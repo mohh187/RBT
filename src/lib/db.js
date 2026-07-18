@@ -1446,6 +1446,29 @@ export async function linkOwnerTenant(uid, tid) {
   return setDoc(userRef(uid), { tenantId: tid, role: 'owner' }, { merge: true })
 }
 
+// ---------- AI usage metering ----------
+// Counter doc lives in aiMemory/_usage (staff-writable + venue-scoped by rules),
+// so every assistant user can bump it. Limits live on the tenant (platform-set:
+// tenant.aiLimits {daily, monthly}) + purchased extras (tenant.aiExtra).
+export async function getAiUsage(tid) {
+  const s = await getDoc(subDoc(tid, 'aiMemory', '_usage'))
+  return s.exists() ? s.data() : {}
+}
+export async function bumpAiUsage(tid) {
+  const d = new Date().toLocaleDateString('en-CA')
+  const m = d.slice(0, 7)
+  const cur = await getAiUsage(tid).catch(() => ({}))
+  const patch = {
+    d,
+    m,
+    dc: (cur.d === d ? Number(cur.dc) || 0 : 0) + 1,
+    mc: (cur.m === m ? Number(cur.mc) || 0 : 0) + 1,
+    updatedAt: serverTimestamp(),
+  }
+  await setDoc(subDoc(tid, 'aiMemory', '_usage'), patch, { merge: true })
+  return patch
+}
+
 // ---------- venue secrets (tenants/{tid}/private/*) ----------
 // Rules: manage_integrations only. Holds the venue's OWN WhatsApp Cloud API
 // credentials etc. — never on the public tenant doc.

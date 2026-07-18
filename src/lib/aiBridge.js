@@ -5,7 +5,7 @@ import { functions, firebaseReady, db } from './firebase.js'
 import { collection, query, getDocs, where } from 'firebase/firestore'
 import { ACTIONS_BY_NAME, TOOL_DECLARATIONS } from './actions.js'
 import { buildContext } from './aiContext.js'
-import { logAi } from './db.js'
+import { logAi, getAiUsage, bumpAiUsage } from './db.js'
 
 const MODEL = import.meta.env.VITE_GEMINI_MODEL || 'gemini-2.5-flash'
 
@@ -100,6 +100,27 @@ export async function runAssistant({ tid, tenant, actor = '', history = [], atta
   // 1. AI Enabled Guard
   if (cfg.enabled === false) {
     return 'عذراً، تم إيقاف المساعد الذكي إدارياً لهذه المنشأة.'
+  }
+
+  // 1b. Usage limits: platform-set per-venue caps (tenant.aiLimits {daily, monthly})
+  // + purchased extra requests (tenant.aiExtra — credited by the platform after a
+  // purchase). Counters live in aiMemory/_usage so any assistant user can bump them.
+  {
+    const limDaily = Number(tenant?.aiLimits?.daily) || 60
+    const limMonthly = Number(tenant?.aiLimits?.monthly) || 900
+    const extra = Number(tenant?.aiExtra) || 0
+    const u = await getAiUsage(tid).catch(() => ({}))
+    const today = new Date().toLocaleDateString('en-CA')
+    const month = today.slice(0, 7)
+    const dc = u.d === today ? Number(u.dc) || 0 : 0
+    const mc = u.m === month ? Number(u.mc) || 0 : 0
+    if (mc >= limMonthly + extra) {
+      throw new Error(`استهلكت رصيد الشهر بالكامل (${limMonthly}${extra ? ` + ${extra} إضافي` : ''} طلباً). اضغط «شراء رصيد» أعلى المحادثة لطلب المزيد — يُفعَّل فور اعتماد الدفع.`)
+    }
+    if (dc >= limDaily) {
+      throw new Error(`وصلت الحد اليومي للمساعد (${limDaily} طلباً) — يتجدد تلقائياً منتصف الليل، أو اطلب رفع الحد من «شراء رصيد».`)
+    }
+    bumpAiUsage(tid).catch(() => {})
   }
 
   // 2. Blocked Keywords Check

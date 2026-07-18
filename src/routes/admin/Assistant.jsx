@@ -4,6 +4,8 @@ import { useI18n } from '../../lib/i18n.jsx'
 import Icon from '../../components/Icon.jsx'
 import Markdown from '../../components/Markdown.jsx'
 import { runAssistant, aiConfigured } from '../../lib/aiBridge.js'
+import { getAiUsage } from '../../lib/db.js'
+import { createIssue } from '../../lib/platform.js'
 import { listChats, getChat, saveChat, deleteChat, newChatId } from '../../lib/aiChats.js'
 import { fileToAttachment, ACCEPT } from '../../lib/aiFiles.js'
 import Sheet from '../../components/Sheet.jsx'
@@ -200,6 +202,38 @@ export default function Assistant() {
 
   // ----- attachment LIBRARY: every file/image from every conversation -----
   const [libOpen, setLibOpen] = useState(false)
+  // ---- usage meter + buy-credits ----
+  const [usage, setUsage] = useState(null) // {d, dc, m, mc}
+  const [buyOpen, setBuyOpen] = useState(false)
+  const [buyBusy, setBuyBusy] = useState(false)
+  const limits = { daily: Number(tenant?.aiLimits?.daily) || 60, monthly: Number(tenant?.aiLimits?.monthly) || 900 }
+  const aiExtra = Number(tenant?.aiExtra) || 0
+  const today = new Date().toLocaleDateString('en-CA')
+  const usageNorm = usage ? { dc: usage.d === today ? Number(usage.dc) || 0 : 0, mc: usage.m === today.slice(0, 7) ? Number(usage.mc) || 0 : 0 } : null
+  const usagePct = usageNorm ? Math.max(usageNorm.dc / limits.daily, usageNorm.mc / (limits.monthly + aiExtra)) : 0
+  const refreshUsage = () => { if (tenantId) getAiUsage(tenantId).then(setUsage).catch(() => {}) }
+  useEffect(refreshUsage, [tenantId, busy]) // eslint-disable-line react-hooks/exhaustive-deps
+  // credit packs (priced — platform confirms + credits tenant.aiExtra after payment)
+  const PACKS = [
+    { qty: 100, price: 49 },
+    { qty: 300, price: 129 },
+    { qty: 1000, price: 349 },
+  ]
+  const requestCredits = async (pack) => {
+    setBuyBusy(true)
+    try {
+      await createIssue(tenantId, {
+        tenantName: tenant?.name || '',
+        title: `[شراء رصيد ذكاء] ${pack.qty} طلب — ${pack.price} ر.س`,
+        body: `طلب شراء رصيد مساعد ذكي.\nالباقة: ${pack.qty} طلب إضافي\nالسعر: ${pack.price} ر.س\nالاستهلاك الحالي: اليوم ${usageNorm?.dc ?? 0}/${limits.daily} · الشهر ${usageNorm?.mc ?? 0}/${limits.monthly + aiExtra}\nبعد اعتماد السداد: أضف الكمية إلى tenant.aiExtra من كونسول المنصة.`,
+        priority: 'high',
+        createdBy: profile?.id || null,
+        createdByName: actor || '',
+      })
+      toast.success(ar ? 'أُرسل طلب الشراء للإدارة — يُفعَّل الرصيد فور اعتماد السداد' : 'Purchase request sent')
+      setBuyOpen(false)
+    } catch (_) { toast.error(ar ? 'تعذّر إرسال الطلب' : 'Request failed') } finally { setBuyBusy(false) }
+  }
   const library = useMemo(() => {
     if (!libOpen || !tenantId) return []
     return listChats(tenantId).flatMap((c) => {
@@ -259,6 +293,17 @@ export default function Assistant() {
           <button className="ai-icon-btn" onClick={() => setSideOpen((s) => !s)} title={ar ? 'السجل' : 'History'}><Icon name="menu" size={18} /></button>
           <div className="title"><Icon name="sparkles" size={18} /> {ar ? 'المساعد الذكي' : 'AI Assistant'} <span className="ai-badge-risk" style={{ background: 'var(--brand-soft)', color: 'var(--brand)' }}>{modelBadge}</span></div>
           <div className="spacer" />
+          {/* usage meter + buy credits */}
+          {usageNorm && (
+            <button className="ai-icon-btn" onClick={() => setBuyOpen(true)} title={ar ? 'الاستهلاك وشراء رصيد' : 'Usage & credits'}
+              style={{ width: 'auto', paddingInline: 10, gap: 6, display: 'inline-flex', alignItems: 'center', color: usagePct >= 0.8 ? 'var(--danger)' : undefined }}>
+              <Icon name="zap" size={14} />
+              <span className="xs num" style={{ fontWeight: 800 }}>{usageNorm.dc}/{limits.daily}</span>
+              <span style={{ width: 34, height: 4, borderRadius: 99, background: 'var(--surface-2)', overflow: 'hidden', display: 'inline-block' }}>
+                <span style={{ display: 'block', height: '100%', width: `${Math.min(100, usagePct * 100)}%`, background: usagePct >= 0.8 ? 'var(--danger)' : 'var(--brand)' }} />
+              </span>
+            </button>
+          )}
           <button className="ai-icon-btn" onClick={() => setLibOpen(true)} title={ar ? 'مكتبة المرفقات — كل الصور والملفات من كل المحادثات' : 'Attachment library'}><Icon name="folder" size={17} /></button>
           <button className={`ai-autorun ${autoRun ? 'on' : ''}`} onClick={() => setAutoRun((v) => !v)} title={ar ? 'تنفيذ الإجراءات تلقائياً دون تأكيد (عدا الحسّاسة)' : 'Auto-run write actions without asking (except destructive)'}>
             <Icon name={autoRun ? 'play' : 'check'} size={13} /> <span>{ar ? 'تنفيذ تلقائي' : 'Auto-run'}</span>
@@ -396,6 +441,30 @@ export default function Assistant() {
       </main>
 
       {/* attachment library: every image/file from every conversation, in one place */}
+      {/* usage + buy credits */}
+      <Sheet open={buyOpen} onClose={() => setBuyOpen(false)} title={ar ? 'استهلاك المساعد وشراء رصيد' : 'AI usage & credits'}>
+        <div className="stack" style={{ gap: 12 }}>
+          <div className="card card-pad stack" style={{ gap: 8 }}>
+            <div className="row-between small"><span>{ar ? 'اليوم' : 'Today'}</span><strong className="num">{usageNorm?.dc ?? 0} / {limits.daily}</strong></div>
+            <div style={{ height: 6, borderRadius: 99, background: 'var(--surface-2)', overflow: 'hidden' }}><div style={{ height: '100%', width: `${Math.min(100, ((usageNorm?.dc ?? 0) / limits.daily) * 100)}%`, background: 'var(--brand)' }} /></div>
+            <div className="row-between small"><span>{ar ? 'هذا الشهر' : 'This month'}</span><strong className="num">{usageNorm?.mc ?? 0} / {limits.monthly + aiExtra}</strong></div>
+            <div style={{ height: 6, borderRadius: 99, background: 'var(--surface-2)', overflow: 'hidden' }}><div style={{ height: '100%', width: `${Math.min(100, ((usageNorm?.mc ?? 0) / (limits.monthly + aiExtra)) * 100)}%`, background: 'var(--brand)' }} /></div>
+            {aiExtra > 0 && <span className="xs faint">{ar ? `يشمل ${aiExtra} طلباً إضافياً مشترى` : `Includes ${aiExtra} purchased`}</span>}
+            <span className="xs faint">{ar ? 'الحد اليومي يتجدد منتصف الليل، والشهري أول كل شهر. الحدود تضبطها إدارة المنصة لكل باقة.' : 'Daily resets at midnight; monthly on the 1st.'}</span>
+          </div>
+          <strong className="small">{ar ? 'شراء رصيد إضافي' : 'Buy extra requests'}</strong>
+          {PACKS.map((p) => (
+            <button key={p.qty} className="card card-pad row-between" style={{ cursor: 'pointer', textAlign: 'start' }} disabled={buyBusy} onClick={() => requestCredits(p)}>
+              <span className="row" style={{ gap: 8 }}><Icon name="zap" size={16} style={{ color: 'var(--brand)' }} /><strong className="num">{p.qty}</strong> <span className="small faint">{ar ? 'طلب إضافي' : 'requests'}</span></span>
+              <span className="badge badge-gold num">{p.price} {ar ? 'ر.س' : 'SAR'}</span>
+            </button>
+          ))}
+          <p className="xs faint" style={{ margin: 0 }}>
+            {ar ? 'يصل طلبك لإدارة المنصة فوراً ويُفعَّل الرصيد فور اعتماد السداد (تحويل/فاتورة). الدفع الإلكتروني المباشر بالبطاقة قادم — سيُفعَّل الرصيد لحظياً عندها.' : 'Your request reaches the platform instantly; credits activate on payment confirmation. Direct card checkout is coming next.'}
+          </p>
+        </div>
+      </Sheet>
+
       <Sheet open={libOpen} onClose={() => setLibOpen(false)} title={ar ? 'مكتبة المرفقات' : 'Attachment library'}>
         {library.length === 0 ? (
           <p className="faint small" style={{ textAlign: 'center', padding: 'var(--sp-5)' }}>
