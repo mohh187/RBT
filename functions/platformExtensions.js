@@ -414,6 +414,19 @@ async function deriveIntentAmount(db, { kind, tenantId, refId, request }) {
     if (!isMgr && !aSnap.exists) throw new HttpsError('permission-denied', 'Not your invoice.')
     amountSar = Number(inv.amount) || 0
     description = `Subscription ${refId}`
+  } else if (kind === 'aiCredits') {
+    // AI-assistant credit packs. refId = pack quantity as a string; the PRICE is
+    // this server-side table ONLY (client-sent amounts are never trusted).
+    const AI_PACKS = { 100: 49, 300: 129, 1000: 349 }
+    const qty = Number(refId)
+    if (!AI_PACKS[qty]) throw new HttpsError('invalid-argument', 'unknown credit pack')
+    const uid = request && request.auth && request.auth.uid
+    if (!uid) throw new HttpsError('unauthenticated', 'Sign in to buy credits.')
+    const uSnap = await db.collection('users').doc(uid).get()
+    const isMgr = uSnap.exists && ['owner', 'manager'].includes(uSnap.data().role) && uSnap.data().tenantId === tenantId
+    if (!isMgr) throw new HttpsError('permission-denied', 'Managers only.')
+    amountSar = AI_PACKS[qty]
+    description = `AI credits ${qty} — ${tenantId}`
   } else if (kind === 'booking') {
     const [rs, ts] = await Promise.all([
       db.doc(`tenants/${tenantId}/reservations/${refId}`).get(),
@@ -598,6 +611,20 @@ async function settleFromPayment(db, payment) {
     }
   } else if (intent.kind === 'subscription') {
     await settleInvoiceFromPayment(db, { ...payment, metadata: { ...meta, invoiceId: intent.refId } })
+  } else if (intent.kind === 'aiCredits') {
+    // FULL AUTOMATION: payment settled → credits appear on the venue instantly
+    // + a PAID invoice record lands in the platform console for the admin.
+    const qty = Number(intent.refId) || 0
+    const tRef = db.doc(`tenants/${tid}`)
+    const tSnap = await tRef.get().catch(() => null)
+    const tName = tSnap && tSnap.exists ? (tSnap.data().name || '') : ''
+    await tRef.set({ aiExtra: FieldValue.increment(qty) }, { merge: true }).catch(() => {})
+    await db.collection('platformInvoices').add({
+      tenantId: tid, tenantName: tName, plan: 'aiCredits',
+      amount: (Number(intent.amount) || 0) / 100, currency: 'SAR',
+      period: `${qty} طلب ذكاء`, status: 'paid', provider: 'moyasar', providerRef: payment.id,
+      paidAt: FieldValue.serverTimestamp(), createdAt: FieldValue.serverTimestamp(),
+    }).catch(() => {})
   } else if (intent.kind === 'booking') {
     const rRef = db.doc(`tenants/${tid}/reservations/${intent.refId}`)
     const rSnap = await rRef.get().catch(() => null)

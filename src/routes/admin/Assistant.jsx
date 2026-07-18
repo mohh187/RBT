@@ -219,6 +219,22 @@ export default function Assistant() {
     { qty: 300, price: 129 },
     { qty: 1000, price: 349 },
   ]
+  // Direct card checkout (Moyasar): pack price is derived SERVER-side, and on
+  // webhook settlement the credits land on the venue automatically + a paid
+  // invoice appears in the platform console. Fallback: a manual request issue.
+  const buyCredits = async (pack) => {
+    setBuyBusy(true)
+    try {
+      const { startPayment } = await import('../../lib/payments.js')
+      await startPayment('aiCredits', tenantId, String(pack.qty))
+      // navigation to /pay/:intentId happens inside startPayment
+    } catch (e) {
+      toast.error(e?.message === 'no-checkout-url' || String(e?.message || '').includes('internal')
+        ? (ar ? 'الدفع المباشر غير مفعّل بعد (انشر الدوال) — أرسل طلباً للإدارة بدلاً عنه' : 'Direct checkout unavailable — send a request instead')
+        : String(e?.message || e))
+      setBuyBusy(false)
+    }
+  }
   const requestCredits = async (pack) => {
     setBuyBusy(true)
     try {
@@ -454,13 +470,21 @@ export default function Assistant() {
           </div>
           <strong className="small">{ar ? 'شراء رصيد إضافي' : 'Buy extra requests'}</strong>
           {PACKS.map((p) => (
-            <button key={p.qty} className="card card-pad row-between" style={{ cursor: 'pointer', textAlign: 'start' }} disabled={buyBusy} onClick={() => requestCredits(p)}>
+            <div key={p.qty} className="card card-pad row-between wrap" style={{ gap: 8 }}>
               <span className="row" style={{ gap: 8 }}><Icon name="zap" size={16} style={{ color: 'var(--brand)' }} /><strong className="num">{p.qty}</strong> <span className="small faint">{ar ? 'طلب إضافي' : 'requests'}</span></span>
-              <span className="badge badge-gold num">{p.price} {ar ? 'ر.س' : 'SAR'}</span>
-            </button>
+              <span className="row" style={{ gap: 6, alignItems: 'center' }}>
+                <span className="badge badge-gold num">{p.price} {ar ? 'ر.س' : 'SAR'}</span>
+                <button className="btn btn-sm btn-primary" disabled={buyBusy} onClick={() => buyCredits(p)}>
+                  <Icon name="card" size={13} /> {ar ? 'ادفع الآن' : 'Pay now'}
+                </button>
+                <button className="btn btn-sm btn-ghost" disabled={buyBusy} onClick={() => requestCredits(p)} title={ar ? 'طلب يدوي تعتمده الإدارة (تحويل بنكي…)' : 'Manual request'}>
+                  {ar ? 'طلب يدوي' : 'Request'}
+                </button>
+              </span>
+            </div>
           ))}
           <p className="xs faint" style={{ margin: 0 }}>
-            {ar ? 'يصل طلبك لإدارة المنصة فوراً ويُفعَّل الرصيد فور اعتماد السداد (تحويل/فاتورة). الدفع الإلكتروني المباشر بالبطاقة قادم — سيُفعَّل الرصيد لحظياً عندها.' : 'Your request reaches the platform instantly; credits activate on payment confirmation. Direct card checkout is coming next.'}
+            {ar ? '«ادفع الآن»: بطاقة/مدى/Apple Pay — يُضاف الرصيد لحسابك تلقائياً لحظة نجاح الدفع وتظهر الفاتورة للإدارة فوراً. «طلب يدوي»: للتحويل البنكي وتعتمده الإدارة.' : 'Pay now: card/mada/Apple Pay — credits land automatically on settlement. Request: bank transfer confirmed by the platform.'}
           </p>
         </div>
       </Sheet>
