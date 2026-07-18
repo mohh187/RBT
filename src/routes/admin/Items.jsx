@@ -8,7 +8,7 @@ import { useI18n, pickLang } from '../../lib/i18n.jsx'
 import { useToast } from '../../components/Toast.jsx'
 import Sheet from '../../components/Sheet.jsx'
 import { Spinner, Empty } from '../../components/ui.jsx'
-import { watchItems, watchCategories, saveItem, deleteItem, setItemAvailability, watchMaterials, duplicateItem } from '../../lib/db.js'
+import { watchItems, watchCategories, saveItem, deleteItem, setItemAvailability, watchMaterials, duplicateItem, publishUrlAsStory } from '../../lib/db.js'
 import { uploadImage, uploadFile } from '../../lib/storage.js'
 import ContrastHint from '../../components/ContrastHint.jsx'
 import ImageCropper from '../../components/ImageCropper.jsx'
@@ -20,7 +20,7 @@ import { sectionTemplate, templateOptions } from '../../lib/systemTemplates.js'
 
 const blank = () => ({
   nameAr: '', nameEn: '', price: '', calories: '', categoryId: '',
-  descAr: '', descEn: '', kdsWarning: '', imageUrl: '', images: [], imageStyle: '', imageScale: 1, available: true, availableFrom: '', availableTo: '', countsForLoyalty: true, featured: false, promoNotify: 'default', trackStock: false, stock: '',
+  descAr: '', descEn: '', kdsWarning: '', imageUrl: '', images: [], imageStyle: '', imageScale: 1, arStandeeUrl: '', model3dUrl: '', available: true, availableFrom: '', availableTo: '', countsForLoyalty: true, featured: false, promoNotify: 'default', trackStock: false, stock: '',
   prepTime: '', serves: '', rating: '', reviewsCount: '',
   ingredients: [], variants: [], modifierGroups: [], sortOrder: 0,
   recipe: [], variantRecipes: {},
@@ -448,6 +448,38 @@ function ItemEditor({ tenantId, cats, currency, value, onClose, onSaved, onDelet
   // AI product photo: item name (+ current photo as reference when present) →
   // nano-banana. CORS-blocked references degrade to a free scene automatically.
   const [aiImgBusy, setAiImgBusy] = useState(false)
+  const [storyBusy, setStoryBusy] = useState(false)
+
+  // ---- AR (عرض على الطاولة) ----
+  // Generated standee: bg-removed photo → real GLB via ar3d.js. Real 3D meshes
+  // (.glb/.usdz made externally) upload via the file input — both render in the
+  // menu's AR viewer. Honest scope: photo→full-3D-mesh needs an external service.
+  const [arBusy, setArBusy] = useState('')
+  const genArStandee = async () => {
+    if (!form.imageUrl) { toast.error(lang === 'ar' ? 'أضف صورة للصنف أولاً' : 'Add a photo first'); return }
+    setArBusy('gen')
+    try {
+      const { photoToArStandee } = await import('../../lib/ar3d.js')
+      const glb = await photoToArStandee(form.imageUrl, { onStep: (s) => setArBusy(s === 'bg' ? 'bg' : 'glb') })
+      const file = new File([glb], `ar-${Date.now()}.glb`, { type: 'model/gltf-binary' })
+      const url = await uploadFile(tenantId, file, 'library/ar')
+      set('arStandeeUrl', url)
+      toast.success(lang === 'ar' ? 'جاهز — احفظ الصنف ليظهر زر AR في المنيو' : 'Done — save the item to enable AR')
+    } catch (e) {
+      toast.error(e?.message || (lang === 'ar' ? 'تعذر إنشاء المجسم' : 'AR build failed'))
+    } finally { setArBusy('') }
+  }
+  const onPickModel = async (e) => {
+    const f = e.target.files?.[0]; e.target.value = ''
+    if (!f) return
+    if (!/\.(glb|usdz)$/i.test(f.name)) { toast.error(lang === 'ar' ? 'الملف يجب أن يكون .glb أو .usdz' : 'Must be .glb or .usdz'); return }
+    setArBusy('upload')
+    try {
+      const url = await uploadFile(tenantId, f, 'library/ar')
+      set('model3dUrl', url)
+      toast.success(lang === 'ar' ? 'رُفع النموذج — احفظ الصنف' : 'Model uploaded — save the item')
+    } catch (_) { toast.error(t('error')) } finally { setArBusy('') }
+  }
   const genItemImage = async () => {
     if (aiImgBusy) return
     const label = form.nameAr || form.nameEn
@@ -543,6 +575,8 @@ function ItemEditor({ tenantId, cats, currency, value, onClose, onSaved, onDelet
         images: (form.images || []).filter(Boolean),
         imageStyle: form.imageStyle || '',
         imageScale: Math.min(1.8, Math.max(0.6, Number(form.imageScale) || 1)),
+        arStandeeUrl: form.arStandeeUrl || '',
+        model3dUrl: form.model3dUrl || '',
         pairings: (form.pairings || []).filter(Boolean).slice(0, 3),
         available: form.available !== false,
         availableFrom: (form.availableFrom || '').trim(),
@@ -685,6 +719,19 @@ function ItemEditor({ tenantId, cats, currency, value, onClose, onSaved, onDelet
               <button type="button" className="btn btn-sm btn-outline" style={{ padding: '4px 6px' }} disabled={aiImgBusy} onClick={genItemImage}
                 title={lang === 'ar' ? 'يولّد صورة احترافية بالذكاء (صورة الصنف الحالية مرجع إن وُجدت)' : 'AI-generate a pro product photo'}>
                 <Icon name="image" size={13} /> {aiImgBusy ? (lang === 'ar' ? 'يولّد…' : 'Generating…') : (lang === 'ar' ? 'توليد بالذكاء' : 'AI photo')}
+              </button>
+            )}
+            {form.imageUrl && !uploading && (
+              <button type="button" className="btn btn-sm btn-outline" style={{ padding: '4px 6px' }} disabled={storyBusy}
+                title={lang === 'ar' ? 'ينشر صورة الصنف كستوري 24 ساعة فوراً' : 'Publish this photo as a 24h story'}
+                onClick={async () => {
+                  setStoryBusy(true)
+                  try {
+                    await publishUrlAsStory(tenantId, { url: form.imageUrl, caption: form.nameAr || form.nameEn || '' })
+                    toast.success(lang === 'ar' ? 'نُشر في الاستوري' : 'Published to stories')
+                  } catch (_) { toast.error(t('error')) } finally { setStoryBusy(false) }
+                }}>
+                <Icon name="camera" size={13} /> {storyBusy ? (lang === 'ar' ? 'ينشر…' : 'Posting…') : (lang === 'ar' ? 'نشر في الاستوري' : 'To story')}
               </button>
             )}
           </div>
@@ -885,6 +932,30 @@ function ItemEditor({ tenantId, cats, currency, value, onClose, onSaved, onDelet
             <input className="input" type="time" value={form.availableTo || ''} onChange={(e) => set('availableTo', e.target.value)} />
           </div>
           <span className="xs faint" style={{ paddingBottom: 8 }}>{lang === 'ar' ? 'اتركهما فارغين ليظهر دائماً — مثال: فطور 06:00 حتى 11:30 يختفي تلقائياً بعدها.' : 'Leave empty for always — e.g. breakfast 06:00-11:30 auto-hides after.'}</span>
+        </div>
+
+        {/* AR — عرض الصنف على طاولة العميل */}
+        <EditorSection title={lang === 'ar' ? 'الواقع المعزز AR' : 'Augmented reality'} />
+        <div className="stack" style={{ gap: 8 }}>
+          <p className="xs faint" style={{ margin: 0 }}>
+            {lang === 'ar'
+              ? 'زر «اعرضه على طاولتك» في المنيو يفتح الكاميرا ويضع الصنف على الطاولة فعلياً (أندرويد وآيفون بلا تطبيق). «مجسم من الصورة» يبني ستاند واقعي من صورة الصنف مقصوصة الخلفية تلقائياً، ولنموذج ثلاثي الأبعاد كامل ارفع ملف .glb أو .usdz جاهزاً.'
+              : 'The menu AR button places the item on the real table (Android/iOS, no app). Generate a standee from the photo, or upload a full .glb/.usdz model.'}
+          </p>
+          <div className="row" style={{ gap: 8, flexWrap: 'wrap', alignItems: 'center' }}>
+            <button type="button" className="btn btn-sm btn-outline" disabled={!!arBusy} onClick={genArStandee}>
+              <Icon name="sparkles" size={13} /> {arBusy === 'bg' ? (lang === 'ar' ? 'يقصّ الخلفية…' : 'Cutting bg…') : arBusy === 'glb' ? (lang === 'ar' ? 'يبني المجسم…' : 'Building…') : (lang === 'ar' ? 'مجسم من الصورة' : 'Standee from photo')}
+            </button>
+            <label className="btn btn-sm btn-outline" style={{ cursor: 'pointer' }}>
+              <Icon name="upload" size={13} /> {arBusy === 'upload' ? (lang === 'ar' ? 'يرفع…' : 'Uploading…') : (lang === 'ar' ? 'رفع نموذج GLB/USDZ' : 'Upload GLB/USDZ')}
+              <input type="file" accept=".glb,.usdz" hidden onChange={onPickModel} disabled={!!arBusy} />
+            </label>
+            {form.arStandeeUrl && <span className="badge badge-success"><Icon name="check" size={11} /> {lang === 'ar' ? 'مجسم الصورة جاهز' : 'Standee ready'}</span>}
+            {form.model3dUrl && <span className="badge badge-success"><Icon name="check" size={11} /> {lang === 'ar' ? 'نموذج 3D مرفوع' : '3D model set'}</span>}
+            {(form.arStandeeUrl || form.model3dUrl) && (
+              <button type="button" className="btn-link xs" style={{ color: 'var(--danger)' }} onClick={() => { set('arStandeeUrl', ''); set('model3dUrl', '') }}>{lang === 'ar' ? 'إزالة' : 'Clear'}</button>
+            )}
+          </div>
         </div>
 
         <div className="row" style={{ gap: 'var(--sp-3)' }}>

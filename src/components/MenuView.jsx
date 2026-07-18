@@ -1177,6 +1177,8 @@ export function ItemSheet({ item, tenant, currency, tenantId, onClose, onAdd, de
   const [reviews, setReviews] = useState(null)
   const [zoom, setZoom] = useState(false)
   const [imgIdx, setImgIdx] = useState(0)
+  const [arOpen, setArOpen] = useState(false)
+  const hasAr = (item.model3dUrl || item.arStandeeUrl) && tenant?.ar?.enabled !== false
 
   // Immersive screen: chevrons / horizontal swipe move to the adjacent dish.
   const navEnabled = detail === 'immersive' && typeof onNavigate === 'function' && siblings.length > 1
@@ -1352,6 +1354,13 @@ export function ItemSheet({ item, tenant, currency, tenantId, onClose, onAdd, de
                 </div>
               )}
 
+              {hasAr && (
+                <button type="button" className="ar-btn" onClick={() => setArOpen(true)}>
+                  <Icon name="scan" size={16} />
+                  <span>{lang === 'ar' ? 'اعرضه على طاولتك (AR)' : 'View on your table (AR)'}</span>
+                </button>
+              )}
+              {arOpen && <ArStage item={item} tenant={tenant} lang={lang} onClose={() => setArOpen(false)} />}
               <div className="row-between">
                 <span className="bold">{t('qty')}</span>
                 <Stepper value={qty} onChange={setQty} />
@@ -1363,6 +1372,55 @@ export function ItemSheet({ item, tenant, currency, tenantId, onClose, onAdd, de
         </div>
       </div>
     </Sheet>
+  )
+}
+
+// AR stage — its own immersive theme (tenant.ar.style), independent of the menu
+// skin. Renders <model-viewer>: real AR via Scene Viewer (Android) / Quick Look
+// (iOS) with camera-controls 3D preview inline. Loaded lazily (heavy bundle).
+function ArStage({ item, tenant, lang, onClose }) {
+  const [state, setState] = useState('loading') // loading | ready | error
+  useEffect(() => {
+    let alive = true
+    import('../lib/ar3d.js')
+      .then((m) => m.loadModelViewer())
+      .then(() => { if (alive) setState('ready') })
+      .catch(() => { if (alive) setState('error') })
+    return () => { alive = false }
+  }, [])
+  useEffect(() => {
+    const onKey = (e) => { if (e.key === 'Escape') onClose() }
+    window.addEventListener('keydown', onKey)
+    return () => window.removeEventListener('keydown', onKey)
+  }, [onClose])
+  const glb = /\.usdz($|\?)/i.test(item.model3dUrl || '') ? (item.arStandeeUrl || '') : (item.model3dUrl || item.arStandeeUrl || '')
+  const usdz = /\.usdz($|\?)/i.test(item.model3dUrl || '') ? item.model3dUrl : ''
+  const ar = lang === 'ar'
+  return (
+    <div className="ar-stage" data-artheme={tenant?.ar?.style || 'noir'} onClick={(e) => e.stopPropagation()}>
+      <div className="ar-stage-head">
+        <strong>{ar ? (item.nameAr || item.nameEn) : (item.nameEn || item.nameAr)}</strong>
+        <button type="button" className="icon-btn" onClick={onClose} aria-label="close" style={{ color: 'inherit' }}><Icon name="close" size={20} /></button>
+      </div>
+      <div className="ar-stage-body">
+        {state === 'loading' && <div className="center" style={{ height: '100%' }}><Spinner /></div>}
+        {state === 'error' && <p className="small" style={{ textAlign: 'center', opacity: 0.8, padding: 24 }}>{ar ? 'تعذر تحميل عارض المجسمات — تحقق من اتصالك' : 'Could not load the 3D viewer'}</p>}
+        {state === 'ready' && (glb || usdz) && (
+          <model-viewer
+            src={glb || undefined}
+            ios-src={usdz || undefined}
+            ar=""
+            ar-modes="scene-viewer webxr quick-look"
+            ar-scale="auto"
+            camera-controls=""
+            auto-rotate=""
+            shadow-intensity="1"
+            style={{ width: '100%', height: '100%', background: 'transparent' }}
+          />
+        )}
+      </div>
+      <p className="ar-stage-hint">{ar ? 'اضغط أيقونة AR داخل العارض ثم وجّه الكاميرا إلى الطاولة — سيقف الصنف عليها فعلياً.' : 'Tap the AR icon inside the viewer and point at your table.'}</p>
+    </div>
   )
 }
 

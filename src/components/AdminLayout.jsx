@@ -40,6 +40,8 @@ const moreGroups = [
     { to: '/admin/offers', icon: 'offers', label: { ar: 'العروض والخصومات', en: 'Offers' }, cap: CAP.MANAGE_OFFERS },
     { to: '/admin/reviews-studio', icon: 'star', label: { ar: 'استوديو التقييمات', en: 'Reviews studio' }, cap: CAP.MANAGE_CAMPAIGNS },
     { to: '/admin/posts-studio', icon: 'camera', label: { ar: 'استوديو المنشورات', en: 'Post studio' }, cap: CAP.MANAGE_CAMPAIGNS },
+    { to: '/admin/messages', icon: 'message', label: { ar: 'سجل الرسائل والتحليلات', en: 'Messages log' }, cap: CAP.MANAGE_CAMPAIGNS },
+    { to: '/admin/library', icon: 'folder', label: { ar: 'المكتبة', en: 'Library' }, anyOf: [CAP.MANAGE_MENU, CAP.MANAGE_CAMPAIGNS, CAP.MANAGE_STORIES, CAP.MANAGE_APPEARANCE] },
     { to: '/admin/stories', icon: 'camera', label: { ar: 'الاستوري', en: 'Stories' }, cap: CAP.MANAGE_STORIES },
     { to: '/admin/posts', icon: 'events', label: { ar: 'البروفايل والأخبار', en: 'Profile & news' }, cap: CAP.MANAGE_STORIES },
   ] },
@@ -62,6 +64,7 @@ const moreGroups = [
     { to: '/admin/assistant', icon: 'sparkles', label: { ar: 'المساعد الذكي', en: 'AI assistant' }, cap: CAP.USE_ASSISTANT },
     { to: '/admin/screens', icon: 'qr', label: { ar: 'شاشات العرض', en: 'Display screens' }, cap: CAP.MANAGE_APPEARANCE },
     { to: '/admin/settings', icon: 'settings', label: { ar: 'الإعدادات', en: 'Settings' }, anyOf: [CAP.MANAGE_SETTINGS, CAP.MANAGE_APPEARANCE, CAP.MANAGE_LOYALTY, CAP.MANAGE_INTEGRATIONS] },
+    { to: '/admin/billing', icon: 'wallet', label: { ar: 'الفوترة والاشتراك', en: 'Billing' }, cap: CAP.MANAGE_SETTINGS },
     { to: '/admin/help', icon: 'zap', label: { ar: 'مركز المساعدة', en: 'Help center' } },
     { to: '/admin/support', icon: 'mail', label: { ar: 'الدعم والتواصل', en: 'Support' }, cap: CAP.MANAGE_SETTINGS },
     { to: '/portal', icon: 'user', label: { ar: 'بوابتي', en: 'My portal' } },
@@ -235,7 +238,7 @@ export default function AdminLayout() {
     : null
 
   return (
-    <div className="admin-shell" style={{ '--sidebar-w': `${effW}px` }} data-collapsed={collapsed ? 'true' : undefined} data-systheme={systemThemeAttr(tenant, 'admin')} data-sidebar={tenant?.sidebarStyle || undefined}>
+    <div className="admin-shell" style={{ '--sidebar-w': `${effW}px` }} data-collapsed={collapsed ? 'true' : undefined} data-systheme={systemThemeAttr(tenant, 'admin')} data-sidebar={tenant?.sidebarStyle || undefined} data-sidetheme={tenant?.sidebarTheme || undefined}>
       <AppBackground tenant={tenant} />
       <PinLock tenant={tenant} tenantId={tenantId} />
       {tourKey && TOURS[tourKey] && <Tour key={tourKey} steps={TOURS[tourKey]} storageKey={tourKey} />}

@@ -760,6 +760,12 @@ export async function addStory(tid, data) {
   })
 }
 export async function deleteStory(tid, id) { return deleteDoc(subDoc(tid, 'stories', id)) }
+// One-tap «نشر في الاستوري» from anywhere in the system: publishes an EXISTING
+// hosted image URL as a 24h story (no re-upload).
+export async function publishUrlAsStory(tid, { url, caption = '', link = '', linkLabel = '' } = {}) {
+  if (!url) throw new Error('no-url')
+  return addStory(tid, { kind: 'image', url, title: '', caption, filterCss: '', link, linkLabel, overlays: [], audioUrl: '', audioStart: 0 })
+}
 export async function updateStory(tid, id, patch) { return updateDoc(subDoc(tid, 'stories', id), patch) }
 // replies: diners write (rules-bounded), staff read/manage
 export async function addStoryReply(tid, storyId, data) {

@@ -1269,6 +1269,44 @@ export default function Settings() {
                       ))}
                     </div>
                   </div>
+
+                  {/* independent sidebar THEME — layers over ANY system theme (mix & match) */}
+                  <div className="row-between wrap" style={{ gap: 10, alignItems: 'center' }}>
+                    <div>
+                      <div className="small bold">{ar ? 'سمة القائمة الجانبية (مستقلة)' : 'Sidebar theme (independent)'}</div>
+                      <div className="xs faint">{ar ? 'شكل روابط وأزرار القائمة وتفاعلها — تُركَّب فوق أي ثيم نظام تختاره. الشعار ثابت أعلى وتسجيل الخروج ثابت أسفل دائماً.' : 'Nav links look & interaction — layered over any system theme.'}</div>
+                    </div>
+                    <select className="select" style={{ maxWidth: 190 }} value={tenant?.sidebarTheme || ''}
+                      onChange={async (e) => {
+                        const v = e.target.value
+                        try { await saveNow({ sidebarTheme: v }); updateTenantLocal({ sidebarTheme: v }); toast.success(t('saved')) } catch (_) { toast.error(t('error')) }
+                      }}>
+                      <option value="">{ar ? 'حسب ثيم النظام' : 'Follow system theme'}</option>
+                      <option value="pills">{ar ? 'حبوب عائمة' : 'Pills'}</option>
+                      <option value="blocks">{ar ? 'كتل مصمتة' : 'Blocks'}</option>
+                      <option value="line">{ar ? 'خط مؤشر بسيط' : 'Indicator line'}</option>
+                      <option value="glassy">{ar ? 'زجاجية شفافة' : 'Glassy'}</option>
+                      <option value="golden">{ar ? 'ذهبية ملكية' : 'Golden'}</option>
+                    </select>
+                  </div>
+
+                  {/* AR — global switch + the AR stage's OWN theme */}
+                  <div className="row-between wrap" style={{ gap: 10, alignItems: 'center' }}>
+                    <div>
+                      <div className="small bold">{ar ? 'الواقع المعزز AR في المنيو' : 'Menu AR'}</div>
+                      <div className="xs faint">{ar ? 'زر «اعرضه على طاولتك» للأصناف التي لها مجسم (من محرر الصنف). لواجهة العرض ثيمها الخاص المستقل.' : 'Table AR for items with a 3D model/standee; the AR stage has its own theme.'}</div>
+                    </div>
+                    <div className="row" style={{ gap: 8, alignItems: 'center' }}>
+                      <select className="select" style={{ maxWidth: 130 }} value={tenant?.ar?.style || 'noir'}
+                        onChange={async (e) => { const next = { ...(tenant?.ar || {}), style: e.target.value }; try { await saveNow({ ar: next }); updateTenantLocal({ ar: next }); toast.success(t('saved')) } catch (_) { toast.error(t('error')) } }}>
+                        <option value="noir">{ar ? 'ليلي فاخر' : 'Noir'}</option>
+                        <option value="brand">{ar ? 'بلون هويتي' : 'Brand'}</option>
+                        <option value="light">{ar ? 'فاتح' : 'Light'}</option>
+                      </select>
+                      <input type="checkbox" checked={tenant?.ar?.enabled !== false} style={{ width: 22, height: 22 }}
+                        onChange={async (e) => { const next = { ...(tenant?.ar || {}), enabled: e.target.checked }; try { await saveNow({ ar: next }); updateTenantLocal({ ar: next }); toast.success(t('saved')) } catch (_) { toast.error(t('error')) } }} />
+                    </div>
+                  </div>
                   <div style={{ borderTop: '1px solid var(--border)' }} />
                   <div className="row-between wrap" style={{ gap: 10, alignItems: 'center' }}>
                     <div>

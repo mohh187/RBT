@@ -75,6 +75,9 @@ const Help = lazy(() => import('./routes/admin/Help.jsx'))
 const NotFound = lazy(() => import('./routes/NotFound.jsx'))
 const ReviewsStudio = lazy(() => import('./routes/admin/ReviewsStudio.jsx'))
 const PostStudio = lazy(() => import('./routes/admin/PostStudio.jsx'))
+const Messages = lazy(() => import('./routes/admin/Messages.jsx'))
+const Billing = lazy(() => import('./routes/admin/Billing.jsx'))
+const Library = lazy(() => import('./routes/admin/Library.jsx'))
 
 // Platform console (super-admin, cross-venue) — separate lazy chunk; venues never download it.
 const PlatformLayout = lazy(() => import('./routes/platform/PlatformLayout.jsx'))
@@ -401,6 +404,10 @@ export default function App() {
         <Route path="help" element={<Help />} />
         <Route path="reviews-studio" element={<RequireCap cap={CAP.MANAGE_CAMPAIGNS}><ReviewsStudio /></RequireCap>} />
         <Route path="posts-studio" element={<RequireCap cap={CAP.MANAGE_CAMPAIGNS}><PostStudio /></RequireCap>} />
+        <Route path="messages" element={<RequireCap cap={CAP.MANAGE_CAMPAIGNS}><Messages /></RequireCap>} />
+        <Route path="billing" element={<RequireCap cap={CAP.MANAGE_SETTINGS}><Billing /></RequireCap>} />
+        {/* library — any staffer who can touch menu/marketing content */}
+        <Route path="library" element={<RequireCap anyOf={[CAP.MANAGE_MENU, CAP.MANAGE_CAMPAIGNS, CAP.MANAGE_STORIES, CAP.MANAGE_APPEARANCE]}><Library /></RequireCap>} />
       </Route>
 
       {/* platform console (super-admin, cross-venue) */}
