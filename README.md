@@ -1,115 +1,150 @@
-# Neema Café Menu
+# RBT360 — منصة منيو رقمي وطلب عبر QR متعددة المنشآت
 
-This repo contains two builds of the interactive Neema Café menu:
+نظام تشغيل متكامل للمقاهي والمطاعم: منيو رقمي، طلب عبر QR لكل طاولة، لوحة كاشير ومطبخ لحظية، لوحة تحكم إدارية، عروض، قاعدة عملاء، وتقارير مبيعات — **مبني على React + Vite + Firebase**، عربي أولاً (RTL)، ومصمَّم للجوال أولاً.
 
-- `index.html` – the production-ready build with the full loyalty and logging experience.
-- `menu` – the compact legacy build that shares the same functionality and strings.
-- `menu-data.js` – the shared catalogue of drinks and desserts that both builds render.
-- `admin/index.html` – Comprehensive Arabic menu management dashboard with full CRUD operations, category management, variant/options support, image preview, search functionality, and CSV export capabilities. Connects to `/api/items`, `/api/orders`, and `/api/customers` endpoints with authentication.
-- `order-status.html` – lightweight view Telegram uses when a waiter accepts or finishes an order.
+> منصّة **عامة متعددة المنشآت**: أي صاحب عمل يسجّل حساباً، ينشئ بروفايل منشأته، وتُعزل بياناته تلقائياً عن بقية المنشآت.
 
-## Latest enhancements
+---
 
-- زر إرسال الطلب السريع تمت إضافته إلى الشريط السفلي بجانب زر استدعاء النادل لبدء الطلب مباشرة من أي قسم.
-- منطق الولاء يحتسب الآن كل المشروبات ضمن رصيد العميل؛ كل خمس مشروبات (بغض النظر عن النوع) تمنح مشروبًا مجانيًا.
-- الطلبات المخزنة في قاعدة البيانات تتضمن ملف العميل، إجمالي المشروبات، خصومات الولاء، نوع الجهاز، اللغة، وعنوان الـ IP.
-- لوحة التحكم الإدارية تعرض الطلبات ببيانات الجهاز وتتيح تصدير تقارير CSV لكل من الطلبات والعملاء عبر `/api/orders` و`/api/customers`.
+## ✨ المزايا
 
-## Asset pipeline and hosting
+- **تسجيل ذاتي + منشآت معزولة** (multi-tenant) مع أدوار: مالك/مدير/كاشير/نادل/مطبخ.
+- **منيو رقمي حي** يُحدَّث لحظياً من قاعدة البيانات (Firestore realtime) — أي تعديل يظهر فوراً.
+- **طلب عبر QR لكل طاولة**: مسح رمز الطاولة → الطلب يُوسَم بالطاولة تلقائياً + عدد الأشخاص + زر نداء النادل.
+- **لوحة كاشير ومطبخ (KDS) لحظية** مع دورة حياة الطلب وتنبيه صوتي للطلبات الجديدة.
+- **لوحة تحكم كاملة**: أصناف، تصنيفات، طاولات وQR، عروض، عملاء، تقارير، موظفون، إعدادات.
+- **رفع صور** عبر Firebase Storage، **هوية بصرية لكل منشأة** (لون + اسم)، ثيم داكن/فاتح، عربي/إنجليزي.
+- **تقارير مبيعات** برسوم بيانية + تصدير CSV.
 
-Static assets are now optimized and hosted on Cloudinary to keep the repository lean and avoid paid storage tiers. The workflow lives in `scripts/`:
+---
 
-- `scripts/optimize-and-upload.mjs` – walks common image folders, converts assets to WebP with `sharp`, uploads them to Cloudinary, and writes a manifest to `scripts/upload-map.json`.
-- `scripts/update-menu-data.mjs` – rewrites image URLs inside the shared menu dataset so that every drink image points to the freshly uploaded Cloudinary URLs.
-- `scripts/git-cleanup.sh` – runs [BFG Repo-Cleaner](https://rtyley.github.io/bfg-repo-cleaner/) to purge large blobs from history after the assets move.
+## 🧱 التقنيات
 
-Create `scripts/.env` (see `scripts/.env.example`) with your Cloudinary credentials plus `BUILD_DIR`, `MENU_DATA_FILE`, and optional `IMAGE_SOURCE_DIRS` overrides if needed, then run:
+| الطبقة | الأداة |
+|---|---|
+| الواجهة | React 18 + Vite + React Router |
+| قاعدة البيانات + اللحظي | Cloud Firestore |
+| المصادقة | Firebase Authentication (Email/Password) |
+| الصور | Firebase Storage |
+| الاستضافة | Firebase Hosting |
+| الخطوط | Tajawal (المتن) + Cairo (العناوين) |
+
+---
+
+## 🚀 التشغيل محلياً
+
+### 1) المتطلبات
+- Node.js 18+ (مثبّت هنا على `C:\Program Files\nodejs`).
+
+### 2) إعداد مشروع Firebase
+1. افتح [console.firebase.google.com](https://console.firebase.google.com) وأنشئ مشروعاً (الخطة المجانية Spark تكفي للبدء).
+2. **Authentication** → فعّل مزوّد **Email/Password**.
+3. **Firestore Database** → أنشئ قاعدة بيانات (Production mode).
+4. **Storage** → فعّله (لرفع صور الأصناف — اختياري؛ المنيو يعمل بدون صور).
+5. **Project settings → Your apps → Web (`</>`)** → سجّل تطبيق ويب وانسخ قيم الإعداد.
+
+### 3) متغيرات البيئة
+انسخ `.env.example` إلى `.env.local` واملأ القيم:
 
 ```bash
-npm ci
-npm run img:upload
-npm run img:rewrite
+cp .env.example .env.local
 ```
 
-Commit the resulting manifest and menu data changes. After assets move, run `bash scripts/git-cleanup.sh` to shrink the Git history.
-
-## Builds and deployment
-
-The Netlify build (`npm run build`) copies the static bundle into `dist/`, which matches `BUILD_DIR` in `netlify.toml`. A GitHub Action in `.github/workflows/deploy-netlify.yml` installs dependencies, builds, and triggers a Netlify deploy on pushes to `main`. Set `NETLIFY_AUTH_TOKEN` and `NETLIFY_SITE_ID` secrets in the repository to enable automated deployments.
-
-## Using the shared menu data in another page
-
-If you are copying the menu UI into a new HTML file, add the shared dataset before the main script that renders the menu:
-
-```html
-<!-- Your menu markup … -->
-<script src="menu-data.js"></script>
-<script>
-  // Existing menu logic that expects window.NEEMA_SHARED.MENU_DATA
-</script>
+```
+VITE_FIREBASE_API_KEY=...
+VITE_FIREBASE_AUTH_DOMAIN=...
+VITE_FIREBASE_PROJECT_ID=...
+VITE_FIREBASE_STORAGE_BUCKET=...
+VITE_FIREBASE_MESSAGING_SENDER_ID=...
+VITE_FIREBASE_APP_ID=...
 ```
 
-The JavaScript inside each menu file now looks up `window.NEEMA_SHARED.MENU_DATA`. If that script does not load, the UI will still render but without any menu items, and the console logs:
+> بدون هذه القيم سيعرض التطبيق شاشة إرشادية للإعداد بدل المنيو.
+
+### 4) التثبيت والتشغيل
+```bash
+npm install
+npm run dev      # http://localhost:5173
+```
+
+---
+
+## 🔒 نشر قواعد الأمان (مهم)
+
+قواعد Firestore و Storage موجودة في المستودع وتفرض عزل المنشآت والصلاحيات. انشرها عبر Firebase CLI:
+
+```bash
+npm i -g firebase-tools
+firebase login
+# اضبط معرّف المشروع في .firebaserc ضمن "default"
+firebase deploy --only firestore:rules,firestore:indexes,storage
+```
+
+- `firestore.rules` — عزل متعدد المنشآت + RBAC + قراءة عامة للمنيو + إنشاء الطلبات للضيوف.
+- `firestore.indexes.json` — فهارس الاستعلامات اللحظية (الطلبات النشطة، نداءات النادل).
+- `storage.rules` — قراءة عامة للصور ورفع للموظفين فقط (≤5MB، صور فقط).
+
+> **تلميح:** عند أول تشغيل لاستعلام يحتاج فهرساً، يطبع Firestore رابطاً في الـ console لإنشائه بنقرة — أو انشر `firestore:indexes` مسبقاً.
+
+---
+
+## 📦 النشر إلى الإنتاج
+
+```bash
+npm run build
+firebase deploy            # ينشر hosting + rules + storage
+# أو فقط الموقع:
+firebase deploy --only hosting
+```
+
+---
+
+## 🗺️ المسارات (Routes)
+
+| المسار | الوصف | الوصول |
+|---|---|---|
+| `/` | صفحة الهبوط + تسجيل/دخول | عام |
+| `/signup` · `/login` | المصادقة | عام |
+| `/onboarding` | إنشاء بروفايل المنشأة | مستخدم بلا منشأة |
+| `/admin` | لوحة التحكم (رئيسية، أصناف، تصنيفات، طاولات، عروض، عملاء، تقارير، موظفون، إعدادات) | موظف |
+| `/cashier` | لوحة الكاشير/الاستقبال اللحظية | موظف |
+| `/kds` | شاشة المطبخ | موظف |
+| `/m/:slug` | المنيو العام للمنشأة | عام |
+| `/t/:slug/:token` | منيو طاولة عبر QR (طلب + نداء النادل) | عام |
+| `/order/:slug/:orderId` | تتبّع حالة الطلب | عام (برابط القدرة) |
+
+---
+
+## 🧭 تدفّق الاستخدام
+
+1. صاحب المنشأة **يسجّل** → ينشئ **بروفايل المنشأة** (اسم، نوع، رابط، عملة، لون).
+2. يضيف **الأصناف والتصنيفات** من لوحة التحكم (مع رفع صور وأحجام/خيارات).
+3. ينشئ **الطاولات** ويطبع **رموز QR** الخاصة بكل طاولة.
+4. الضيف **يمسح QR الطاولة** → يختار عدد الأشخاص → يطلب → يصل الطلب **لحظياً** للكاشير والمطبخ.
+5. الموظف ينقل الطلب عبر مراحله، والضيف **يتابع الحالة** على جواله.
+6. يدعو المالك **الموظفين** بالبريد؛ ينضمون تلقائياً عند تسجيل الدخول.
+
+---
+
+## 📁 بنية المشروع
 
 ```
-[Neema] Shared menu data not found — rendering with empty menu dataset.
+src/
+  lib/         firebase.js, db.js, auth.jsx, i18n.jsx, qr.js, storage.js, format.js, seed.js
+  components/  AdminLayout, DinerBar, MenuView, Sheet, Toast, ui, FirebaseSetup
+  routes/      Landing, Login, Signup, Onboarding
+    admin/     Dashboard, Items, Categories, Tables, Offers, Customers, Reports, Staff, Settings
+    staff/     Cashier, Kds
+    menu/      PublicMenu, TableMenu, OrderStatus
+firestore.rules · firestore.indexes.json · storage.rules · firebase.json
+legacy/        نسخة الكافيه القديمة (مرجع + بيانات أولية)
+PLAN.md        المخطط المعماري الكامل
 ```
 
-Including `menu-data.js` on the page ensures both menu builds use the same catalogue of products and imagery.
+---
 
-## Customising the catalogue
+## ⚠️ ملاحظات
 
-You now have two options when updating the menu:
-
-1. **Admin Dashboard (`/admin/`)** – A modern, comprehensive web interface that connects to the `/api/items` endpoint for full menu management:
-   - **Add/Edit/Delete Items**: Complete CRUD operations with form validation
-   - **Category Management**: Assign items to categories (hot-coffee, hot-tea, cold-coffee, cold-mojito, cold-other, dessert-cake, dessert-side)
-   - **Variant/Options Support**: Add size variations, flavor options, or pricing tiers to any item
-   - **Image Management**: Live image preview and URL management
-   - **Search & Filter**: Quick search across all menu items
-   - **Bulk Operations**: Export menu as JSON, view and export orders/customers as CSV
-   - **Statistics Dashboard**: View total items, orders, and customers at a glance
-   - **Authentication**: Password-protected using the `ADMIN_PASSWORD` environment variable
-   - Access the dashboard at `/admin/` and log in with your admin password
-
-2. **Manual File Editing** – You can still edit `menu-data.js` directly to modify prices or items when you need default data without a database connection.
-
-## Serverless API
-
-- `/api/items` – Full CRUD operations for menu items with support for:
-  - **GET**: Retrieve all items or a specific item by ID
-  - **POST**: Create new menu items with category and variant support
-  - **PUT**: Update existing items (requires `Authorization: Bearer <ADMIN_PASSWORD>`)
-  - **DELETE**: Remove items (requires `Authorization: Bearer <ADMIN_PASSWORD>`)
-  - **Fields**: `name_ar`, `name_en`, `price`, `calories`, `img_url`, `category`, `variants` (JSONB)
-  
-- `/api/orders` – Order management and retrieval:
-  - **POST**: Submit new orders from the frontend
-  - **GET**: Retrieve order history (requires `Authorization: Bearer <ADMIN_PASSWORD>`)
-  - Stores customer profile, total drinks, loyalty discounts, device info, language, and IP address
-  
-- `/api/customers` – Aggregated customer data endpoint:
-  - **GET**: List all customers with order count, total spent, total drinks, rewards, last device, and last IP
-  - Requires authorization header for access from admin dashboard
-  - Used for analytics and CSV export
-
-يستعمل كلا المسارين قاعدة بيانات PostgreSQL عبر Netlify Neon. استورد المخطط الموجود في `netlify/functions/schema.sql` لتجهيز الجداول المطلوبة (`items` و`orders`)، وتمت إضافة جدول `customers` وأعمدة إضافية داخل `orders` للاحتفاظ بملخصات الولاء، خصومات الولاء، بيانات الجهاز، وعناوين الـ IP.
-
-### Environment variables
-
-- `ADMIN_PASSWORD` – required لكلا لوحة التحكم والعمليات المحمية في واجهات `/api`.
-- `CORS_ORIGIN` – (اختياري) اضبطه لتحجيم النطاقات المسموح لها باستهلاك الواجهات؛ القيمة الافتراضية `*`.
-
-## Persisted data keys
-
-The menu stores customer preferences and order history in `localStorage`. These keys are shared by both builds:
-
-- `nima.lang` – preferred language (`ar` or `en`).
-- `nima.mode` – theme (`dark` or `light`).
-- `nima.customerProfile` – saved name and phone number.
-- `nima.customerRegistry` – known customers for multi-guest logs.
-- `nima.orderLog` – history of orders sent from the device.
-- `nima.loyaltyTracker` – عدادات الولاء لكل عميل (عدد المشروبات والمستويات المكتملة بغض النظر عن نوع المشروب).
-- `neema.menuData.custom` – نسخة محلية من أصناف المنيو يتم إنشاؤها من خلال لوحة التحكم.
-
-Clearing browser storage resets the greeting, loyalty counts, and saved customer details.
+- النسخة القديمة (كافيه نيمة الثابت) محفوظة في `legacy/` للمرجع وبيانات المنيو الأولية.
+- إعادة حساب الأسعار من جهة الخادم وروابط القدرة الموقّعة للطاولات مخطّطة كتحسينات لاحقة (تتطلب Cloud Functions / خطة Blaze) — راجع `PLAN.md`.
+- إن لم يتوفّر Storage على خطتك، يعمل المنيو بدون صور (حقل الصورة اختياري).

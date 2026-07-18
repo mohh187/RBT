@@ -1,0 +1,73 @@
+rules_version = '2';
+
+// MenuLink Storage rules.
+// All uploads live under tenants/{tid}/...  (items, branding/logo+cover, events,
+// videos, and support-chat attachments).
+// • Public READ  — menu/branding/event images/videos must be viewable by anyone.
+// • WRITE/DELETE — ONLY staff of THAT tenant (or a platform admin). This is the
+//   critical isolation guard: without the tenant check, any signed-in user could
+//   delete/overwrite another venue's assets.
+service firebase.storage {
+  match /b/{bucket}/o {
+
+    function isImage() {
+      return request.resource.contentType.matches('image/.*');
+    }
+    function isVideo() {
+      return request.resource.contentType.matches('video/.*');
+    }
+    function isAudio() {
+      return request.resource.contentType.matches('audio/.*');
+    }
+    function underLimit(mb) {
+      return request.resource.size < mb * 1024 * 1024;
+    }
+
+    // Cross-service Firestore lookups: is the caller staff of this tenant, or a platform admin?
+    function isTenantStaff(tid) {
+      return request.auth != null
+        && firestore.get(/databases/(default)/documents/users/$(request.auth.uid)).data.tenantId == tid;
+    }
+    function isPlatformAdmin() {
+      return request.auth != null
+        && firestore.exists(/databases/(default)/documents/platformAdmins/$(request.auth.uid));
+    }
+
+    // Support-chat attachments: staff/platform may upload bounded files of any
+    // type (voice notes, PDFs, images) needed for support conversations.
+    match /tenants/{tid}/support/{allPaths=**} {
+      allow read: if true;
+      allow create, update: if (isTenantStaff(tid) || isPlatformAdmin())
+        && underLimit(25);
+      allow delete: if isTenantStaff(tid) || isPlatformAdmin();
+    }
+
+    // Central media library (tenants/{tid}/library/...): unlike the generic
+    // tenant-assets block below, ANY content type is allowed here (documents,
+    // fonts, archives…) with per-kind ceilings, so the library can hold every
+    // reusable asset. Media types get their own (larger) limits.
+    match /tenants/{tid}/library/{allPaths=**} {
+      allow read: if true;
+      allow create, update: if (isTenantStaff(tid) || isPlatformAdmin()) && (
+        (isImage() && underLimit(10)) ||
+        (isVideo() && underLimit(150)) ||
+        (isAudio() && underLimit(40)) ||
+        (!isImage() && !isVideo() && !isAudio() && underLimit(25))
+      );
+      allow delete: if isTenantStaff(tid) || isPlatformAdmin();
+    }
+
+    // Tenant assets (item photos, logo, cover, event images, background videos).
+    match /tenants/{tid}/{allPaths=**} {
+      allow read: if true;
+      allow create, update: if (isTenantStaff(tid) || isPlatformAdmin()) && (
+        (isImage() && underLimit(10)) ||
+        (isVideo() && underLimit(100)) ||
+        (isAudio() && underLimit(30))
+      );
+      allow delete: if isTenantStaff(tid) || isPlatformAdmin();
+    }
+
+    // Everything outside tenants/ is denied by default (no rule = no access).
+  }
+}

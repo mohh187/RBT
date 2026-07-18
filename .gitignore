@@ -1,7 +1,34 @@
+# dependencies
 node_modules/
+
+# build
 dist/
-scripts/.env
+dist-ssr/
+*.local
+
+# env (secrets) — never commit real keys (Moyasar, Gemini, Firebase)
+.env
+.env.local
+.env.*.local
+.env.menu-88996
+.env.shots
+functions/.env
+functions/.env.*
+!functions/.env.example
+
+# firebase
+.firebase/
+firebase-debug.log
+firestore-debug.log
+ui-debug.log
+
+# editor / os
+.idea/
+.DS_Store
+*.sw?
+
+# logs
 *.log
 
-# Environment files
-.env
+# legacy build leftovers
+.netlify/

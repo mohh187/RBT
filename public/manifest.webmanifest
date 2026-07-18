@@ -1,0 +1,16 @@
+{
+  "name": "MenuLink",
+  "short_name": "MenuLink",
+  "description": "منيو رقمي وطلب عبر QR ونظام إدارة متكامل للمقاهي والمطاعم",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#F7F2EC",
+  "theme_color": "#8B5E3C",
+  "orientation": "any",
+  "dir": "rtl",
+  "lang": "ar",
+  "icons": [
+    { "src": "/favicon.svg", "sizes": "any", "type": "image/svg+xml", "purpose": "any maskable" }
+  ],
+  "categories": ["food", "business", "shopping"]
+}

@@ -1,0 +1,664 @@
+rules_version = '2';
+
+// MenuLink Firestore security rules — multi-tenant isolation + RBAC.
+//
+// Model:
+//   users/{uid}                      -> { tenantId, role }   (role: owner|manager|cashier|waiter|kitchen)
+//   tenantSlugs/{slug}               -> { tenantId }          (public slug lookup)
+//   tenants/{tid}                    -> venue profile/settings
+//   tenants/{tid}/categories/{id}
+//   tenants/{tid}/items/{id}
+//   tenants/{tid}/tables/{id}
+//   tenants/{tid}/offers/{id}
+//   tenants/{tid}/orders/{id}
+//   tenants/{tid}/waiterCalls/{id}
+//   tenants/{tid}/customers/{id}
+//
+// Public (anonymous diners) may READ the menu and CREATE orders / waiter calls.
+// Everything operational is restricted to authenticated staff of THAT tenant.
+
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    // ---- helpers ----
+    function isSignedIn() {
+      return request.auth != null;
+    }
+    function userDoc() {
+      return get(/databases/$(database)/documents/users/$(request.auth.uid)).data;
+    }
+    function isMember(tid) {
+      return isSignedIn()
+        && exists(/databases/$(database)/documents/users/$(request.auth.uid))
+        && userDoc().tenantId == tid;
+    }
+    function roleIn(tid, roles) {
+      return isMember(tid) && (userDoc().role in roles);
+    }
+    // Any user bound to THIS tenant is staff (supports custom roles: supervisor,
+    // barista, cleaner, ...). Only owner/manager are "managers" for privileged writes.
+    function isStaff(tid) {
+      return isMember(tid);
+    }
+    function isManager(tid) {
+      return roleIn(tid, ['owner', 'manager']);
+    }
+    // Granular capability check. Managers hold every cap. A non-manager member holds
+    // a cap only if it appears in the RESOLVED override array on their staff doc
+    // (tenants/{tid}/staff/{uid}.caps) — which only a manager can write (see the
+    // staff rule: `caps` is blocked from self-write). Absent override → no delegated
+    // cap (they keep the isStaff-level access that other rules already grant).
+    function staffCapsList(tid) {
+      return get(/databases/$(database)/documents/tenants/$(tid)/staff/$(request.auth.uid)).data.caps;
+    }
+    function hasCap(tid, cap) {
+      return isManager(tid)
+        || (isMember(tid)
+            && exists(/databases/$(database)/documents/tenants/$(tid)/staff/$(request.auth.uid))
+            && ('caps' in get(/databases/$(database)/documents/tenants/$(tid)/staff/$(request.auth.uid)).data)
+            && (cap in staffCapsList(tid)));
+    }
+    // Platform super-admin (console owner). Membership is the existence of a
+    // platformAdmins/{uid} doc — created ONLY via Firebase Console / Admin SDK
+    // (client writes are denied below), so it cannot be self-granted.
+    function isPlatformAdmin() {
+      return isSignedIn()
+        && exists(/databases/$(database)/documents/platformAdmins/$(request.auth.uid));
+    }
+
+    // ---- per-user profile ----
+    match /users/{uid} {
+      // A user may read their own profile; platform admins may read/manage any
+      // account (support: fix a broken role/tenant binding).
+      allow read: if isSignedIn() && (request.auth.uid == uid || isPlatformAdmin());
+      allow update, delete: if isPlatformAdmin();
+      // On signup the user creates their own bootstrap profile (no tenant yet, or self-claimed owner).
+      allow create: if isSignedIn() && request.auth.uid == uid;
+      // `caps` (per-staffer capability overrides) is manager-owned — a staffer must
+      // NOT be able to self-grant capabilities by writing their own users doc.
+      // (role/tenantId already protected; caps was the privilege-escalation hole.)
+      // NOTE: the owner branch MUST use getAfter() — venue creation links the user
+      // to the tenant inside the SAME transaction that creates the tenant, and a
+      // plain get() sees the PRE-transaction state (tenant not there yet), which
+      // rejected the link and broke every fresh venue creation.
+      allow update: if isSignedIn() && request.auth.uid == uid
+        && (
+          !request.resource.data.diff(resource.data).affectedKeys().hasAny(['role', 'tenantId', 'caps'])
+          || (request.resource.data.role == 'owner'
+              && request.resource.data.tenantId != null
+              && getAfter(/databases/$(database)/documents/tenants/$(request.resource.data.tenantId)).data.ownerUid == uid)
+          || (request.resource.data.role != 'owner'
+              && request.resource.data.tenantId != null
+              && exists(/databases/$(database)/documents/staffInvites/$(resource.data.email))
+              && get(/databases/$(database)/documents/staffInvites/$(resource.data.email)).data.tenantId == request.resource.data.tenantId
+              && get(/databases/$(database)/documents/staffInvites/$(resource.data.email)).data.role == request.resource.data.role)
+        );
+    }
+
+    // ---- public slug -> tenant lookup ----
+    match /tenantSlugs/{slug} {
+      allow read: if true;
+      allow create: if isSignedIn(); // claimed during onboarding; uniqueness enforced by doc id == slug
+      allow update, delete: if false;
+    }
+
+    // ---- public custom-domain / subdomain -> tenant lookup (doc id == hostname) ----
+    // Public read so the menu resolves at load. A manager may REQUEST a domain
+    // (status 'pending'); only the platform activates it (after DNS + SSL), so a
+    // venue can't hijack another's hostname or self-activate.
+    match /domains/{host} {
+      allow read: if true;
+      allow create: if isPlatformAdmin()
+        || (isSignedIn() && isManager(request.resource.data.tenantId)
+            && request.resource.data.status == 'pending');
+      allow update: if isPlatformAdmin();
+      // A venue may cancel its OWN still-pending request; only the platform
+      // touches an active domain (anti-hijack).
+      allow delete: if isPlatformAdmin()
+        || (isManager(resource.data.tenantId) && resource.data.status == 'pending');
+    }
+
+    // ---- payment intents (order / subscription / booking checkout) ----
+    // Created + settled ONLY by Cloud Functions (admin SDK, server-derived amount).
+    // Public read by the unguessable auto-id so a client can poll its own status;
+    // no client writes (prevents amount/status tampering).
+    match /payIntents/{id} {
+      allow read: if true;
+      allow write: if false;
+    }
+
+    // ---- staff invites (no-backend invite flow) ----
+    // Managers of the target tenant create invites; the invited user reads & claims their own (by email == doc id).
+    match /staffInvites/{email} {
+      allow get: if isSignedIn();
+      allow list: if isSignedIn() && isManager(resource.data.tenantId);
+      allow create, update: if isSignedIn() && isManager(request.resource.data.tenantId);
+      allow delete: if isSignedIn(); // manager cancels, or invited user deletes on claim
+    }
+
+    // ---- tenant root ----
+    // ---- digital signage screens: doc id = the pairing code the TV enters.
+    //      TVs read anonymously; only staff of the owning venue manage. ----
+    match /screens/{code} {
+      allow read: if true;
+      allow create: if isStaff(request.resource.data.tid);
+      // Anonymous paired TVs may write ONLY their health heartbeat (last-seen +
+      // which slide is playing) — nothing else on the doc is reachable publicly.
+      allow update: if isStaff(resource.data.tid)
+        || request.resource.data.diff(resource.data).affectedKeys().hasOnly(['lastSeenAt', 'nowIdx']);
+      allow delete: if isStaff(resource.data.tid);
+    }
+
+    match /tenants/{tid} {
+      // Public can read venue profile (needed to render the public menu/branding).
+      allow read: if true;
+      // Owner creates their tenant during onboarding — but may NOT self-assign
+      // platform-owned subscription/suspension fields.
+      allow create: if isSignedIn() && request.resource.data.ownerUid == request.auth.uid
+        && !request.resource.data.keys().hasAny(['plan', 'planStatus', 'planExpiresAt', 'active', 'suspendReason', 'platformNote', 'features']);
+      // Managers update venue settings, but subscription/suspension fields are
+      // platform-owned (set only from the platform console). A staffer holding a
+      // settings-domain cap (appearance / loyalty / campaigns / integrations /
+      // settings) may also save — but NEVER roleCaps (self-escalation via the
+      // role-defaults mirror) or the messaging quota counters.
+      allow update: if isPlatformAdmin()
+        || (isManager(tid)
+            && !request.resource.data.diff(resource.data).affectedKeys()
+                 .hasAny(['plan', 'planStatus', 'planExpiresAt', 'active', 'suspendReason', 'platformNote', 'ownerUid', 'features']))
+        || ((hasCap(tid, 'manage_settings') || hasCap(tid, 'manage_appearance') || hasCap(tid, 'manage_loyalty') || hasCap(tid, 'manage_campaigns') || hasCap(tid, 'manage_integrations'))
+            && !request.resource.data.diff(resource.data).affectedKeys()
+                 .hasAny(['plan', 'planStatus', 'planExpiresAt', 'active', 'suspendReason', 'platformNote', 'ownerUid', 'features', 'roleCaps', 'msgsSent', 'msgCapMonthly']));
+      allow delete: if roleIn(tid, ['owner']) || isPlatformAdmin();
+
+      // Platform admins get full read/write over every tenant subcollection
+      // (support, oversight, and account control from the central console).
+      match /{document=**} {
+        allow read, write: if isPlatformAdmin();
+      }
+
+      // ---- menu catalogue: public read; manager OR a staffer granted manage_menu ----
+      match /categories/{id} {
+        allow read: if true;
+        allow write: if hasCap(tid, 'manage_menu');
+      }
+      match /items/{id} {
+        allow read: if true;
+        allow create, delete: if hasCap(tid, 'manage_menu');
+        // Updating is menu-cap work, but CHANGING price-bearing fields additionally
+        // needs edit_prices (managers hold both). Unchanged fields don't appear in
+        // affectedKeys, so availability/star/sort/archive edits pass untouched.
+        allow update: if hasCap(tid, 'manage_menu')
+          && (hasCap(tid, 'edit_prices')
+              || !request.resource.data.diff(resource.data).affectedKeys().hasAny(['price', 'variants']));
+      }
+
+      // ---- item reviews: guests submit + read, managers moderate ----
+      match /reviews/{id} {
+        allow read: if true;
+        allow create: if true
+          && request.resource.data.rating is number
+          && request.resource.data.rating >= 1
+          && request.resource.data.rating <= 5;
+        allow update, delete: if isManager(tid);
+      }
+      match /offers/{id} {
+        allow read: if true;
+        allow write: if hasCap(tid, 'manage_offers');
+      }
+      match /tables/{id} {
+        // Diners resolve a table by its qrToken (read needed); managers (or a staffer
+        // granted manage_tables) manage tables.
+        allow read: if true;
+        allow write: if hasCap(tid, 'manage_tables');
+      }
+
+      // ---- events (café-hosted): public read; manager OR manage_events ----
+      match /events/{id} {
+        allow read: if true;
+        allow write: if hasCap(tid, 'manage_events');
+      }
+
+      // ---- tickets: diners book + view-by-id, staff manage/check-in ----
+      match /tickets/{id} {
+        allow get: if true;
+        allow list: if isStaff(tid);
+        // A diner may create ONLY a 'pending' ticket. FREE tickets are issued by
+        // the issueFreeTicket Cloud Function (Admin SDK, re-derives price==0 from
+        // the event); priced ones are flipped 'pending'→'valid' by the payment
+        // webhook. This blocks self-issuing a 'valid' (esp. a free-priced-0) ticket
+        // for a PAID event. Payment-proof fields are server-owned, never seeded by
+        // a diner (else a 'pending' ticket could masquerade as already paid).
+        // NOTE: deploy functions + client BEFORE this rule (free tickets route
+        // through the callable; otherwise diner free-ticket creation is rejected).
+        allow create: if isStaff(tid)
+          || (request.resource.data.status == 'pending'
+              && !request.resource.data.keys().hasAny(['paidOnline', 'paymentRef', 'paymentStatus', 'paidAt']));
+        allow update: if isStaff(tid);
+        allow delete: if isManager(tid);
+      }
+
+      // ---- reservations: diners request + view-by-id, staff confirm/decline ----
+      match /reservations/{id} {
+        allow get: if true;
+        allow list: if isStaff(tid);
+        // A diner requests a reservation as 'requested'. The deposit is server-
+        // settled (webhook), so a diner may only seed depositStatus 'pending' and
+        // never any payment-proof field — otherwise a booking could show a paid
+        // deposit that was never collected.
+        allow create: if isStaff(tid)
+          || (
+            request.resource.data.status == 'requested'
+            && (!('depositStatus' in request.resource.data) || request.resource.data.depositStatus == 'pending')
+            && !request.resource.data.keys().hasAny(['paidOnline', 'paymentRef', 'depositPaidAt'])
+          );
+        allow update: if isStaff(tid);
+        allow delete: if isManager(tid);
+      }
+
+      // ---- public mirror docs (e.g. ready-order codes for signage TVs) ----
+      match /public/{docId} {
+        allow read: if true;
+        allow write: if isStaff(tid);
+      }
+
+      // ---- receipts / tax invoices: written ONLY by Cloud Functions (numbered,
+      // amount-authoritative, ZATCA). A customer opens their OWN invoice by its
+      // unguessable auto-id (get); LISTING is staff-only — receipts carry buyer
+      // name+phone, so a public `list` would leak the whole customer roster. ----
+      match /receipts/{id} {
+        allow get: if true;
+        allow list: if isStaff(tid);
+        allow write: if false;
+      }
+
+      // ---- orders: diners create + track-by-id, staff manage ----
+      match /orders/{id} {
+        // get: a diner may read THEIR order by its (unguessable) id to track status.
+        allow get: if true;
+        // list/query: staff only (prevents enumerating all orders).
+        allow list: if isStaff(tid);
+        // A suspended venue (active == false) stops accepting orders.
+        allow create: if true
+          && get(/databases/$(database)/documents/tenants/$(tid)).data.active != false
+          // 'pending' = cash/terminal (reaches staff now); 'awaiting_payment' =
+          // online, held until the payment settles (server flips it to 'pending').
+          && (request.resource.data.status == 'pending'
+              || request.resource.data.status == 'awaiting_payment')
+          && request.resource.data.total is number
+          && request.resource.data.total >= 0
+          && request.resource.data.items is list
+          && request.resource.data.items.size() > 0;
+        // Only staff move orders through their lifecycle.
+        allow update: if isStaff(tid);
+        allow delete: if isManager(tid);
+      }
+
+      // ---- stories: public menu strip — anyone reads, staff manage,
+      //      diners may only bump likes/views by exactly +1 ----
+      // ---- diner-facing notices: anyone reads (shown in the menu bell); manager OR
+      //      a marketing staffer granted manage_campaigns writes ----
+      match /notices/{id} {
+        allow read: if true;
+        allow write: if hasCap(tid, 'manage_campaigns');
+      }
+
+      match /stories/{id} {
+        allow read: if true;
+        allow create, delete: if isStaff(tid);
+        allow update: if isStaff(tid)
+          || (request.resource.data.diff(resource.data).affectedKeys().hasOnly(['likes'])
+              && request.resource.data.likes == resource.data.likes + 1)
+          || (request.resource.data.diff(resource.data).affectedKeys().hasOnly(['views'])
+              && request.resource.data.views == resource.data.views + 1);
+      }
+
+      // ---- venue profile posts: public read of published, staff manage,
+      //      diners may only bump likes/views by exactly +1 ----
+      match /posts/{id} {
+        allow get, list: if resource == null || resource.data.published == true || isStaff(tid);
+        allow create, delete: if isStaff(tid);
+        allow update: if isStaff(tid)
+          || (request.resource.data.diff(resource.data).affectedKeys().hasOnly(['likes'])
+              && request.resource.data.likes == resource.data.likes + 1)
+          || (request.resource.data.diff(resource.data).affectedKeys().hasOnly(['views'])
+              && request.resource.data.views == resource.data.views + 1);
+
+        // story replies: anyone may send a short text; staff read & moderate
+        match /replies/{rid} {
+          allow read, delete: if isStaff(tid);
+          allow create: if request.resource.data.text is string
+            && request.resource.data.text.size() > 0
+            && request.resource.data.text.size() < 300;
+        }
+      }
+
+      // ---- waiter calls: diners create, staff resolve ----
+      match /waiterCalls/{id} {
+        allow read: if isStaff(tid);
+        allow create: if true && request.resource.data.status == 'open';
+        allow update, delete: if isStaff(tid);
+      }
+
+      // ---- cashier sessions (cash drawer): staff open/close their till ----
+      match /cashierSessions/{id} {
+        allow read: if isStaff(tid);
+        allow create, update: if isStaff(tid);
+        allow delete: if isManager(tid);
+      }
+
+      // ---- raw materials inventory: staff read + update (sale deductions / receive / count),
+      // managers add/remove materials. Not public. ----
+      match /materials/{id} {
+        allow read: if isStaff(tid);
+        allow update: if isStaff(tid);
+        allow create, delete: if hasCap(tid, 'manage_inventory');
+      }
+      // ---- stock movements log: staff append (sales/receive/waste), managers correct ----
+      match /stockMoves/{id} {
+        allow read: if isStaff(tid);
+        allow create: if isStaff(tid);
+        allow update, delete: if isManager(tid);
+      }
+      // ---- suppliers: staff read, manager OR manage_inventory manages ----
+      match /suppliers/{id} {
+        allow read: if isStaff(tid);
+        allow write: if hasCap(tid, 'manage_inventory');
+      }
+      // ---- purchase orders: staff create/receive, manager OR manage_inventory corrects/deletes ----
+      match /purchaseOrders/{id} {
+        allow read: if isStaff(tid);
+        allow create, update: if isStaff(tid);
+        allow delete: if hasCap(tid, 'manage_inventory');
+      }
+      // ---- supplier payments ledger: staff append, managers correct ----
+      match /supplierPayments/{id} {
+        allow read: if isStaff(tid);
+        allow create: if isStaff(tid);
+        allow update, delete: if isManager(tid);
+      }
+      // ---- AI assistant audit log: any assistant user appends; managers read ----
+      match /aiLog/{id} {
+        allow read: if isManager(tid);
+        allow create: if hasCap(tid, 'use_assistant');
+        allow update, delete: if false;
+      }
+
+      // AI durable memory (self-learning). Staff-scoped to this venue only; the
+      // assistant reads it into context and writes insights via remember_fact.
+      match /aiMemory/{id} {
+        allow read, write: if isStaff(tid);
+      }
+
+      // Marketing campaigns (scheduled WhatsApp blasts) — manager OR a marketing
+      // staffer granted manage_campaigns; the processCampaigns Cloud Function
+      // (Admin SDK) does the actual sending.
+      match /campaigns/{id} {
+        allow read: if isStaff(tid);
+        allow write: if hasCap(tid, 'manage_campaigns');
+      }
+
+      // Marketing post drafts (AI/manual designs awaiting approval before any
+      // publish). Campaigns-capability owns the whole approve/publish flow.
+      match /marketingPosts/{id} {
+        allow read: if isStaff(tid);
+        allow write: if hasCap(tid, 'manage_campaigns');
+      }
+
+      // Saved-card TOKENS — server-only (Admin SDK). The payable token must never
+      // be client-readable; diners list/charge/delete via callable functions that
+      // verify the owning device and re-derive the amount server-side.
+      match /savedCards/{id} {
+        allow read, write: if false;
+      }
+      // ---- expenses (operating costs): managers manage ----
+      match /expenses/{id} {
+        allow read: if isStaff(tid);
+        allow write: if isManager(tid);
+      }
+
+      // ---- complaints: diners submit, staff read & resolve ----
+      match /complaints/{id} {
+        allow read: if isStaff(tid);
+        allow create: if true
+          && request.resource.data.status == 'open'
+          && request.resource.data.message is string
+          && request.resource.data.message.size() > 0;
+        allow update, delete: if isStaff(tid);
+      }
+
+      // ---- customers (CRM) ----
+      // Staff read + full write. Diners may upsert only their own LIGHT profile on order
+      // (name/phone/stats) — never the loyalty/flag fields, which are staff/server-owned.
+      // This closes the "self-grant membership / infinite points / un-flag" hole.
+      match /customers/{id} {
+        allow read: if isStaff(tid);
+        allow create: if isStaff(tid)
+          || !request.resource.data.keys().hasAny(['membership', 'flagged', 'flagNote', 'staffRating', 'cancelCount', 'noShowCount', 'lastBdayYear', 'staffRatedBy', 'rewards', 'loyaltyDrinks', 'points', 'totalSpent', 'totalOrders', 'totalDrinks']);
+        allow update: if isStaff(tid)
+          || !request.resource.data.diff(resource.data).affectedKeys().hasAny(['membership', 'flagged', 'flagNote', 'staffRating', 'cancelCount', 'noShowCount', 'lastBdayYear', 'staffRatedBy', 'rewards', 'loyaltyDrinks', 'points', 'totalSpent', 'totalOrders', 'totalDrinks']);
+        allow delete: if isManager(tid);
+      }
+
+      // ---- member cards (VIP): public display mirror, get-by-token; staff write ----
+      match /memberCards/{token} {
+        allow get: if true; // diner opens their own card by its unguessable token
+        allow list: if isStaff(tid);
+        allow write: if isStaff(tid);
+      }
+      // ---- phone→card lookup mirror: lets the menu recognize a returning member by
+      // phone (get-by-phoneId). Holds only token/tier/discount, no PII. Staff write. ----
+      match /memberPhones/{pid} {
+        allow get: if true;
+        allow list: if isStaff(tid);
+        allow write: if isStaff(tid);
+      }
+      // ---- loyalty points ledger (earn/redeem statement): staff read + append ----
+      match /loyaltyLog/{id} {
+        allow read: if isStaff(tid);
+        allow create: if isStaff(tid);
+        allow update, delete: if isManager(tid);
+      }
+
+      // ---- staff directory: managers manage anyone; a staffer self-registers
+      // ONLY their own doc within their own tenant (strict isolation). ----
+      match /staff/{uid} {
+        allow read: if isStaff(tid);
+        allow create: if isManager(tid)
+          || (isStaff(tid) && request.auth.uid == uid
+              && !request.resource.data.keys().hasAny(['salary', 'caps', 'deductions', 'workDays', 'shiftStart', 'shiftEnd']));
+        allow update: if isManager(tid)
+          || (isStaff(tid) && request.auth.uid == uid
+              && !request.resource.data.diff(resource.data).affectedKeys().hasAny(['salary', 'role', 'caps', 'deductions', 'workDays', 'shiftStart', 'shiftEnd', 'active']));
+        allow delete: if isManager(tid);
+      }
+
+      // ---- attendance: a staffer punches in/out for THEMSELVES; staff read, managers manage ----
+      match /attendance/{id} {
+        allow read: if isStaff(tid);
+        allow create: if isStaff(tid)
+          && request.resource.data.staffUid == request.auth.uid
+          && request.resource.data.at == request.time
+          && request.resource.data.selfieUrl is string
+          && request.resource.data.selfieUrl.size() > 0;
+        allow update, delete: if isManager(tid);
+      }
+
+      // ---- leave requests: a staffer requests for THEMSELVES; staff read, managers decide ----
+      match /leaves/{id} {
+        allow read: if isStaff(tid);
+        allow create: if isStaff(tid)
+          && request.resource.data.staffUid == request.auth.uid
+          && request.resource.data.status == 'pending';
+        allow update, delete: if isManager(tid);
+      }
+
+      // ---- announcements: managers post venue-wide, all staff read ----
+      match /announcements/{id} {
+        allow read: if isStaff(tid);
+        allow create, update, delete: if isManager(tid);
+      }
+
+      // ---- status sessions (busy/break): a staffer logs & closes their OWN
+      // sessions; staff read, managers manage. ----
+      match /statusLog/{id} {
+        allow read: if isStaff(tid);
+        allow create: if isStaff(tid) && request.resource.data.staffUid == request.auth.uid;
+        allow update: if isManager(tid) || (isStaff(tid) && resource.data.staffUid == request.auth.uid);
+        allow delete: if isManager(tid);
+      }
+
+      // ---- shifts (weekly schedule): managers assign, all staff read ----
+      match /shifts/{id} {
+        allow read: if isStaff(tid);
+        allow create, update, delete: if isManager(tid);
+      }
+
+      // ---- shift swaps: a staffer requests with a coworker; the TARGET coworker
+      // accepts/declines (peer-to-peer); managers can also manage. ----
+      match /shiftSwaps/{id} {
+        allow read: if isStaff(tid);
+        allow create: if isStaff(tid) && request.resource.data.fromUid == request.auth.uid;
+        allow update: if isManager(tid) || (isStaff(tid) && resource.data.toUid == request.auth.uid);
+        allow delete: if isManager(tid) || (isStaff(tid) && resource.data.fromUid == request.auth.uid);
+      }
+
+      // ---- push tokens (FCM): staff register their device; server reads via Admin SDK ----
+      match /pushTokens/{id} {
+        allow read: if isStaff(tid);
+        allow write: if isStaff(tid);
+      }
+
+      // ---- central media library: every upload is registered here so assets can
+      // be reused anywhere (backgrounds, menu, signage…) without re-uploading.
+      // Any staffer who can upload can register + browse; managers curate/delete. ----
+      match /media/{id} {
+        allow read: if isStaff(tid);
+        allow create: if isStaff(tid);
+        allow delete: if isStaff(tid);
+        allow update: if isManager(tid);
+      }
+
+      // ---- venue secrets (own WhatsApp number credentials, API keys) ----
+      // NEVER public: the tenant root doc is world-readable, so anything secret
+      // lives here instead. Managers manage; Cloud Functions read via Admin SDK.
+      match /private/{id} {
+        allow read, write: if hasCap(tid, 'manage_integrations');
+      }
+
+      // ---- misc tenant subcollections (meta, audit) ----
+      match /meta/{id} {
+        allow read: if true;
+        allow write: if isManager(tid);
+      }
+    }
+
+    // ================= PLATFORM CONSOLE (super-admin) =================
+
+    // Membership roster. Bootstrap: create your own admin doc from the Firebase
+    // Console (doc id = your auth uid). Clients can only verify THEIR OWN entry.
+    match /platformAdmins/{uid} {
+      // Any signed-in user may verify THEIR OWN entry; platform admins may read
+      // the full roster (Roles screen). Role writes go through the setPlatformRole
+      // Cloud Function (Admin SDK), never the client.
+      allow get: if isSignedIn() && (request.auth.uid == uid || isPlatformAdmin());
+      allow list: if isPlatformAdmin();
+      allow write: if false;
+    }
+
+    // Cross-venue activity feed — written exclusively by Cloud Functions
+    // (Admin SDK bypasses rules); the console reads it live.
+    match /platformActivity/{id} {
+      allow read: if isPlatformAdmin();
+      allow write: if false;
+    }
+
+    // Client error reports (code monitoring). Any signed-in principal (diners
+    // may auth anonymously) may file a bounded, shape-constrained report; only
+    // the platform reads/manages them.
+    match /platformErrors/{id} {
+      allow create: if isSignedIn()
+        && request.resource.data.message is string
+        && request.resource.data.message.size() > 0
+        && request.resource.data.message.size() < 2000
+        && request.resource.data.keys().hasOnly(['message', 'stack', 'kind', 'url', 'ua', 'tenantId', 'tenantName', 'uid', 'status', 'at'])
+        && (!('stack' in request.resource.data) || request.resource.data.stack.size() < 5000);
+      allow read, update, delete: if isPlatformAdmin();
+    }
+
+    // Support tickets/issues. Venue managers open + follow THEIR OWN venue's
+    // tickets; the platform sees and manages all of them.
+    match /platformIssues/{id} {
+      allow create: if isPlatformAdmin()
+        || (isSignedIn()
+            && isManager(request.resource.data.tenantId)
+            && request.resource.data.status == 'open');
+      // Managers only (support tickets may carry account/billing context).
+      allow read: if isPlatformAdmin()
+        || (isSignedIn() && isManager(resource.data.tenantId));
+      allow update: if isPlatformAdmin() || (isSignedIn() && isManager(resource.data.tenantId));
+      allow delete: if isPlatformAdmin();
+    }
+
+    // Direct chat: one thread per venue (thread id == tenantId).
+    // Venue managers and the platform both read/write the same thread.
+    match /platformChats/{tid} {
+      allow read, create, update: if isPlatformAdmin() || isManager(tid);
+      allow delete: if isPlatformAdmin();
+      match /messages/{mid} {
+        allow read, create, update: if isPlatformAdmin() || isManager(tid);
+        // A venue manager may unsend their OWN (from == 'venue') message; the
+        // platform may delete any message (moderation).
+        allow delete: if isPlatformAdmin()
+          || (isManager(tid) && resource.data.from == 'venue');
+      }
+    }
+
+    // Platform admin device tokens (FCM) for the strong-notification pipeline.
+    match /platformPushTokens/{id} {
+      allow read, write: if isPlatformAdmin();
+    }
+
+    // Global announcements queue — a Cloud Function fans each doc out to every
+    // (matching) venue's announcements board.
+    match /platformBroadcasts/{id} {
+      allow read, write: if isPlatformAdmin();
+    }
+
+    // Daily cross-venue rollups — written by the scheduled Cloud Function.
+    match /platformStats/{id} {
+      allow read: if isPlatformAdmin();
+      allow write: if false;
+    }
+
+    // ---- extended platform features (invoices, config, audit, growth, …) ----
+    // Platform-only collections: only the console (or its Cloud Functions) touch them.
+    match /platformInvoices/{id}   { allow read: if isPlatformAdmin() || (isSignedIn() && isManager(resource.data.tenantId)); allow write: if isPlatformAdmin(); }
+    match /platformCoupons/{id}    { allow read, write: if isPlatformAdmin(); }
+    match /platformConfig/{id}     { allow read, write: if isPlatformAdmin(); }
+    match /platformCannedResponses/{id} { allow read, write: if isPlatformAdmin(); }
+    match /platformTemplates/{id}  { allow read, write: if isPlatformAdmin(); }
+    match /platformOnboarding/{id} { allow read, write: if isPlatformAdmin(); }
+    match /platformReferrals/{id}  { allow read, write: if isPlatformAdmin(); }
+    match /platformExports/{id}    { allow read, write: if isPlatformAdmin(); }
+    match /platformAudit/{id}      { allow read: if isPlatformAdmin(); allow write: if false; }
+    // Error-push throttle signatures (written by onErrorReported via Admin SDK).
+    match /platformErrorSignatures/{id} { allow read, write: if false; }
+
+    // Public status page — anyone can read; only the platform posts incidents.
+    match /platformStatus/{id} {
+      allow read: if true;
+      allow write: if isPlatformAdmin();
+    }
+    // NPS responses — venue managers/diners may submit a bounded rating; platform manages.
+    match /platformNps/{id} {
+      allow create: if isSignedIn() && request.resource.data.rating is number
+        && request.resource.data.rating >= 0 && request.resource.data.rating <= 10;
+      allow read, update, delete: if isPlatformAdmin();
+    }
+    // Consent records — a signed-in party may record consent; platform reads/manages.
+    match /platformConsent/{id} {
+      allow create: if isSignedIn();
+      allow read, update, delete: if isPlatformAdmin();
+    }
+  }
+}

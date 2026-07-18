@@ -1,23 +1,46 @@
 {
-  "name": "neemacafe",
-  "version": "1.0.0",
+  "name": "rbt",
+  "private": true,
+  "version": "0.1.0",
   "type": "module",
+  "description": "MenuLink — multi-tenant QR ordering & restaurant management platform (menu, admin, cashier/KDS) powered by Firebase",
   "scripts": {
-    "build": "node scripts/build.mjs",
-    "vercel-build": "npm run build",
-    "img:upload": "node scripts/optimize-and-upload.mjs",
-    "img:rewrite": "node scripts/update-menu-data.mjs",
-    "deploy:netlify": "netlify deploy --build --prod --dir=${BUILD_DIR:-dist}",
-    "deploy:cf": "wrangler pages deploy ${BUILD_DIR:-dist}"
+    "dev": "vite",
+    "build": "vite build",
+    "preview": "vite preview",
+    "lint": "eslint .",
+    "guard": "node scripts/guard.mjs",
+    "check": "npm run guard && npm run lint && npm run build",
+    "deploy": "npm run build && firebase deploy",
+    "deploy:hosting": "npm run build && firebase deploy --only hosting",
+    "deploy:rules": "firebase deploy --only firestore:rules,firestore:indexes,storage",
+    "firebase": "firebase"
   },
   "dependencies": {
-    "@neondatabase/serverless": "^0.9.0",
-    "cloudinary": "^2.5.0",
-    "dotenv": "^16.4.5",
-    "sharp": "^0.33.3"
+    "@dnd-kit/core": "^6.3.1",
+    "@dnd-kit/sortable": "^9.0.0",
+    "@dnd-kit/utilities": "^3.2.2",
+    "@imgly/background-removal": "^1.7.0",
+    "firebase": "^11.1.0",
+    "html5-qrcode": "^2.3.8",
+    "leaflet": "^1.9.4",
+    "lucide-react": "^0.460.0",
+    "pdfjs-dist": "^4.10.38",
+    "qrcode": "^1.5.4",
+    "react": "^18.3.1",
+    "react-dom": "^18.3.1",
+    "react-easy-crop": "^5.5.7",
+    "react-router-dom": "^6.28.0",
+    "recharts": "^2.13.3",
+    "xlsx": "^0.18.5"
   },
   "devDependencies": {
-    "netlify-cli": "^17.34.5",
-    "wrangler": "^3.80.0"
+    "@vitejs/plugin-react": "^4.3.4",
+    "eslint": "^10.6.0",
+    "eslint-plugin-react-hooks": "^7.1.1",
+    "firebase-tools": "^13.29.1",
+    "globals": "^17.7.0",
+    "playwright-core": "^1.61.1",
+    "vite": "^5.4.11"
   }
 }
