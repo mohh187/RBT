@@ -110,6 +110,7 @@ const StatusPage = lazy(() => import('./routes/StatusPage.jsx'))
 const Legal = lazy(() => import('./routes/Legal.jsx'))
 const PlatformLegal = lazy(() => import('./routes/platform/LegalEditor.jsx'))
 const PlatformDomains = lazy(() => import('./routes/platform/Domains.jsx'))
+const PlatformLanding = lazy(() => import('./routes/platform/LandingStudio.jsx'))
 
 function RequireAuth({ children }) {
   const { user, loading } = useAuth()
@@ -459,6 +460,7 @@ export default function App() {
         <Route path="segments" element={<PlatformSegments />} />
         <Route path="legal" element={<PlatformLegal />} />
         <Route path="domains" element={<PlatformDomains />} />
+        <Route path="landing" element={<PlatformLanding />} />
       </Route>
 
       {/* public platform status page + legal documents */}

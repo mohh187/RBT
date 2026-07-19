@@ -1,391 +1,419 @@
+// Public landing — fully CMS-driven (platformConfig/landing over
+// src/lib/landingContent.js defaults). Section order & visibility, every text,
+// bullet, tier and FAQ come from the merged content object; prices come from
+// src/lib/plans.js unless a tier sets priceOverride (server stays the truth at
+// checkout). Design: the existing glass/premium landing language (landing.css)
+// + the lx-* additions appended to index.css (landing-cms v1 block).
 import { useEffect, useState, Fragment } from 'react'
-import { Link, useNavigate } from 'react-router-dom'
+import { Link } from 'react-router-dom'
 import { useAuth } from '../lib/auth.jsx'
 import { useI18n } from '../lib/i18n.jsx'
 import { BrandMark } from '../components/ui.jsx'
 import Icon from '../components/Icon.jsx'
 import { Price } from '../components/Riyal.jsx'
+import { db } from '../lib/firebase.js'
+import { mergeLanding, watchLanding } from '../lib/landingContent.js'
+import { PLANS, PLAN_PRICES, YEARLY_DISCOUNT } from '../lib/plans.js'
 import '../landing.css'
 
-export default function Landing() {
-  const { t, lang, toggleLang, theme, toggleTheme } = useI18n()
-  const { user, tenantId, loading } = useAuth()
-  const navigate = useNavigate()
-  const ar = lang === 'ar'
-  const L = (a, e) => (ar ? a : e)
+const YEARLY_PCT = Math.round((1 - YEARLY_DISCOUNT) * 100)
 
-  const [bar, setBar] = useState(true)
+// href-aware link: SPA routes via <Link>, anchors/external via <a>.
+function Smart({ href, className, style, children, onClick }) {
+  if (href && href.startsWith('/')) return <Link to={href} className={className} style={style} onClick={onClick}>{children}</Link>
+  const ext = href && /^https?:/i.test(href)
+  return <a href={href || '#'} className={className} style={style} onClick={onClick} {...(ext ? { target: '_blank', rel: 'noreferrer' } : {})}>{children}</a>
+}
+
+export default function Landing() {
+  const { theme, toggleTheme } = useI18n()
+  const { user, tenantId, loading } = useAuth()
+
+  const [content, setContent] = useState(() => mergeLanding({}))
+  const [annc, setAnnc] = useState(true)
   const [menuOpen, setMenuOpen] = useState(false)
   const [showTop, setShowTop] = useState(false)
-  const [faq, setFaq] = useState(0)
-  const [bizName, setBizName] = useState('')
-  const [bizPhone, setBizPhone] = useState('')
+
+  useEffect(() => watchLanding(db, setContent), [])
 
   useEffect(() => {
     const io = new IntersectionObserver(
       (entries) => entries.forEach((e) => { if (e.isIntersecting) { e.target.classList.add('in'); io.unobserve(e.target) } }),
       { threshold: 0.12 },
     )
-    document.querySelectorAll('.rl .reveal').forEach((el) => io.observe(el))
+    document.querySelectorAll('.rl .reveal:not(.in)').forEach((el) => io.observe(el))
     const onScroll = () => setShowTop(window.scrollY > 640)
     window.addEventListener('scroll', onScroll, { passive: true })
     onScroll()
     return () => { io.disconnect(); window.removeEventListener('scroll', onScroll) }
-  }, [])
+  }, [content])
 
   // Signed-in visitors are NOT auto-redirected — the landing stays browsable;
   // a slim banner offers the dashboard instead.
   const sessionTarget = !loading && user ? (tenantId ? '/admin' : '/onboarding') : ''
 
-  const stats = [
-    { v: '0%', l: L('عمولة على أي طلب', 'commission per order') },
-    { v: '+20', l: L('وحدة متكاملة', 'integrated modules') },
-    { v: 'ZATCA', l: L('فوترة متوافقة', 'compliant e-invoicing') },
-    { v: '∞', l: L('طاولات وأصناف', 'tables & items') },
-  ]
+  const secEnabled = Object.fromEntries((content.sections || []).map((s) => [s.key, s.enabled !== false]))
+  const flowKeys = (content.sections || []).filter((s) => s.enabled !== false && s.key !== 'announcement').map((s) => s.key)
 
-  const trust = [
-    L('فوترة متوافقة مع زاتكا (ZATCA)', 'ZATCA-ready invoicing'),
-    L('عربي أولاً · واجهة تدعم RTL', 'Arabic-first · RTL'),
-    L('بدون أي عمولة على طلباتك', 'Zero order commission'),
-    L('يعمل على أي جوال أو تابلت', 'Runs on any device'),
-  ]
+  const navLinks = [
+    ['#features', 'المزايا', secEnabled.features],
+    ['#pricing', 'الباقات', secEnabled.pricing],
+    ['#faq', 'الأسئلة', secEnabled.faq && content.faq.enabled],
+  ].filter((l) => l[2])
 
-  const problems = [
-    { icon: 'clock', ar: ['الطلب اليدوي يبطّئك', 'الورق والتنقّل بين الطاولات يؤخّر الخدمة ويربك المطبخ.'], en: ['Manual orders slow you', 'Paper and back-and-forth delay service and confuse the kitchen.'] },
-    { icon: 'wallet', ar: ['العمولات تأكل ربحك', 'تطبيقات التوصيل تقتطع نسبة من كل طلب، وربحك يتآكل.'], en: ['Commissions eat profit', 'Delivery apps take a cut of every order, and your margin shrinks.'] },
-    { icon: 'inventory', ar: ['هدر لا تراه', 'بدون مخزون دقيق لن تعرف تكلفتك الحقيقية ولا أين يضيع مالك.'], en: ['Waste you can’t see', 'Without real inventory you won’t know your true cost or where money leaks.'] },
-  ]
+  const RENDER = {
+    hero: HeroSec,
+    logos: LogosSec,
+    features: FeaturesSec,
+    showcase: ShowcaseSec,
+    stats: StatsSec,
+    pricing: PricingSec,
+    faq: FaqSec,
+    cta: CtaSec,
+  }
 
-  // Real, shipped modules only (verified against the codebase).
-  const features = [
-    { icon: 'qr', ar: ['طلب QR لكل طاولة', 'يُوسَم الطلب بالطاولة تلقائياً — أو استلام وسفري.'], en: ['Per-table QR ordering', 'Auto-tagged to the table — plus pickup & takeaway.'] },
-    { icon: 'car', ar: ['توصيل واستلام للسيارة', 'نوع طلب توصيل بعنوان وموقع ورسوم — واستلام للسيارة.'], en: ['Delivery & curbside', 'Delivery with address, GPS & fees — plus car pickup.'] },
-    { icon: 'award', ar: ['ولاء وعضوية VIP', 'بطاقة رقمية، نقاط، فئات، ومكافآت «اشترِ N واحصل على واحدة».'], en: ['Loyalty & VIP', 'Digital card, points, tiers, and stamp rewards.'] },
-    { icon: 'offers', ar: ['عروض وكوبونات', 'خصومات مجدولة، أكواد، وعروض للأعضاء فقط.'], en: ['Offers & coupons', 'Scheduled discounts, codes, members-only deals.'] },
-    { icon: 'customers', ar: ['قاعدة عملاء (CRM)', 'زيارات، تقييمات، تنبيهات — واعرف عملاءك.'], en: ['Customer CRM', 'Visits, ratings, flags — know your guests.'] },
-    { icon: 'events', ar: ['فعاليات وتذاكر', 'بطاقات QR ومسح دخول للمناسبات.'], en: ['Events & ticketing', 'QR passes with door check-in.'] },
-    { icon: 'reservations', ar: ['حجوزات الطاولات', 'استقبل طلبات الحجز وأدرها من لوحتك.'], en: ['Reservations', 'Take and manage table bookings.'] },
-    { icon: 'palette', ar: ['مكتبة ثيمات وسكنات', 'عشرات الثيمات والتخطيطات والخلفيات والعلامة المائية.'], en: ['Themes & skins library', 'Dozens of themes, layouts, backgrounds & watermark.'] },
-    { icon: 'staff', ar: ['طاقم وموارد بشرية', 'حضور بموقع، ورديات، رواتب وخصومات، وأداء.'], en: ['Staff & HR', 'Geofenced attendance, shifts, payroll, performance.'] },
-    { icon: 'key', ar: ['أدوار وصلاحيات', '9 أدوار ومصفوفة صلاحيات دقيقة لكل موظف.'], en: ['Roles & permissions', '9 roles + granular per-staffer capabilities.'] },
-    { icon: 'file', ar: ['فواتير ZATCA', 'ضريبة القيمة المضافة ورمز فاتورة متوافق تلقائياً.'], en: ['ZATCA invoices', 'VAT + compliant e-invoice QR, automatic.'] },
-    { icon: 'bellRing', ar: ['إشعارات وواتساب', 'صوت وإشعار لكل طلب — وتحديثات واتساب وبريد للعميل.'], en: ['Alerts & WhatsApp', 'Sound + push per order — WhatsApp & email to guests.'] },
-  ]
-
-  const faqs = [
-    { ar: ['كيف يطلب العميل؟', 'يمسح رمز QR على طاولته، يتصفّح المنيو، ويرسل الطلب — فيصل فوراً للكاشير والمطبخ.'], en: ['How do guests order?', 'They scan the table QR, browse, and send — it reaches cashier & kitchen instantly.'] },
-    { ar: ['هل أحتاج جهازاً خاصاً؟', 'لا. يعمل على أي جوال أو تابلت أو كمبيوتر عبر المتصفح، ويمكن تثبيته كتطبيق.'], en: ['Do I need special hardware?', 'No — any phone, tablet or computer via the browser; installs as an app.'] },
-    { ar: ['هل المخزون حقيقي؟', 'نعم — مواد خام بوحداتها، وصفات ومكوّنات، تكلفة، وخصم تلقائي من المخزون عند دفع كل طلب.'], en: ['Is inventory real?', 'Yes — raw materials, recipes/BOM, costing, and auto-deduction on every paid order.'] },
-    { ar: ['وماذا عن المساعد الذكي؟', 'مساعد يفهم أوامرك ويشغّل النظام نيابةً عنك — بعد ربط مفتاح Gemini الخاص بك.'], en: ['And the AI assistant?', 'An assistant that understands you and operates the system — once your Gemini key is linked.'] },
-    { ar: ['هل يدعم العربية والإنجليزية؟', 'نعم، الواجهة والمنيو ثنائيا اللغة مع تبديل فوري ودعم كامل لليمين‑لليسار.'], en: ['Arabic & English?', 'Yes — fully bilingual UI & menu with instant switch and RTL.'] },
-    { ar: ['هل الفوترة متوافقة مع الضريبة؟', 'نعم، فاتورة ضريبية مبسّطة مع رمز ZATCA وضريبة القيمة المضافة عند إدخال رقمك الضريبي.'], en: ['ZATCA-compliant billing?', 'Yes — simplified tax invoice with ZATCA QR and VAT once your VAT number is set.'] },
-  ]
-
-  // Real 4-tier structure from src/lib/plans.js (menu / ops / pro / enterprise).
-  const plans = [
-    { name: L('منيو', 'Menu'), tag: L('للبداية', 'To start'), featured: false, items: [L('منيو رقمي ثنائي اللغة', 'Bilingual digital menu'), L('طلب QR لكل طاولة', 'Per-table QR ordering'), L('هوية بصرية أساسية', 'Basic branding'), L('صفحة المنشأة والقصص', 'Venue profile & stories')] },
-    { name: L('منيو + تشغيل', 'Operations'), tag: L('الأنسب لمقهى يعمل', 'For a working venue'), featured: true, items: [L('كل ما في «منيو»', 'Everything in Menu'), L('كاشير ومطبخ لحظي (KDS)', 'Live cashier & kitchen'), L('طاولات وطلبات وحجوزات', 'Tables, orders & reservations'), L('توصيل واستلام للسيارة', 'Delivery & curbside'), L('عروض وكوبونات وولاء', 'Offers, coupons & loyalty')] },
-    { name: L('احترافي', 'Pro'), tag: L('لعلامة تلفت الأنظار', 'For a standout brand'), featured: false, items: [L('كل ما في «تشغيل»', 'Everything in Operations'), L('مكتبة الثيمات والسكنات', 'Themes & skins library'), L('خلفيات وعلامة مائية', 'Backgrounds & watermark'), L('استوديو الشاشات والموسيقى', 'Signage studio & music'), L('فعاليات وتذاكر', 'Events & ticketing')] },
-    { name: L('متكامل', 'Enterprise'), tag: L('تشغيل كامل بلا حدود', 'Full operation'), featured: false, items: [L('كل ما في «احترافي»', 'Everything in Pro'), L('طاقم كامل: حضور وورديات ورواتب', 'Full HR: attendance, shifts, payroll'), L('أدوار وصلاحيات متقدمة', 'Advanced roles & permissions'), L('مخزون ووصفات (BOM) دقيق', 'Real inventory & recipes'), L('مساعد ذكي وتقارير متقدمة', 'AI assistant & advanced reports')] },
-  ]
-
-  const nav = [
-    ['#features', L('المزايا', 'Features')],
-    ['#flow', L('كيف تعمل', 'How it works')],
-    ['#pricing', L('الباقات', 'Pricing')],
-    ['#faq', L('الأسئلة', 'FAQ')],
-  ]
+  const accent = content.theme?.accent?.trim()
+  const rootStyle = accent ? { '--brand': accent, '--brand-2': accent } : undefined
+  const waNumber = String(content.whatsappFloat?.number || '').replace(/[^0-9]/g, '')
 
   return (
-    <div className="rl">
+    <div className={`rl ${content.theme?.density === 'compact' ? 'lx-compact' : ''}`} dir="rtl" style={rootStyle}>
       {sessionTarget && (
         <div className="rl-session">
-          <span>{L('أنت مسجّل الدخول بالفعل', 'You are already signed in')}</span>
-          <Link to={sessionTarget} className="rl-btn" style={{ padding: '8px 16px' }}>{L(tenantId ? 'الدخول للوحتك' : 'أكمل إنشاء منشأتك', tenantId ? 'Open dashboard' : 'Finish setup')}</Link>
+          <span>أنت مسجّل الدخول بالفعل</span>
+          <Link to={sessionTarget} className="rl-btn" style={{ padding: '8px 16px' }}>{tenantId ? 'الدخول للوحتك' : 'أكمل إنشاء منشأتك'}</Link>
         </div>
       )}
-      {bar && (
+
+      {secEnabled.announcement && content.announcement.enabled && annc && (
         <div className="rl-annc">
           <Icon name="sparkles" size={15} />
-          <span>{L('كل المزايا مجاناً خلال فترة الإطلاق — ابدأ اليوم', 'Every feature free during launch — start today')}</span>
-          <button className="x" onClick={() => setBar(false)} aria-label="close"><Icon name="close" size={15} /></button>
+          {content.announcement.href
+            ? <Smart href={content.announcement.href} style={{ color: '#fff', textDecoration: 'none' }}>{content.announcement.text}</Smart>
+            : <span>{content.announcement.text}</span>}
+          <button className="x" onClick={() => setAnnc(false)} aria-label="close"><Icon name="close" size={15} /></button>
         </div>
       )}
 
       <header className="rl-nav">
         <BrandMark />
         <nav className="links">
-          {nav.map(([href, label]) => <a key={href} href={href}>{label}</a>)}
+          {navLinks.map(([href, label]) => <a key={href} href={href}>{label}</a>)}
         </nav>
         <div className="act">
           <button className="rl-icon-btn" onClick={toggleTheme} aria-label="theme"><Icon name={theme === 'dark' ? 'sun' : 'moon'} size={17} /></button>
-          <button className="rl-icon-btn" onClick={toggleLang} aria-label="language">{ar ? 'EN' : 'ع'}</button>
-          <Link to="/login" className="rl-btn ghost" style={{ padding: '9px 16px' }}>{t('login')}</Link>
-          <Link to="/signup" className="rl-btn" style={{ padding: '9px 18px' }}>{L('ابدأ مجاناً', 'Start free')}</Link>
+          <Link to="/login" className="rl-btn ghost" style={{ padding: '9px 16px' }}>تسجيل الدخول</Link>
+          <Link to="/signup" className="rl-btn" style={{ padding: '9px 18px' }}>إنشاء حساب</Link>
           <button className="rl-icon-btn rl-burger" onClick={() => setMenuOpen((v) => !v)} aria-label="menu"><Icon name={menuOpen ? 'close' : 'more'} /></button>
         </div>
       </header>
       <div className={`rl-mobnav ${menuOpen ? 'open' : ''}`}>
-        {nav.map(([href, label]) => <a key={href} href={href} onClick={() => setMenuOpen(false)}>{label}</a>)}
+        {navLinks.map(([href, label]) => <a key={href} href={href} onClick={() => setMenuOpen(false)}>{label}</a>)}
         {/* the header hides the login link on narrow phones — keep it reachable here */}
-        <Link to="/login" style={{ padding: '13px 6px', color: 'var(--brand)', fontWeight: 700, textDecoration: 'none' }} onClick={() => setMenuOpen(false)}>{t('login')}</Link>
+        <Link to="/login" style={{ padding: '13px 6px', color: 'var(--brand)', fontWeight: 700, textDecoration: 'none' }} onClick={() => setMenuOpen(false)}>تسجيل الدخول</Link>
       </div>
 
-      {/* hero */}
-      <section className="rl-hero">
-        <div className="rl-hero-bg" aria-hidden="true" />
-        <div className="rl-wrap rl-hero-in">
-          <span className="rl-kicker">{L('نظام تشغيل مقهاك ومطعمك', 'Café & restaurant OS')}</span>
-          <h1>{L('شغّل مقهاك كله', 'Run your whole venue')} <span className="em">{L('من نظام واحد', 'from one system')}</span></h1>
-          <p className="rl-lead">{L('من المنيو والطلب بالباركود، إلى الكاشير والمطبخ اللحظي، إلى المخزون والمساعد الذكي — تشغيل مقهاك كامل في نظام واحد عربي، وبدون أي عمولة على طلباتك.', 'From QR menu & ordering to a live cashier & kitchen to real inventory and an AI assistant — your whole venue in one Arabic-first system, with zero commission on orders.')}</p>
-          <div className="rl-cta">
-            <Link to="/signup" className="rl-btn lg">{L('ابدأ الآن مجاناً', 'Start free now')}</Link>
-            <a href="#features" className="rl-btn ghost lg">{L('استعرض المزايا', 'See features')}</a>
-          </div>
-          <p className="rl-hero-note">{L('بدون بطاقة ائتمان · جاهز خلال دقائق', 'No credit card · ready in minutes')}</p>
-        </div>
-        <div className="rl-wrap rl-hero-media reveal">
-          <div className="rl-frame"><CashierMock lang={lang} /></div>
-        </div>
-      </section>
+      {flowKeys.map((k) => {
+        const Sec = RENDER[k]
+        if (!Sec) return null
+        if (k === 'logos' && !content.logos.enabled) return null
+        if (k === 'stats' && !content.stats.enabled) return null
+        if (k === 'faq' && !content.faq.enabled) return null
+        return <Sec key={k} c={content} />
+      })}
 
-      {/* trust */}
-      <section className="rl-sec pad-sm rl-panel">
-        <div className="rl-wrap rl-trust reveal">
-          {trust.map((it) => <span key={it}><Icon name="check" size={15} className="ic" />{it}</span>)}
-        </div>
-      </section>
+      <FooterSec c={content} />
 
-      {/* problem */}
-      <section className="rl-sec">
-        <div className="rl-wrap">
-          <div className="rl-head center reveal">
-            <span className="rl-kicker">{L('المشكلة', 'The problem')}</span>
-            <h2 className="rl-h2">{L('الإدارة اليدوية تُبطئك، والعمولات والهدر يأكلان أرباحك', 'Manual ops slow you; commissions and waste eat your profit')}</h2>
-          </div>
-          <div className="rl-p3 reveal">
-            {problems.map((p) => (
-              <div key={p.en[0]} className="rl-pcard">
-                <div className="rl-fic"><Icon name={p.icon} size={22} /></div>
-                <strong>{L(p.ar[0], p.en[0])}</strong>
-                <p>{L(p.ar[1], p.en[1])}</p>
-              </div>
-            ))}
-          </div>
-        </div>
-      </section>
-
-      {/* showcase: cashier */}
-      <section className="rl-sec rl-panel">
-        <div className="rl-wrap rl-show reveal">
-          <div className="rl-show-txt">
-            <span className="rl-kicker">{L('نقطة البيع', 'Point of sale')}</span>
-            <h2 className="rl-h2">{L('كاشير سريع يعمل باللمس', 'A fast, touch-first cashier')}</h2>
-            <p className="rl-lead">{L('انقر الصنف فيدخل الفاتورة، اختر الحجم والإضافات، طبّق الخصم، وأرسل للمطبخ — من التابلت أو الكمبيوتر.', 'Tap an item to the ticket, pick size & add-ons, apply a discount, send to the kitchen — on tablet or desktop.')}</p>
-            {[L('بطاقات أصناف باللمس مع الأحجام والإضافات.', 'Touch item cards with sizes & modifiers.'), L('نقد، مدى/شبكة، أو تحويل — وطلبات معلّقة وبيع سريع.', 'Cash, mada/card or transfer — held orders & quick sale.'), L('لوحة حالات قابلة للسحب تصل المطبخ لحظياً.', 'Draggable status board, live to the kitchen.')].map((c) => (
-              <div key={c} className="rl-check"><Icon name="check" size={20} className="ic" /><span>{c}</span></div>
-            ))}
-          </div>
-          <div className="rl-show-media"><OrderBoardWin lang={lang} /></div>
-        </div>
-      </section>
-
-      {/* features grid */}
-      <section id="features" className="rl-sec">
-        <div className="rl-wrap">
-          <div className="rl-head center reveal">
-            <span className="rl-kicker">{L('المزايا', 'Features')}</span>
-            <h2 className="rl-h2">{L('كل ما يحتاجه مقهاك أو مطعمك', 'Everything your venue needs')}</h2>
-            <p className="rl-lead">{L('أكثر من عشرين وحدة متكاملة تعمل معاً — لا أدوات متفرقة.', 'Twenty-plus modules that work as one — not scattered tools.')}</p>
-          </div>
-          <div className="rl-fgrid reveal">
-            {features.map((f, i) => (
-              <div key={f.en[0]} className="rl-feat">
-                <div className="rl-feat-top">
-                  <div className="rl-fic"><Icon name={f.icon} size={22} /></div>
-                  <span className="no">{String(i + 1).padStart(2, '0')}</span>
-                </div>
-                <strong>{L(f.ar[0], f.en[0])}</strong>
-                <p>{L(f.ar[1], f.en[1])}</p>
-              </div>
-            ))}
-          </div>
-        </div>
-      </section>
-
-      {/* showcase: customization */}
-      <section className="rl-sec rl-panel">
-        <div className="rl-wrap rl-show rev reveal">
-          <div className="rl-show-txt">
-            <span className="rl-kicker">{L('التخصيص', 'Make it yours')}</span>
-            <h2 className="rl-h2">{L('خصّص كل شيء — أو ابنِ ثيمك الخاص', 'Customize everything — or build your own theme')}</h2>
-            <p className="rl-lead">{L('عشرات الثيمات والسكنات الجاهزة للمنيو ولواجهات النظام كلها: الكاشير والمطبخ ولوحة الإدارة — بألوان وخطوط وتخطيطات وخلفيات وعلامة مائية.', 'Dozens of ready themes & skins — for the menu and every system surface: cashier, kitchen, admin — with colors, fonts, layouts, backgrounds & watermark.')}</p>
-            {[L('ثيمات كاملة تعيد تلوين النظام كله بنقرة.', 'Full themes reskin the whole system in one click.'), L('عشرات تخطيطات وسكنات المنيو — أو صمّم واحداً.', 'Dozens of menu layouts & skins — or design your own.'), L('خطوط، حواف، حركة، خلفيات، وعلامة مائية.', 'Fonts, corners, motion, backgrounds & watermark.')].map((c) => (
-              <div key={c} className="rl-check"><Icon name="check" size={20} className="ic" /><span>{c}</span></div>
-            ))}
-          </div>
-          <div className="rl-show-media"><ThemeSwap lang={lang} /></div>
-        </div>
-      </section>
-
-      {/* showcase: AI + inventory */}
-      <section className="rl-sec">
-        <div className="rl-wrap rl-show reveal">
-          <div className="rl-show-txt">
-            <span className="rl-kicker">{L('ذكاء + مخزون', 'AI + inventory')}</span>
-            <h2 className="rl-h2">{L('مخزون دقيق، يديره مساعد ذكي', 'Real inventory, run by an AI assistant')}</h2>
-            <p className="rl-lead">{L('مواد خام بوحداتها ووصفات لكل صنف، وتكلفة محسوبة تلقائياً. يُخصم المخزون فور دفع الطلب — والمساعد الذكي ينفّذ أوامرك ويحذّرك قبل النفاد.', 'Raw materials with units, a recipe per item, and auto-calculated cost. Stock deducts the moment an order is paid — and the AI assistant acts on your words and warns before you run out.')}</p>
-            {[L('وصفات ومكوّنات فرعية وتحويل وحدات وتكلفة متوسطة.', 'Recipes, sub-recipes, unit conversion & weighted cost.'), L('خصم تلقائي عند الدفع، وجرد وهدر وتباين.', 'Auto-deduct on pay, plus counts, waste & variance.'), L('تنبيه نفاد المخزون، ومساعد ينفّذ ويُعدّل بالأوامر.', 'Low-stock alerts, and an assistant that executes commands.')].map((c) => (
-              <div key={c} className="rl-check"><Icon name="check" size={20} className="ic" /><span>{c}</span></div>
-            ))}
-          </div>
-          <div className="rl-show-media"><InventoryMock lang={lang} /></div>
-        </div>
-      </section>
-
-      {/* flow */}
-      <section id="flow" className="rl-sec rl-panel">
-        <div className="rl-wrap">
-          <div className="rl-head center reveal">
-            <span className="rl-kicker">{L('نظام واحد', 'One system')}</span>
-            <h2 className="rl-h2">{L('نظام واحد، تدفّق واحد', 'One system, one flow')}</h2>
-          </div>
-          <div className="reveal"><FlowDiagram lang={lang} /></div>
-        </div>
-      </section>
-
-      {/* showcase: signage */}
-      <section className="rl-sec">
-        <div className="rl-wrap rl-show rev reveal">
-          <div className="rl-show-txt">
-            <span className="rl-kicker">{L('الشاشات', 'Signage')}</span>
-            <h2 className="rl-h2">{L('استوديو شاشات بموسيقى', 'A signage studio with music')}</h2>
-            <p className="rl-lead">{L('حوّل أي شاشة إلى لوحة عرض حية: شرائح تسحب اسم وسعر الصنف والعرض النشط تلقائياً، انتقالات وجدولة بالساعة، وموسيقى خلفية بقوائم تشغيل.', 'Turn any screen into a live board: slides that pull item names, prices and the active offer, timed transitions & scheduling, and background music with playlists.')}</p>
-            {[L('ربط حي بالمنيو والعروض + طبقة QR وقوالب جاهزة.', 'Live menu/offer binding + QR layer & templates.'), L('انتقالات وحركة وجدولة صباحية/مسائية.', 'Transitions, motion & morning/evening scheduling.'), L('موسيقى خلفية بقوائم مسمّاة وتحكّم عن بُعد.', 'Background music, named playlists & remote control.')].map((c) => (
-              <div key={c} className="rl-check"><Icon name="check" size={20} className="ic" /><span>{c}</span></div>
-            ))}
-          </div>
-          <div className="rl-show-media"><SignageMock lang={lang} /></div>
-        </div>
-      </section>
-
-      {/* stats */}
-      <section className="rl-sec pad-sm">
-        <div className="rl-wrap rl-stats reveal">
-          {stats.map((s) => (<div key={s.l} className="rl-stat"><div className="v">{s.v}</div><div className="l">{s.l}</div></div>))}
-        </div>
-      </section>
-
-      {/* pricing */}
-      <section id="pricing" className="rl-sec rl-panel">
-        <div className="rl-wrap">
-          <div className="rl-head center reveal">
-            <span className="rl-kicker">{L('الباقات', 'Pricing')}</span>
-            <h2 className="rl-h2">{L('ابدأ صغيراً، وطوّر حسب نموّك', 'Start small, scale as you grow')}</h2>
-            <p className="rl-lead">{L('أربع باقات متدرّجة — وكل المزايا مفتوحة مجاناً خلال فترة الإطلاق.', 'Four tiers — and every feature is unlocked free during launch.')}</p>
-          </div>
-          <div className="rl-plans reveal">
-            {plans.map((p) => (
-              <div key={p.name} className={`rl-plan ${p.featured ? 'feat' : ''}`}>
-                {p.featured && <span className="rl-plan-badge">{L('الأكثر شيوعاً', 'Most popular')}</span>}
-                <span className="rl-plan-tag">{p.tag}</span>
-                <h3>{p.name}</h3>
-                <div className="rl-plan-price"><strong>{L('مجاناً', 'Free')}</strong><span>{L('خلال فترة الإطلاق', 'during launch')}</span></div>
-                <ul>{p.items.map((it) => (<li key={it}><Icon name="check" size={16} className="ic" /> {it}</li>))}</ul>
-                <Link to="/signup" className={`rl-btn ${p.featured ? '' : 'ghost'} block`}>{L('ابدأ الآن', 'Start now')}</Link>
-              </div>
-            ))}
-          </div>
-          <p className="rl-fineprint reveal">{L('بعض المزايا (المساعد الذكي، واتساب، النطاق المخصّص) تحتاج ربط مفتاحك أو إعداداً بسيطاً.', 'A few features (AI assistant, WhatsApp, custom domain) need your key or a quick setup.')}</p>
-        </div>
-      </section>
-
-      {/* FAQ */}
-      <section id="faq" className="rl-sec">
-        <div className="rl-wrap">
-          <div className="rl-head center reveal">
-            <span className="rl-kicker">{L('الأسئلة الشائعة', 'FAQ')}</span>
-            <h2 className="rl-h2">{L('أسئلة متكررة', 'Common questions')}</h2>
-          </div>
-          <div className="rl-faq reveal">
-            {faqs.map((f, i) => (
-              <div key={i} className="rl-faq-item">
-                <button className="rl-faq-q" onClick={() => setFaq(faq === i ? -1 : i)}>
-                  <span>{L(f.ar[0], f.en[0])}</span>
-                  <Icon name={faq === i ? 'close' : 'add'} size={18} className="ic" />
-                </button>
-                {faq === i && <div className="rl-faq-a">{L(f.ar[1], f.en[1])}</div>}
-              </div>
-            ))}
-          </div>
-        </div>
-      </section>
-
-      {/* try now */}
-      <section className="rl-sec rl-panel">
-        <div className="rl-wrap rl-show reveal">
-          <div className="rl-show-txt">
-            <h2 className="rl-h2">{L('جرّب الآن في دقيقة', 'Try it in a minute')}</h2>
-            <p className="rl-lead">{L('أنشئ حسابك وابدأ استقبال الطلبات اليوم — مجاناً خلال الإطلاق.', 'Create your account and start taking orders today — free during launch.')}</p>
-            <div className="rl-cta" style={{ justifyContent: 'flex-start' }}><Link to="/signup" className="rl-btn lg">{L('ابدأ الآن مجاناً', 'Start free now')}</Link></div>
-          </div>
-          {/* carry what the visitor already typed into signup — don't discard it */}
-          <form className="rl-tryform" onSubmit={(e) => { e.preventDefault(); const q = new URLSearchParams(); if (bizName.trim()) q.set('venue', bizName.trim()); if (bizPhone.trim()) q.set('phone', bizPhone.trim()); navigate(`/signup${q.toString() ? `?${q}` : ''}`) }}>
-            <strong style={{ fontSize: '1.1rem' }}>{L('جرّب الآن', 'Try it now')}</strong>
-            <div className="field"><label>{L('اسم المنشأة', 'Venue name')}</label><input className="rl-input" value={bizName} onChange={(e) => setBizName(e.target.value)} placeholder={L('مثال: كافيه نيمة', 'e.g. Neema Café')} /></div>
-            <div className="field"><label>{t('phone')}</label><input className="rl-input" dir="ltr" inputMode="tel" value={bizPhone} onChange={(e) => setBizPhone(e.target.value)} placeholder="05xxxxxxxx" /></div>
-            <button className="rl-btn block lg" style={{ marginTop: 16 }}>{L('ابدأ الآن', 'Start now')} <Icon name={ar ? 'back' : 'next'} size={16} /></button>
-          </form>
-        </div>
-      </section>
-
-      {/* final CTA */}
-      <section className="rl-sec">
-        <div className="rl-wrap">
-          <div className="rl-ctaband reveal">
-            <h2>{L('حرّر منشأتك من التعقيد', 'Free your venue from friction')}</h2>
-            <p>{L('منيو، طلب QR، كاشير، مخزون، ومساعد ذكي — ابدأ اليوم مجاناً.', 'Menu, QR ordering, cashier, inventory & AI — start today, free.')}</p>
-            <Link to="/signup" className="rl-btn lg">{L('ابدأ الآن مجاناً', 'Start free now')}</Link>
-          </div>
-        </div>
-      </section>
-
-      {/* footer */}
-      <footer className="rl-foot">
-        <div className="rl-wrap">
-          <div className="rl-foot-grid">
-            <div>
-              <BrandMark />
-              <p style={{ color: 'var(--ink-2)', maxWidth: 300, marginTop: 10, fontSize: '0.9rem' }}>{t('tagline')}</p>
-            </div>
-            <div>
-              <strong>{L('روابط', 'Links')}</strong>
-              <a href="#features">{L('المزايا', 'Features')}</a>
-              <a href="#pricing">{L('الباقات', 'Pricing')}</a>
-              <a href="#faq">{L('الأسئلة', 'FAQ')}</a>
-            </div>
-            <div>
-              <strong>{L('ابدأ', 'Get started')}</strong>
-              <Link to="/signup">{L('إنشاء حساب', 'Sign up')}</Link>
-              <Link to="/login">{t('login')}</Link>
-            </div>
-            <div>
-              <strong>{L('قانوني', 'Legal')}</strong>
-              <Link to="/legal/terms">{L('الشروط والأحكام', 'Terms')}</Link>
-              <Link to="/legal/privacy">{L('سياسة الخصوصية', 'Privacy')}</Link>
-              <Link to="/legal/refund">{L('الاسترجاع', 'Refund')}</Link>
-              <Link to="/status">{L('حالة المنصة', 'Status')}</Link>
-            </div>
-          </div>
-          <p className="rl-foot-copy">© 2026 rbt360. {L('جميع الحقوق محفوظة.', 'All rights reserved.')}</p>
-        </div>
-      </footer>
-
+      {content.whatsappFloat?.enabled && waNumber && (
+        <a className="lx-wa" href={`https://wa.me/${waNumber}`} target="_blank" rel="noreferrer" aria-label="WhatsApp">
+          <Icon name="message" size={24} />
+        </a>
+      )}
       <button className={`rl-top ${showTop ? 'show' : ''}`} onClick={() => window.scrollTo({ top: 0, behavior: 'smooth' })} aria-label="top"><Icon name="back" size={20} style={{ transform: 'rotate(90deg)' }} /></button>
     </div>
   )
 }
+
+/* ============================ sections ============================ */
+
+function HeroSec({ c }) {
+  const h = c.hero
+  return (
+    <section className="rl-hero lx-heroS">
+      <div className="rl-hero-bg" aria-hidden="true" />
+      <div className="rl-wrap lx-hero">
+        <div className="lx-hero-txt">
+          <span className="rl-kicker">نظام تشغيل مقهاك ومطعمك</span>
+          <h1>{h.title} {h.titleAccent && <span className="em">{h.titleAccent}</span>}</h1>
+          <p className="rl-lead">{h.subtitle}</p>
+          <div className="rl-cta lx-start">
+            <Smart href={h.ctaHref || '/signup'} className="rl-btn lg">{h.ctaText}</Smart>
+            {h.secondaryText && <Smart href={h.secondaryHref || '#pricing'} className="rl-btn ghost lg">{h.secondaryText}</Smart>}
+          </div>
+          {(h.badges || []).length > 0 && (
+            <div className="lx-badges">
+              {h.badges.map((b) => <span key={b} className="lx-badge"><Icon name="check" size={13} className="ic" />{b}</span>)}
+            </div>
+          )}
+        </div>
+        <div className="lx-hero-media reveal">
+          <div className="rl-frame"><CashierMock lang="ar" /></div>
+        </div>
+      </div>
+    </section>
+  )
+}
+
+function LogosSec({ c }) {
+  const items = (c.logos.items || []).filter((it) => it?.name)
+  if (!items.length) return null
+  const strip = [...items, ...items] // duplicated for the seamless CSS loop
+  return (
+    <section className="rl-sec pad-sm rl-panel">
+      <div className="rl-wrap">
+        {c.logos.title && <p className="lx-logos-title reveal">{c.logos.title}</p>}
+        <div className="lx-marquee" dir="ltr">
+          <div className="lx-marquee-track">
+            {strip.map((it, i) => <span key={i} className="lx-chip"><Icon name="store" size={14} className="ic" />{it.name}</span>)}
+          </div>
+        </div>
+      </div>
+    </section>
+  )
+}
+
+function FeaturesSec({ c }) {
+  const f = c.features
+  return (
+    <section id="features" className="rl-sec">
+      <div className="rl-wrap">
+        <div className="rl-head center reveal">
+          <span className="rl-kicker">المزايا</span>
+          <h2 className="rl-h2">{f.title}</h2>
+          {f.subtitle && <p className="rl-lead">{f.subtitle}</p>}
+        </div>
+        <div className="rl-fgrid reveal">
+          {(f.items || []).map((it, i) => (
+            <div key={`${it.title}-${i}`} className="rl-feat">
+              <div className="rl-feat-top">
+                <div className="rl-fic"><Icon name={it.icon || 'star'} size={22} /></div>
+                <span className="no">{String(i + 1).padStart(2, '0')}</span>
+              </div>
+              <strong>{it.title}</strong>
+              <p>{it.desc}</p>
+            </div>
+          ))}
+        </div>
+      </div>
+    </section>
+  )
+}
+
+const VISUALS = {
+  menu: (props) => <ThemeSwap {...props} />,
+  ops: (props) => <OrderBoardWin {...props} />,
+  ai: (props) => <InventoryMock {...props} />,
+  signage: (props) => <SignageMock {...props} />,
+  flow: (props) => <FlowDiagram {...props} />,
+}
+
+function ShowcaseSec({ c }) {
+  const items = Array.isArray(c.showcase) ? c.showcase : []
+  return (
+    <>
+      {items.map((s, i) => {
+        const Visual = VISUALS[s.visual]
+        return (
+          <section key={`${s.title}-${i}`} className={`rl-sec ${i % 2 === 0 ? 'rl-panel' : ''}`}>
+            <div className={`rl-wrap rl-show ${s.flip ? 'rev' : ''} reveal`}>
+              <div className="rl-show-txt">
+                <span className="rl-kicker"><Icon name={s.icon || 'star'} size={14} /> {String(i + 1).padStart(2, '0')}</span>
+                <h2 className="rl-h2">{s.title}</h2>
+                {s.desc && <p className="rl-lead">{s.desc}</p>}
+                {(s.bullets || []).map((b) => (
+                  <div key={b} className="rl-check"><Icon name="check" size={20} className="ic" /><span>{b}</span></div>
+                ))}
+              </div>
+              <div className="rl-show-media">
+                {Visual ? <Visual lang="ar" /> : <div className="lx-icpanel"><Icon name={s.icon || 'star'} size={64} /></div>}
+              </div>
+            </div>
+          </section>
+        )
+      })}
+    </>
+  )
+}
+
+function StatsSec({ c }) {
+  return (
+    <section className="rl-sec pad-sm">
+      <div className="rl-wrap rl-stats reveal">
+        {(c.stats.items || []).map((s, i) => (
+          <div key={`${s.label}-${i}`} className="rl-stat"><div className="v num">{s.value}</div><div className="l">{s.label}</div></div>
+        ))}
+      </div>
+    </section>
+  )
+}
+
+function PricingSec({ c }) {
+  const pr = c.pricing
+  const [open, setOpen] = useState({})
+  return (
+    <section id="pricing" className="rl-sec rl-panel">
+      <div className="rl-wrap">
+        <div className="rl-head center reveal">
+          <span className="rl-kicker">الباقات</span>
+          <h2 className="rl-h2">{pr.title}</h2>
+          {pr.subtitle && <p className="rl-lead">{pr.subtitle}</p>}
+        </div>
+        <div className="rl-plans reveal">
+          {PLANS.map((p) => {
+            const t = pr.tiers?.[p.id] || {}
+            const price = Number.isFinite(Number(t.priceOverride)) && t.priceOverride !== null && t.priceOverride !== ''
+              ? Number(t.priceOverride)
+              : PLAN_PRICES[p.id]
+            const yearly = Math.round(price * YEARLY_DISCOUNT)
+            const extra = t.more || []
+            const isOpen = !!open[p.id]
+            return (
+              <div key={p.id} className={`rl-plan ${t.highlight ? 'feat' : ''} ${t.glow ? 'lx-ent' : ''}`}>
+                {t.badge && <span className="rl-plan-badge">{t.badge}</span>}
+                {t.tagline && <span className="rl-plan-tag">{t.tagline}</span>}
+                <h3>{p.ar}</h3>
+                <div className="lx-price">
+                  <Price value={price} lang="ar" symbolSize="0.62em" />
+                  <span className="per">/ شهرياً</span>
+                </div>
+                <div className="lx-yearly">
+                  سنوياً: <Price value={yearly} lang="ar" symbolSize="0.8em" /> شهرياً
+                  <span className="save num">وفّر {YEARLY_PCT}%</span>
+                </div>
+                <ul>
+                  {(t.bullets || []).map((it) => <li key={it}><Icon name="check" size={16} className="ic" /> {it}</li>)}
+                  {isOpen && extra.map((it) => <li key={it}><Icon name="add" size={16} className="ic" /> {it}</li>)}
+                </ul>
+                {extra.length > 0 && (
+                  <button className="lx-more" onClick={() => setOpen((o) => ({ ...o, [p.id]: !o[p.id] }))}>
+                    {isOpen ? 'عرض أقل' : `عرض المزيد (${extra.length})`} <Icon name={isOpen ? 'minus' : 'add'} size={14} />
+                  </button>
+                )}
+                <Link to="/signup" className={`rl-btn ${t.highlight ? '' : 'ghost'} block`}>ابدأ الآن</Link>
+              </div>
+            )
+          })}
+        </div>
+        {pr.note && <p className="rl-fineprint reveal">{pr.note}</p>}
+      </div>
+    </section>
+  )
+}
+
+// Deliberately accordion-free: a scannable two-column Q&A list.
+function FaqSec({ c }) {
+  return (
+    <section id="faq" className="rl-sec">
+      <div className="rl-wrap">
+        <div className="rl-head center reveal">
+          <span className="rl-kicker">الأسئلة الشائعة</span>
+          <h2 className="rl-h2">أسئلة يكثر طرحها</h2>
+        </div>
+        <div className="lx-faq2 reveal">
+          {(c.faq.items || []).map((f, i) => (
+            <div key={`${f.q}-${i}`} className="lx-faq-item">
+              <strong>{f.q}</strong>
+              <p>{f.a}</p>
+            </div>
+          ))}
+        </div>
+      </div>
+    </section>
+  )
+}
+
+function CtaSec({ c }) {
+  return (
+    <section className="rl-sec">
+      <div className="rl-wrap">
+        <div className="rl-ctaband reveal">
+          <h2>{c.cta.title}</h2>
+          <p>{c.cta.subtitle}</p>
+          <Link to="/signup" className="rl-btn lg">{c.cta.buttonText}</Link>
+        </div>
+      </div>
+    </section>
+  )
+}
+
+/* ============================ footer ============================ */
+
+// Minimal inline glyphs for networks Icon.jsx doesn't carry (rules: SVG only).
+function SocialGlyph({ kind }) {
+  const common = { width: 16, height: 16, viewBox: '0 0 24 24', fill: 'none', stroke: 'currentColor', strokeWidth: 2, strokeLinecap: 'round', strokeLinejoin: 'round' }
+  if (kind === 'x') return <svg {...common}><path d="M5 4l14 16M19 4L5 20" /></svg>
+  if (kind === 'instagram') return <svg {...common}><rect x="3" y="3" width="18" height="18" rx="5" /><circle cx="12" cy="12" r="4" /><circle cx="17.2" cy="6.8" r="0.6" fill="currentColor" /></svg>
+  if (kind === 'tiktok') return <svg {...common}><path d="M14 4v9.5a4 4 0 1 1-3.2-3.92" /><path d="M14 5.5c.9 1.9 2.6 3.1 4.8 3.3" /></svg>
+  return null
+}
+
+function FooterSec({ c }) {
+  const f = c.footer || {}
+  const socials = f.socials || {}
+  const waDigits = String(socials.whatsapp || '').replace(/[^0-9]/g, '')
+  const socialLinks = [
+    socials.whatsapp && { k: 'whatsapp', href: `https://wa.me/${waDigits}`, icon: 'message' },
+    socials.x && { k: 'x', href: socials.x },
+    socials.instagram && { k: 'instagram', href: socials.instagram },
+    socials.tiktok && { k: 'tiktok', href: socials.tiktok },
+    socials.email && { k: 'email', href: `mailto:${socials.email}`, icon: 'mail' },
+  ].filter(Boolean)
+  return (
+    <footer className="rl-foot">
+      <div className="rl-wrap">
+        <div className="rl-foot-grid">
+          <div>
+            <BrandMark />
+            {f.about && <p style={{ color: 'var(--ink-2)', maxWidth: 320, marginTop: 10, fontSize: '0.9rem', lineHeight: 1.7 }}>{f.about}</p>}
+            {socialLinks.length > 0 && (
+              <div className="lx-social">
+                {socialLinks.map((s) => (
+                  <a key={s.k} href={s.href} target="_blank" rel="noreferrer" aria-label={s.k}>
+                    {s.icon ? <Icon name={s.icon} size={16} /> : <SocialGlyph kind={s.k} />}
+                  </a>
+                ))}
+              </div>
+            )}
+          </div>
+          <div>
+            <strong>روابط</strong>
+            {(f.links || []).map((l, i) => <Smart key={`${l.href}-${i}`} href={l.href}>{l.label}</Smart>)}
+          </div>
+          <div>
+            <strong>ابدأ</strong>
+            <Link to="/signup">إنشاء حساب</Link>
+            <Link to="/login">تسجيل الدخول</Link>
+          </div>
+          <div>
+            <strong>قانوني</strong>
+            <Link to="/legal/terms">الشروط والأحكام</Link>
+            <Link to="/legal/privacy">سياسة الخصوصية</Link>
+            <Link to="/legal/refund">الاسترجاع</Link>
+          </div>
+        </div>
+        {f.showPayments !== false && (
+          <div className="lx-pay">
+            <span className="lbl">وسائل دفع مقبولة:</span>
+            {['مدى', 'Visa', 'Mastercard', 'Apple Pay'].map((p) => <span key={p} className="chip">{p}</span>)}
+          </div>
+        )}
+        <p className="rl-foot-copy">© 2026 rbt360. جميع الحقوق محفوظة.</p>
+      </div>
+    </footer>
+  )
+}
+
+/* ==================== live product mockups (kept) ==================== */
 
 function FlowDiagram({ lang }) {
   const ar = lang === 'ar'
@@ -594,4 +622,3 @@ function ThemeSwap({ lang }) {
     </div>
   )
 }
-

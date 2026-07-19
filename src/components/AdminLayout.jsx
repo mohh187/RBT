@@ -19,6 +19,7 @@ import { menuUrl } from '../lib/qr.js'
 import Tour from './Tour.jsx'
 import { TOURS } from '../lib/tours.js'
 import GlobalSearch from './GlobalSearch.jsx'
+import PageGuide from './PageGuide.jsx'
 import { getDocs, collection, doc, updateDoc } from 'firebase/firestore'
 import { db } from '../lib/firebase.js'
 
@@ -229,6 +230,17 @@ export default function AdminLayout() {
     navigate('/login')
   }
 
+  // In-app navigation bridge for the AI assistant's open_page tool (actions.js
+  // dispatches 'rbt:navigate' — SPA navigation instead of a full reload).
+  useEffect(() => {
+    const onNav = (e) => {
+      const to = e?.detail?.to
+      if (typeof to === 'string' && to.startsWith('/')) navigate(to)
+    }
+    window.addEventListener('rbt:navigate', onNav)
+    return () => window.removeEventListener('rbt:navigate', onNav)
+  }, [navigate])
+
   // First-run guided tour for the current section (shows once per device per key).
   const tourKey = loc.pathname === '/admin' ? 'dashboard'
     : loc.pathname.startsWith('/admin/menu') || loc.pathname.startsWith('/admin/items') ? 'items'
@@ -242,7 +254,7 @@ export default function AdminLayout() {
     <div className="admin-shell" style={{ '--sidebar-w': `${effW}px` }} data-collapsed={collapsed ? 'true' : undefined} data-systheme={systemThemeAttr(tenant, 'admin')} data-sidebar={tenant?.sidebarStyle || undefined} data-sidetheme={tenant?.sidebarTheme || undefined}>
       <AppBackground tenant={tenant} />
       <PinLock tenant={tenant} tenantId={tenantId} />
-      {tourKey && TOURS[tourKey] && <Tour key={tourKey} steps={TOURS[tourKey]} storageKey={tourKey} />}
+      {tourKey && TOURS[tourKey] && tenant?.toursEnabled !== false && <Tour key={tourKey} steps={TOURS[tourKey]} storageKey={tourKey} />}
       {searchOpen && <GlobalSearch open={searchOpen} onClose={() => setSearchOpen(false)} />}
       {/* desktop sidebar (hidden on mobile; bottom nav takes over) — collapsible + drag-resizable */}
       <aside className="admin-sidebar">
@@ -309,6 +321,7 @@ export default function AdminLayout() {
         <button className="icon-btn" onClick={() => setSearchOpen(true)} title={lang === 'ar' ? 'البحث الشامل (Ctrl+K)' : 'Global search (Ctrl+K)'} aria-label="global search">
           <Icon name="search" size={18} />
         </button>
+        <PageGuide />
         {tenant?.pinLock?.enabled && (
           <button className="icon-btn" onClick={requestLock} title={lang === 'ar' ? 'قفل الشاشة الآن' : 'Lock now'} aria-label="lock">
             <Icon name="key" size={18} />

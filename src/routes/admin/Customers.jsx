@@ -1,8 +1,9 @@
 import { useEffect, useMemo, useState } from 'react'
+import { useSearchParams } from 'react-router-dom'
 import { useAuth } from '../../lib/auth.jsx'
 import { useI18n } from '../../lib/i18n.jsx'
 import { Spinner, Empty } from '../../components/ui.jsx'
-import { watchCustomers, mergeCustomers } from '../../lib/db.js'
+import { watchCustomers, mergeCustomers, getCustomerByPhone } from '../../lib/db.js'
 import Sheet from '../../components/Sheet.jsx'
 import { useToast } from '../../components/Toast.jsx'
 import { Price } from '../../components/Riyal.jsx'
@@ -44,6 +45,22 @@ export default function Customers() {
     if (!tenantId) return
     return watchCustomers(tenantId, setCustomers)
   }, [tenantId])
+
+  // Deep-link (bell / OS notification): ?id=<customerId> opens that customer's
+  // profile sheet. Freshly self-registered customers may not be in the
+  // lastOrderAt-ordered list yet, so fall back to a direct lookup by id (=phone).
+  const [params, setParams] = useSearchParams()
+  useEffect(() => {
+    const want = params.get('id')
+    if (!want || customers === null) return
+    const p = new URLSearchParams(params); p.delete('id'); setParams(p, { replace: true })
+    const c = customers.find((x) => x.id === want)
+    if (c) { setSel({ phone: c.phone || c.id, name: c.name }); return }
+    getCustomerByPhone(tenantId, want).then((found) => {
+      if (found) setSel({ phone: found.phone || want, name: found.name })
+      else toast.error(lang === 'ar' ? 'العنصر لم يعد موجوداً' : 'Item no longer exists')
+    }).catch(() => {})
+  }, [params, customers])
 
   const shown = useMemo(() => {
     let list = customers || []

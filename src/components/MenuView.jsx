@@ -18,6 +18,7 @@ import { createOrder, upsertCustomerOnOrder, getCustomerByPhone, getMemberByToke
 import { tierDiscountAmount, TIER_META, resolveMembershipPolicy } from '../lib/membership.js'
 import { evaluateOffers, activeAutoOffers, offerForItem, discountedPrice } from '../lib/offers.js'
 import { alertParty } from '../lib/notify.js'
+import ItemFx from './ItemFx.jsx'
 import { getLocalCustomer, setLocalCustomer, isRegisterDismissed, dismissRegister, fetchIp, getMyOrders, addMyOrder, getMemberToken, setMemberToken } from '../lib/customer.js'
 import { resolveSkin } from '../lib/skins.js'
 import { distanceMeters, getPosition } from '../lib/geo.js'
@@ -941,8 +942,14 @@ function SpotSlide({ it, slideId, currency, offers, catName, suggestions = [], o
                 : it.imageUrl
                   ? <img className="spot-img" src={it.imageUrl} alt="" />
                   : <span className="spot-img spot-noimg"><Icon name="coffee" size={90} /></span>}
-              {ambient === 'hot' && <span className="spot-steam" aria-hidden="true"><i /><i /><i /></span>}
-              {ambient === 'cold' && <span className="spot-cold" aria-hidden="true" />}
+              {it.effect
+                ? <ItemFx kind={it.effect} />
+                : (
+                  <>
+                    {ambient === 'hot' && <span className="spot-steam" aria-hidden="true"><i /><i /><i /></span>}
+                    {ambient === 'cold' && <span className="spot-cold" aria-hidden="true" />}
+                  </>
+                )}
             </span>
             <span className="spot-face spot-back">
               <strong>{lang === 'ar' ? 'التفاصيل' : 'Details'}</strong>
@@ -1278,12 +1285,18 @@ export function ItemSheet({ item, tenant, currency, tenantId, onClose, onAdd, de
           <button type="button" className="dish-nav-btn end" onClick={() => onNavigate(nextItem)} aria-label={lang === 'ar' ? 'التالي' : 'Next'}><Icon name={lang === 'ar' ? 'back' : 'next'} size={20} /></button>
         )}
         {gallery.length === 1 ? (
-          <img className="dish-circle" data-imgstyle={imgStyle} src={gallery[0]} alt={pickLang(item, 'name', lang)} onClick={() => setZoom(true)} style={{ cursor: 'zoom-in', ...scaleStyle }} />
+          <span style={{ position: 'relative', display: 'inline-block' }}>
+            <img className="dish-circle" data-imgstyle={imgStyle} src={gallery[0]} alt={pickLang(item, 'name', lang)} onClick={() => setZoom(true)} style={{ cursor: 'zoom-in', ...scaleStyle }} />
+            <ItemFx kind={item.effect} />
+          </span>
         ) : gallery.length > 1 ? (
           <div className="dish-stack">
             <div className="dish-carousel" onScroll={(e) => { const w = e.currentTarget.clientWidth || 1; setImgIdx(Math.min(gallery.length - 1, Math.round(Math.abs(e.currentTarget.scrollLeft) / w))) }}>
               {gallery.map((src, i) => (
-                <div key={i} className="dish-slide"><img className="dish-circle" data-imgstyle={imgStyle} src={src} alt="" onClick={() => setZoom(true)} style={{ cursor: 'zoom-in', ...scaleStyle }} /></div>
+                <div key={i} className="dish-slide" style={{ position: 'relative' }}>
+                  <img className="dish-circle" data-imgstyle={imgStyle} src={src} alt="" onClick={() => setZoom(true)} style={{ cursor: 'zoom-in', ...scaleStyle }} />
+                  {i === imgIdx && <ItemFx kind={item.effect} />}
+                </div>
               ))}
             </div>
             <div className="dish-dots">{gallery.map((_, i) => <span key={i} className={i === imgIdx ? 'on' : ''} />)}</div>
@@ -1402,7 +1415,7 @@ function ArStage({ item, tenant, lang, onClose }) {
         <strong>{ar ? (item.nameAr || item.nameEn) : (item.nameEn || item.nameAr)}</strong>
         <button type="button" className="icon-btn" onClick={onClose} aria-label="close" style={{ color: 'inherit' }}><Icon name="close" size={20} /></button>
       </div>
-      <div className="ar-stage-body">
+      <div className="ar-stage-body" style={{ position: 'relative' }}>
         {state === 'loading' && <div className="center" style={{ height: '100%' }}><Spinner /></div>}
         {state === 'error' && <p className="small" style={{ textAlign: 'center', opacity: 0.8, padding: 24 }}>{ar ? 'تعذر تحميل عارض المجسمات — تحقق من اتصالك' : 'Could not load the 3D viewer'}</p>}
         {state === 'ready' && (glb || usdz) && (
@@ -1418,6 +1431,7 @@ function ArStage({ item, tenant, lang, onClose }) {
             style={{ width: '100%', height: '100%', background: 'transparent' }}
           />
         )}
+        {state === 'ready' && <ItemFx kind={item.effect} scale={1.4} />}
       </div>
       <p className="ar-stage-hint">{ar ? 'اضغط أيقونة AR داخل العارض ثم وجّه الكاميرا إلى الطاولة — سيقف الصنف عليها فعلياً.' : 'Tap the AR icon inside the viewer and point at your table.'}</p>
     </div>

@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { DndContext, closestCenter, PointerSensor, TouchSensor, useSensor, useSensors } from '@dnd-kit/core'
 import { SortableContext, verticalListSortingStrategy, useSortable, arrayMove } from '@dnd-kit/sortable'
 import { CSS } from '@dnd-kit/utilities'
@@ -19,11 +19,14 @@ import RecipeEditor from '../../components/RecipeEditor.jsx'
 import { Price } from '../../components/Riyal.jsx'
 import Icon from '../../components/Icon.jsx'
 import { ItemSheet } from '../../components/MenuView.jsx'
+import ModelStudio from '../../components/ModelStudio.jsx'
+import ItemFx from '../../components/ItemFx.jsx'
+import { ITEM_EFFECTS } from '../../lib/itemEffects.js'
 import { sectionTemplate, templateOptions } from '../../lib/systemTemplates.js'
 
 const blank = () => ({
   nameAr: '', nameEn: '', price: '', calories: '', categoryId: '',
-  descAr: '', descEn: '', kdsWarning: '', imageUrl: '', images: [], imageStyle: '', imageScale: 1, arStandeeUrl: '', model3dUrl: '', available: true, availableFrom: '', availableTo: '', countsForLoyalty: true, featured: false, promoNotify: 'default', trackStock: false, stock: '',
+  descAr: '', descEn: '', kdsWarning: '', imageUrl: '', images: [], imageStyle: '', imageScale: 1, effect: '', arStandeeUrl: '', model3dUrl: '', available: true, availableFrom: '', availableTo: '', countsForLoyalty: true, featured: false, promoNotify: 'default', trackStock: false, stock: '',
   prepTime: '', serves: '', rating: '', reviewsCount: '',
   ingredients: [], variants: [], modifierGroups: [], sortOrder: 0,
   recipe: [], variantRecipes: {},
@@ -51,6 +54,10 @@ export default function Items() {
   const [selectMode, setSelectMode] = useState(false)
   const [selected, setSelected] = useState(() => new Set())
   const [bulkBusy, setBulkBusy] = useState(false)
+  // Batch photo→realistic-3D queue + per-item model studio (list-level entries).
+  const can3d = planAllows(tenant, 'ar3d')
+  const [batchOpen, setBatchOpen] = useState(false)
+  const [studioItem, setStudioItem] = useState(null)
 
   useEffect(() => { setTpl(sectionTemplate(tenant, 'menu')) }, [tenant])
 
@@ -184,6 +191,9 @@ export default function Items() {
               </button>
               <button className="btn btn-sm btn-outline" onClick={(e) => toggleStar(it, e)} title={lang === 'ar' ? 'صنف مميّز' : 'Featured'} style={{ color: it.featured ? 'var(--gold)' : 'var(--text-muted)' }}><Icon name="star" size={14} /></button>
               <button className="btn btn-sm btn-outline" disabled={dupBusy === it.id} onClick={(e) => dup(it, e)} title={lang === 'ar' ? 'تكرار الصنف' : 'Duplicate'}><Icon name="copy" size={14} /></button>
+              {(it.model3dUrl || it.arStandeeUrl) && (
+                <button className="btn btn-sm btn-outline" onClick={(e) => { e.stopPropagation(); setStudioItem(it) }} title={lang === 'ar' ? 'استوديو المجسم' : '3D studio'} style={{ color: 'var(--brand)' }}><Icon name="layers" size={14} /></button>
+              )}
               <button className="btn btn-sm btn-outline" onClick={(e) => { e.stopPropagation(); openEdit(it) }}>{t('edit')}</button>
             </div>
           )}
@@ -225,6 +235,9 @@ export default function Items() {
             <button className="btn btn-sm btn-outline grow" onClick={(e) => { e.stopPropagation(); openEdit(it) }}>{t('edit')}</button>
             <button className="btn btn-sm btn-outline" onClick={(e) => toggleStar(it, e)} title={lang === 'ar' ? 'صنف مميّز' : 'Featured'} style={{ color: it.featured ? 'var(--gold)' : 'var(--text-muted)' }}><Icon name="star" size={14} /></button>
             <button className="btn btn-sm btn-outline" disabled={dupBusy === it.id} onClick={(e) => dup(it, e)} title={lang === 'ar' ? 'تكرار الصنف' : 'Duplicate'}><Icon name="copy" size={14} /></button>
+            {(it.model3dUrl || it.arStandeeUrl) && (
+              <button className="btn btn-sm btn-outline" onClick={(e) => { e.stopPropagation(); setStudioItem(it) }} title={lang === 'ar' ? 'استوديو المجسم' : '3D studio'} style={{ color: 'var(--brand)' }}><Icon name="layers" size={14} /></button>
+            )}
           </div>
         )}
       </div>
@@ -246,6 +259,15 @@ export default function Items() {
               </button>
             ))}
           </div>
+          {can3d ? (
+            <button className="btn btn-sm btn-outline" onClick={() => setBatchOpen(true)} title={lang === 'ar' ? 'حوّل كل الأصناف المصوّرة إلى مجسمات واقعية دفعة واحدة' : 'Convert all photographed items to realistic 3D'}>
+              <Icon name="layers" size={14} /> {lang === 'ar' ? 'تحويل جماعي 3D' : 'Batch 3D'}
+            </button>
+          ) : (
+            <span className="badge" title={lang === 'ar' ? 'التحويل الواقعي الجماعي ميزة الباقة المتكاملة' : 'Batch realistic 3D is an Enterprise feature'}>
+              <Icon name="lock" size={11} /> 3D
+            </span>
+          )}
           <button className="btn btn-primary btn-sm" onClick={openNew}>+ {t('addItem')}</button>
         </div>
       </div>
@@ -359,6 +381,28 @@ export default function Items() {
           onClose={() => setOpen(false)}
           onSaved={() => { setOpen(false); toast.success(t('saved')) }}
           onDeleted={() => { setOpen(false); toast.success(t('deleted')) }}
+          onOpenStudio={(it) => { setOpen(false); setStudioItem(it) }}
+        />
+      )}
+
+      {batchOpen && (
+        <Batch3dSheet
+          tenantId={tenantId} items={items} lang={lang}
+          onClose={() => setBatchOpen(false)}
+          onOpenStudio={(it) => { setBatchOpen(false); setStudioItem(it) }}
+        />
+      )}
+
+      {studioItem && (
+        <ModelStudio
+          open onClose={() => setStudioItem(null)}
+          tenantId={tenantId} item={studioItem}
+          onChange={async (patch) => {
+            try {
+              if (studioItem.id) await saveItem(tenantId, studioItem.id, patch)
+              setStudioItem((s) => (s ? { ...s, ...patch } : s))
+            } catch (_) { toast.error(t('error')) }
+          }}
         />
       )}
 
@@ -379,10 +423,34 @@ export default function Items() {
 
 // Visual section header inside the item editor — groups the long flat form
 // without moving any field or touching state/logic.
-function EditorSection({ title, first }) {
+function EditorSection({ title, first, id }) {
   return (
-    <div style={first ? { paddingBottom: 2 } : { borderTop: '1px solid var(--border)', paddingTop: 'var(--sp-3)', marginTop: 'var(--sp-2)', paddingBottom: 2 }}>
+    <div id={id} style={{ ...(first ? { paddingBottom: 2 } : { borderTop: '1px solid var(--border)', paddingTop: 'var(--sp-3)', marginTop: 'var(--sp-2)', paddingBottom: 2 }), scrollMarginTop: 54 }}>
       <strong style={{ fontSize: 'var(--fs-md)' }}>{title}</strong>
+    </div>
+  )
+}
+
+// Sticky jump-chips inside the item editor sheet: one long form (state never
+// unmounts) organized by anchors — a chip scrolls its section into view.
+function EditorTabs({ lang }) {
+  const tabs = [
+    ['ie-basics', lang === 'ar' ? 'الأساسي' : 'Basics'],
+    ['ie-images', lang === 'ar' ? 'الصور والمؤثرات' : 'Images & FX'],
+    ['ie-pricing', lang === 'ar' ? 'المقاسات والإضافات' : 'Sizes & mods'],
+    ['ie-ar', lang === 'ar' ? '3D وAR' : '3D & AR'],
+    ['ie-recipe', lang === 'ar' ? 'الوصفة والمخزون' : 'Recipe'],
+    ['ie-advanced', lang === 'ar' ? 'متقدم' : 'Advanced'],
+  ]
+  const jump = (id) => {
+    const el = document.getElementById(id)
+    if (el && el.scrollIntoView) el.scrollIntoView({ behavior: 'smooth', block: 'start' })
+  }
+  return (
+    <div className="row ie-tabs" style={{ gap: 6, flexWrap: 'nowrap', overflowX: 'auto', position: 'sticky', top: -1, zIndex: 3, background: 'var(--surface)', paddingBlock: 6, marginBlock: -6 }}>
+      {tabs.map(([id, label]) => (
+        <button key={id} type="button" className="chip" style={{ flex: 'none' }} onClick={() => jump(id)}>{label}</button>
+      ))}
     </div>
   )
 }
@@ -393,7 +461,7 @@ function SortableItem({ id, children }) {
   return <div ref={setNodeRef} style={style}>{children({ ...listeners, ...attributes })}</div>
 }
 
-function ItemEditor({ tenantId, cats, currency, value, onClose, onSaved, onDeleted, items = [] }) {
+function ItemEditor({ tenantId, cats, currency, value, onClose, onSaved, onDeleted, onOpenStudio, items = [] }) {
   const { t, lang } = useI18n()
   const { can } = useAuth()
   // Price fields lock without the edit_prices cap — the staffer can still fix
@@ -602,6 +670,7 @@ function ItemEditor({ tenantId, cats, currency, value, onClose, onSaved, onDelet
         images: (form.images || []).filter(Boolean),
         imageStyle: form.imageStyle || '',
         imageScale: Math.min(1.8, Math.max(0.6, Number(form.imageScale) || 1)),
+        effect: form.effect || '',
         arStandeeUrl: form.arStandeeUrl || '',
         model3dUrl: form.model3dUrl || '',
         pairings: (form.pairings || []).filter(Boolean).slice(0, 3),
@@ -722,7 +791,8 @@ function ItemEditor({ tenantId, cats, currency, value, onClose, onSaved, onDelet
             hint={lang === 'ar' ? 'حرّك وكبّر/صغّر لضبط الصورة على الثيم (مربّع يناسب كل الأشكال)' : 'Move & zoom to fit the theme (square fits all shapes)'}
             onClose={() => setCropState(null)} onCropped={onCropped} />
         )}
-        <EditorSection first title={lang === 'ar' ? 'الأساسي' : 'Basics'} />
+        <EditorTabs lang={lang} />
+        <EditorSection first id="ie-basics" title={lang === 'ar' ? 'الأساسي' : 'Basics'} />
         <div className="row" style={{ gap: 'var(--sp-3)', alignItems: 'flex-start' }}>
           <div className="stack" style={{ flex: 'none', gap: 4, alignItems: 'stretch', width: 88 }}>
             <label style={{ cursor: 'pointer' }}>
@@ -774,7 +844,7 @@ function ItemEditor({ tenantId, cats, currency, value, onClose, onSaved, onDelet
           </div>
         </div>
 
-        <EditorSection title={lang === 'ar' ? 'الصور' : 'Images'} />
+        <EditorSection id="ie-images" title={lang === 'ar' ? 'الصور' : 'Images'} />
         {/* additional images — swiped in the item screen */}
         <div className="field">
           <label>{lang === 'ar' ? 'صور إضافية (يمكن التمرير بينها في الصنف)' : 'Extra images (swiped in the item screen)'}</label>
@@ -820,6 +890,23 @@ function ItemEditor({ tenantId, cats, currency, value, onClose, onSaved, onDelet
             {(Number(form.imageScale) || 1) !== 1 && <button type="button" className="btn btn-xs btn-ghost" onClick={() => set('imageScale', 1)}>{lang === 'ar' ? 'إعادة' : 'Reset'}</button>}
           </div>
           <p className="xs faint">{lang === 'ar' ? 'يكبّر/يصغّر الصورة عند فتح تفاصيل المنتج فقط، دون التأثير على حجمها في القائمة.' : 'Scales the photo only when the product is opened — the menu card stays as-is.'}</p>
+        </div>
+
+        {/* live visual effect over the item (menu detail + spotlight + in-app 3D viewer) */}
+        <div className="field">
+          <label>{lang === 'ar' ? 'مؤثر حي على الصنف' : 'Live effect'}</label>
+          <div className="row" style={{ gap: 10, alignItems: 'center' }}>
+            <select className="select grow" value={form.effect || ''} onChange={(e) => set('effect', e.target.value)}>
+              {ITEM_EFFECTS.map((fx) => <option key={fx.id} value={fx.id}>{lang === 'ar' ? fx.ar : fx.en}</option>)}
+            </select>
+            {form.imageUrl && (
+              <span style={{ position: 'relative', width: 52, height: 52, flex: 'none', borderRadius: 10, overflow: 'hidden' }}>
+                <img src={form.imageUrl} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+                <ItemFx kind={form.effect} />
+              </span>
+            )}
+          </div>
+          <p className="xs faint">{lang === 'ar' ? 'بخار أو دخان أو لمعان يتحرك فوق الصنف في تفاصيل المنيو وفي عارض المجسم داخل التطبيق. في وضع AR على الطاولة (الكاميرا) يظهر المجسم فقط بلا مؤثر — قيد تقني من نظام التشغيل.' : 'Animates over the photo in the menu detail and the in-app 3D viewer. Real camera AR shows the bare model only (OS limitation).'}</p>
         </div>
 
         {/* Custom styling options for individual items (name & price position, colors, effects) */}
@@ -934,7 +1021,7 @@ function ItemEditor({ tenantId, cats, currency, value, onClose, onSaved, onDelet
           )}
         </div>
 
-        <EditorSection title={lang === 'ar' ? 'التسعير والمقاسات' : 'Pricing & sizes'} />
+        <EditorSection id="ie-pricing" title={lang === 'ar' ? 'التسعير والمقاسات' : 'Pricing & sizes'} />
         <div className="row" style={{ gap: 'var(--sp-3)' }}>
           <div className="field grow">
             <label className="row" style={{ gap: 5 }}>{t('price')} ({currency}){!canPrice && <Icon name="lock" size={12} className="faint" />}</label>
@@ -962,7 +1049,7 @@ function ItemEditor({ tenantId, cats, currency, value, onClose, onSaved, onDelet
         </div>
 
         {/* AR — عرض الصنف على طاولة العميل */}
-        <EditorSection title={lang === 'ar' ? 'الواقع المعزز AR' : 'Augmented reality'} />
+        <EditorSection id="ie-ar" title={lang === 'ar' ? 'الواقع المعزز AR' : 'Augmented reality'} />
         <div className="stack" style={{ gap: 8 }}>
           <p className="xs faint" style={{ margin: 0 }}>
             {lang === 'ar'
@@ -989,6 +1076,11 @@ function ItemEditor({ tenantId, cats, currency, value, onClose, onSaved, onDelet
             )}
             {form.arStandeeUrl && <span className="badge badge-success"><Icon name="check" size={11} /> {lang === 'ar' ? 'مجسم الصورة جاهز' : 'Standee ready'}</span>}
             {form.model3dUrl && <span className="badge badge-success"><Icon name="check" size={11} /> {lang === 'ar' ? 'نموذج 3D مرفوع' : '3D model set'}</span>}
+            {(form.arStandeeUrl || form.model3dUrl) && form.id && onOpenStudio && (
+              <button type="button" className="btn btn-sm btn-outline" style={{ color: 'var(--brand)' }} onClick={() => onOpenStudio({ ...form })}>
+                <Icon name="layers" size={13} /> {lang === 'ar' ? 'عرض المجسم في الاستوديو' : 'Open 3D studio'}
+              </button>
+            )}
             {(form.arStandeeUrl || form.model3dUrl) && (
               <button type="button" className="btn-link xs" style={{ color: 'var(--danger)' }} onClick={() => { set('arStandeeUrl', ''); set('model3dUrl', '') }}>{lang === 'ar' ? 'إزالة' : 'Clear'}</button>
             )}
@@ -1115,7 +1207,7 @@ function ItemEditor({ tenantId, cats, currency, value, onClose, onSaved, onDelet
           ))}
         </div>
 
-        <EditorSection title={lang === 'ar' ? 'الوصفة والمخزون' : 'Recipe & inventory'} />
+        <EditorSection id="ie-recipe" title={lang === 'ar' ? 'الوصفة والمخزون' : 'Recipe & inventory'} />
         {/* recipe / BOM — links raw materials consumed per variant (deducted on sale) */}
         <div className="field">
           <label>{lang === 'ar' ? 'الوصفة (المخزون)' : 'Recipe (inventory)'} <span className="faint xs">({lang === 'ar' ? 'استهلاك المواد الخام لكل حجم' : 'raw-material usage per size'})</span></label>
@@ -1136,7 +1228,7 @@ function ItemEditor({ tenantId, cats, currency, value, onClose, onSaved, onDelet
           ))}
         </div>
 
-        <EditorSection title={lang === 'ar' ? 'خيارات متقدمة' : 'Advanced options'} />
+        <EditorSection id="ie-advanced" title={lang === 'ar' ? 'خيارات متقدمة' : 'Advanced options'} />
         {/* modifier groups (add-ons, add to price) */}
         <ModifierGroupsEditor groups={form.modifierGroups || []} onChange={(g) => set('modifierGroups', g)} currency={currency} materials={materials} />
       </div>
@@ -1200,5 +1292,148 @@ function ModifierGroupsEditor({ groups, onChange, currency, materials = [] }) {
         </div>
       ))}
     </div>
+  )
+}
+
+// «تحويل جماعي إلى 3D»: converts every photographed item without a realistic
+// model via the imageTo3d callable — client-side queue, CONCURRENCY 2, live
+// per-item status. Each conversion takes 1-8 minutes (Meshy polls server-side);
+// a missing provider key aborts the whole queue with the server's honest
+// Arabic message (every item would fail identically).
+function Batch3dSheet({ tenantId, items, lang, onClose, onOpenStudio }) {
+  const ar = lang === 'ar'
+  const candidates = useMemo(
+    () => (items || []).filter((i) => !i.archived && i.imageUrl && !i.model3dUrl),
+    [items],
+  )
+  const [picked, setPicked] = useState(() => new Set(candidates.map((i) => i.id)))
+  const [status, setStatus] = useState({}) // id -> {state:'wait'|'run'|'done'|'fail', sec, msg, url}
+  const [running, setRunning] = useState(false)
+  const stopRef = useRef(false)
+  const [abortMsg, setAbortMsg] = useState('')
+
+  // Elapsed-seconds ticker for items currently converting.
+  useEffect(() => {
+    if (!running) return undefined
+    const t = setInterval(() => {
+      setStatus((s) => {
+        const n = { ...s }
+        for (const k of Object.keys(n)) if (n[k].state === 'run') n[k] = { ...n[k], sec: (n[k].sec || 0) + 1 }
+        return n
+      })
+    }, 1000)
+    return () => clearInterval(t)
+  }, [running])
+
+  const toggle = (id) => setPicked((p) => { const n = new Set(p); if (n.has(id)) n.delete(id); else n.add(id); return n })
+  const allPicked = picked.size === candidates.length && candidates.length > 0
+
+  const start = async () => {
+    const queue = candidates.filter((i) => picked.has(i.id))
+    if (!queue.length) return
+    stopRef.current = false
+    setAbortMsg('')
+    setRunning(true)
+    setStatus(Object.fromEntries(queue.map((i) => [i.id, { state: 'wait' }])))
+    let idx = 0
+    const worker = async () => {
+      while (!stopRef.current) {
+        const my = idx++
+        if (my >= queue.length) return
+        const it = queue[my]
+        setStatus((s) => ({ ...s, [it.id]: { state: 'run', sec: 0 } }))
+        try {
+          const res = await httpsCallable(functions, 'imageTo3d', { timeout: 540000 })({ tenantId, itemId: it.id, imageUrl: it.imageUrl })
+          const url = res?.data?.url || ''
+          setStatus((s) => ({ ...s, [it.id]: { state: 'done', url } }))
+        } catch (e) {
+          const msg = String(e?.message || e)
+          // Provider key not configured -> identical failure for every item: abort the queue.
+          if (/MESHY|مزود|مفتاح/i.test(msg)) { setAbortMsg(msg); stopRef.current = true }
+          setStatus((s) => ({ ...s, [it.id]: { state: 'fail', msg } }))
+        }
+      }
+    }
+    await Promise.all([worker(), worker()])
+    setRunning(false)
+  }
+
+  const doneCount = Object.values(status).filter((x) => x.state === 'done').length
+  const failCount = Object.values(status).filter((x) => x.state === 'fail').length
+  const total = Object.keys(status).length
+
+  return (
+    <Sheet open onClose={running ? () => {} : onClose} title={ar ? 'تحويل جماعي إلى مجسمات واقعية' : 'Batch realistic 3D'}>
+      <div className="stack" style={{ gap: 'var(--sp-3)' }}>
+        <p className="small muted" style={{ margin: 0, lineHeight: 1.8 }}>
+          {ar
+            ? `${candidates.length.toLocaleString('ar-SA-u-nu-latn')} صنفاً مصوّراً بلا مجسم واقعي. التحويل يستغرق 1-8 دقائق لكل صنف (صنفان معاً في كل مرة) — أبقِ الصفحة مفتوحة حتى الانتهاء.`
+            : `${candidates.length} photographed items without a realistic model. Each takes 1-8 minutes (2 at a time) — keep this page open.`}
+        </p>
+        {abortMsg && (
+          <div className="card card-pad" style={{ borderColor: 'var(--danger)' }}>
+            <p className="small" style={{ margin: 0, color: 'var(--danger)' }}>{abortMsg}</p>
+          </div>
+        )}
+        {total > 0 && (
+          <div className="stack" style={{ gap: 4 }}>
+            <div className="row-between">
+              <span className="xs faint">{ar ? 'التقدم' : 'Progress'}</span>
+              <span className="xs faint" style={{ direction: 'ltr' }}>{doneCount + failCount} / {total}</span>
+            </div>
+            <div style={{ height: 6, borderRadius: 4, background: 'var(--surface-2)', overflow: 'hidden' }}>
+              <div style={{ height: '100%', width: `${total ? Math.round(((doneCount + failCount) / total) * 100) : 0}%`, background: 'var(--brand)', transition: 'width 0.4s ease' }} />
+            </div>
+          </div>
+        )}
+        {!running && total === 0 && candidates.length > 0 && (
+          <label className="row" style={{ gap: 8, alignItems: 'center', cursor: 'pointer' }}>
+            <input type="checkbox" checked={allPicked} onChange={() => setPicked(allPicked ? new Set() : new Set(candidates.map((i) => i.id)))} style={{ width: 18, height: 18 }} />
+            <span className="small bold">{ar ? 'تحديد الكل' : 'Select all'}</span>
+          </label>
+        )}
+        <div className="stack" style={{ gap: 6, maxHeight: '46dvh', overflowY: 'auto' }}>
+          {candidates.length === 0 && (
+            <p className="small muted" style={{ textAlign: 'center', padding: 16 }}>
+              {ar ? 'كل الأصناف المصوّرة لديها مجسمات بالفعل — أضف صوراً لأصنافك أولاً.' : 'Every photographed item already has a model.'}
+            </p>
+          )}
+          {candidates.map((it) => {
+            const st = status[it.id]
+            return (
+              <div key={it.id} className="row" style={{ gap: 10, alignItems: 'center', padding: '6px 4px', borderBottom: '1px solid var(--border)' }}>
+                {!running && !st && (
+                  <input type="checkbox" checked={picked.has(it.id)} onChange={() => toggle(it.id)} style={{ width: 18, height: 18, flex: 'none' }} />
+                )}
+                <img src={it.imageUrl} alt="" style={{ width: 38, height: 38, borderRadius: 8, objectFit: 'cover', flex: 'none' }} />
+                <span className="small grow" style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{it.nameAr || it.nameEn}</span>
+                {st?.state === 'wait' && <span className="badge">{ar ? 'بانتظار الدور' : 'Queued'}</span>}
+                {st?.state === 'run' && <span className="badge" style={{ color: 'var(--brand)' }}><Spinner size={12} /> {ar ? `يحوّل… ${st.sec || 0} ث` : `Converting… ${st.sec || 0}s`}</span>}
+                {st?.state === 'done' && (
+                  <button className="badge badge-success" onClick={() => onOpenStudio({ ...it, model3dUrl: st.url })}>
+                    <Icon name="check" size={11} /> {ar ? 'تم — عرض' : 'Done — view'}
+                  </button>
+                )}
+                {st?.state === 'fail' && <span className="badge badge-danger" title={st.msg}><Icon name="warning" size={11} /> {ar ? 'فشل' : 'Failed'}</span>}
+              </div>
+            )
+          })}
+        </div>
+        <div className="row" style={{ gap: 8 }}>
+          {!running ? (
+            <>
+              <button className="btn btn-primary grow" disabled={!picked.size || candidates.length === 0} onClick={start}>
+                <Icon name="layers" size={16} /> {ar ? `ابدأ التحويل (${picked.size.toLocaleString('ar-SA-u-nu-latn')})` : `Start (${picked.size})`}
+              </button>
+              <button className="btn btn-outline" onClick={onClose}>{ar ? 'إغلاق' : 'Close'}</button>
+            </>
+          ) : (
+            <button className="btn btn-outline grow" onClick={() => { stopRef.current = true }}>
+              <Icon name="stop" size={16} /> {ar ? 'إيقاف الباقي (يُكمل الجاري الآن)' : 'Stop the rest (current ones finish)'}
+            </button>
+          )}
+        </div>
+      </div>
+    </Sheet>
   )
 }

@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from 'react'
+import { useSearchParams } from 'react-router-dom'
 import { useAuth } from '../../lib/auth.jsx'
 import { useI18n } from '../../lib/i18n.jsx'
 import { Spinner, Empty } from '../../components/ui.jsx'
@@ -46,6 +47,16 @@ export default function Orders() {
     if (!tenantId) return
     return watchOrdersSince(tenantId, startOfToday(), setOrders)
   }, [tenantId])
+
+  // Deep-link (bell / search): ?order=<id> opens that order's detail sheet once
+  // today's orders load, then clears the param. Unknown id → silently ignored.
+  const [params, setParams] = useSearchParams()
+  useEffect(() => {
+    const want = params.get('order')
+    if (!want || orders === null) return
+    const p = new URLSearchParams(params); p.delete('order'); setParams(p, { replace: true })
+    if (orders.some((o) => o.id === want)) setActiveOrderId(want)
+  }, [params, orders])
 
   // Statistics calculations
   const stats = useMemo(() => {

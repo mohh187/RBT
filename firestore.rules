@@ -639,6 +639,9 @@ service cloud.firestore {
     match /platformInvoices/{id}   { allow read: if isPlatformAdmin() || (isSignedIn() && isManager(resource.data.tenantId)); allow write: if isPlatformAdmin(); }
     match /platformCoupons/{id}    { allow read, write: if isPlatformAdmin(); }
     match /platformConfig/{id}     { allow read, write: if isPlatformAdmin(); }
+    // Landing-page CMS doc: the public marketing page reads it unauthenticated
+    // (overlapping matches are OR'd — writes still require a platform admin).
+    match /platformConfig/landing  { allow read: if true; }
     match /platformCannedResponses/{id} { allow read, write: if isPlatformAdmin(); }
     match /platformTemplates/{id}  { allow read, write: if isPlatformAdmin(); }
     match /platformOnboarding/{id} { allow read, write: if isPlatformAdmin(); }

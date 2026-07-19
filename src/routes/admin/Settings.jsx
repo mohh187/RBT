@@ -907,6 +907,25 @@ export default function Settings() {
                 {langs.map((l) => <button key={l.id} className={lang === l.id ? 'active' : ''} onClick={() => setLang(l.id)}>{l.name}</button>)}
               </div>
             </div>
+            <div className="row-between wrap" style={{ gap: 10 }}>
+              <div>
+                <span className="small">{ar ? 'الجولات الإرشادية' : 'Guided tours'}</span>
+                <p className="xs faint" style={{ margin: 0 }}>{ar ? 'بطاقات الشرح التي تظهر تلقائياً أول مرة يفتح فيها الموظف كل قسم — الإيقاف يشمل كل الفريق.' : 'First-run walkthrough cards shown once per screen — turning off applies to the whole team.'}</p>
+              </div>
+              <input type="checkbox" checked={tenant?.toursEnabled !== false} style={{ width: 22, height: 22 }}
+                onChange={async (e) => { try { await saveNow({ toursEnabled: e.target.checked }); updateTenantLocal({ toursEnabled: e.target.checked }); toast.success(t('saved')) } catch (_) { toast.error(t('error')) } }} />
+            </div>
+            <div className="row-between wrap" style={{ gap: 10 }}>
+              <span className="small">{ar ? 'أعد عرض كل الجولات على هذا الجهاز' : 'Replay all tours on this device'}</span>
+              <button className="btn btn-outline btn-sm" onClick={() => {
+                try {
+                  const keys = []
+                  for (let i = 0; i < localStorage.length; i++) { const k = localStorage.key(i); if (k && k.startsWith('rbt_tour_')) keys.push(k) }
+                  keys.forEach((k) => localStorage.removeItem(k))
+                  toast.success(ar ? 'ستظهر الجولات من جديد عند فتح كل صفحة' : 'Tours will replay on each page')
+                } catch (_) { toast.error(t('error')) }
+              }}>{ar ? 'إعادة العرض' : 'Replay'}</button>
+            </div>
           </div>
 
           <div className="set-anchor" id="sec-social" />

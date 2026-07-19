@@ -6,6 +6,7 @@
 // Re-run a tour via resetTour(storageKey) then remount/open the page.
 import { useCallback, useEffect, useRef, useState } from 'react'
 import Icon from './Icon.jsx'
+import { useAuth } from '../lib/auth.jsx'
 
 const LS_PREFIX = 'rbt_tour_'
 
@@ -26,6 +27,9 @@ const CARD_W = 330
 const GAP = 12 // gap between spotlight and card
 
 export default function Tour({ steps = [], storageKey, open, onClose }) {
+  // Venue-wide kill switch (Settings -> system preferences). Explicitly-opened
+  // tours (controlled mode, e.g. from the help center) still work.
+  const { tenant } = useAuth()
   const controlled = typeof open === 'boolean'
   const [show, setShow] = useState(() => (controlled ? open : !seenTour(storageKey)))
   const [idx, setIdx] = useState(0)
@@ -110,6 +114,7 @@ export default function Tour({ steps = [], storageKey, open, onClose }) {
     return () => window.removeEventListener('keydown', onKey)
   }, [show, finish])
 
+  if (!controlled && tenant?.toursEnabled === false) return null
   if (!show || total === 0 || !step) return null
 
   const vw = window.innerWidth

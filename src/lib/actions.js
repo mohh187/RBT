@@ -170,6 +170,22 @@ export const ACTIONS = [
   { name: 'help_guide', risk: 'safe', description: 'Authoritative how-to guide for THIS system (rbt360): where every feature lives and how to use it. Call for ANY "how do I / where is / what does X do" question from the manager or staff, then answer from the returned guide text.', parameters: obj({ query: str('the feature/task being asked about, in Arabic or English') }, ['query']),
     run: async (a) => { const { searchGuide } = await import('./aiGuide.js'); const hits = searchGuide(a.query, 3); return hits.length ? { sections: hits } : { sections: [], note: 'no direct match — answer from your general knowledge of the snapshot and tools, honestly' } },
   },
+  { name: 'explain_page', risk: 'safe', description: 'Detailed step-by-step usage guide for a SPECIFIC admin page (the same manual behind the «دليل الصفحة» button): sections, tabs and exact steps. Call when the user asks how to use a page/section, then teach from the returned steps and OFFER to open the page with open_page.', parameters: obj({ page: str('page name or keyword, Arabic or English — e.g. "المنيو", "الكاشير", "campaigns"') }, ['page']),
+    run: async (a) => { const { findGuides, PAGE_GUIDES } = await import('./pageGuides.js'); const hits = findGuides(a.page, 2); return hits.length ? { guides: hits.map((g) => ({ title: g.title, path: g.path, intro: g.intro, sections: g.sections })) } : { guides: [], availablePages: PAGE_GUIDES.map((g) => ({ title: g.title, path: g.path })) } },
+  },
+  { name: 'open_page', risk: 'safe', description: 'Navigate the user to a system page RIGHT NOW (in-app, no reload). Use after explaining where something lives, or when the user says "خذني إلى / افتح صفحة …". Path must be one of the known page paths from explain_page.', parameters: obj({ path: str('in-app path, e.g. /admin/menu or /cashier') }, ['path']),
+    run: async (a) => {
+      const { PAGE_GUIDES } = await import('./pageGuides.js')
+      const p = String(a.path || '')
+      const ok = p.startsWith('/') && (PAGE_GUIDES.some((g) => p === g.path || p.startsWith(g.path + '/')) || ['/portal', '/scan', '/admin'].some((x) => p === x || p.startsWith(x + '/')))
+      if (!ok) return { error: 'unknown path — call explain_page first and use one of its paths' }
+      window.dispatchEvent(new CustomEvent('rbt:navigate', { detail: { to: p } }))
+      return { ok: true, navigated: p }
+    },
+  },
+  { name: 'set_tours_enabled', risk: 'confirm', description: 'Turn the first-run guided tours (الجولات الإرشادية) on or off for the WHOLE venue (all staff devices).', parameters: obj({ enabled: bool('true = show tours, false = hide') }, ['enabled']),
+    run: async (a, { tid }) => { await db.updateTenant(tid, { toursEnabled: !!a.enabled }); return { ok: true, toursEnabled: !!a.enabled } },
+  },
   { name: 'market_research', risk: 'safe', description: 'LIVE internet research via Google Search (market trends, competitor pricing, popular dishes, supplier prices, seasonal demand in Saudi/GCC). Use for any question about the OUTSIDE market — never guess market facts from memory.', parameters: obj({ query: str('specific research question, e.g. "متوسط سعر اللاتيه في مقاهي الرياض 2026"') }, ['query']),
     run: async (a) => { const { aiQuick } = await import('./aiBridge.js'); try { const out = await aiQuick(`أجب بدقة وباختصار مع أرقام وحقائق من نتائج البحث، وبالعربية:\n${a.query}`, { withSearch: true }); return { findings: out || 'لم تصل نتائج' } } catch (e) { return { error: 'تعذّر البحث: ' + String(e?.message || e) } } },
   },
@@ -240,6 +256,16 @@ export const ACTIONS = [
     run: async (a, { tid }) => { const it = await resolveItem(tid, a); if (!it) return { error: 'item not found — call list_items and use the exact id or name' }; const patch = {}; if (a.price != null) patch.price = Number(a.price) || 0; if (a.nameAr) patch.nameAr = a.nameAr; if (a.descAr != null) patch.descAr = a.descAr; if (a.descEn != null) patch.descEn = a.descEn; if (a.available != null) patch.available = !!a.available; if (a.imageUrl && !isBadImageUrl(a.imageUrl)) patch.imageUrl = a.imageUrl; await db.saveItem(tid, it.id, patch); return { ok: true, id: it.id, name: it.nameAr } } },
   { name: 'set_item_image', risk: 'confirm', description: 'Set an item\'s product photo to an image URL (the URL returned by upload_attached_image/crop_and_upload_image). Identify by itemId or itemName.', parameters: obj({ itemId: str('id'), itemName: str('item name (fallback)'), imageUrl: str('public image URL — never a placeholder') }, ['imageUrl']),
     run: async (a, { tid }) => { if (isBadImageUrl(a.imageUrl)) return { error: 'refusing a placeholder/example image — upload a real photo (upload_attached_image) first' }; const it = await resolveItem(tid, a); if (!it) return { error: 'item not found — call list_items first' }; await db.saveItem(tid, it.id, { imageUrl: a.imageUrl }); return { ok: true, id: it.id, name: it.nameAr } } },
+  { name: 'set_item_effect', risk: 'confirm', description: 'Set a LIVE visual effect on an item (animates over its photo in the menu detail/spotlight and over the in-app 3D viewer — NOT in real camera AR). Valid ids: steam (hot-drink steam), smoke, sparkle, bubbles (cold drinks), frost, fire — or empty string to remove. Identify by itemId or itemName.', parameters: obj({ itemId: str('id'), itemName: str('item name (fallback)'), effect: str('steam | smoke | sparkle | bubbles | frost | fire | "" to clear') }, ['effect']),
+    run: async (a, { tid }) => {
+      const { EFFECT_IDS } = await import('./itemEffects.js')
+      const fx = String(a.effect || '')
+      if (fx && !EFFECT_IDS.includes(fx)) return { error: 'unknown effect — valid: ' + EFFECT_IDS.join(', ') + ' or "" to clear' }
+      const it = await resolveItem(tid, a)
+      if (!it) return { error: 'item not found — call list_items first' }
+      await db.saveItem(tid, it.id, { effect: fx })
+      return { ok: true, id: it.id, name: it.nameAr, effect: fx }
+    } },
   { name: 'set_item_price', risk: 'confirm', description: 'Set an item base price. Identify by itemId or itemName.', parameters: obj({ itemId: str('id'), itemName: str('item name (fallback)'), price: num('new price') }, ['price']),
     run: async (a, { tid }) => { const it = await resolveItem(tid, a); if (!it) return { error: 'item not found — call list_items first' }; await db.saveItem(tid, it.id, { price: Number(a.price) || 0 }); return { ok: true, id: it.id, name: it.nameAr } } },
   { name: 'set_item_availability', risk: 'confirm', description: 'Mark item available or sold out. Identify by itemId or itemName.', parameters: obj({ itemId: str('id'), itemName: str('item name (fallback)'), available: bool('') }, ['available']),

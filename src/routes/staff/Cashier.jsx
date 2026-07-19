@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react'
-import { Link } from 'react-router-dom'
+import { Link, useSearchParams } from 'react-router-dom'
 import { DndContext, useDraggable, useDroppable, PointerSensor, TouchSensor, useSensor, useSensors } from '@dnd-kit/core'
 import { useAuth } from '../../lib/auth.jsx'
 import { useI18n } from '../../lib/i18n.jsx'
@@ -74,6 +74,19 @@ export default function Cashier() {
   const prevCalls = useRef(0)
   const seeded = useRef(false)
   const escalated = useRef(new Set())
+  const [params, setParams] = useSearchParams()
+
+  // Deep-link (bell / OS notification): ?order=<id> opens that order's detail
+  // sheet once orders are in, then clears the param. Unknown id → toast, no crash.
+  useEffect(() => {
+    const want = params.get('order')
+    if (!want || orders === null) return
+    const found = orders.some((o) => o.id === want) || (todays || []).some((o) => o.id === want)
+    if (!found && todays === null) return // completed orders still loading — keep waiting
+    const p = new URLSearchParams(params); p.delete('order'); setParams(p, { replace: true })
+    if (found) setDetailId(want)
+    else toast.error(lang === 'ar' ? 'العنصر لم يعد موجوداً' : 'Item no longer exists')
+  }, [params, orders, todays])
 
   const sensors = useSensors(
     useSensor(PointerSensor, { activationConstraint: { distance: 8 } }),

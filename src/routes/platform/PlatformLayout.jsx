@@ -46,6 +46,7 @@ const NAV_GROUPS = [
     { to: '/platform/legal', icon: 'file', label: 'المحرر القانوني' },
     { to: '/platform/design-tools', icon: 'penLine', label: 'أدوات التصميم' },
     { to: '/platform/design', icon: 'image', label: 'التصميم' },
+    { to: '/platform/landing', icon: 'palette', label: 'واجهة الموقع' },
   ] },
 ]
 const PRIMARY = [
