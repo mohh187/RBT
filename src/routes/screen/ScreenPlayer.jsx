@@ -349,6 +349,9 @@ export default function ScreenPlayer() {
         <div key={idx} className={`scr-media ${fx}`}>
           <DesignSlideView slide={slide} data={{ items, offers, venue: venueEff }} />
         </div>
+      ) : slide.type === 'prayer' ? (
+        // reaches here ONLY with verified fetched timings (the slides filter skips otherwise)
+        <PrayerSlide key={idx} data={prayer[normCity(slide.city).toLowerCase()]} venue={venueEff} fxClass={fx} />
       ) : (
         <MenuSlide key={idx} slide={slide} venue={venueEff} items={items} cats={cats} fxClass={fx} />
       )}
@@ -715,6 +718,36 @@ function SignageFileDJ({ playlist, command }) {
         />
       )}
     </>
+  )
+}
+
+// Prayer-times slide: venue identity + today's five prayers in a glass grid.
+// Rendered only with VERIFIED aladhan data (see the slides filter). Arabic
+// prayer names, Latin-digit 12h times; the upcoming prayer is highlighted.
+function PrayerSlide({ data, venue, fxClass = '' }) {
+  if (!data || data === 'fail' || !validTimings(data.times)) return null // belt & braces — filter already skips
+  const brand = venue?.brandColor || venue?.themeColor || '#7c2d2d'
+  const toMin = (hm) => { const [h, m] = String(hm).split(':').map(Number); return h * 60 + m }
+  const to12 = (hm) => { const [h, m] = String(hm).split(':').map(Number); return `${h % 12 || 12}:${String(m).padStart(2, '0')} ${h >= 12 ? 'م' : 'ص'}` }
+  const now = new Date()
+  const nowMin = now.getHours() * 60 + now.getMinutes()
+  const nextKey = PRAYER_KEYS.find((k) => toMin(data.times[k]) > nowMin) || 'Fajr' // after Isha → tomorrow's Fajr
+  return (
+    <div className={`scr-prayer ${fxClass}`} style={{ '--scr-brand': brand }}>
+      {venue?.logoUrl && <img className="scr-prayer-logo" src={venue.logoUrl} alt="" />}
+      {venue?.name && <h2 className="scr-prayer-venue">{venue.name}</h2>}
+      <div className="scr-prayer-title">مواقيت الصلاة</div>
+      {data.hijri && <div className="scr-prayer-date num">{data.hijri}</div>}
+      <div className="scr-prayer-grid">
+        {PRAYER_KEYS.map((k) => (
+          <div key={k} className={`scr-prayer-cell${k === nextKey ? ' next' : ''}`}>
+            <span className="scr-prayer-name">{PRAYER_AR[k]}</span>
+            <span className="scr-prayer-time num" dir="ltr">{to12(data.times[k])}</span>
+          </div>
+        ))}
+      </div>
+      <div className="scr-prayer-next">الصلاة القادمة: {PRAYER_AR[nextKey]}</div>
+    </div>
   )
 }
 

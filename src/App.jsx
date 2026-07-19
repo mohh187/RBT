@@ -78,6 +78,7 @@ const PostStudio = lazy(() => import('./routes/admin/PostStudio.jsx'))
 const Messages = lazy(() => import('./routes/admin/Messages.jsx'))
 const Billing = lazy(() => import('./routes/admin/Billing.jsx'))
 const Library = lazy(() => import('./routes/admin/Library.jsx'))
+const ChoosePlan = lazy(() => import('./routes/ChoosePlan.jsx'))
 
 // Platform console (super-admin, cross-venue) — separate lazy chunk; venues never download it.
 const PlatformLayout = lazy(() => import('./routes/platform/PlatformLayout.jsx'))
@@ -263,6 +264,16 @@ export default function App() {
                   </PlanGate>
                 </RequireCap>
               </RequireActive>
+            </RequireTenant>
+          </RequireAuth>
+        }
+      />
+      <Route
+        path="/choose-plan"
+        element={
+          <RequireAuth>
+            <RequireTenant>
+              <ChoosePlan />
             </RequireTenant>
           </RequireAuth>
         }

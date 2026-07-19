@@ -91,7 +91,8 @@ export default function MediaLibrary({ open, onClose, onPick, tenantId, kind, fo
     return [...set].sort((a, b) => a.localeCompare(b, ar ? 'ar' : 'en'))
   }, [items, localFolders, ar])
   const shown = useMemo(() => (items || []).filter((m) =>
-    (filter === 'all' ? true : (m.kind || 'file') === filter)
+    !m.trashed // library trash-bin items never surface in pickers
+    && (filter === 'all' ? true : (m.kind || 'file') === filter)
     && (folderSel === 'all' ? true : (m.folder || '') === folderSel)
   ), [items, filter, folderSel])
 

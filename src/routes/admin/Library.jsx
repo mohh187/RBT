@@ -204,27 +204,56 @@ export default function Library() {
   const [orgRows, setOrgRows] = useState(null)
   const [orgBusy, setOrgBusy] = useState(false)
 
+  // V3: favorites + trash bin + duplicate scan + social-size export + auto-compress
+  const [favOnly, setFavOnly] = useState(false)
+  const [trashView, setTrashView] = useState(false)
+  const [dupGroups, setDupGroups] = useState(null) // array of id-arrays | null
+  const [sizesBusy, setSizesBusy] = useState(false)
+  const [autoCompress, setAutoCompress] = useState(() => {
+    try { return localStorage.getItem('lib.autoCompress') !== '0' } catch (_) { return true }
+  })
+
   useEffect(() => { if (!tenantId) return; setItems(null); return watchMedia(tenantId, setItems) }, [tenantId])
 
+  // V3: everything below the trash chip works on `live` (non-trashed) docs only —
+  // the grid, folders, counts, studio ref-picking and organize never see trash.
+  const live = useMemo(() => (items || []).filter((m) => !m.trashed), [items])
+  const trashItems = useMemo(() => (items || []).filter((m) => m.trashed), [items])
   const folders = useMemo(() => {
     const set = new Set(localFolders)
-    for (const m of items || []) if (m.folder) set.add(m.folder)
+    for (const m of live) if (m.folder) set.add(m.folder)
     return [...set].sort((a, b) => a.localeCompare(b, ar ? 'ar' : 'en'))
-  }, [items, localFolders, ar])
+  }, [live, localFolders, ar])
+  // per-folder stats: count + total MB (Latin digits, rendered with .toFixed(1))
   const counts = useMemo(() => {
-    const by = {}; let root = 0
-    for (const m of items || []) { const f = m.folder || ''; if (f) by[f] = (by[f] || 0) + 1; else root++ }
-    return { by, root }
-  }, [items])
+    const by = {}; const root = { n: 0, mb: 0 }; const all = { n: 0, mb: 0 }
+    for (const m of live) {
+      const mb = (Number(m.size) || 0) / (1024 * 1024)
+      all.n += 1; all.mb += mb
+      const f = m.folder || ''
+      if (!f) { root.n += 1; root.mb += mb; continue }
+      const e = by[f] || (by[f] = { n: 0, mb: 0 })
+      e.n += 1; e.mb += mb
+    }
+    return { by, root, all }
+  }, [live])
   const shown = useMemo(() => {
     const needle = q.trim().toLowerCase()
-    return (items || []).filter((m) =>
+    return live.filter((m) =>
       (tab === 'all' ? true : (m.kind || 'file') === tab)
       && (folderSel === 'all' ? true : (m.folder || '') === folderSel)
+      && (!favOnly || m.fav === true)
       && (!needle || (m.name || '').toLowerCase().includes(needle)))
-  }, [items, tab, folderSel, q])
-  const detail = useMemo(() => (items || []).find((m) => m.id === detailId) || null, [items, detailId])
-  const totalMB = useMemo(() => ((items || []).reduce((s, m) => s + (Number(m.size) || 0), 0) / (1024 * 1024)).toFixed(1), [items])
+  }, [live, tab, folderSel, q, favOnly])
+  const detail = useMemo(() => live.find((m) => m.id === detailId) || null, [live, detailId])
+  const totalMB = counts.all.mb.toFixed(1)
+  const favCount = useMemo(() => live.filter((m) => m.fav === true).length, [live])
+  // duplicate groups resolved against live docs, so trashing one updates the panel
+  const dupLive = useMemo(() => {
+    if (!dupGroups) return null
+    const byId = new Map(live.map((m) => [m.id, m]))
+    return dupGroups.map((g) => g.map((id) => byId.get(id)).filter(Boolean)).filter((g) => g.length >= 2)
+  }, [dupGroups, live])
 
   // ---- data-layer actions (mirror MediaLibrary's gating: move = manager-only) ----
   const moveHint = ar ? 'النقل بين المجلدات للمدير فقط' : 'Only managers can move files'
@@ -268,8 +297,18 @@ export default function Library() {
     if (!files.length || upBusy) return
     setUpBusy(true)
     const folder = targetFolder()
-    for (const f of files) {
-      try { await uploadDirect(f, folder) } catch (err) { toast.error(String(err?.message || err)) }
+    for (let f of files) {
+      try {
+        // «ضغط تلقائي»: big raster images re-encoded before upload (opt-out toggle)
+        if (autoCompress && kindOf(f) === 'image' && f.size > COMPRESS_OVER_MB * 1024 * 1024 && !COMPRESS_SKIP_EXT.includes(extOf(f.name))) {
+          const before = f.size
+          f = await compressImage(f)
+          if (f.size < before) {
+            toast.success(ar ? `ضُغطت «${f.name}» من ${fmtMB(before)} إلى ${fmtMB(f.size)}` : `Compressed "${f.name}" from ${fmtMB(before)} to ${fmtMB(f.size)}`)
+          }
+        }
+        await uploadDirect(f, folder)
+      } catch (err) { toast.error(String(err?.message || err)) }
     }
     setUpBusy(false)
   }
@@ -278,9 +317,33 @@ export default function Library() {
     if (!isManager || target === (m.folder || '')) return
     try { await updateDoc(doc(db, 'tenants', tenantId, 'media', m.id), { folder: target }) } catch (_) { toast.error(ar ? 'تعذّر النقل' : 'Move failed') }
   }
+  // V3 soft delete: «حذف» moves the doc to سلة المحذوفات (trashed:true) — restorable.
+  // NOTE: firestore.rules currently allow media UPDATE for managers only, so
+  // trashing / restoring / starring fails for non-manager staff until rules add
+  // a narrow staff update path (the old hard-delete WAS any-staff).
+  const patchMedia = (id, patch) => updateDoc(doc(db, 'tenants', tenantId, 'media', id), patch)
+  const trashNow = async (m) => {
+    try {
+      await patchMedia(m.id, { trashed: true, trashedAt: serverTimestamp() })
+      if (detailId === m.id) setDetailId(null)
+    } catch (_) { toast.error(ar ? 'تعذّر النقل إلى السلة — تعديل الوسائط للمدير فقط' : 'Trash failed — media edits are manager-only') }
+  }
   const removeOne = async (m) => {
-    if (!window.confirm(ar ? 'إزالة من المكتبة؟ (لا يُحذف من الأماكن المستخدَم فيها)' : 'Remove from library? (stays where already used)')) return
-    try { await deleteMedia(tenantId, m.id); if (detailId === m.id) setDetailId(null) } catch (_) { toast.error(ar ? 'تعذّر الحذف' : 'Delete failed') }
+    if (!window.confirm(ar ? 'نقل إلى سلة المحذوفات؟ (يمكن استعادته لاحقاً، ولا يُحذف من الأماكن المستخدَم فيها)' : 'Move to trash? (restorable later; stays where already used)')) return
+    await trashNow(m)
+  }
+  const restoreOne = async (m) => {
+    try { await patchMedia(m.id, { trashed: false, trashedAt: null }) }
+    catch (_) { toast.error(ar ? 'تعذّرت الاستعادة' : 'Restore failed') }
+  }
+  const hardDelete = async (m) => {
+    if (!isManager) return
+    if (!window.confirm(ar ? 'حذف نهائي؟ لا يمكن التراجع بعدها' : 'Delete forever? This cannot be undone')) return
+    try { await deleteMedia(tenantId, m.id) } catch (_) { toast.error(ar ? 'تعذّر الحذف' : 'Delete failed') }
+  }
+  const toggleFav = async (m) => {
+    try { await patchMedia(m.id, { fav: !m.fav }) }
+    catch (_) { toast.error(ar ? 'تعذّر الحفظ — تعديل الوسائط للمدير فقط' : 'Save failed — media edits are manager-only') }
   }
   const copyUrl = async (m) => {
     try { await navigator.clipboard.writeText(m.url); toast.success(ar ? 'تم نسخ الرابط' : 'Link copied') } catch (_) { toast.error(ar ? 'تعذّر النسخ' : 'Copy failed') }
@@ -335,10 +398,45 @@ export default function Library() {
   }
   const bulkDelete = async () => {
     if (!selected.size) return
-    if (!window.confirm(ar ? `إزالة ${selected.size} من المكتبة؟ (لا تُحذف من الأماكن المستخدَمة فيها)` : `Remove ${selected.size} from the library?`)) return
-    await Promise.all([...selected].map((id) => deleteMedia(tenantId, id).catch(() => null)))
-    setSelected(new Set())
+    if (!window.confirm(ar ? `نقل ${selected.size} إلى سلة المحذوفات؟ (يمكن استعادتها لاحقاً)` : `Move ${selected.size} to trash? (restorable later)`)) return
+    const ok = await Promise.all([...selected].map((id) =>
+      patchMedia(id, { trashed: true, trashedAt: serverTimestamp() }).then(() => 1).catch(() => 0)))
+    const n = ok.reduce((a, b) => a + b, 0)
     if (detailId && selected.has(detailId)) setDetailId(null)
+    setSelected(new Set())
+    if (n) toast.success(ar ? `نُقل ${n} إلى سلة المحذوفات` : `Moved ${n} to trash`)
+    else toast.error(ar ? 'تعذّر النقل إلى السلة — تعديل الوسائط للمدير فقط' : 'Trash failed — media edits are manager-only')
+  }
+
+  // ---- «فحص التكرارات»: identical size + near-identical normalized name (no model) ----
+  const scanDups = () => {
+    const groups = {}
+    for (const m of live) {
+      const size = Number(m.size) || 0
+      if (!size) continue
+      const key = `${size}::${normName(m.name)}`
+      if (!groups[key]) groups[key] = []
+      groups[key].push(m.id)
+    }
+    const found = Object.values(groups).filter((g) => g.length >= 2)
+    if (!found.length) { setDupGroups(null); toast.success(ar ? 'لا تكرارات — كل الملفات فريدة' : 'No duplicates — every file is unique') }
+    else setDupGroups(found)
+  }
+
+  // ---- «تصدير مقاسات»: canvas cover-crop → 3 NEW library items (no model) ----
+  const exportSizes = async (m) => {
+    if (sizesBusy || upBusy) return
+    setSizesBusy(true)
+    try {
+      const img = await loadImg(m.url)
+      for (const [suffix, w, h] of SOCIAL_SIZES) {
+        const blob = await coverCrop(img, w, h) // throws on CORS-tainted canvas
+        await uploadDirect(new File([blob], `${baseName(m)}-${suffix}.webp`, { type: 'image/webp' }), m.folder || '')
+      }
+      toast.success(ar ? 'صُدّرت 3 مقاسات وحُفظت كعناصر جديدة في المكتبة' : 'Exported 3 sizes as new library items')
+    } catch (_) {
+      toast.error(ar ? 'تعذّر التصدير — فعّل CORS للتخزين أو ارفع الصورة من جهازك' : 'Export failed — enable storage CORS or re-upload the image from your device')
+    } finally { setSizesBusy(false) }
   }
 
   // ---- auto-organize (client-side heuristics + preview + manager-only apply) ----
@@ -352,7 +450,7 @@ export default function Library() {
         names = its.flatMap((i) => [i.nameAr, i.nameEn, i.name]).filter(Boolean)
           .map((s) => String(s).trim().toLowerCase()).filter((s) => s.length >= 3)
       } catch (_) { /* items unreadable → name-match heuristic just skips */ }
-      const rows = (items || []).map((m) => {
+      const rows = live.map((m) => {
         const to = proposeFolder(m, names)
         return to && to !== (m.folder || '') ? { id: m.id, name: m.name || m.kind || 'file', from: m.folder || '', to, on: true } : null
       }).filter(Boolean)
@@ -424,7 +522,7 @@ export default function Library() {
 
   if (items === null) return <Spinner />
 
-  const kindCount = (id) => (id === 'all' ? items.length : items.filter((m) => (m.kind || 'file') === id).length)
+  const kindCount = (id) => (id === 'all' ? live.length : live.filter((m) => (m.kind || 'file') === id).length)
 
   return (
     <div className="page stack" style={{ gap: 'var(--sp-3)' }}>
@@ -432,15 +530,24 @@ export default function Library() {
       <div className="row-between" style={{ flexWrap: 'wrap', gap: 8 }}>
         <div className="stack" style={{ gap: 2 }}>
           <h2 className="page-title" style={{ margin: 0 }}>{ar ? 'المكتبة والاستوديو' : 'Library & studio'}</h2>
-          <span className="xs faint num">{items.length} {ar ? 'ملف' : 'files'} · {totalMB} MB</span>
+          <span className="xs faint num">{live.length} {ar ? 'ملف' : 'files'} · {totalMB} MB</span>
         </div>
         <div className="row" style={{ gap: 6, flexWrap: 'wrap' }}>
+          <label className="lib-comp-toggle"
+            title={ar ? 'الصور الأكبر من 2MB تُضغط تلقائياً قبل الرفع (webp بعرض أقصى 2000px)' : 'Images over 2MB are auto-compressed before upload (webp, max 2000px)'}>
+            <input type="checkbox" checked={autoCompress}
+              onChange={(ev) => {
+                setAutoCompress(ev.target.checked)
+                try { localStorage.setItem('lib.autoCompress', ev.target.checked ? '1' : '0') } catch (_) { /* ignore */ }
+              }} />
+            <span className="xs">{ar ? 'ضغط تلقائي' : 'Auto-compress'}</span>
+          </label>
           <label className="btn btn-sm btn-primary" style={{ cursor: 'pointer' }}>
             <Icon name="upload" size={14} /> {upBusy ? (ar ? 'يرفع…' : 'Uploading…') : (ar ? 'رفع ملفات' : 'Upload')}
             <input type="file" multiple style={{ display: 'none' }} disabled={upBusy} onChange={onUpload} />
           </label>
           <button className={`btn btn-sm ${selMode ? 'btn-primary' : 'btn-outline'}`}
-            onClick={() => { setSelMode((v) => !v); setSelected(new Set()); setDetailId(null); setRefPick(false) }}>
+            onClick={() => { setSelMode((v) => !v); setSelected(new Set()); setDetailId(null); setRefPick(false); setTrashView(false) }}>
             <Icon name="check" size={14} /> {selMode ? (ar ? 'إنهاء التحديد' : 'Done') : (ar ? 'تحديد' : 'Select')}
           </button>
         </div>
@@ -472,7 +579,7 @@ export default function Library() {
             <div className="row" style={{ gap: 6, flexWrap: 'wrap', alignItems: 'center' }}>
               <span className="lib-lbl">{ar ? 'المراجع' : 'Refs'}</span>
               <button className={`btn btn-sm ${refPick ? 'btn-primary' : 'btn-outline'}`} disabled={genBusy}
-                onClick={() => { setRefPick((p) => !p); setSelMode(false); setDetailId(null) }}>
+                onClick={() => { setRefPick((p) => !p); setSelMode(false); setDetailId(null); setTrashView(false) }}>
                 <Icon name="grid" size={14} /> {refPick ? (ar ? `تم (${libRefs.length})` : `Done (${libRefs.length})`) : (ar ? 'اختيار من المكتبة' : 'Pick from library')}
               </button>
               <label className="btn btn-sm btn-outline" style={{ cursor: 'pointer' }}>
@@ -526,15 +633,19 @@ export default function Library() {
             {ar ? a : e} <span className="num">({kindCount(id)})</span>
           </button>
         ))}
+        <button className={`chip ${favOnly ? 'active' : ''}`} onClick={() => setFavOnly((v) => !v)}
+          title={ar ? 'إظهار المفضلة فقط' : 'Show favorites only'}>
+          <Icon name="star" size={13} /> {ar ? 'المفضلة' : 'Favorites'} <span className="num">({favCount})</span>
+        </button>
       </div>
 
       {/* virtual folders + new folder + auto-organize */}
       <div className="ml-folders">
-        <button className={`chip ${folderSel === 'all' ? 'active' : ''}`} onClick={() => setFolderSel('all')}>{ar ? 'الكل' : 'All'} <span className="num">({items.length})</span></button>
-        <button className={`chip ${folderSel === '' ? 'active' : ''}`} onClick={() => setFolderSel('')}><Icon name="folder" size={13} /> {ar ? 'الجذر' : 'Root'} <span className="num">({counts.root})</span></button>
+        <button className={`chip ${folderSel === 'all' ? 'active' : ''}`} onClick={() => setFolderSel('all')}>{ar ? 'الكل' : 'All'} <span className="num">({counts.all.n} · {counts.all.mb.toFixed(1)}MB)</span></button>
+        <button className={`chip ${folderSel === '' ? 'active' : ''}`} onClick={() => setFolderSel('')}><Icon name="folder" size={13} /> {ar ? 'الجذر' : 'Root'} <span className="num">({counts.root.n} · {counts.root.mb.toFixed(1)}MB)</span></button>
         {folders.map((f) => (
           <button key={f} className={`chip ${folderSel === f ? 'active' : ''}`} onClick={() => setFolderSel(f)}>
-            <Icon name="folder" size={13} /> {f} <span className="num">({counts.by[f] || 0})</span>
+            <Icon name="folder" size={13} /> {f} <span className="num">({counts.by[f]?.n || 0} · {(counts.by[f]?.mb || 0).toFixed(1)}MB)</span>
           </button>
         ))}
         {newFolder === null ? (
@@ -553,6 +664,13 @@ export default function Library() {
             <Icon name="zap" size={13} /> {orgBusy ? (ar ? 'يحلل…' : 'Analyzing…') : (ar ? 'تنظيم تلقائي بالذكاء' : 'Auto-organize')}
           </button>
         )}
+        <button className="chip" onClick={scanDups} title={ar ? 'تجميع الملفات المتطابقة حجماً والمتشابهة اسماً' : 'Group files with identical size and near-identical name'}>
+          <Icon name="layers" size={13} /> {ar ? 'فحص التكرارات' : 'Find duplicates'}
+        </button>
+        <button className={`chip lib-trashchip ${trashView ? 'active' : ''}`}
+          onClick={() => { setTrashView((v) => !v); setDetailId(null); setSelMode(false); setSelected(new Set()); setRefPick(false) }}>
+          <Icon name="delete" size={13} /> {ar ? 'سلة المحذوفات' : 'Trash'} <span className="num">({trashItems.length})</span>
+        </button>
       </div>
 
       {/* auto-organize preview: nothing moves until «تطبيق» */}
@@ -582,6 +700,37 @@ export default function Library() {
             </button>
             <button className="btn btn-sm btn-outline" onClick={() => setOrgRows(null)}>{ar ? 'إلغاء' : 'Cancel'}</button>
           </div>
+        </div>
+      )}
+
+      {/* duplicate-scan results: size+name groups; delete buttons only TRASH (restorable) */}
+      {dupLive && (
+        <div className="card card-pad stack" style={{ gap: 8 }}>
+          <div className="row-between">
+            <span className="small bold" style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}>
+              <Icon name="layers" size={15} /> {ar ? `مجموعات متكررة (${dupLive.length})` : `Duplicate groups (${dupLive.length})`}
+            </span>
+            <button className="icon-btn" onClick={() => setDupGroups(null)} title={ar ? 'إغلاق' : 'Close'}><Icon name="close" size={14} /></button>
+          </div>
+          {dupLive.length === 0 ? (
+            <p className="xs faint" style={{ margin: 0 }}>{ar ? 'عولجت كل التكرارات — أعد الفحص متى شئت.' : 'All duplicates handled — rescan any time.'}</p>
+          ) : dupLive.map((g) => (
+            <div key={g[0].id} className="lib-dup-group">
+              <span className="xs faint num" style={{ flexBasis: '100%' }}>{fmtMB(g[0].size)} · {g.length} {ar ? 'نسخ متطابقة الحجم' : 'same-size copies'}</span>
+              {g.map((m) => (
+                <div key={m.id} className="lib-dup-item">
+                  <div className="lib-dup-thumb">
+                    {m.kind === 'image' ? <img src={m.url} alt="" loading="lazy" />
+                      : m.kind === 'video' ? <video src={m.url} preload="metadata" muted playsInline />
+                        : <Icon name={m.kind === 'audio' ? 'sound' : 'file'} size={16} className="faint" />}
+                  </div>
+                  <span className="xs lib-dup-name" title={m.name}>{m.name || m.kind}</span>
+                  <button className="icon-btn" style={{ color: 'var(--danger)', flex: 'none' }} onClick={() => trashNow(m)}
+                    title={ar ? 'نقل إلى سلة المحذوفات' : 'Move to trash'}><Icon name="delete" size={13} /></button>
+                </div>
+              ))}
+            </div>
+          ))}
         </div>
       )}
 
@@ -626,6 +775,10 @@ export default function Library() {
           <div className="stack grow" style={{ gap: 7, minWidth: 220 }}>
             <div className="row" style={{ gap: 6, alignItems: 'center', flexWrap: 'wrap' }}>
               <span className="small bold lib-name grow" style={{ minWidth: 0 }} title={detail.name}>{detail.name || detail.kind}</span>
+              <button className={`icon-btn lib-starbtn ${detail.fav ? 'on' : ''}`} style={{ flex: 'none' }} onClick={() => toggleFav(detail)}
+                title={detail.fav ? (ar ? 'إزالة من المفضلة' : 'Unfavorite') : (ar ? 'إضافة إلى المفضلة' : 'Favorite')}>
+                <Icon name="star" size={15} />
+              </button>
               {fmtMB(detail.size) && <span className="xs faint num" style={{ flex: 'none' }}>{fmtMB(detail.size)}</span>}
               <select className="ml-move" style={{ maxWidth: 130, flex: 'none' }} value={detail.folder || ''} disabled={!isManager}
                 title={isManager ? (ar ? 'نقل إلى…' : 'Move to…') : moveHint} onChange={(e) => moveTo(detail, e.target.value)}>
@@ -644,6 +797,10 @@ export default function Library() {
                 </button>
                 <button className="btn btn-sm btn-outline" disabled={!!busyId} onClick={() => bgCut(detail)}>
                   <Icon name="scan" size={14} /> {ar ? 'إزالة الخلفية' : 'Remove background'}
+                </button>
+                <button className="btn btn-sm btn-outline" disabled={!!busyId || sizesBusy} onClick={() => exportSizes(detail)}
+                  title={ar ? 'قصّ مركزي إلى 1:1 و9:16 و4:5 — تُحفظ كعناصر جديدة' : 'Center-crop to 1:1, 9:16 and 4:5 — saved as new items'}>
+                  <Icon name="layers" size={14} /> {sizesBusy ? (ar ? 'يصدّر…' : 'Exporting…') : (ar ? 'تصدير مقاسات' : 'Export sizes')}
                 </button>
               </div>
             )}
@@ -674,8 +831,40 @@ export default function Library() {
         </div>
       )}
 
-      {/* grid browser */}
-      {items.length === 0 ? (
+      {/* trash-bin view: restore for everyone the rules allow, hard delete manager-only */}
+      {trashView ? (
+        trashItems.length === 0 ? (
+          <p className="muted small" style={{ textAlign: 'center', padding: 20 }}>{ar ? 'سلة المحذوفات فارغة.' : 'Trash is empty.'}</p>
+        ) : (
+          <div className="lib-grid">
+            {trashItems.map((m) => (
+              <div key={m.id} className="card lib-card lib-trashed" title={m.name}>
+                <div className="lib-thumb">
+                  {m.kind === 'image' ? <img src={m.url} alt="" loading="lazy" />
+                    : m.kind === 'video' ? <video src={m.url} preload="metadata" muted playsInline />
+                      : (
+                        <div className="stack" style={{ alignItems: 'center', gap: 4 }}>
+                          <Icon name={m.kind === 'audio' ? 'sound' : 'file'} size={22} className="faint" />
+                          <span className="lib-ext">{extBadge(m)}</span>
+                        </div>
+                      )}
+                </div>
+                <div className="xs lib-name" style={{ padding: '5px 7px' }}>{m.name || m.kind}</div>
+                <div className="row" style={{ gap: 4, padding: '0 6px 6px', flexWrap: 'wrap' }}>
+                  <button className="btn btn-sm btn-outline" onClick={() => restoreOne(m)}>
+                    <Icon name="undo" size={13} /> {ar ? 'استعادة' : 'Restore'}
+                  </button>
+                  {isManager && (
+                    <button className="btn btn-sm btn-outline" style={{ color: 'var(--danger)' }} onClick={() => hardDelete(m)}>
+                      <Icon name="delete" size={13} /> {ar ? 'حذف نهائي' : 'Delete forever'}
+                    </button>
+                  )}
+                </div>
+              </div>
+            ))}
+          </div>
+        )
+      ) : live.length === 0 ? (
         <Empty icon="image" title={ar ? 'المكتبة فارغة' : 'Library is empty'}
           hint={ar ? 'أي ملف يُرفع في النظام يُحفظ هنا تلقائياً — أو ارفع ملفات الآن، أو ولّد صورة من الاستوديو أعلاه.' : 'Every upload in the system lands here automatically — or upload now, or generate from the studio above.'} />
       ) : shown.length === 0 ? (
@@ -694,6 +883,10 @@ export default function Library() {
                     <div className="xs lib-name">{m.name || (ar ? 'صوت' : 'Audio')}</div>
                     {fmtMB(m.size) && <div className="xs faint num">{fmtMB(m.size)}</div>}
                   </div>
+                  <button className={`icon-btn lib-starbtn ${m.fav ? 'on' : ''}`} style={{ flex: 'none' }}
+                    onClick={(e) => { e.stopPropagation(); toggleFav(m) }} title={ar ? 'المفضلة' : 'Favorite'}>
+                    <Icon name="star" size={14} />
+                  </button>
                   <audio src={m.url} controls preload="none" onClick={(e) => e.stopPropagation()} />
                 </div>
               )
@@ -714,6 +907,10 @@ export default function Library() {
                 {fmtMB(m.size) && <div className="xs faint num" style={{ padding: '0 7px 6px' }}>{fmtMB(m.size)}</div>}
                 {selMode && <span className={`lib-mark ${selected.has(m.id) ? 'on' : ''}`}><Icon name="check" size={12} /></span>}
                 {refIdx >= 0 && <span className="lib-refbadge">{ar ? 'مرجع' : 'Ref'} {refIdx + 1}</span>}
+                {!selMode && !refPick && (
+                  <button className={`lib-star ${m.fav ? 'on' : ''}`} title={ar ? 'المفضلة' : 'Favorite'}
+                    onClick={(e) => { e.stopPropagation(); toggleFav(m) }}><Icon name="star" size={12} /></button>
+                )}
               </div>
             )
           })}

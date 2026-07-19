@@ -839,9 +839,119 @@ const auditRetention = onSchedule(
   }
 )
 
+// ============ Self-serve plan subscription (signup checkout) ============
+// The ONLY price source for self-signup plans. Adjust here; the client page
+// mirrors these numbers for display only and is never trusted.
+const PLAN_PRICES = { menu: 99, ops: 199, pro: 349, enterprise: 549 } // SAR / month
+const YEARLY_DISCOUNT = 0.8 // yearly = 12 months at 20% off
+
+// A venue manager creates their OWN pending plan invoice (server-priced), then
+// pays it through the normal 'subscription' pay-intent flow; the payment webhook
+// (settleInvoiceFromPayment) marks it paid AND activates plan + expiry + email.
+const startPlanSubscription = onCall(async (request) => {
+  const { planId, yearly } = request.data || {}
+  if (!PLAN_PRICES[planId]) throw new HttpsError('invalid-argument', 'unknown plan')
+  const uid = request.auth && request.auth.uid
+  if (!uid) throw new HttpsError('unauthenticated', 'sign in first')
+  const db = getFirestore()
+  const uSnap = await db.collection('users').doc(uid).get()
+  const u = uSnap.exists ? uSnap.data() : {}
+  const tid = u.tenantId
+  if (!tid || !['owner', 'manager'].includes(u.role)) throw new HttpsError('permission-denied', 'managers only')
+  const tSnap = await db.doc(`tenants/${tid}`).get()
+  const tName = tSnap.exists ? (tSnap.data().name || '') : ''
+  const monthly = PLAN_PRICES[planId]
+  const amount = yearly ? Math.round(monthly * 12 * YEARLY_DISCOUNT) : monthly
+  const now = new Date()
+  const ref = await db.collection('platformInvoices').add({
+    tenantId: tid, tenantName: tName, plan: planId, amount, currency: 'SAR',
+    period: `${now.toISOString().slice(0, 7)}${yearly ? ' — سنوي' : ''}`,
+    billing: yearly ? 'yearly' : 'monthly', status: 'pending', source: 'self-signup',
+    createdAt: FieldValue.serverTimestamp(),
+  })
+  return { invoiceId: ref.id, amount }
+})
+
+// ============ Realistic image→3D model (top-tier feature) ============
+// Provider: Meshy image-to-3D (MESHY_API_KEY env). Fail-soft honest: without a
+// key the callable explains exactly what to configure. Result GLB is stored in
+// the venue library and (optionally) attached to the item as model3dUrl.
+const { getStorage } = require('firebase-admin/storage')
+const nodeCrypto = require('crypto')
+const sleepMs = (ms) => new Promise((res) => setTimeout(res, ms))
+
+const imageTo3d = onCall({ timeoutSeconds: 540, memory: '1GiB' }, async (request) => {
+  const key = process.env.MESHY_API_KEY
+  if (!key) {
+    throw new HttpsError('failed-precondition',
+      'خدمة المجسمات الواقعية تحتاج تفعيلاً: أنشئ حساباً في meshy.ai وضع MESHY_API_KEY في functions/.env ثم أعد نشر الدوال.')
+  }
+  const { tenantId, itemId, imageUrl } = request.data || {}
+  if (!tenantId || !imageUrl) throw new HttpsError('invalid-argument', 'tenantId + imageUrl required')
+  const uid = request.auth && request.auth.uid
+  if (!uid) throw new HttpsError('unauthenticated', 'sign in')
+  const db = getFirestore()
+  const uSnap = await db.collection('users').doc(uid).get()
+  const u = uSnap.exists ? uSnap.data() : {}
+  if (u.tenantId !== tenantId || !['owner', 'manager'].includes(u.role)) throw new HttpsError('permission-denied', 'managers only')
+  // Plan gate: top tier (enterprise) or an explicit per-venue feature override.
+  const tSnap = await db.doc(`tenants/${tenantId}`).get()
+  const td = tSnap.exists ? tSnap.data() : {}
+  const ORDER = { menu: 1, ops: 2, pro: 3, enterprise: 4 }
+  const allowed = td.features && td.features.ar3d === true
+    ? true
+    : (ORDER[td.plan || 'enterprise'] || 4) >= 4 && td.features?.ar3d !== false
+  if (!allowed) throw new HttpsError('permission-denied', 'المجسمات الواقعية ميزة الباقة المتكاملة — رقِّ اشتراكك لتفعيلها.')
+
+  // 1) create the conversion task
+  const create = await fetch('https://api.meshy.ai/openapi/v1/image-to-3d', {
+    method: 'POST',
+    headers: { Authorization: `Bearer ${key}`, 'Content-Type': 'application/json' },
+    body: JSON.stringify({ image_url: imageUrl, should_texture: true, enable_pbr: true, topology: 'triangle' }),
+  }).then((r) => r.json()).catch((e) => ({ _err: String(e && e.message) }))
+  const taskId = create && create.result
+  if (!taskId) throw new HttpsError('internal', 'تعذر بدء التحويل: ' + JSON.stringify(create || {}).slice(0, 160))
+  await db.collection(`tenants/${tenantId}/ar3dJobs`).doc(String(taskId)).set({
+    itemId: itemId || '', imageUrl, status: 'running', by: uid, createdAt: FieldValue.serverTimestamp(),
+  }).catch(() => {})
+
+  // 2) poll (up to ~8 min inside the callable window)
+  let glbUrl = ''
+  for (let i = 0; i < 48; i++) {
+    await sleepMs(10000)
+    const s = await fetch(`https://api.meshy.ai/openapi/v1/image-to-3d/${taskId}`, {
+      headers: { Authorization: `Bearer ${key}` },
+    }).then((r) => r.json()).catch(() => null)
+    const st = s && s.status
+    if (st === 'SUCCEEDED') { glbUrl = s.model_urls && s.model_urls.glb; break }
+    if (st === 'FAILED' || st === 'CANCELED') {
+      await db.collection(`tenants/${tenantId}/ar3dJobs`).doc(String(taskId)).set({ status: 'failed' }, { merge: true }).catch(() => {})
+      throw new HttpsError('internal', 'فشل التحويل لدى المزود: ' + ((s.task_error && s.task_error.message) || st))
+    }
+  }
+  if (!glbUrl) {
+    throw new HttpsError('deadline-exceeded', 'التحويل يستغرق أطول من المعتاد — المهمة مستمرة لدى المزود، أعد المحاولة بعد دقائق وسيكتمل أسرع.')
+  }
+
+  // 3) store the GLB in the venue library + attach to the item
+  const buf = Buffer.from(await (await fetch(glbUrl)).arrayBuffer())
+  const bucket = getStorage().bucket()
+  const path = `tenants/${tenantId}/library/ar/real-${Date.now()}.glb`
+  const token = nodeCrypto.randomUUID()
+  await bucket.file(path).save(buf, {
+    metadata: { contentType: 'model/gltf-binary', metadata: { firebaseStorageDownloadTokens: token } },
+  })
+  const url = `https://firebasestorage.googleapis.com/v0/b/${bucket.name}/o/${encodeURIComponent(path)}?alt=media&token=${token}`
+  if (itemId) await db.doc(`tenants/${tenantId}/items/${itemId}`).set({ model3dUrl: url }, { merge: true }).catch(() => {})
+  await db.collection(`tenants/${tenantId}/ar3dJobs`).doc(String(taskId)).set({ status: 'done', url }, { merge: true }).catch(() => {})
+  return { url }
+})
+
 module.exports = {
   generateMonthlyInvoices,
   setPlatformRole,
+  startPlanSubscription,
+  imageTo3d,
   requestVenueExport,
   createPayIntent,
   issueFreeTicket,

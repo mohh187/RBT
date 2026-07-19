@@ -17,7 +17,14 @@ export const FEATURE_MIN = {
   cashier: 2, orders: 2, delivery: 2, tables: 2, kds: 2, reservations: 2,
   themes: 3, background: 3, watermark: 3, customSkins: 3, systemTemplates: 3, customDomain: 3,
   staff: 4, attendance: 4, performance: 4, payroll: 4, shifts: 4, reports: 4, announcements: 4,
+  // realistic image→3D conversion (Meshy pipeline) — the top tier's signature perk.
+  ar3d: 4,
 }
+
+// Self-signup display prices (SAR/month) — MUST mirror PLAN_PRICES in
+// functions/platformExtensions.js (the server table is the only trusted source).
+export const PLAN_PRICES = { menu: 99, ops: 199, pro: 349, enterprise: 549 }
+export const YEARLY_DISCOUNT = 0.8
 
 // After a subscription expires the venue keeps full features for a grace
 // period, then drops to the lowest tier (menu-only) until renewed.
@@ -65,6 +72,7 @@ export const FEATURE_CATALOG = [
   { key: 'staff', ar: 'الطاقم والموارد البشرية', en: 'Staff & HR', tier: 'enterprise' },
   { key: 'attendance', ar: 'الحضور والانصراف', en: 'Attendance', tier: 'enterprise' },
   { key: 'reports', ar: 'التقارير المتقدمة', en: 'Advanced reports', tier: 'enterprise' },
+  { key: 'ar3d', ar: 'مجسمات AR واقعية بالذكاء', en: 'Realistic AI 3D models', tier: 'enterprise' },
 ]
 
 export function planLabel(tenant, lang = 'ar') {

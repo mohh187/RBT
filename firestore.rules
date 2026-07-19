@@ -535,7 +535,11 @@ service cloud.firestore {
         allow read: if isStaff(tid);
         allow create: if isStaff(tid);
         allow delete: if isStaff(tid);
-        allow update: if isManager(tid);
+        // Managers edit anything; other staff may only star/trash/restore
+        // (the library soft-delete flow) — never rename/move/relink.
+        allow update: if isManager(tid)
+          || (isStaff(tid)
+              && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['fav', 'trashed', 'trashedAt']));
       }
 
       // ---- venue secrets (own WhatsApp number credentials, API keys) ----

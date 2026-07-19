@@ -4,6 +4,9 @@ import { SortableContext, verticalListSortingStrategy, useSortable, arrayMove } 
 import { CSS } from '@dnd-kit/utilities'
 import { useAuth } from '../../lib/auth.jsx'
 import { CAP } from '../../lib/permissions.js'
+import { planAllows } from '../../lib/plans.js'
+import { httpsCallable } from 'firebase/functions'
+import { functions } from '../../lib/firebase.js'
 import { useI18n, pickLang } from '../../lib/i18n.jsx'
 import { useToast } from '../../components/Toast.jsx'
 import Sheet from '../../components/Sheet.jsx'
@@ -469,6 +472,30 @@ function ItemEditor({ tenantId, cats, currency, value, onClose, onSaved, onDelet
       toast.error(e?.message || (lang === 'ar' ? 'تعذر إنشاء المجسم' : 'AR build failed'))
     } finally { setArBusy('') }
   }
+  // REALISTIC 3D (top plan): server callable → Meshy image-to-3D → GLB in the
+  // library + attached to the item. Long-running (1-8 min) with a live timer.
+  const { tenant: tnt } = useAuth()
+  const can3d = planAllows(tnt, 'ar3d')
+  const [real3dSec, setReal3dSec] = useState(-1) // -1 idle, >=0 running (elapsed)
+  useEffect(() => {
+    if (real3dSec < 0) return undefined
+    const iv = setInterval(() => setReal3dSec((s) => (s >= 0 ? s + 1 : s)), 1000)
+    return () => clearInterval(iv)
+  }, [real3dSec >= 0]) // eslint-disable-line react-hooks/exhaustive-deps
+  const genReal3d = async () => {
+    if (!form.imageUrl) { toast.error(lang === 'ar' ? 'أضف صورة للصنف أولاً' : 'Add a photo first'); return }
+    setReal3dSec(0)
+    try {
+      const res = await httpsCallable(functions, 'imageTo3d', { timeout: 540000 })({ tenantId, itemId: form.id || '', imageUrl: form.imageUrl })
+      const url = res?.data?.url
+      if (!url) throw new Error(lang === 'ar' ? 'لم يصل رابط المجسم' : 'No model URL returned')
+      set('model3dUrl', url)
+      toast.success(lang === 'ar' ? 'اكتمل المجسم الواقعي — احفظ الصنف' : 'Realistic model ready — save the item')
+    } catch (e) {
+      toast.error(String(e?.message || e))
+    } finally { setReal3dSec(-1) }
+  }
+
   const onPickModel = async (e) => {
     const f = e.target.files?.[0]; e.target.value = ''
     if (!f) return
@@ -950,6 +977,16 @@ function ItemEditor({ tenantId, cats, currency, value, onClose, onSaved, onDelet
               <Icon name="upload" size={13} /> {arBusy === 'upload' ? (lang === 'ar' ? 'يرفع…' : 'Uploading…') : (lang === 'ar' ? 'رفع نموذج GLB/USDZ' : 'Upload GLB/USDZ')}
               <input type="file" accept=".glb,.usdz" hidden onChange={onPickModel} disabled={!!arBusy} />
             </label>
+            {can3d ? (
+              <button type="button" className="btn btn-sm btn-primary" disabled={real3dSec >= 0 || !!arBusy} onClick={genReal3d}
+                title={lang === 'ar' ? 'يحوّل صورة الصنف إلى مجسم ثلاثي الأبعاد واقعي كامل بالذكاء (1-8 دقائق)' : 'AI-convert the photo to a full realistic 3D mesh'}>
+                <Icon name="sparkles" size={13} /> {real3dSec >= 0 ? (lang === 'ar' ? `يحوّل واقعياً… ${real3dSec} ث` : `Converting… ${real3dSec}s`) : (lang === 'ar' ? 'تحويل واقعي 3D' : 'Realistic 3D')}
+              </button>
+            ) : (
+              <span className="badge badge-gold" title={lang === 'ar' ? 'التحويل الواقعي الكامل ميزة الباقة المتكاملة' : 'Realistic conversion is an Enterprise perk'}>
+                <Icon name="lock" size={11} /> {lang === 'ar' ? 'تحويل واقعي 3D — الباقة المتكاملة' : 'Realistic 3D — Enterprise'}
+              </span>
+            )}
             {form.arStandeeUrl && <span className="badge badge-success"><Icon name="check" size={11} /> {lang === 'ar' ? 'مجسم الصورة جاهز' : 'Standee ready'}</span>}
             {form.model3dUrl && <span className="badge badge-success"><Icon name="check" size={11} /> {lang === 'ar' ? 'نموذج 3D مرفوع' : '3D model set'}</span>}
             {(form.arStandeeUrl || form.model3dUrl) && (

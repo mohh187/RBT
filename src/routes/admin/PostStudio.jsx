@@ -10,7 +10,7 @@ import Sheet from '../../components/Sheet.jsx'
 import { listItems, addStory, addPost, saveCampaign, updateTenant } from '../../lib/db.js'
 import { uploadImage } from '../../lib/storage.js'
 import { generatePostImage, generateCaption, PRESET_STYLES, cleanCaption } from '../../lib/postGen.js'
-import { aiConfigured } from '../../lib/aiBridge.js'
+import { aiQuick, aiConfigured } from '../../lib/aiBridge.js'
 import { CAP } from '../../lib/permissions.js'
 
 // Post Studio: AI (nano-banana) or manual-canvas marketing designs → an APPROVAL
@@ -40,6 +40,41 @@ const CANVAS_H = 1350 // 4:5 portrait — the standard feed-post frame
 const SIZES = { s: [58, 34], m: [76, 42], l: [96, 52] }
 const TONES = [['', 'راقي (افتراضي)', 'Elegant (default)'], ['حماسي وشبابي', 'حماسي', 'Energetic'], ['ودود وعائلي', 'ودود', 'Friendly']]
 
+// V2 — seasonal presets LOCAL to this page: PRESET_STYLES lives in postGen.js and
+// is shared with the assistant/pilot pipelines, so extra entries are merged here only.
+const EXTRA_STYLES = [
+  { id: 'national', ar: 'اليوم الوطني', prompt: 'Saudi National Day celebration theme, elegant green and white palette, subtle Saudi flag and falcon motifs softly blurred in the background, festive green uplighting, proud premium celebratory mood' },
+  { id: 'school', ar: 'العودة للمدارس', prompt: 'back-to-school season theme, cheerful bright morning scene, notebooks pencils and a backpack softly blurred in the background, crisp optimistic daylight, energetic fresh-start mood' },
+  { id: 'winter', ar: 'الشتاء', prompt: 'cozy winter theme, gentle steam rising from the drink, knitted wool and warm blanket textures, soft cool daylight through a fogged window, comforting hot-drink season mood' },
+]
+const ALL_STYLES = [...PRESET_STYLES, ...EXTRA_STYLES]
+
+// V2 — defensive parse of the 30-day plan: strips code fences, grabs the first
+// JSON array, validates/clamps every entry, de-dupes days, hygienes captions.
+function parsePlan(raw) {
+  let s = String(raw || '').trim()
+  const fence = /```(?:json)?\s*([\s\S]*?)```/i.exec(s)
+  if (fence) s = fence[1]
+  const a = s.indexOf('[')
+  const b = s.lastIndexOf(']')
+  if (a < 0 || b <= a) return []
+  let arr
+  try { arr = JSON.parse(s.slice(a, b + 1)) } catch (_) { return [] }
+  if (!Array.isArray(arr)) return []
+  const seen = new Set()
+  const out = []
+  for (const e of arr) {
+    const day = Math.round(Number(e?.day))
+    if (!Number.isFinite(day) || day < 1 || day > 31 || seen.has(day)) continue
+    const idea = cleanCaption(String(e?.idea || '')).slice(0, 180)
+    const caption = cleanCaption(String(e?.caption || '')).slice(0, 600)
+    if (!idea && !caption) continue
+    seen.add(day)
+    out.push({ day, idea, itemName: String(e?.itemName || '').slice(0, 60), caption })
+  }
+  return out.sort((x, y) => x.day - y.day).slice(0, 30)
+}
+
 export default function PostStudio() {
   const { t, lang } = useI18n()
   const ar = lang === 'ar'
@@ -59,9 +94,14 @@ export default function PostStudio() {
   const [freePrompt, setFreePrompt] = useState('')
   const [tone, setTone] = useState('')
   const [offer, setOffer] = useState('')
-  const [genBusy, setGenBusy] = useState('') // '' | 'image' | 'caption'
+  const [genBusy, setGenBusy] = useState('') // '' | 'image' | 'imageA' | 'imageB' | 'caption' | 'translate'
   const [preview, setPreview] = useState(null) // { blob, url, caption }
   const [saveBusy, setSaveBusy] = useState(false)
+  const [abMode, setAbMode] = useState(false) // V2: A/B — two variants, pick one
+  const [abPair, setAbPair] = useState(null) // { a: {blob,url}, b: {blob,url} | null }
+  const [planBusy, setPlanBusy] = useState(false) // V2: 30-day content plan
+  const [draftGenId, setDraftGenId] = useState('') // V2: per-draft image generation
+  const [transId, setTransId] = useState('') // V2: per-draft translation
 
   // ---- manual composer state ----
   const canvasRef = useRef(null)
@@ -94,23 +134,57 @@ export default function PostStudio() {
 
   // ---------- AI generate ----------
   const buildStylePrompt = () => {
-    const p = PRESET_STYLES.find((s) => s.id === styleId)
+    const p = ALL_STYLES.find((s) => s.id === styleId)
     return [p?.prompt, freePrompt.trim()].filter(Boolean).join(', ')
   }
   const refUrls = (it) => [it?.imageUrl, ...(it?.images || [])].filter(Boolean)
 
   const [refFiles, setRefFiles] = useState([]) // directly-uploaded references (product/logo) — no CORS involved
   const [imitateRef, setImitateRef] = useState(false) // replicate the uploaded design EXACTLY with only the described changes
+  const genOneImage = (it) => generatePostImage({ itemImageUrls: it ? refUrls(it) : [], refFiles, stylePrompt: buildStylePrompt(), venueName: tenant?.name || '', tenant, imitate: imitateRef })
+  const discardAb = () => setAbPair((p) => { if (p?.a?.url) URL.revokeObjectURL(p.a.url); if (p?.b?.url) URL.revokeObjectURL(p.b.url); return null })
   const regenImage = async () => {
     const it = withImages.find((i) => i.id === aiItemId)
     if (!it && !refFiles.length && !freePrompt.trim()) { toast.error(ar ? 'اختر صنفاً أو ارفع صورة مرجعية أو صف المشهد' : 'Pick an item, upload a reference, or describe the scene'); return }
-    setGenBusy('image')
+    discardAb()
+    if (!abMode) {
+      setGenBusy('image')
+      try {
+        const blob = await genOneImage(it)
+        const url = URL.createObjectURL(blob)
+        setPreview((p) => { if (p?.url) URL.revokeObjectURL(p.url); return { blob, url, caption: p?.caption || '' } })
+      } catch (e) { toast.error(String(e?.message || e)) }
+      finally { setGenBusy('') }
+      return
+    }
+    // V2 A/B: two sequential generations (same prompt — model variance), pick one
+    setGenBusy('imageA')
+    let a = null
     try {
-      const blob = await generatePostImage({ itemImageUrls: it ? refUrls(it) : [], refFiles, stylePrompt: buildStylePrompt(), venueName: tenant?.name || '', tenant, imitate: imitateRef })
-      const url = URL.createObjectURL(blob)
-      setPreview((p) => { if (p?.url) URL.revokeObjectURL(p.url); return { blob, url, caption: p?.caption || '' } })
-    } catch (e) { toast.error(String(e?.message || e)) }
+      const blob = await genOneImage(it)
+      a = { blob, url: URL.createObjectURL(blob) }
+      setAbPair({ a, b: null })
+    } catch (e) { toast.error(String(e?.message || e)); setGenBusy(''); return }
+    setGenBusy('imageB')
+    try {
+      const blob = await genOneImage(it)
+      setAbPair({ a, b: { blob, url: URL.createObjectURL(blob) } })
+    } catch (_) {
+      // second variant failed — keep the first as the preview, with a note
+      setAbPair(null)
+      setPreview((p) => { if (p?.url) URL.revokeObjectURL(p.url); return { blob: a.blob, url: a.url, caption: p?.caption || '' } })
+      toast.error(ar ? 'تعذر توليد النسخة الثانية — اعتُمدت الأولى' : 'Second variant failed — kept the first')
+    }
     finally { setGenBusy('') }
+  }
+  const pickAb = (k) => {
+    const pair = abPair
+    const win = pair?.[k]
+    if (!win) return
+    const lose = pair[k === 'a' ? 'b' : 'a']
+    if (lose?.url) URL.revokeObjectURL(lose.url)
+    setPreview((p) => { if (p?.url) URL.revokeObjectURL(p.url); return { blob: win.blob, url: win.url, caption: p?.caption || '' } })
+    setAbPair(null)
   }
   const regenCaption = async () => {
     const it = (items || []).find((i) => i.id === aiItemId)
@@ -125,6 +199,119 @@ export default function PostStudio() {
   const doGenerate = async () => {
     await regenImage()
     await regenCaption()
+  }
+
+  // ---------- V2: EN translation appended under the Arabic ----------
+  const hasEnglishTail = (cap) => {
+    const parts = String(cap || '').trim().split(/\n\s*\n/)
+    const last = parts[parts.length - 1] || ''
+    const latin = (last.match(/[A-Za-z]/g) || []).length
+    return latin > 15 && latin > (last.match(/[؀-ۿ]/g) || []).length
+  }
+  const translateCaption = async (text) => {
+    const out = cleanCaption(await aiQuick([
+      'Translate this Arabic cafe/restaurant marketing caption into natural, polished ENGLISH marketing copy (marketing tone, not literal).',
+      'Keep the hashtags line: translate it into fitting English hashtags.',
+      'No emojis. Reply with the English text only, no explanations.',
+      '---',
+      String(text || '').trim(),
+    ].join('\n')))
+    if (!out) throw new Error(ar ? 'لم تصل ترجمة — أعد المحاولة' : 'No translation returned — retry')
+    return out
+  }
+  const translatePreview = async () => {
+    const cap = (preview?.caption || '').trim()
+    if (!cap || genBusy) return
+    if (hasEnglishTail(cap)) { toast.error(ar ? 'النص مُترجم مسبقاً' : 'Already translated'); return }
+    setGenBusy('translate')
+    try {
+      const en = await translateCaption(cap)
+      setPreview((p) => (p ? { ...p, caption: `${(p.caption || '').trim()}\n\n${en}` } : p))
+    } catch (e) { toast.error(String(e?.message || e)) }
+    finally { setGenBusy('') }
+  }
+  const translateDraft = async (d) => {
+    if (transId) return
+    const cap = (d.caption || '').trim()
+    if (!cap) return
+    if (hasEnglishTail(cap)) { toast.error(ar ? 'النص مُترجم مسبقاً' : 'Already translated'); return }
+    setTransId(d.id)
+    try { await patchMarketingPost(tenantId, d.id, { caption: `${cap}\n\n${await translateCaption(cap)}` }) }
+    catch (e) { draftError(e) }
+    finally { setTransId('') }
+  }
+
+  // ---------- V2: prompt library (tenant.promptLibrary, max 20) ----------
+  const promptLib = Array.isArray(tenant?.promptLibrary) ? tenant.promptLibrary : []
+  const persistLib = async (next) => {
+    try { await updateTenant(tenantId, { promptLibrary: next }); updateTenantLocal?.({ promptLibrary: next }) }
+    catch (_) { toast.error(t('error')) }
+  }
+  const savePromptToLib = async () => {
+    const prompt = freePrompt.trim()
+    if (!prompt) { toast.error(ar ? 'اكتب الوصف الحر أولاً' : 'Write the free prompt first'); return }
+    const name = (window.prompt(ar ? 'اسم البرومبت:' : 'Prompt name:', prompt.slice(0, 24)) || '').trim().slice(0, 40)
+    if (!name) return
+    const rest = promptLib.filter((p) => p?.name !== name)
+    if (rest.length >= 20) { toast.error(ar ? 'الحد 20 برومبتاً — احذف واحداً أولاً' : 'Limit is 20 prompts — delete one first'); return }
+    await persistLib([{ name, prompt: prompt.slice(0, 400), styleId }, ...rest])
+    toast.success(t('saved'))
+  }
+  const applyLibPrompt = (p) => {
+    setFreePrompt(p?.prompt || '')
+    if (p?.styleId && ALL_STYLES.some((s) => s.id === p.styleId)) setStyleId(p.styleId)
+  }
+  const removeLibPrompt = (p) => persistLib(promptLib.filter((x) => x?.name !== p?.name))
+
+  // ---------- V2: 30-day content calendar (tenant.contentPlan) ----------
+  const plan = tenant?.contentPlan || null
+  const generatePlan = async () => {
+    if (planBusy || !canWrite) return
+    if (plan?.entries?.length && !window.confirm(ar ? 'توجد خطة محفوظة — استبدالها بخطة جديدة؟' : 'A saved plan exists — replace it?')) return
+    setPlanBusy(true)
+    try {
+      const tops = [...(items || [])].sort((x, y) => (Number(y.soldCount) || 0) - (Number(x.soldCount) || 0)).slice(0, 8).map(iName).filter(Boolean)
+      const entries = parsePlan(await aiQuick([
+        'أنت مخطط محتوى تسويقي محترف لمنشآت الضيافة السعودية.',
+        `أنشئ خطة محتوى لمدة 30 يوماً لمنشأة "${tenant?.name || 'مقهى'}".`,
+        tops.length ? `أصنافها الأكثر مبيعاً: ${tops.join('، ')}.` : '',
+        'أجب بمصفوفة JSON صارمة فقط دون أي شرح أو Markdown أو أسوار كود، بهذا الشكل بالضبط:',
+        '[{"day":1,"idea":"فكرة قصيرة للمنشور","itemName":"اسم صنف من القائمة أو اتركه فارغاً","caption":"نص المنشور الجاهز من سطرين مع هاشتاقات"}]',
+        '30 عنصراً (day من 1 إلى 30) مع تنويع: أصناف، عروض، مناسبات، محتوى تفاعلي، كواليس.',
+        'ممنوع: الرموز التعبيرية والأرقام العربية المشرقية — أرقام لاتينية فقط.',
+      ].filter(Boolean).join('\n')))
+      if (!entries.length) throw new Error(ar ? 'تعذرت قراءة خطة صالحة من الذكاء — أعد المحاولة' : 'Could not parse a valid plan — retry')
+      const next = { month: new Date().toISOString().slice(0, 7), entries, createdAt: Date.now() }
+      await updateTenant(tenantId, { contentPlan: next })
+      updateTenantLocal?.({ contentPlan: next })
+      toast.success(ar ? `جاهزة — خطة ${entries.length} يوماً` : `Ready — a ${entries.length}-day plan`)
+    } catch (e) { toast.error(String(e?.message || e)) }
+    finally { setPlanBusy(false) }
+  }
+  const planToDraft = async (entry, idx) => {
+    if (!canWrite) return
+    try {
+      await addMarketingPost(tenantId, { kind: 'ai', caption: entry.caption || entry.idea || '', plannedDay: entry.day, itemName: entry.itemName || '', imageUrl: '' })
+      const entries = (plan?.entries || []).map((e, i) => (i === idx ? { ...e, drafted: true } : e))
+      const next = { ...plan, entries }
+      updateTenant(tenantId, { contentPlan: next }).then(() => updateTenantLocal?.({ contentPlan: next })).catch(() => {})
+      toast.success(ar ? 'أُنشئت المسودة — ولّد صورتها من قائمة الاعتماد' : 'Draft created — generate its image from the queue')
+    } catch (e) { draftError(e) }
+  }
+  // V2: image for an image-less (plan-born) draft — scene from its caption/item
+  const genDraftImage = async (d) => {
+    if (draftGenId) return
+    setDraftGenId(d.id)
+    try {
+      const it = (items || []).find((i) => i.id === d.itemId || (d.itemName && iName(i) === d.itemName))
+      const scene = [(d.caption || '').split('\n')[0], d.itemName].filter(Boolean).join(', ')
+      const blob = await generatePostImage({ itemImageUrls: it ? refUrls(it) : [], stylePrompt: scene, venueName: tenant?.name || '', tenant })
+      const file = new File([blob], `post-${Date.now()}.${(blob.type || '').includes('jpeg') ? 'jpg' : 'png'}`, { type: blob.type || 'image/png' })
+      const imageUrl = await uploadImage(tenantId, file, 'library/marketing')
+      await patchMarketingPost(tenantId, d.id, { imageUrl })
+      toast.success(ar ? 'وُلّدت صورة المسودة' : 'Draft image generated')
+    } catch (e) { toast.error(String(e?.message || e)) }
+    finally { setDraftGenId('') }
   }
 
   const saveDraftFromBlob = async (blob, extra) => {
@@ -255,6 +442,7 @@ export default function PostStudio() {
 
   // ---------- approval queue actions ----------
   const approve = async (d) => {
+    if (!d.imageUrl) { toast.error(ar ? 'ولّد صورة المسودة أولاً' : 'Generate the draft image first'); return }
     try { await patchMarketingPost(tenantId, d.id, { status: 'approved', approvedAt: Date.now() }) } catch (e) { draftError(e) }
   }
   const remove = async (d) => {
@@ -329,7 +517,7 @@ export default function PostStudio() {
       for (let n = 0; n < tops.length; n++) {
         const it = tops[n]
         try {
-          const style = PRESET_STYLES[(Math.floor(Date.now() / (7 * 24 * 3600 * 1000)) + n) % PRESET_STYLES.length]
+          const style = ALL_STYLES[(Math.floor(Date.now() / (7 * 24 * 3600 * 1000)) + n) % ALL_STYLES.length]
           const blob = await generatePostImage({ itemImageUrls: refUrls(it), stylePrompt: style.prompt, venueName: tenant?.name || '' })
           const caption = await generateCaption({ itemName: iName(it), venueName: tenant?.name || '' }).catch(() => '')
           await saveDraftFromBlob(blob, { kind: 'ai', pilot: true, itemId: it.id, itemName: iName(it), style: style.id, caption })
@@ -349,19 +537,32 @@ export default function PostStudio() {
 
   const DraftCard = ({ d }) => (
     <div className="ps-card">
-      <img src={d.imageUrl} alt="" loading="lazy" />
+      {d.imageUrl ? (
+        <img src={d.imageUrl} alt="" loading="lazy" />
+      ) : (
+        <div className="ps2-noimg center stack" style={{ gap: 6 }}>
+          <Icon name="image" size={26} />
+          <span className="xs faint">{ar ? 'بلا صورة بعد' : 'No image yet'}</span>
+        </div>
+      )}
       <div className="ps-card-body">
         <div className="ps-badge-row">
           <span className="badge">{d.kind === 'ai' ? (ar ? 'ذكاء' : 'AI') : (ar ? 'يدوي' : 'Manual')}</span>
           {d.pilot && <span className="badge badge-gold">{ar ? 'مقترح آلي' : 'Auto-pilot'}</span>}
+          {d.plannedDay > 0 && <span className="badge num">{(ar ? 'اليوم ' : 'Day ') + d.plannedDay}</span>}
           {d.itemName && <span className="badge">{d.itemName}</span>}
           {(d.publishedTo || []).map((c) => <span key={c} className="badge badge-success">{CH_LABEL[c] || c}</span>)}
         </div>
         {d.caption && <div className="ps-cap">{d.caption}</div>}
         {d.publishedAt && <span className="xs faint num">{fmtWhen(d.publishedAt)}</span>}
         <div className="ps-actions">
+          {d.status === 'draft' && canWrite && !d.imageUrl && (
+            <button className="btn btn-sm btn-outline" disabled={!!draftGenId || !aiConfigured()} onClick={() => genDraftImage(d)}>
+              <Icon name="sparkles" size={13} /> {draftGenId === d.id ? (ar ? 'يولّد…' : 'Generating…') : (ar ? 'توليد الصورة' : 'Generate image')}
+            </button>
+          )}
           {d.status === 'draft' && canWrite && (
-            <button className="btn btn-sm btn-primary" onClick={() => approve(d)}><Icon name="check" size={13} /> {ar ? 'اعتماد' : 'Approve'}</button>
+            <button className="btn btn-sm btn-primary" disabled={!d.imageUrl} onClick={() => approve(d)}><Icon name="check" size={13} /> {ar ? 'اعتماد' : 'Approve'}</button>
           )}
           {d.status !== 'draft' && (
             <>
@@ -369,6 +570,11 @@ export default function PostStudio() {
               {canStories && <button className="btn btn-sm btn-outline" onClick={() => publishPost(d)}><Icon name="events" size={13} /> {ar ? 'نشر كخبر' : 'As post'}</button>}
               {canWrite && <button className="btn btn-sm btn-outline" onClick={() => { setCampFor(d); setCampAudience('all') }}><Icon name="message" size={13} /> {ar ? 'حملة واتساب' : 'WA campaign'}</button>}
             </>
+          )}
+          {canWrite && d.caption && d.status !== 'published' && (
+            <button className="btn btn-sm btn-outline" disabled={!!transId} onClick={() => translateDraft(d)}>
+              <Icon name="lang" size={13} /> {transId === d.id ? (ar ? 'يترجم…' : 'Translating…') : (ar ? 'ترجم EN' : 'EN')}
+            </button>
           )}
           {canWrite && <button className="icon-btn" style={{ color: 'var(--danger)' }} onClick={() => remove(d)} aria-label={ar ? 'حذف' : 'Delete'}><Icon name="delete" size={14} /></button>}
         </div>
@@ -413,6 +619,48 @@ export default function PostStudio() {
         {pilotBusy && <span className="small row" style={{ gap: 6, alignItems: 'center', color: 'var(--brand)' }}><Icon name="sparkles" size={14} /> {ar ? 'يجري توليد مسودات هذا الأسبوع…' : 'Generating this week’s drafts…'}</span>}
       </div>
 
+      {/* ---- V2: content calendar — a 30-day plan whose ideas convert to drafts ---- */}
+      <div className="card card-pad stack" style={{ gap: 10 }}>
+        <div className="row-between" style={{ gap: 8, flexWrap: 'wrap' }}>
+          <strong className="small">
+            <Icon name="calendar" size={14} style={{ verticalAlign: 'middle' }} /> {ar ? 'تقويم المحتوى' : 'Content calendar'}
+            {plan?.month && <span className="xs faint num"> — {plan.month}</span>}
+          </strong>
+          {canWrite && (
+            <button className="btn btn-sm btn-outline" disabled={planBusy || !aiConfigured()} onClick={generatePlan}>
+              <Icon name="sparkles" size={13} /> {planBusy ? (ar ? 'يولّد الخطة…' : 'Generating the plan…') : (ar ? 'ولّد خطة 30 يوماً' : 'Generate a 30-day plan')}
+            </button>
+          )}
+        </div>
+        {plan?.entries?.length ? (
+          <div className="ps2-plan">
+            {plan.entries.map((e, i) => (
+              <div key={e.day} className="ps2-plan-cell">
+                <span className="ps2-plan-day num">{e.day}</span>
+                <div className="stack" style={{ gap: 4, minWidth: 0, flex: 1 }}>
+                  {e.idea && <strong className="xs">{e.idea}</strong>}
+                  {e.itemName && <span className="badge" style={{ alignSelf: 'flex-start' }}>{e.itemName}</span>}
+                  {e.caption && <span className="xs faint ps2-clamp">{e.caption}</span>}
+                  {canWrite && (e.drafted
+                    ? <span className="xs row" style={{ gap: 4, alignItems: 'center', color: 'var(--success)' }}><Icon name="check" size={11} /> {ar ? 'تحولت لمسودة' : 'Drafted'}</span>
+                    : (
+                      <button className="btn btn-sm btn-outline" style={{ alignSelf: 'flex-start' }} onClick={() => planToDraft(e, i)}>
+                        <Icon name="penLine" size={12} /> {ar ? 'حوّلها لمسودة' : 'To draft'}
+                      </button>
+                    ))}
+                </div>
+              </div>
+            ))}
+          </div>
+        ) : (
+          <span className="xs faint">
+            {ar
+              ? 'خطة شهر كاملة بضغطة: فكرة ونص جاهز لكل يوم اعتماداً على اسم منشأتك وأصنافك الأكثر مبيعاً — وكل فكرة تتحول لمسودة في قائمة الاعتماد (الصورة تولّدها لاحقاً من المسودة).'
+              : 'A full month in one tap: an idea and a ready caption for every day, based on your venue and best-sellers — each idea converts to a draft in the approval queue (generate its image later from the draft).'}
+          </span>
+        )}
+      </div>
+
       {/* ---- composer ---- */}
       {tab === 'ai' ? (
         <div className="card card-pad ps-gen-grid">
@@ -451,7 +699,7 @@ export default function PostStudio() {
             <div className="field" style={{ marginBottom: 0 }}>
               <label>{ar ? 'نمط الصورة' : 'Image style'}</label>
               <div className="row" style={{ gap: 6, flexWrap: 'wrap' }}>
-                {PRESET_STYLES.map((s) => (
+                {ALL_STYLES.map((s) => (
                   <button key={s.id} type="button" className={`chip ${styleId === s.id ? 'active' : ''}`} onClick={() => setStyleId(s.id)}>{s.ar}</button>
                 ))}
               </div>
@@ -459,6 +707,24 @@ export default function PostStudio() {
             <div className="field" style={{ marginBottom: 0 }}>
               <label>{ar ? 'وصف إضافي حر (اختياري)' : 'Extra free prompt (optional)'}</label>
               <input className="input" value={freePrompt} onChange={(e) => setFreePrompt(e.target.value)} placeholder={ar ? 'مثال: مع حبوب قهوة متناثرة وبخار خفيف' : 'e.g. scattered coffee beans, soft steam'} />
+              {/* V2: prompt library — save the current prompt+style, reapply with one tap */}
+              <div className="row" style={{ gap: 6, flexWrap: 'wrap', alignItems: 'center', marginTop: 6 }}>
+                {canWrite && (
+                  <button type="button" className="btn btn-sm btn-outline" onClick={savePromptToLib}>
+                    <Icon name="star" size={12} /> {ar ? 'احفظ كبرومبت' : 'Save prompt'}
+                  </button>
+                )}
+                {promptLib.map((p) => (
+                  <span key={p.name} className="chip ps2-lib-chip" title={p.prompt} onClick={() => applyLibPrompt(p)}>
+                    <span className="ps2-lib-name">{p.name}</span>
+                    {canWrite && (
+                      <button type="button" className="icon-btn ps2-lib-del" aria-label={ar ? 'حذف' : 'Delete'} onClick={(e) => { e.stopPropagation(); removeLibPrompt(p) }}>
+                        <Icon name="close" size={9} />
+                      </button>
+                    )}
+                  </span>
+                ))}
+              </div>
             </div>
             <div className="row" style={{ gap: 8, flexWrap: 'wrap' }}>
               <div className="field grow" style={{ marginBottom: 0, minWidth: 140 }}>
@@ -472,20 +738,52 @@ export default function PostStudio() {
                 <input className="input" value={offer} onChange={(e) => setOffer(e.target.value)} placeholder={ar ? 'مثال: خصم 15% هذا الخميس' : 'e.g. 15% off this Thursday'} />
               </div>
             </div>
+            {/* V2: A/B toggle — two variants of the same prompt, keep the better one */}
+            <label className="row xs" style={{ gap: 6, alignItems: 'center', cursor: 'pointer' }}>
+              <input type="checkbox" checked={abMode} onChange={(e) => setAbMode(e.target.checked)} style={{ width: 16, height: 16 }} />
+              <span>{ar ? 'نسختان A/B — صورتان لنفس الوصف وتختار أفضلهما' : 'A/B — two variants of the same prompt, pick the better'}</span>
+            </label>
             <button className="btn btn-primary" disabled={!!genBusy || !canWrite || !aiConfigured()} onClick={doGenerate}>
-              <Icon name="sparkles" size={15} /> {genBusy ? (genBusy === 'image' ? (ar ? 'يولّد الصورة…' : 'Generating image…') : (ar ? 'يكتب النص…' : 'Writing caption…')) : (ar ? 'توليد التصميم والنص' : 'Generate design + caption')}
+              <Icon name="sparkles" size={15} /> {genBusy
+                ? (genBusy === 'caption' ? (ar ? 'يكتب النص…' : 'Writing caption…')
+                  : genBusy === 'translate' ? (ar ? 'يترجم…' : 'Translating…')
+                  : genBusy === 'imageA' ? (ar ? 'يولّد النسخة A…' : 'Generating variant A…')
+                  : genBusy === 'imageB' ? (ar ? 'يولّد النسخة B…' : 'Generating variant B…')
+                  : (ar ? 'يولّد الصورة…' : 'Generating image…'))
+                : (ar ? 'توليد التصميم والنص' : 'Generate design + caption')}
             </button>
             {!aiConfigured() && <span className="xs" style={{ color: 'var(--warning)' }}>{ar ? 'الذكاء غير مهيأ — أكمل إعداد Firebase/Gemini.' : 'AI not configured — finish Firebase/Gemini setup.'}</span>}
           </div>
 
           <div className="stack" style={{ gap: 'var(--sp-2)' }}>
-            {preview?.url ? (
+            {abPair ? (
+              <>
+                {/* V2: A/B chooser — the picked variant becomes the preview */}
+                <span className="xs faint">{ar ? 'قارن واختر — النسخة الأخرى تُهمل' : 'Compare and pick — the other variant is discarded'}</span>
+                <div className="ps2-ab">
+                  {['a', 'b'].map((k) => (
+                    <div key={k} className="ps2-ab-slot">
+                      <span className="ps2-ab-tag">{k === 'a' ? 'A' : 'B'}</span>
+                      {abPair[k]
+                        ? <img src={abPair[k].url} alt="" />
+                        : <div className="ps2-ab-wait center">{genBusy === 'imageB' ? <div className="spinner" /> : <Icon name="image" size={22} />}</div>}
+                      {abPair[k] && (
+                        <button className="btn btn-sm btn-primary" disabled={!!genBusy} onClick={() => pickAb(k)}>
+                          <Icon name="check" size={13} /> {ar ? 'اختيار هذه' : 'Pick this'}
+                        </button>
+                      )}
+                    </div>
+                  ))}
+                </div>
+              </>
+            ) : preview?.url ? (
               <>
                 <img className="ps-preview-img" src={preview.url} alt="" />
                 <textarea className="textarea" rows={4} value={preview.caption} onChange={(e) => setPreview((p) => ({ ...p, caption: e.target.value }))} placeholder={ar ? 'نص المنشور…' : 'Caption…'} />
                 <div className="row" style={{ gap: 6, flexWrap: 'wrap' }}>
                   <button className="btn btn-sm btn-outline" disabled={!!genBusy} onClick={regenImage}><Icon name="reload" size={13} /> {ar ? 'صورة أخرى' : 'New image'}</button>
                   <button className="btn btn-sm btn-outline" disabled={!!genBusy} onClick={regenCaption}><Icon name="reload" size={13} /> {ar ? 'نص آخر' : 'New caption'}</button>
+                  <button className="btn btn-sm btn-outline" disabled={!!genBusy || !(preview.caption || '').trim()} onClick={translatePreview}><Icon name="lang" size={13} /> {ar ? 'ترجم EN' : 'EN'}</button>
                   <button className="btn btn-sm btn-primary grow" disabled={saveBusy || !canWrite} onClick={saveAiDraft}>{saveBusy ? t('saving') : (ar ? 'حفظ في قائمة الاعتماد' : 'Save to approval queue')}</button>
                 </div>
               </>

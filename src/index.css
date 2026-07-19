@@ -6366,3 +6366,83 @@ body:has(.sd2-root) .toast-wrap { z-index: 840; }
 }
 /* zero-height scroll targets; offset clears the app bar + sticky chips */
 .set-anchor { scroll-margin-top: 90px; }
+
+/* ==== LIBRARY V3 (2026-07-19) ==== */
+/* /admin/library additions: favorites star, trash-bin view, duplicate-scan
+   groups, auto-compress toggle. Folder-chip stats reuse .num — no CSS needed. */
+/* favorites: hover-reveal star on grid cards (always visible once starred) */
+.lib-star {
+  position: absolute; top: 5px; inset-inline-end: 5px; z-index: 3;
+  width: 22px; height: 22px; border-radius: 50%; padding: 0;
+  display: grid; place-items: center; cursor: pointer;
+  background: var(--surface); border: 1px solid var(--border-strong); color: var(--text-muted);
+  opacity: 0; transition: opacity var(--dur-fast) ease, color var(--dur-fast) ease, border-color var(--dur-fast) ease;
+}
+.lib-card:hover .lib-star, .lib-card:focus-visible .lib-star, .lib-star.on { opacity: 1; }
+.lib-star.on { color: #d99a06; border-color: #d99a06; }
+.lib-starbtn.on { color: #d99a06; }
+/* trash view: dimmed, non-clickable cards */
+.lib-trashed { cursor: default; }
+.lib-trashed .lib-thumb img, .lib-trashed .lib-thumb video { filter: grayscale(0.55); opacity: 0.7; }
+.chip.lib-trashchip.active { border-color: var(--danger); color: var(--danger); background: color-mix(in srgb, var(--danger) 12%, transparent); }
+/* duplicate-scan result groups */
+.lib-dup-group { display: flex; flex-wrap: wrap; gap: 6px; padding: 8px; border: 1px dashed var(--border-strong); border-radius: var(--r-md); background: var(--surface-2); }
+.lib-dup-item { display: flex; align-items: center; gap: 7px; padding: 4px 8px; border: 1px solid var(--border); border-radius: var(--r-md); background: var(--surface); max-width: 100%; }
+.lib-dup-thumb { width: 38px; height: 38px; border-radius: 8px; overflow: hidden; background: var(--surface-2); display: grid; place-items: center; flex: none; }
+.lib-dup-thumb img, .lib-dup-thumb video { width: 100%; height: 100%; object-fit: cover; }
+.lib-dup-name { max-width: 150px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+/* auto-compress pill toggle (library header) */
+.lib-comp-toggle { display: inline-flex; align-items: center; gap: 5px; cursor: pointer; padding: 5px 10px; border: 1px solid var(--border); border-radius: var(--r-pill); background: var(--surface); }
+.lib-comp-toggle input { width: 14px; height: 14px; accent-color: var(--brand); margin: 0; }
+
+/* ==== SCREENS V3 (2026-07-19) ==== */
+/* Prayer-times signage slide (مواقيت الصلاة): venue identity on top, the five
+   prayers in a glass grid, the upcoming prayer highlighted. Rendered ONLY with
+   verified fetched timings — the player skips the slide entirely otherwise.
+   vmin units keep one layout working on landscape AND rotated portrait TVs. */
+.scr-prayer { position: absolute; inset: 0; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 2.4vmin; padding: 5vmin; text-align: center; color: #fff; background: radial-gradient(120% 100% at 50% 0%, color-mix(in srgb, var(--scr-brand, #7c2d2d) 42%, #0b0d12) 0%, #090a0f 78%); }
+.scr-prayer-logo { width: 11vmin; height: 11vmin; border-radius: 50%; object-fit: cover; border: 0.4vmin solid rgba(255, 255, 255, 0.25); }
+.scr-prayer-venue { margin: 0; font-size: 3.2vmin; font-weight: 800; opacity: 0.9; }
+.scr-prayer-title { font-size: 6.6vmin; font-weight: 900; line-height: 1.25; text-shadow: 0 2px 18px rgba(0, 0, 0, 0.45); }
+.scr-prayer-date { font-size: 2.6vmin; font-weight: 700; opacity: 0.75; }
+.scr-prayer-grid { display: flex; flex-wrap: wrap; justify-content: center; gap: 2vmin; margin-top: 1.6vmin; width: min(94%, 180vmin); }
+.scr-prayer-cell { flex: 1 1 24vmin; min-width: 22vmin; max-width: 34vmin; display: flex; flex-direction: column; gap: 1.2vmin; padding: 3vmin 2vmin; border-radius: 2.4vmin; background: rgba(255, 255, 255, 0.07); border: 1px solid rgba(255, 255, 255, 0.14); backdrop-filter: blur(6px); }
+.scr-prayer-cell.next { background: color-mix(in srgb, var(--scr-brand, #7c2d2d) 55%, rgba(255, 255, 255, 0.1)); border-color: rgba(255, 255, 255, 0.42); box-shadow: 0 1vmin 4vmin rgba(0, 0, 0, 0.35); transform: scale(1.05); }
+.scr-prayer-name { font-size: 3vmin; font-weight: 800; opacity: 0.92; }
+.scr-prayer-time { font-size: 4.6vmin; font-weight: 900; letter-spacing: 0.03em; }
+.scr-prayer-next { font-size: 2.6vmin; font-weight: 800; opacity: 0.9; background: rgba(255, 255, 255, 0.1); border: 1px solid rgba(255, 255, 255, 0.18); padding: 1.2vmin 3.2vmin; border-radius: 999px; }
+
+/* ==== POST STUDIO V2 (2026-07-19) ==== */
+/* Base Post Studio layout (ps-*, previously unstyled) + V2 additions (ps2-*):
+   content calendar, A/B variant chooser, prompt-library chips, image-less drafts. */
+.ps-note { margin: 0; font-size: var(--fs-sm); color: var(--muted, var(--text)); opacity: 0.85; line-height: 1.7; }
+.ps-gen-grid { display: grid; grid-template-columns: minmax(0, 1.15fr) minmax(0, 0.85fr); gap: var(--sp-4); align-items: start; }
+@media (max-width: 760px) { .ps-gen-grid { grid-template-columns: 1fr; } }
+.ps-stage canvas { width: 100%; height: auto; display: block; border-radius: var(--r-md); border: 1px solid var(--border); background: var(--surface-2); }
+.ps-preview-img { width: 100%; border-radius: var(--r-md); border: 1px solid var(--border); display: block; }
+.ps-empty-stage { min-height: 240px; border: 1px dashed var(--border); border-radius: var(--r-md); background: var(--surface-2); }
+.ps-queue { display: grid; grid-template-columns: repeat(auto-fill, minmax(230px, 1fr)); gap: var(--sp-3); }
+.ps-card { border: 1px solid var(--border); border-radius: var(--r-lg); background: var(--surface); overflow: hidden; display: flex; flex-direction: column; }
+.ps-card > img { width: 100%; aspect-ratio: 4 / 5; object-fit: cover; display: block; }
+.ps-card-body { padding: 10px; display: flex; flex-direction: column; gap: 8px; flex: 1; }
+.ps-badge-row { display: flex; flex-wrap: wrap; gap: 4px; }
+.ps-cap { font-size: var(--fs-xs); line-height: 1.6; white-space: pre-wrap; max-height: 88px; overflow: hidden; }
+.ps-actions { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; margin-top: auto; }
+.ps-swatch { width: 24px; height: 24px; border-radius: 50%; border: 1px solid var(--border); cursor: pointer; padding: 0; flex: none; }
+/* V2: image-less (plan-born) drafts */
+.ps2-noimg { width: 100%; aspect-ratio: 4 / 5; background: var(--surface-2); border-bottom: 1px solid var(--border); color: var(--text-muted, var(--muted)); flex-direction: column; }
+/* V2: content calendar */
+.ps2-plan { display: grid; grid-template-columns: repeat(auto-fill, minmax(240px, 1fr)); gap: 8px; }
+.ps2-plan-cell { display: flex; gap: 8px; align-items: flex-start; border: 1px solid var(--border); border-radius: var(--r-md); background: var(--surface-2); padding: 8px 10px; min-width: 0; }
+.ps2-plan-day { flex: none; width: 26px; height: 26px; border-radius: 50%; display: inline-flex; align-items: center; justify-content: center; font-size: var(--fs-xs); font-weight: 800; background: color-mix(in srgb, var(--brand) 14%, transparent); color: var(--brand); }
+.ps2-clamp { display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
+/* V2: A/B variant chooser */
+.ps2-ab { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+.ps2-ab-slot { position: relative; display: flex; flex-direction: column; gap: 6px; border: 1px solid var(--border); border-radius: var(--r-md); padding: 6px; background: var(--surface-2); }
+.ps2-ab-slot img { width: 100%; border-radius: var(--r-sm, 6px); display: block; }
+.ps2-ab-tag { position: absolute; top: 10px; inset-inline-start: 10px; z-index: 1; width: 22px; height: 22px; border-radius: 50%; display: inline-flex; align-items: center; justify-content: center; font-size: var(--fs-xs); font-weight: 800; background: var(--brand); color: #fff; }
+.ps2-ab-wait { aspect-ratio: 4 / 5; border: 1px dashed var(--border); border-radius: var(--r-sm, 6px); color: var(--text-muted, var(--muted)); }
+/* V2: prompt-library chips */
+.ps2-lib-chip { display: inline-flex; align-items: center; gap: 5px; cursor: pointer; max-width: 190px; }
+.ps2-lib-name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; min-width: 0; }
+.ps2-lib-del { width: 16px; height: 16px; flex: none; }

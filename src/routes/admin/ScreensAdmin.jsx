@@ -50,6 +50,7 @@ export default function ScreensAdmin() {
   const [tplFor, setTplFor] = useState(null) // screenId → templates gallery sheet
   const [schedFor, setSchedFor] = useState(null) // { screenId, index } → inline slide scheduler
   const [mediaLibFor, setMediaLibFor] = useState(null) // screenId → pick a slide from the library
+  const [groupFilter, setGroupFilter] = useState('') // '' = show all screen groups
 
   useEffect(() => { if (!tenantId) return; return watchScreens(tenantId, setScreens) }, [tenantId])
   useEffect(() => { if (!tenantId) return; return watchCategories(tenantId, setCats) }, [tenantId])
@@ -209,6 +210,11 @@ export default function ScreensAdmin() {
 
   if (screens === null) return <Spinner />
 
+  // screen groups (free-text screen.group): distinct names + the filtered list.
+  // Filtering is display-only; «تطبيق على المجموعة» lives in each screen's ops row.
+  const groups = [...new Set(screens.map((x) => (x.group || '').trim()).filter(Boolean))]
+  const shown = groupFilter ? screens.filter((x) => (x.group || '').trim() === groupFilter) : screens
+
   return (
     <div className="page stack" style={{ gap: 'var(--sp-3)' }}>
       <h2 className="page-title">{ar ? 'شاشات العرض' : 'Display screens'}</h2>
@@ -240,9 +246,22 @@ export default function ScreensAdmin() {
         </details>
       </div>
 
+      {/* group filter chips — appear once any screen has a group name */}
+      {groups.length > 0 && (
+        <div className="row" style={{ gap: 6, flexWrap: 'wrap', alignItems: 'center' }}>
+          <span className="xs faint">{ar ? 'المجموعات:' : 'Groups:'}</span>
+          <button className={`btn btn-sm ${groupFilter === '' ? 'btn-primary' : 'btn-outline'}`} onClick={() => setGroupFilter('')}>{ar ? 'الكل' : 'All'} ({screens.length})</button>
+          {groups.map((g) => (
+            <button key={g} className={`btn btn-sm ${groupFilter === g ? 'btn-primary' : 'btn-outline'}`} onClick={() => setGroupFilter(groupFilter === g ? '' : g)}>
+              {g} ({screens.filter((x) => (x.group || '').trim() === g).length})
+            </button>
+          ))}
+        </div>
+      )}
+
       {screens.length === 0 ? (
         <Empty icon="qr" title={ar ? 'لا شاشات بعد' : 'No screens yet'} hint={ar ? 'أنشئ شاشة واعرض منيوك على أي تلفزيون' : 'Create one and show your menu on any TV'} />
-      ) : screens.map((s) => (
+      ) : shown.map((s) => (
         <div key={s.id} className="card card-pad stack" style={{ gap: 10 }}>
           <div className="row" style={{ gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
             <strong className="grow">{s.name || s.id}</strong>
@@ -256,6 +275,7 @@ export default function ScreensAdmin() {
                   ? <span className="badge badge-success">{ar ? 'متصلة الآن' : 'Online'}{(s.items || []).length ? ` · ${ar ? 'شريحة' : 'slide'} ${(Number(s.nowIdx) % Math.max(1, (s.items || []).length)) + 1}` : ''}</span>
                   : <span className="badge badge-warning">{ar ? `آخر اتصال منذ ${mins < 60 ? `${mins} د` : `${Math.round(mins / 60)} س`}` : `Seen ${mins}m ago`}</span>
             })()}
+            {(s.group || '').trim() && <span className="badge">{s.group}</span>}
             <span className="badge badge-gold num" dir="ltr" style={{ fontSize: 13, letterSpacing: 2 }}>{s.id}</span>
             <a className="icon-btn" href="/screen" target="_blank" rel="noreferrer" title={ar ? 'فتح صفحة الشاشة' : 'Open player'}><Icon name="eye" size={16} /></a>
             <button className="icon-btn" onClick={() => setOpenId(openId === s.id ? null : s.id)}><Icon name={openId === s.id ? 'close' : 'edit'} size={16} /></button>
@@ -274,6 +294,9 @@ export default function ScreensAdmin() {
                   <option value="landscape">{ar ? 'أفقي' : 'Landscape'}</option>
                   <option value="portrait">{ar ? 'عمودي' : 'Portrait'}</option>
                 </select>
+                <label className="xs faint">{ar ? 'المجموعة' : 'Group'}</label>
+                <input className="input input-sm" style={{ maxWidth: 140 }} placeholder={ar ? 'مثال: الصالة' : 'e.g. Hall'} defaultValue={s.group || ''}
+                  onBlur={(e) => { const v = e.target.value.trim(); if (v !== (s.group || '')) updateScreen(s.id, { group: v }).catch(() => toast.error(t('error'))) }} />
                 <input className="input input-sm grow" style={{ minWidth: 160 }} placeholder={ar ? 'شريط أخبار متحرك أسفل الشاشة (اختياري)' : 'News ticker (optional)'} defaultValue={s.ticker || ''}
                   onBlur={(e) => { if ((e.target.value || '') !== (s.ticker || '')) updateScreen(s.id, { ticker: e.target.value.trim() }).catch(() => toast.error(t('error'))) }} />
               </div>
@@ -288,14 +311,6 @@ export default function ScreensAdmin() {
               </div>
               <div className="row" style={{ gap: 8, flexWrap: 'wrap', alignItems: 'center', padding: '8px 10px', background: 'var(--surface-2)', borderRadius: 10 }}>
                 <span className="xs faint">{ar ? 'المحتوى:' : 'Playlist:'}</span>
-                <button className="btn btn-sm btn-outline" onClick={() => updateScreen(s.id, { backup: s.items || [], backupAt: Date.now() }).then(() => toast.success(ar ? 'حُفظت نسخة احتياطية' : 'Backed up')).catch(() => toast.error(t('error')))}>
-                  <Icon name="copy" size={13} /> {ar ? 'نسخة احتياطية' : 'Backup'}
-                </button>
-                {Array.isArray(s.backup) && s.backup.length > 0 && (
-                  <button className="btn btn-sm btn-outline" onClick={() => { if (window.confirm(ar ? 'استبدال المحتوى الحالي بالنسخة الاحتياطية؟' : 'Restore backup over current?')) updateScreen(s.id, { items: s.backup }).then(() => toast.success(ar ? 'استُعيدت' : 'Restored')).catch(() => toast.error(t('error'))) }}>
-                    <Icon name="reload" size={13} /> {ar ? `استعادة (${s.backup.length})` : `Restore (${s.backup.length})`}
-                  </button>
-                )}
                 {screens.length > 1 && (
                   <select className="select" style={{ maxWidth: 190 }} value="" onChange={(e) => {
                     const target = e.target.value
@@ -309,6 +324,20 @@ export default function ScreensAdmin() {
                     {screens.filter((x) => x.id !== s.id).map((x) => <option key={x.id} value={x.id}>{x.name || x.id}</option>)}
                   </select>
                 )}
+                {/* apply this screen's playlist to EVERY screen in the same group */}
+                {(s.group || '').trim() && screens.some((x) => x.id !== s.id && (x.group || '').trim() === (s.group || '').trim()) && (
+                  <button className="btn btn-sm btn-outline" onClick={() => {
+                    const g = (s.group || '').trim()
+                    const targets = screens.filter((x) => x.id !== s.id && (x.group || '').trim() === g)
+                    const n = (s.items || []).length
+                    if (!window.confirm(ar ? `نسخ ${n} شريحة إلى ${targets.length} شاشة في مجموعة «${g}»؟ يستبدل محتواها الحالي.` : `Copy ${n} slides over ${targets.length} screens in group "${g}"?`)) return
+                    Promise.all(targets.map((x) => updateScreen(x.id, { items: s.items || [] })))
+                      .then(() => toast.success(ar ? `طُبق المحتوى على ${targets.length} شاشة` : `Applied to ${targets.length} screens`))
+                      .catch(() => toast.error(t('error')))
+                  }}><Icon name="layers" size={13} /> {ar ? 'تطبيق المحتوى على المجموعة' : 'Apply to group'}</button>
+                )}
+                {/* versions vault: named snapshots (max 5) + legacy single backup */}
+                <BackupVault s={s} ar={ar} toast={toast} t={t} />
               </div>
               {/* live remote + transition — the TV obeys instantly via its snapshot */}
               <div className="row" style={{ gap: 6, flexWrap: 'wrap', alignItems: 'center', padding: '8px 10px', background: 'var(--surface-2)', borderRadius: 10 }}>
@@ -366,6 +395,18 @@ export default function ScreensAdmin() {
                   </div>
                   {sl.type === 'design' && (
                     <button className="icon-btn" title={ar ? 'فتح المصمم' : 'Open designer'} onClick={() => setDesigner({ screenId: s.id, index: i, slide: sl })}><Icon name="palette" size={15} /></button>
+                  )}
+                  {sl.type === 'design' && (
+                    // quick action: insert an order-QR LAYER bound to the venue menu url.
+                    // qrKind:'menu' → DesignSlideView's QrLayer resolves menuUrl(venue.slug)
+                    // itself, so no url is stored; positioned bottom-corner of the canvas.
+                    <button className="icon-btn" title={ar ? 'أضف QR الطلب' : 'Add order QR'} aria-label={ar ? 'أضف QR الطلب' : 'Add order QR'} onClick={() => {
+                      if ((sl.layers || []).some((l) => l.type === 'qr' && (l.qrKind || 'menu') === 'menu')) { toast.error(ar ? 'الشريحة تحتوي QR المنيو بالفعل' : 'Slide already has the menu QR'); return }
+                      const layer = { id: newLayerId(), type: 'qr', qrKind: 'menu', x: 76, y: 58, w: 19, h: 36, radius: 2 }
+                      const it = [...s.items]
+                      it[i] = { ...sl, layers: [...(sl.layers || []), layer] }
+                      updateScreen(s.id, { items: it }).then(() => toast.success(ar ? 'أُضيف QR الطلب أسفل الشريحة' : 'Order QR added')).catch(() => toast.error(t('error')))
+                    }}><Icon name="qr" size={15} /></button>
                   )}
                   <button className="icon-btn" title={ar ? 'جدولة العرض' : 'Schedule'} style={sl.sched ? { color: 'var(--brand)' } : undefined}
                     onClick={() => setSchedFor(schedFor?.screenId === s.id && schedFor.index === i ? null : { screenId: s.id, index: i })}>
@@ -559,6 +600,60 @@ function MusicManager({ screen: s, tenantId, busy, setBusy, ar, toast }) {
         </div>
       ))}
     </div>
+  )
+}
+
+// Versions vault (نسخ متعددة): named playlist snapshots in screen.backups =
+// [{ name, items, at }] — newest first, max 5 (the oldest is dropped on save).
+// The legacy single `backup` field keeps its restore button when present.
+const MAX_BACKUPS = 5
+function BackupVault({ s, ar, toast, t }) {
+  const [naming, setNaming] = useState(false)
+  const [vname, setVname] = useState('')
+  const list = Array.isArray(s.backups) ? s.backups : []
+  const err = () => toast.error(t('error'))
+  const fmtAt = (at) => { try { return new Intl.DateTimeFormat('ar-SA-u-ca-gregory-nu-latn', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' }).format(at) } catch (_) { return '' } }
+  const saveVersion = () => {
+    const nm = vname.trim() || (ar ? `نسخة ${list.length + 1}` : `Version ${list.length + 1}`)
+    const next = [{ name: nm, items: s.items || [], at: Date.now() }, ...list].slice(0, MAX_BACKUPS)
+    updateScreen(s.id, { backups: next })
+      .then(() => { setVname(''); setNaming(false); toast.success(ar ? 'حُفظت النسخة' : 'Version saved') })
+      .catch(err)
+  }
+  return (
+    <>
+      {naming ? (
+        <>
+          <input className="input input-sm" style={{ maxWidth: 170 }} autoFocus placeholder={ar ? 'اسم النسخة (رمضان…)' : 'Version name'} value={vname}
+            onChange={(e) => setVname(e.target.value)} onKeyDown={(e) => { if (e.key === 'Enter') saveVersion() }} />
+          <button className="btn btn-sm btn-primary" onClick={saveVersion}><Icon name="check" size={13} /> {ar ? 'حفظ' : 'Save'}</button>
+          <button className="btn btn-sm btn-outline" onClick={() => { setNaming(false); setVname('') }}>{ar ? 'إلغاء' : 'Cancel'}</button>
+        </>
+      ) : (
+        <button className="btn btn-sm btn-outline" title={ar ? 'حفظ المحتوى الحالي كنسخة قابلة للاستعادة (بحد أقصى 5)' : 'Save the current playlist as a restorable version (max 5)'} onClick={() => setNaming(true)}>
+          <Icon name="copy" size={13} /> {ar ? 'حفظ نسخة باسم…' : 'Save version as…'}
+        </button>
+      )}
+      {/* legacy single-backup restore (screens backed up before the vault) */}
+      {Array.isArray(s.backup) && s.backup.length > 0 && (
+        <button className="btn btn-sm btn-outline" onClick={() => { if (window.confirm(ar ? 'استبدال المحتوى الحالي بالنسخة الاحتياطية القديمة؟' : 'Restore the legacy backup over current?')) updateScreen(s.id, { items: s.backup }).then(() => toast.success(ar ? 'استُعيدت' : 'Restored')).catch(err) }}>
+          <Icon name="reload" size={13} /> {ar ? `استعادة القديمة (${s.backup.length})` : `Restore legacy (${s.backup.length})`}
+        </button>
+      )}
+      {list.length > 0 && (
+        <div className="stack" style={{ flexBasis: '100%', gap: 4, marginTop: 2 }}>
+          {list.map((b, i) => (
+            <div key={`${b.at || 0}-${i}`} className="row" style={{ gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
+              <Icon name="folder" size={13} style={{ color: 'var(--brand)', flex: 'none' }} />
+              <span className="small grow" style={{ minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{b.name || (ar ? 'نسخة' : 'Version')}</span>
+              <span className="xs faint num" style={{ flex: 'none' }}>{(b.items || []).length} {ar ? 'شريحة' : 'slides'}{b.at ? ` · ${fmtAt(b.at)}` : ''}</span>
+              <button className="btn btn-sm btn-outline" style={{ flex: 'none' }} onClick={() => { if (window.confirm(ar ? `استبدال المحتوى الحالي بنسخة «${b.name}» (${(b.items || []).length} شريحة)؟` : `Restore "${b.name}" (${(b.items || []).length} slides) over current?`)) updateScreen(s.id, { items: b.items || [] }).then(() => toast.success(ar ? 'استُعيدت' : 'Restored')).catch(err) }}>{ar ? 'استعادة' : 'Restore'}</button>
+              <button className="icon-btn" style={{ color: 'var(--danger)', flex: 'none' }} title={ar ? 'حذف النسخة' : 'Delete version'} onClick={() => { if (window.confirm(ar ? `حذف نسخة «${b.name}»؟` : 'Delete this version?')) updateScreen(s.id, { backups: list.filter((_, j) => j !== i) }).catch(err) }}><Icon name="delete" size={13} /></button>
+            </div>
+          ))}
+        </div>
+      )}
+    </>
   )
 }
 

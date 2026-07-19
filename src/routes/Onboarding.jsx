@@ -139,8 +139,9 @@ export default function Onboarding() {
       await refreshProfile()
       try { sessionStorage.removeItem('rbt_onb_draft') } catch (_) { /* ignore */ }
       toast.success(t('saved'))
-      // replace: browser-back from setup must never land on a stale creation form
-      navigate('/setup', { replace: true }) // guided first-run setup
+      // replace: browser-back must never land on a stale creation form.
+      // Signup → plan choice (pay now or start the full trial) → guided setup.
+      navigate('/choose-plan', { replace: true })
     } catch (err) {
       const code = err?.code || err?.message || ''
       toast.error(
