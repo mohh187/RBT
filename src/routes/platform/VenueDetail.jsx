@@ -295,6 +295,7 @@ function PlanTab({ tid, tenant, toast, toggleActive, toggling }) {
   const [aiDaily, setAiDaily] = useState(String(Number(tenant.aiLimits?.daily) || 60))
   const [aiMonthly, setAiMonthly] = useState(String(Number(tenant.aiLimits?.monthly) || 900))
   const [aiExtra, setAiExtra] = useState(String(Number(tenant.aiExtra) || 0))
+  const [ar3dCap, setAr3dCap] = useState(String(Number(tenant.ar3dMonthly) || 20))
   const [suspendText, setSuspendText] = useState(tenant.suspendReason || '')
   const [savingSub, setSavingSub] = useState(false)
   const [savingAi, setSavingAi] = useState(false)
@@ -328,9 +329,12 @@ function PlanTab({ tid, tenant, toast, toggleActive, toggling }) {
     const nextD = Math.max(0, Number(aiDaily) || 0)
     const nextM = Math.max(0, Number(aiMonthly) || 0)
     const nextX = Math.max(0, Number(aiExtra) || 0)
+    const curA = Number(tenant.ar3dMonthly) || 20
+    const nextA = Math.max(0, Number(ar3dCap) || 0)
     const patch = {}
     if (nextD !== curD || nextM !== curM) patch.aiLimits = { daily: nextD, monthly: nextM }
     if (nextX !== curX) patch.aiExtra = nextX
+    if (nextA !== curA) patch.ar3dMonthly = nextA
     if (!Object.keys(patch).length) { toast.success('لا توجد تغييرات للحفظ'); return }
     setSavingAi(true)
     try {
@@ -445,9 +449,13 @@ function PlanTab({ tid, tenant, toast, toggleActive, toggling }) {
             <span className="xs faint bold">رصيد إضافي مشترى</span>
             <input type="number" min="0" className="input num" value={aiExtra} onChange={(e) => setAiExtra(e.target.value)} />
           </label>
+          <label className="stack grow" style={{ gap: 4, minWidth: 120 }}>
+            <span className="xs faint bold">مجسمات 3D شهرياً</span>
+            <input type="number" min="0" className="input num" value={ar3dCap} onChange={(e) => setAr3dCap(e.target.value)} />
+          </label>
         </div>
         <button className="btn btn-outline" disabled={savingAi} onClick={saveAi}>{savingAi ? 'جارٍ الحفظ…' : 'حفظ حدود الذكاء'}</button>
-        <p className="xs faint">الافتراضي 60 يومياً / 900 شهرياً. الرصيد الإضافي يُضاف للحد الشهري بعد شراء المنشأة باقة رصيد.</p>
+        <p className="xs faint">الافتراضي 60 يومياً / 900 شهرياً. الرصيد الإضافي يُضاف للحد الشهري بعد شراء المنشأة باقة رصيد. مجسمات 3D: حد التحويلات الواقعية الشهري (الافتراضي 20 — كل تحويل يستهلك رصيد Meshy المدفوع من المنصة، وحد كل صنف تحويلان شهرياً مفروض على الخادم).</p>
       </Section>
 
       {/* per-venue feature control (override plan gating) */}

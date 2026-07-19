@@ -1440,6 +1440,7 @@ function ArStage({ item, tenant, lang, onClose }) {
             camera-controls=""
             auto-rotate=""
             shadow-intensity="1"
+            loading="eager"
             style={{ width: '100%', height: '100%', background: 'transparent' }}
           />
         )}

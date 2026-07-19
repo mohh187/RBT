@@ -134,6 +134,7 @@ export default function ModelStudio({ open, onClose, tenantId, item, onChange })
               environment-image={env}
               shadow-intensity="1"
               interaction-prompt="none"
+              loading="eager"
               style={{ width: '100%', height: '100%', minHeight: 'inherit' }}
             />
           )}
@@ -207,6 +208,8 @@ export default function ModelStudio({ open, onClose, tenantId, item, onChange })
                 exposure={String(exposure)}
                 environment-image={env}
                 shadow-intensity="1"
+                loading="eager"
+                style={{ width: '100%', height: '100%' }}
               />
             ) : (
               <div className="center" style={{ height: '100%' }}><Icon name="shapes" size={26} className="faint" /></div>

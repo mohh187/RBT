@@ -642,6 +642,13 @@ service cloud.firestore {
     // Landing-page CMS doc: the public marketing page reads it unauthenticated
     // (overlapping matches are OR'd — writes still require a platform admin).
     match /platformConfig/landing  { allow read: if true; }
+
+    // Realistic-3D conversion log: managers read it for the usage meter;
+    // ONLY Cloud Functions write it (Admin SDK bypasses rules).
+    match /tenants/{tid}/ar3dJobs/{id} {
+      allow read: if isSignedIn() && isManager(tid);
+      allow write: if false;
+    }
     match /platformCannedResponses/{id} { allow read, write: if isPlatformAdmin(); }
     match /platformTemplates/{id}  { allow read, write: if isPlatformAdmin(); }
     match /platformOnboarding/{id} { allow read, write: if isPlatformAdmin(); }

@@ -903,6 +903,34 @@ const imageTo3d = onCall({ timeoutSeconds: 540, memory: '1GiB' }, async (request
     : (ORDER[td.plan || 'enterprise'] || 4) >= 4 && td.features?.ar3d !== false
   if (!allowed) throw new HttpsError('permission-denied', 'المجسمات الواقعية ميزة الباقة المتكاملة — رقِّ اشتراكك لتفعيلها.')
 
+  // Credit protection (server-enforced): every conversion consumes PLATFORM
+  // Meshy credits, so venues get a monthly cap (tenant.ar3dMonthly, default 20,
+  // platform console edits it) + max 2 conversions per item per month.
+  const AR3D_DEFAULT_MONTHLY = 20
+  const cap = Math.max(0, Number(td.ar3dMonthly) || AR3D_DEFAULT_MONTHLY)
+  const monthStart = new Date()
+  monthStart.setDate(1); monthStart.setHours(0, 0, 0, 0)
+  const jobsSnap = await db.collection(`tenants/${tenantId}/ar3dJobs`)
+    .where('createdAt', '>=', monthStart).get().catch(() => null)
+  const monthJobs = jobsSnap ? jobsSnap.docs.map((d) => d.data()).filter((j) => j.status === 'done' || j.status === 'running') : []
+  if (monthJobs.length >= cap) {
+    throw new HttpsError('resource-exhausted',
+      `اكتمل حد التحويلات الواقعية لهذا الشهر (${cap} تحويلاً). يتجدد الحد مطلع الشهر، أو تواصل مع المنصة لرفعه.`)
+  }
+  if (itemId && monthJobs.filter((j) => j.itemId === itemId).length >= 2) {
+    throw new HttpsError('resource-exhausted',
+      'هذا الصنف حُوِّل مرتين هذا الشهر — الحد تحويلان لكل صنف شهرياً حمايةً للرصيد. عدِّل صورة الصنف جيداً قبل إعادة المحاولة الشهر القادم.')
+  }
+  // Fail-soft provider-balance guard: warn out loudly before burning a task on
+  // an empty Meshy wallet (endpoint shape may change — never block on it).
+  try {
+    const bal = await fetch('https://api.meshy.ai/openapi/v1/balance', { headers: { Authorization: `Bearer ${key}` } }).then((r) => r.json())
+    const credits = bal && (typeof bal.balance === 'number' ? bal.balance : (bal.result && typeof bal.result.balance === 'number' ? bal.result.balance : null))
+    if (credits != null && credits < 5) {
+      throw new HttpsError('resource-exhausted', `رصيد مزود المجسمات أوشك على النفاد (${credits} نقطة) — أعد الشحن من meshy.ai ثم أعد المحاولة.`)
+    }
+  } catch (e) { if (e instanceof HttpsError) throw e }
+
   // 1) create the conversion task
   const create = await fetch('https://api.meshy.ai/openapi/v1/image-to-3d', {
     method: 'POST',
@@ -960,7 +988,7 @@ const imageTo3d = onCall({ timeoutSeconds: 540, memory: '1GiB' }, async (request
   }
   if (itemId) await db.doc(`tenants/${tenantId}/items/${itemId}`).set({ model3dUrl: url, model3dUsdzUrl: usdzStoredUrl }, { merge: true }).catch(() => {})
   await db.collection(`tenants/${tenantId}/ar3dJobs`).doc(String(taskId)).set({ status: 'done', url, usdzUrl: usdzStoredUrl }, { merge: true }).catch(() => {})
-  return { url, usdzUrl: usdzStoredUrl }
+  return { url, usdzUrl: usdzStoredUrl, remaining: Math.max(0, cap - monthJobs.length - 1), cap }
 })
 
 module.exports = {

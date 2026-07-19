@@ -1308,6 +1308,24 @@ function Batch3dSheet({ tenantId, items, lang, onClose, onOpenStudio }) {
     () => (items || []).filter((i) => !i.archived && i.imageUrl && !i.model3dUrl),
     [items],
   )
+  // Monthly credit meter (server-enforced quota; this mirror is display-only).
+  const [quota, setQuota] = useState(null) // {used, cap}
+  useEffect(() => {
+    let alive = true
+    ;(async () => {
+      try {
+        const { collection, getDocs, query, where, Timestamp, doc, getDoc } = await import('firebase/firestore')
+        const { db } = await import('../../lib/firebase.js')
+        const ms = new Date(); ms.setDate(1); ms.setHours(0, 0, 0, 0)
+        const snap = await getDocs(query(collection(db, 'tenants', tenantId, 'ar3dJobs'), where('createdAt', '>=', Timestamp.fromDate(ms))))
+        const used = snap.docs.map((d) => d.data()).filter((j) => j.status === 'done' || j.status === 'running').length
+        const t = await getDoc(doc(db, 'tenants', tenantId))
+        const cap = Math.max(0, Number(t.data()?.ar3dMonthly) || 20)
+        if (alive) setQuota({ used, cap })
+      } catch (_) { /* meter is cosmetic — the server enforces the real quota */ }
+    })()
+    return () => { alive = false }
+  }, [tenantId])
   const [picked, setPicked] = useState(() => new Set(candidates.map((i) => i.id)))
   const [status, setStatus] = useState({}) // id -> {state:'wait'|'run'|'done'|'fail', sec, msg, url}
   const [running, setRunning] = useState(false)
@@ -1372,6 +1390,17 @@ function Batch3dSheet({ tenantId, items, lang, onClose, onOpenStudio }) {
             ? `${candidates.length.toLocaleString('ar-SA-u-nu-latn')} صنفاً مصوّراً بلا مجسم واقعي. التحويل يستغرق 1-8 دقائق لكل صنف (صنفان معاً في كل مرة) — أبقِ الصفحة مفتوحة حتى الانتهاء.`
             : `${candidates.length} photographed items without a realistic model. Each takes 1-8 minutes (2 at a time) — keep this page open.`}
         </p>
+        {quota && (
+          <div className="row-between card card-pad" style={{ paddingBlock: 8 }}>
+            <span className="small bold">{ar ? 'رصيد الشهر' : 'Monthly quota'}</span>
+            <span className="small" style={{ direction: 'ltr' }}>{Math.max(0, quota.cap - quota.used)} / {quota.cap}</span>
+          </div>
+        )}
+        {quota && quota.used >= quota.cap && (
+          <p className="xs" style={{ margin: 0, color: 'var(--danger)' }}>
+            {ar ? 'اكتمل حد هذا الشهر — يتجدد مطلع الشهر، أو اطلب رفعه من المنصة.' : 'Monthly cap reached — resets next month, or ask the platform to raise it.'}
+          </p>
+        )}
         {abortMsg && (
           <div className="card card-pad" style={{ borderColor: 'var(--danger)' }}>
             <p className="small" style={{ margin: 0, color: 'var(--danger)' }}>{abortMsg}</p>
