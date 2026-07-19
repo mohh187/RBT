@@ -29,7 +29,7 @@ export const fontStacks = (key) => {
 }
 export const FONT_OPTIONS = Object.entries(FONTS).map(([key, f]) => ({ key, label: f.label }))
 export const SHAPE_OPTIONS = ['sharp', 'soft', 'round', 'pill']
-export const LAYOUT_OPTIONS = ['list', 'minimal', 'cards', 'grid', 'gallery', 'bento', 'sidebar', 'catalog', 'plates', 'storefront', 'coffeelist', 'alternating', 'coffeepan', 'spotlight']
+export const LAYOUT_OPTIONS = ['list', 'minimal', 'cards', 'grid', 'gallery', 'bento', 'sidebar', 'catalog', 'plates', 'storefront', 'coffeelist', 'alternating', 'coffeepan', 'spotlight', 'editorial', 'oceanart']
 // Header (top app-bar) styles — [id, ar, en]. 'none' removes the header (floating toggles remain).
 export const HEADER_STYLES = [
   ['classic', 'كلاسيكي', 'Classic'], ['glass', 'زجاجي', 'Glass'], ['transparent', 'شفاف', 'Transparent'],
@@ -67,7 +67,9 @@ export const BOTTOMNAV_STYLES = [
 export const SKINS = [
   { id: 'classic', name: { ar: 'كلاسيكي', en: 'Classic' }, tier: 'menu', tokens: { brand: '#7c2d2d', accent: '#5c5c66', font: 'tajawal', shape: 'soft', mode: 'auto' }, layout: { menuLayout: 'list', hero: 'cover', nav: 'standard' } },
   { id: 'nova', name: { ar: 'نوفا', en: 'Nova' }, tier: 'pro', tokens: { brand: '#F97316', accent: '#111827', font: 'cairo', shape: 'round', mode: 'dark' }, layout: { menuLayout: 'cards', hero: 'cover', nav: 'standard' } },
-  { id: 'editorial', name: { ar: 'تحرير', en: 'Editorial' }, tier: 'pro', tokens: { brand: '#141414', accent: '#B0895A', font: 'messiri', shape: 'sharp', mode: 'light' }, layout: { menuLayout: 'sidebar', hero: 'cover', nav: 'sidebar' } },
+  // «المجلة الداكنة» — dark magazine: one dish per screen, vertical snap, amber
+  // ingredient amounts, vertical category label, FLIP photo-expand item stage.
+  { id: 'editorial', name: { ar: 'المجلة الداكنة', en: 'Dark Editorial' }, tier: 'enterprise', tokens: { brand: '#f5b942', accent: '#0d0d0f', font: 'messiri', shape: 'sharp', mode: 'dark' }, layout: { menuLayout: 'editorial', hero: 'minimal', nav: 'chips' } },
   { id: 'serene', name: { ar: 'صفاء', en: 'Serene' }, tier: 'pro', tokens: { brand: '#15803D', accent: '#0f172a', font: 'ibm', shape: 'soft', mode: 'light' }, layout: { menuLayout: 'minimal', hero: 'minimal', nav: 'pill' } },
   { id: 'vivid', name: { ar: 'حيوي', en: 'Vivid' }, tier: 'pro', tokens: { brand: '#E11D48', accent: '#4338CA', font: 'changa', shape: 'pill', mode: 'light' }, layout: { menuLayout: 'gallery', hero: 'headline', nav: 'pill' } },
   { id: 'bento', name: { ar: 'بنتو', en: 'Bento' }, tier: 'pro', tokens: { brand: '#F59E0B', accent: '#B91C1C', font: 'rubik', shape: 'round', mode: 'light' }, layout: { menuLayout: 'bento', hero: 'cover', nav: 'pill' } },
@@ -109,6 +111,10 @@ export const SKINS = [
   // ---- immersive full-screen "spotlight": one product per view, big transparent
   // image, scroll-snap between products, direct add-to-cart. Warm coffee brand. ----
   { id: 'spotlight', name: { ar: 'واجهة العرض', en: 'Spotlight' }, tier: 'pro', tokens: { brand: '#7c2d2d', accent: '#C9A24B', font: 'messiri', shape: 'round', mode: 'auto' }, layout: { menuLayout: 'spotlight', hero: 'cover', nav: 'chips' } },
+  // «اللوحة الفنية» — Ocean-Basket-style art direction: deep saturated painted
+  // backdrop (tenant.artBgUrl / artBgTone / category covers), rotated plate
+  // photos with scalloped price seals, hand-styled names, wavy dividers.
+  { id: 'oceanart', name: { ar: 'اللوحة الفنية', en: 'Art Canvas' }, tier: 'enterprise', tokens: { brand: '#16267d', accent: '#f2e9d8', font: 'messiri', shape: 'round', mode: 'dark' }, layout: { menuLayout: 'oceanart', hero: 'minimal', nav: 'chips' } },
 ]
 
 export function getSkin(id) { return SKINS.find((s) => s.id === id) || SKINS[0] }
@@ -156,6 +162,7 @@ const CHROME = {
   grillplatter: { header: 'classic', bottomNav: 'standard' },
   coffeepan: { header: 'glass', bottomNav: 'floating' },
   spotlight: { header: 'transparent', bottomNav: 'floating' },
+  oceanart: { header: 'transparent', bottomNav: 'glass' },
 }
 
 // Resolve the effective skin for a tenant + surface. Per-surface overrides win,

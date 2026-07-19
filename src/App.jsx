@@ -62,6 +62,7 @@ const Orders = lazy(() => import('./routes/admin/Orders.jsx'))
 const CustomersHub = lazy(() => import('./routes/admin/CustomersHub.jsx'))
 const Campaigns = lazy(() => import('./routes/admin/Campaigns.jsx'))
 const PrintMenu = lazy(() => import('./routes/admin/PrintMenu.jsx'))
+const PrintStudio = lazy(() => import('./routes/admin/PrintStudio.jsx'))
 const Cashier = lazy(() => import('./routes/staff/Cashier.jsx'))
 const Kds = lazy(() => import('./routes/staff/Kds.jsx'))
 const Scanner = lazy(() => import('./routes/staff/Scanner.jsx'))
@@ -385,6 +386,7 @@ export default function App() {
             direct-URL hole: lower roles only reach what their caps permit. */}
         <Route path="menu" element={<RequireCap cap={CAP.MANAGE_MENU}><MenuHub /></RequireCap>} />
         <Route path="print-menu" element={<RequireCap cap={CAP.MANAGE_MENU}><PrintMenu /></RequireCap>} />
+        <Route path="print-studio" element={<RequireCap cap={CAP.MANAGE_MENU}><PrintStudio /></RequireCap>} />
         <Route path="orders" element={<RequireCap cap={CAP.TAKE_ORDERS}><PlanGate feature="orders"><Orders /></PlanGate></RequireCap>} />
         <Route path="operations" element={<RequireCap cap={CAP.MANAGE_TABLES}><PlanGate feature="tables"><OpsHub /></PlanGate></RequireCap>} />
         <Route path="inventory" element={<RequireCap cap={CAP.MANAGE_INVENTORY}><Inventory /></RequireCap>} />

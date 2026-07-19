@@ -649,6 +649,11 @@ service cloud.firestore {
       allow read: if isSignedIn() && isManager(tid);
       allow write: if false;
     }
+
+    // Free-form print designs (Print Studio): managers + menu-capable staff.
+    match /tenants/{tid}/printDesigns/{id} {
+      allow read, write: if isSignedIn() && (isManager(tid) || hasCap(tid, 'manage_menu'));
+    }
     match /platformCannedResponses/{id} { allow read, write: if isPlatformAdmin(); }
     match /platformTemplates/{id}  { allow read, write: if isPlatformAdmin(); }
     match /platformOnboarding/{id} { allow read, write: if isPlatformAdmin(); }

@@ -516,6 +516,39 @@ export default function Settings() {
       await saveNow(patch); updateTenantLocal(patch); toast.success(t('saved'))
     } catch (_) { toast.error(ar ? 'تعذّر رفع الصورة (فعّل Storage)' : 'Upload failed (enable Storage)') } finally { setUploading('') }
   }
+  // Art backdrop (oceanart theme): AI generation in the theme's visual
+  // language + manual upload. Both instant-save tenant.artBgUrl.
+  const [artBgBusy, setArtBgBusy] = useState(false)
+  const ART_TONE_PROMPTS = {
+    deepblue: 'BACKGROUND SURFACE ONLY: an empty deep royal cobalt-blue textured plaster tabletop photographed from directly above, rich saturated blue, subtle brush strokes and soft vignette, moody studio light, a couple of lemon wedges and green leaves ONLY at the far corners, ABSOLUTELY NO dishes, NO plated food, NO products, NO text, NO hands',
+    emerald: 'BACKGROUND SURFACE ONLY: an empty deep emerald-green textured stone tabletop from directly above, luxurious dark green, soft vignette, faint herb sprigs ONLY at the far corners, ABSOLUTELY NO dishes, NO plated food, NO products, NO text',
+    burgundy: 'BACKGROUND SURFACE ONLY: an empty deep burgundy velvet-textured plaster surface from directly above, rich wine red, soft studio vignette, a few scattered rose petals ONLY at the far edges, ABSOLUTELY NO dishes, NO plated food, NO products, NO text',
+    charcoal: 'BACKGROUND SURFACE ONLY: an empty near-black charcoal slate surface from directly above, subtle stone texture, dramatic low-key light, faint scattered peppercorns and herbs ONLY at the far corners, ABSOLUTELY NO dishes, NO plated food, NO products, NO text',
+  }
+  const genArtBg = async () => {
+    if (artBgBusy) return
+    setArtBgBusy(true)
+    try {
+      const { generatePostImage } = await import('../../lib/postGen.js')
+      const tone = tenant?.artBgTone || 'deepblue'
+      const blob = await generatePostImage({ stylePrompt: ART_TONE_PROMPTS[tone], tenant, venueName: tenant?.name || '' })
+      const url = await uploadImage(tenantId, blob, 'branding')
+      await saveNow({ artBgUrl: url }); updateTenantLocal({ artBgUrl: url })
+      toast.success(ar ? 'وُلدت الخلفية وطُبقت' : 'Backdrop generated & applied')
+    } catch (e) {
+      toast.error(String(e?.message || e))
+    } finally { setArtBgBusy(false) }
+  }
+  const onArtBgFile = async (e) => {
+    const file = e.target.files?.[0]; e.target.value = ''
+    if (!file) return
+    setUploading('artbg')
+    try {
+      const small = await shrinkImage(file, 1800, 0.85)
+      const url = await uploadImage(tenantId, small, 'branding')
+      await saveNow({ artBgUrl: url }); updateTenantLocal({ artBgUrl: url }); toast.success(t('saved'))
+    } catch (_) { toast.error(ar ? 'تعذّر رفع الصورة (فعّل Storage)' : 'Upload failed (enable Storage)') } finally { setUploading('') }
+  }
   const onVideoFile = async (e) => {
     const file = e.target.files?.[0]; e.target.value = ''
     if (!file) return
@@ -2222,6 +2255,35 @@ export default function Settings() {
                     <span className="small">{ar ? 'فتح تفاصيل الصنف بملء الشاشة مباشرة' : 'Open item fullscreen'}</span>
                     <input type="checkbox" checked={immersiveFull} onChange={(e) => setImmersiveFull(e.target.checked)} style={{ width: 22, height: 22 }} />
                   </label>
+                </div>
+
+                {/* Art backdrop for the artistic themes (oceanart) — AI-generated in the
+                    theme's visual language, or uploaded. Instant-save (artBgUrl/artBgTone). */}
+                <div className="card card-pad stack" style={{ gap: 12 }}>
+                  <strong className="small"><Icon name="palette" size={14} style={{ verticalAlign: 'middle' }} /> {ar ? 'الخلفية الفنية (ثيم «اللوحة الفنية»)' : 'Art backdrop (Ocean-art theme)'}</strong>
+                  <p className="xs faint" style={{ margin: 0 }}>{ar ? 'سطح مصمم بروح الثيم تُعرض عليه الأصناف كلوحات. ولّدها بالذكاء بنفس اللغة البصرية أو ارفع تصميمك.' : 'A designed surface the dishes sit on. Generate it with AI in the theme language, or upload your own.'}</p>
+                  <div className="row" style={{ gap: 6, flexWrap: 'wrap' }}>
+                    {[['deepblue', ar ? 'أزرق ملكي' : 'Deep blue'], ['emerald', ar ? 'زمردي' : 'Emerald'], ['burgundy', ar ? 'عنابي' : 'Burgundy'], ['charcoal', ar ? 'فحمي' : 'Charcoal']].map(([id, label]) => (
+                      <button key={id} type="button" className={`chip ${(tenant?.artBgTone || 'deepblue') === id ? 'active' : ''}`}
+                        onClick={async () => { try { await saveNow({ artBgTone: id }); updateTenantLocal({ artBgTone: id }) } catch (_) { toast.error(t('error')) } }}>{label}</button>
+                    ))}
+                  </div>
+                  <div className="row" style={{ gap: 10, flexWrap: 'wrap', alignItems: 'center' }}>
+                    <button type="button" className="btn btn-sm btn-primary" disabled={!!artBgBusy} onClick={genArtBg}>
+                      <Icon name="sparkles" size={15} /> {artBgBusy ? (ar ? 'يولّد الخلفية…' : 'Generating…') : (ar ? 'توليد خلفية بالذكاء' : 'AI-generate backdrop')}
+                    </button>
+                    <label className="btn btn-sm btn-outline" style={{ cursor: 'pointer' }}>
+                      <Icon name="upload" size={15} /> {uploading === 'artbg' ? t('saving') : (ar ? 'رفع خلفية' : 'Upload')}
+                      <input type="file" accept="image/*" hidden onChange={onArtBgFile} />
+                    </label>
+                    {tenant?.artBgUrl && (
+                      <button className="btn btn-sm btn-ghost" style={{ color: 'var(--danger)' }}
+                        onClick={async () => { try { await saveNow({ artBgUrl: '' }); updateTenantLocal({ artBgUrl: '' }); toast.success(t('saved')) } catch (_) { toast.error(t('error')) } }}>
+                        {ar ? 'إزالة' : 'Remove'}
+                      </button>
+                    )}
+                  </div>
+                  {tenant?.artBgUrl && <img src={tenant.artBgUrl} alt="" style={{ width: '100%', maxHeight: 140, objectFit: 'cover', borderRadius: 'var(--r-md)' }} />}
                 </div>
 
                 </div>

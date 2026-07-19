@@ -157,6 +157,9 @@ export default function PrintMenu() {
         <Link to="/admin/menu" className="icon-btn" aria-label={ar ? 'رجوع' : 'Back'}><Icon name="back" size={18} /></Link>
         <strong className="pm-toolbar-title">{ar ? 'مصمم المنيو المطبوع' : 'Print menu designer'}</strong>
         <button className="btn btn-sm btn-outline" onClick={smartPreset}><Icon name="sparkles" size={14} /> {ar ? 'مطابقة ثيمي الرقمي' : 'Match my digital theme'}</button>
+        <Link to="/admin/print-studio" className="btn btn-sm btn-primary" title={ar ? 'لوحة تصميم حرة بأشكال وعناصر بلا حدود' : 'Free-form design canvas'}>
+          <Icon name="penLine" size={14} /> {ar ? 'استوديو التصميم الحر' : 'Free design studio'}
+        </Link>
         <div className="grow" />
         <label className="pm-tool"><span>{ar ? 'تكبير' : 'Zoom'}</span>
           <input type="range" min="0.5" max="1" step="0.05" value={zoom} onChange={(e) => setZoom(Number(e.target.value))} style={{ width: 90 }} />

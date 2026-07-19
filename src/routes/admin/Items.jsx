@@ -21,12 +21,13 @@ import Icon from '../../components/Icon.jsx'
 import { ItemSheet } from '../../components/MenuView.jsx'
 import ModelStudio from '../../components/ModelStudio.jsx'
 import ItemFx from '../../components/ItemFx.jsx'
+import DishHotspots from '../../components/DishHotspots.jsx'
 import { ITEM_EFFECTS } from '../../lib/itemEffects.js'
 import { sectionTemplate, templateOptions } from '../../lib/systemTemplates.js'
 
 const blank = () => ({
   nameAr: '', nameEn: '', price: '', calories: '', categoryId: '',
-  descAr: '', descEn: '', kdsWarning: '', imageUrl: '', images: [], imageStyle: '', imageScale: 1, effect: '', arStandeeUrl: '', model3dUrl: '', model3dUsdzUrl: '', available: true, availableFrom: '', availableTo: '', countsForLoyalty: true, featured: false, promoNotify: 'default', trackStock: false, stock: '',
+  descAr: '', descEn: '', kdsWarning: '', imageUrl: '', images: [], imageStyle: '', imageScale: 1, effect: '', hotspots: [], arStandeeUrl: '', model3dUrl: '', model3dUsdzUrl: '', available: true, availableFrom: '', availableTo: '', countsForLoyalty: true, featured: false, promoNotify: 'default', trackStock: false, stock: '',
   prepTime: '', serves: '', rating: '', reviewsCount: '',
   ingredients: [], variants: [], modifierGroups: [], sortOrder: 0,
   recipe: [], variantRecipes: {},
@@ -672,6 +673,15 @@ function ItemEditor({ tenantId, cats, currency, value, onClose, onSaved, onDelet
         imageStyle: form.imageStyle || '',
         imageScale: Math.min(1.8, Math.max(0.6, Number(form.imageScale) || 1)),
         effect: form.effect || '',
+        hotspots: (form.hotspots || [])
+          .filter((h) => h && (h.label || '').trim())
+          .slice(0, 8)
+          .map((h) => ({
+            x: Math.min(100, Math.max(0, Number(h.x) || 0)),
+            y: Math.min(100, Math.max(0, Number(h.y) || 0)),
+            label: (h.label || '').trim(),
+            desc: (h.desc || '').trim(),
+          })),
         arStandeeUrl: form.arStandeeUrl || '',
         model3dUrl: form.model3dUrl || '',
         model3dUsdzUrl: form.model3dUsdzUrl || '',
@@ -909,6 +919,16 @@ function ItemEditor({ tenantId, cats, currency, value, onClose, onSaved, onDelet
             )}
           </div>
           <p className="xs faint">{lang === 'ar' ? 'بخار أو دخان أو لمعان يتحرك فوق الصنف في تفاصيل المنيو وفي عارض المجسم داخل التطبيق. في وضع AR على الطاولة (الكاميرا) يظهر المجسم فقط بلا مؤثر — قيد تقني من نظام التشغيل.' : 'Animates over the photo in the menu detail and the in-app 3D viewer. Real camera AR shows the bare model only (OS limitation).'}</p>
+        </div>
+
+        {/* «نقاط تفاعلية على الصورة» — tappable ingredient/sauce pins inside the dish photo */}
+        <div className="field">
+          <label>
+            {lang === 'ar' ? 'نقاط تفاعلية على الصورة' : 'Interactive photo hotspots'}{' '}
+            <span className="faint xs num">({(form.hotspots || []).length}/8)</span>
+          </label>
+          <HotspotsEditor lang={lang} imageUrl={form.imageUrl} hotspots={form.hotspots || []} onChange={(v) => set('hotspots', v)} />
+          <p className="xs faint">{lang === 'ar' ? 'يضغط العميل على النقطة داخل صورة الطبق ليقرأ ما هي — نوع الجبن، الصوص، الإضافة المميزة.' : 'Customers tap a dot inside the dish photo to read what that part of the plate is.'}</p>
         </div>
 
         {/* Custom styling options for individual items (name & price position, colors, effects) */}
@@ -1293,6 +1313,120 @@ function ModifierGroupsEditor({ groups, onChange, currency, materials = [] }) {
           <button className="btn btn-sm btn-ghost" style={{ color: 'var(--brand)' }} onClick={() => addOpt(gi)}>+ {lang === 'ar' ? 'خيار' : 'Option'}</button>
         </div>
       ))}
+    </div>
+  )
+}
+
+// «نقاط تفاعلية على الصورة» — pins up to 8 tappable info points on the dish
+// photo. Clicking the photo adds a point at that exact spot (percent of the
+// image box via getBoundingClientRect), dragging a numbered dot repositions it
+// (pointer capture), and the preview toggle renders the real customer-facing
+// component (DishHotspots) so the manager sees exactly what diners get.
+// x/y are stored as 0-100 percentages from the image's left/top edges.
+function HotspotsEditor({ imageUrl, hotspots, onChange, lang }) {
+  const ar = lang === 'ar'
+  const boxRef = useRef(null)
+  const dragRef = useRef(null) // { idx } while a numbered dot is being dragged
+  const [preview, setPreview] = useState(false)
+  const spots = hotspots || []
+  const full = spots.length >= 8
+
+  const clampPct = (v) => Math.min(100, Math.max(0, v))
+  const round1 = (n) => Math.round(n * 10) / 10
+  const pointPct = (e) => {
+    const r = boxRef.current.getBoundingClientRect()
+    return {
+      x: round1(clampPct(((e.clientX - r.left) / r.width) * 100)),
+      y: round1(clampPct(((e.clientY - r.top) / r.height) * 100)),
+    }
+  }
+
+  const addAt = (e) => {
+    if (preview || full) return
+    onChange([...spots, { ...pointPct(e), label: '', desc: '' }])
+  }
+  const setSpot = (i, patch) => onChange(spots.map((h, idx) => (idx === i ? { ...h, ...patch } : h)))
+  const delSpot = (i) => onChange(spots.filter((_, idx) => idx !== i))
+
+  const dragStart = (i) => (e) => {
+    e.stopPropagation()
+    e.preventDefault()
+    dragRef.current = { idx: i }
+    e.currentTarget.setPointerCapture?.(e.pointerId)
+  }
+  const dragMove = (i) => (e) => {
+    if (dragRef.current?.idx !== i) return
+    setSpot(i, pointPct(e))
+  }
+  const dragEnd = () => { dragRef.current = null }
+
+  if (!imageUrl) {
+    return (
+      <p className="xs faint" style={{ margin: 0 }}>
+        <Icon name="camera" size={13} style={{ verticalAlign: 'middle' }} />{' '}
+        {ar ? 'أضف صورة رئيسية للصنف أولاً حتى تتمكن من تثبيت النقاط عليها.' : 'Add a main photo first, then pin points on it.'}
+      </p>
+    )
+  }
+
+  return (
+    <div className="stack" style={{ gap: 8 }}>
+      <div className="row-between" style={{ alignItems: 'center', gap: 8 }}>
+        <span className="xs faint">
+          {full
+            ? (ar ? 'وصلت للحد الأقصى: 8 نقاط — احذف نقطة لإضافة غيرها.' : 'Maximum reached: 8 points — delete one to add another.')
+            : spots.length === 0
+              ? (ar ? 'انقر على الصورة لإضافة نقطة — مثال: نوع الجبن، الصوص، الإضافة المميزة.' : 'Click the photo to add a point — e.g. the cheese, the sauce, the signature side.')
+              : (ar ? 'انقر على الصورة لإضافة نقطة، واسحب الرقم لتحريكه.' : 'Click the photo to add a point, drag a number to move it.')}
+        </span>
+        <button type="button" className={`btn btn-xs ${preview ? 'btn-primary' : 'btn-outline'}`} style={{ flex: 'none' }} onClick={() => setPreview((v) => !v)}>
+          <Icon name="eye" size={12} /> {ar ? 'معاينة' : 'Preview'}
+        </button>
+      </div>
+
+      <div ref={boxRef} className={`dh-edit-box ${preview ? 'dh-edit-box--preview' : ''}`} onClick={addAt}>
+        <img src={imageUrl} alt="" draggable={false} />
+        {preview ? (
+          <DishHotspots hotspots={spots} />
+        ) : (
+          spots.map((h, i) => (
+            <span
+              key={i}
+              className="dh-edit-dot num"
+              style={{ left: `${clampPct(Number(h.x) || 0)}%`, top: `${clampPct(Number(h.y) || 0)}%` }}
+              onPointerDown={dragStart(i)}
+              onPointerMove={dragMove(i)}
+              onPointerUp={dragEnd}
+              onPointerCancel={dragEnd}
+              onClick={(e) => e.stopPropagation()}
+            >
+              {i + 1}
+            </span>
+          ))
+        )}
+      </div>
+
+      {spots.map((h, i) => (
+        <div key={i} className="row" style={{ gap: 6, alignItems: 'center' }}>
+          <span className="dh-num-chip num">{i + 1}</span>
+          <input
+            className="input" style={{ flex: '1 1 40%', minWidth: 0 }}
+            placeholder={ar ? 'الاسم — مطلوب (مثال: جبن حلوم)' : 'Label — required (e.g. halloumi)'}
+            value={h.label || ''} onChange={(e) => setSpot(i, { label: e.target.value })}
+          />
+          <input
+            className="input" style={{ flex: '1 1 50%', minWidth: 0 }}
+            placeholder={ar ? 'وصف قصير (اختياري)' : 'Short description (optional)'}
+            value={h.desc || ''} onChange={(e) => setSpot(i, { desc: e.target.value })}
+          />
+          <button type="button" className="icon-btn" style={{ color: 'var(--danger)', flex: 'none' }} onClick={() => delSpot(i)} aria-label={ar ? 'حذف النقطة' : 'Delete point'}>
+            <Icon name="close" size={15} />
+          </button>
+        </div>
+      ))}
+      {spots.some((h) => !(h.label || '').trim()) && (
+        <p className="xs faint" style={{ margin: 0 }}>{ar ? 'النقاط بلا اسم لا تُحفظ مع الصنف.' : 'Unnamed points are not saved with the item.'}</p>
+      )}
     </div>
   )
 }

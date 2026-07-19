@@ -36,6 +36,8 @@ export const PAGE_INDEX = [
     keywords: ['عرض', 'عروض', 'خصم', 'خصومات', 'تخفيضات', 'كوبون', 'offers', 'discounts', 'promo'] },
   { id: 'print-menu', ar: 'طباعة المنيو PDF', en: 'Print menu PDF', to: '/admin/print-menu', icon: 'print', cap: CAP.MANAGE_MENU,
     keywords: ['طباعة', 'طباعه', 'بي دي اف', 'منيو ورقي', 'print', 'pdf', 'paper menu'] },
+  { id: 'print-studio', ar: 'استوديو التصميم الحر', en: 'Print design studio', to: '/admin/print-studio', icon: 'penLine', cap: CAP.MANAGE_MENU,
+    keywords: ['استوديو تصميم', 'تصميم حر', 'بوستر', 'مطبوعات', 'اشكال', 'عناصر', 'كانفا', 'design studio', 'poster', 'canvas'] },
   { id: 'operations', ar: 'العمليات', en: 'Operations', to: '/admin/operations', icon: 'tables', cap: CAP.MANAGE_TABLES,
     keywords: ['عمليات', 'تشغيل', 'صالة', 'صاله', 'operations', 'floor'] },
   { id: 'tables', ar: 'الطاولات', en: 'Tables', to: '/admin/tables', icon: 'tables', cap: CAP.MANAGE_TABLES,

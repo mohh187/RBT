@@ -23,6 +23,8 @@ import { getLocalCustomer, setLocalCustomer, isRegisterDismissed, dismissRegiste
 import { resolveSkin } from '../lib/skins.js'
 import { distanceMeters, getPosition } from '../lib/geo.js'
 import { startPayment } from '../lib/payments.js'
+import EditorialLayout, { EditorialItemStage } from './menuThemes/EditorialLayout.jsx'
+import OceanArtLayout from './menuThemes/OceanArtLayout.jsx'
 
 const resolveItemStyles = (it) => {
   const nameStyle = {}
@@ -92,13 +94,23 @@ export default function MenuView({ tenant, tenantId, items, categories, offers =
       clearUiFx(node)
     }
   }, [menuPortalRoot, menuGlassLvl, menuGlassFx]) // eslint-disable-line react-hooks/exhaustive-deps
+  // OceanArt: mirror the venue art tone onto the portal root so PORTALED
+  // sheets (item detail, cart) inherit the blue-canvas styling ([data-oa-tone] CSS).
+  useEffect(() => {
+    const node = menuPortalRoot
+    if (!node || menuLayout !== 'oceanart') return undefined
+    node.setAttribute('data-oa-tone', tenant?.artBgTone || 'deepblue')
+    return () => node.removeAttribute('data-oa-tone')
+  }, [menuPortalRoot, menuLayout, tenant?.artBgTone])
   const heroRef = useRef(null) // storefront hero scroller (for the thumbnail strip)
   const [heroIdx, setHeroIdx] = useState(0)
   const SHOWCASE_LAYOUTS = ['cards', 'grid', 'gallery', 'bento', 'catalog', 'plates', 'coffeepan']
   // The list/grid toggle only makes sense where both views fit; hidden otherwise.
   const showViewToggle = ['list', 'cards', 'grid'].includes(menuLayout)
   // Read user details style override if set, otherwise fallback to skin default layout rules.
-  const itemDetail = resolveSkin(tenant, 'menu')?.detailLayout || (['plates', 'gallery', 'spotlight'].includes(menuLayout) ? 'immersive' : 'sheet')
+  // 'editorial' gets its own FLIP photo-expand stage; 'oceanart' reuses the immersive sheet (re-skinned via [data-oa-tone]).
+  const itemDetail = resolveSkin(tenant, 'menu')?.detailLayout
+    || (menuLayout === 'editorial' ? 'editorial' : ['plates', 'gallery', 'spotlight', 'oceanart'].includes(menuLayout) ? 'immersive' : 'sheet')
   // Elements the venue chose to hide for this surface (events, search, …).
   const hiddenEls = resolveSkin(tenant, 'menu')?.hidden || []
   const isHidden = (k) => hiddenEls.includes(k)
@@ -110,6 +122,8 @@ export default function MenuView({ tenant, tenantId, items, categories, offers =
   // Follow the skin's layout (so switching themes in the live preview re-renders).
   useEffect(() => { setViewMode(SHOWCASE_LAYOUTS.includes(menuLayout) ? 'gallery' : 'list') }, [menuLayout]) // eslint-disable-line react-hooks/exhaustive-deps
   const [viewItem, setViewItem] = useState(null)
+  // editorial detail: viewport rect of the tapped photo — the FLIP animation origin.
+  const [openRect, setOpenRect] = useState(null)
   const [cart, setCart] = useState([])
   const [cartOpen, setCartOpen] = useState(false)
   const [savedCustomer, setSavedCustomer] = useState(() => getLocalCustomer())
@@ -656,6 +670,24 @@ export default function MenuView({ tenant, tenantId, items, categories, offers =
             />
           )}
         </div>
+      ) : menuLayout === 'editorial' ? (
+        /* editorial («المجلة الداكنة») — dark magazine: one dish per screen, vertical snap, FLIP item stage */
+        <EditorialLayout
+          cats={sortedCats} itemsByCat={itemsByCat} visibleItems={visibleItems}
+          filtered={!!search.trim() || activeCat !== 'all'}
+          activeCat={activeCat} onPickCat={setActiveCat}
+          currency={currency} offers={offers} stickyTop={stickyTop}
+          onOpen={(it, rect) => { setOpenRect(rect || null); setViewItem(it) }}
+        />
+      ) : menuLayout === 'oceanart' ? (
+        /* oceanart («اللوحة الفنية») — painted deep-tone canvas, rotated plates, scalloped price seals */
+        <OceanArtLayout
+          tenant={tenant} cats={sortedCats} itemsByCat={itemsByCat} visibleItems={visibleItems}
+          filtered={!!search.trim() || activeCat !== 'all'}
+          activeCat={activeCat} onPickCat={setActiveCat}
+          currency={currency} offers={offers} stickyTop={stickyTop}
+          onOpen={setViewItem}
+        />
       ) : menuLayout === 'storefront' ? (
         /* storefront — brand-app carbon copy: brand-colored page, sections, floating product cards (#Starbucks) */
         <div className="store-app">
@@ -836,9 +868,16 @@ export default function MenuView({ tenant, tenantId, items, categories, offers =
         />
       )}
 
-      {viewItem && (
+      {viewItem && (itemDetail === 'editorial' ? (
+        /* editorial detail: FLIP photo-expand full-screen stage (ordering included) */
+        <EditorialItemStage
+          item={viewItem} currency={currency} originRect={openRect}
+          onClose={() => { setViewItem(null); setOpenRect(null) }}
+          onAdd={(variant, mods, qty) => { addLine(viewItem, variant, mods, qty); setViewItem(null); setOpenRect(null) }}
+        />
+      ) : (
         <ItemSheet item={viewItem} tenant={tenant} currency={currency} tenantId={tenantId} detail={itemDetail} siblings={visibleItems} onNavigate={setViewItem} onClose={() => setViewItem(null)} onAdd={(variant, mods, qty) => { addLine(viewItem, variant, mods, qty); setViewItem(null) }} />
-      )}
+      ))}
 
       {cartOpen && (
         <CartSheet
