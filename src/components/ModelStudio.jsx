@@ -24,9 +24,6 @@ export default function ModelStudio({ open, onClose, tenantId, item, onChange })
   const ar = lang === 'ar'
   const [mv, setMv] = useState('loading') // loading | ready | error
   const [autoRotate, setAutoRotate] = useState(true)
-  // Customer preview reuses the SAME viewer instance shrunk into a phone frame
-  // (a second <model-viewer> proved unreliable — one instance, zero risk).
-  const [phoneView, setPhoneView] = useState(false)
   const [exposure, setExposure] = useState(1)
   const [env, setEnv] = useState('neutral') // model-viewer environment-image keyword
   const [resetKey, setResetKey] = useState(0) // remounts the viewer => camera reset
@@ -119,7 +116,7 @@ export default function ModelStudio({ open, onClose, tenantId, item, onChange })
       title={(ar ? 'استوديو المجسم — ' : 'Model studio — ') + (ar ? (item.nameAr || item.nameEn || '') : (item.nameEn || item.nameAr || ''))}
     >
       <div className="ms-grid">
-        <div className={`ms-stage${phoneView ? ' ms-stage--phone' : ''}`} style={{ position: 'relative' }}>
+        <div className="ms-stage" style={{ position: 'relative' }}>
           {mv === 'loading' && <div className="center" style={{ minHeight: 280 }}><Spinner /></div>}
           {mv === 'error' && <p className="small" style={{ padding: 24, textAlign: 'center' }}>{ar ? 'تعذر تحميل عارض المجسمات — تحقق من اتصالك ثم أعد المحاولة.' : 'Could not load the 3D viewer — check your connection.'}</p>}
           {mv === 'ready' && hasModel && (
@@ -174,36 +171,31 @@ export default function ModelStudio({ open, onClose, tenantId, item, onChange })
               </div>
             </div>
           )}
-          <div className="ms-ctrl">
-            <button type="button" className={`chip ${autoRotate ? 'active' : ''}`} onClick={() => setAutoRotate((v) => !v)}>
-              <Icon name="reload" size={13} /> {ar ? 'دوران تلقائي' : 'Auto-rotate'}
-            </button>
-            <span className="field-inline">
-              {ar ? 'الإضاءة' : 'Exposure'}
-              <input type="range" min="0.2" max="2" step="0.05" value={exposure} onChange={(e) => setExposure(Number(e.target.value))} />
-              <span className="num faint">{exposure.toFixed(2)}</span>
-            </span>
-            <span className="field-inline">
-              {ar ? 'البيئة' : 'Environment'}
-              <select className="select" style={{ width: 'auto', padding: '4px 26px 4px 8px' }} value={env} onChange={(e) => setEnv(e.target.value)}>
-                <option value="neutral">{ar ? 'محايدة (استوديو)' : 'Neutral (studio)'}</option>
-                <option value="legacy">{ar ? 'كلاسيكية دافئة' : 'Legacy (warm)'}</option>
-              </select>
-            </span>
-            <button type="button" className="chip" onClick={() => setResetKey((k) => k + 1)}>
-              <Icon name="undo" size={13} /> {ar ? 'إعادة الكاميرا' : 'Reset camera'}
-            </button>
-          </div>
+        </div>
+
+        {/* controls live BELOW the stage — nothing ever covers the model */}
+        <div className="ms-ctrl ms-ctrl--below">
+          <button type="button" className={`chip ${autoRotate ? 'active' : ''}`} onClick={() => setAutoRotate((v) => !v)}>
+            <Icon name="reload" size={13} /> {ar ? 'دوران تلقائي' : 'Auto-rotate'}
+          </button>
+          <span className="field-inline">
+            {ar ? 'الإضاءة' : 'Exposure'}
+            <input type="range" min="0.2" max="2" step="0.05" value={exposure} onChange={(e) => setExposure(Number(e.target.value))} />
+            <span className="num faint">{exposure.toFixed(2)}</span>
+          </span>
+          <span className="field-inline">
+            {ar ? 'البيئة' : 'Environment'}
+            <select className="select" style={{ width: 'auto', padding: '4px 26px 4px 8px' }} value={env} onChange={(e) => setEnv(e.target.value)}>
+              <option value="neutral">{ar ? 'محايدة (استوديو)' : 'Neutral (studio)'}</option>
+              <option value="legacy">{ar ? 'كلاسيكية دافئة' : 'Legacy (warm)'}</option>
+            </select>
+          </span>
+          <button type="button" className="chip" onClick={() => setResetKey((k) => k + 1)}>
+            <Icon name="undo" size={13} /> {ar ? 'إعادة الكاميرا' : 'Reset camera'}
+          </button>
         </div>
 
         <div className="ms-side stack" style={{ gap: 'var(--sp-3)' }}>
-          <strong className="small">{ar ? 'كيف يظهر للعميل' : 'Customer preview'}</strong>
-          <button type="button" className={`btn btn-sm ${phoneView ? 'btn-primary' : 'btn-outline'}`} disabled={!hasModel} onClick={() => setPhoneView((v) => !v)}>
-            <Icon name="phone" size={14} /> {phoneView ? (ar ? 'عودة للعرض الكامل' : 'Back to full view') : (ar ? 'معاينة بحجم الجوال' : 'Phone-size preview')}
-          </button>
-          <p className="xs faint" style={{ margin: 0 }}>
-            {ar ? 'يقلّص العارض نفسه إلى إطار جوال لترى المجسم كما سيراه العميل تماماً — بنفس الدوران والإضاءة.' : 'Shrinks the SAME viewer into a phone frame — exactly what the customer sees.'}
-          </p>
           <p className="xs faint" style={{ margin: 0 }}>
             {ar
               ? 'زر AR داخل العارض يعمل من الجوال، أما العرض على الطاولة فيفتحه العميل من المنيو مباشرة عبر «اعرضه على طاولتك».'

@@ -6564,3 +6564,12 @@ body:has(.sd2-root) .toast-wrap { z-index: 840; }
 .ms-stage--phone .ms-ctrl { inset-inline: 6px; bottom: 6px; padding: 5px 6px; gap: 5px; }
 .ms-stage--phone .ms-ctrl .field-inline input[type='range'] { width: 56px; }
 /* ==== /model-studio phone-toggle v1 ==== */
+
+/* ==== model-studio ctrl-below v1 ==== */
+.ms-ctrl--below { position: static; inset: auto; background: var(--surface-2); backdrop-filter: none; grid-column: 1; grid-row: 2; }
+.ms-stage { grid-column: 1; grid-row: 1; }
+.ms-side { grid-column: 2; grid-row: 1 / span 2; }
+@media (max-width: 760px) {
+  .ms-stage, .ms-ctrl--below, .ms-side { grid-column: 1; grid-row: auto; }
+}
+/* ==== /model-studio ctrl-below v1 ==== */
