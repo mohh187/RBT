@@ -6539,3 +6539,21 @@ body:has(.sd2-root) .toast-wrap { z-index: 840; }
 
 @media (prefers-reduced-motion: reduce) { .itemfx { display: none; } }
 /* ==== /item-effects v1 ==== */
+
+/* ==== model-studio v1 (completes the agent's missing block) ==== */
+.ms-grid { display: grid; grid-template-columns: 1fr 240px; gap: var(--sp-4); align-items: start; }
+.ms-stage { position: relative; min-height: 46dvh; border-radius: var(--r-lg, 14px); background: var(--surface-2); overflow: hidden; }
+.ms-stage model-viewer { width: 100%; height: 100%; min-height: 46dvh; display: block; background: transparent; }
+.ms-ctrl { position: absolute; inset-inline: 10px; bottom: 10px; display: flex; flex-wrap: wrap; gap: 8px; align-items: center; padding: 8px 10px; border-radius: var(--r-md, 12px); background: color-mix(in srgb, var(--surface) 82%, transparent); backdrop-filter: blur(8px); border: 1px solid var(--border); }
+.ms-ctrl .field-inline { display: inline-flex; align-items: center; gap: 6px; font-size: 12px; }
+.ms-ctrl .field-inline input[type='range'] { width: 90px; }
+.ms-ctrl .num { direction: ltr; min-width: 34px; text-align: center; font-size: 11px; }
+.ms-phone { width: 180px; height: 320px; margin-inline: auto; border: 6px solid var(--border-strong, #444); border-radius: 26px; overflow: hidden; background: var(--surface-2); }
+.ms-phone model-viewer { width: 100%; height: 100%; display: block; }
+.ms-empty { position: absolute; inset: 0; display: grid; place-items: center; padding: var(--sp-4); }
+@media (max-width: 760px) {
+  .ms-grid { grid-template-columns: 1fr; }
+  .ms-stage, .ms-stage model-viewer { min-height: 38dvh; }
+  .ms-phone { width: 150px; height: 266px; }
+}
+/* ==== /model-studio v1 ==== */

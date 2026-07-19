@@ -29,6 +29,15 @@ export default function ModelStudio({ open, onClose, tenantId, item, onChange })
   const [resetKey, setResetKey] = useState(0) // remounts the viewer => camera reset
   const [uploadBusy, setUploadBusy] = useState(false)
   const [regenSec, setRegenSec] = useState(-1) // -1 idle, >=0 running (elapsed s)
+  // Surfaced honestly instead of a silently-blank stage: model-viewer emits an
+  // 'error' CustomEvent when the GLB fails to fetch/parse (bad URL, CORS, …).
+  const [modelErr, setModelErr] = useState(false)
+  const bindViewer = (el) => {
+    if (!el || el._rbtErrBound) return
+    el._rbtErrBound = true
+    el.addEventListener('error', () => setModelErr(true))
+    el.addEventListener('load', () => setModelErr(false))
+  }
 
   useEffect(() => {
     if (!open) return undefined
@@ -103,6 +112,7 @@ export default function ModelStudio({ open, onClose, tenantId, item, onChange })
           {mv === 'error' && <p className="small" style={{ padding: 24, textAlign: 'center' }}>{ar ? 'تعذر تحميل عارض المجسمات — تحقق من اتصالك ثم أعد المحاولة.' : 'Could not load the 3D viewer — check your connection.'}</p>}
           {mv === 'ready' && hasModel && (
             <model-viewer
+              ref={bindViewer}
               key={`main-${resetKey}`}
               src={glb || undefined}
               ios-src={usdz || undefined}
@@ -115,11 +125,32 @@ export default function ModelStudio({ open, onClose, tenantId, item, onChange })
               environment-image={env}
               shadow-intensity="1"
               interaction-prompt="none"
+              style={{ width: '100%', height: '100%', minHeight: 'inherit' }}
             />
           )}
-          {mv === 'ready' && hasModel && <ItemFx kind={item.effect} scale={1.35} />}
+          {mv === 'ready' && hasModel && !modelErr && <ItemFx kind={item.effect} scale={1.35} />}
+          {mv === 'ready' && hasModel && modelErr && (
+            <div className="ms-empty">
+              <div className="card card-pad stack text-center" style={{ maxWidth: 340, gap: 8, borderColor: 'var(--danger)' }}>
+                <Icon name="warning" size={26} style={{ color: 'var(--danger)', marginInline: 'auto' }} />
+                <strong className="small">{ar ? 'تعذر تحميل ملف المجسم' : 'The model file failed to load'}</strong>
+                <p className="xs faint" style={{ margin: 0, lineHeight: 1.7 }}>
+                  {ar ? 'أعد المحاولة بزر «إعادة الكاميرا». إن استمر الخطأ فالملف تالف أو محجوب (CORS على حاوية التخزين) — أعد التوليد أو ارفع ملفاً بديلاً.' : 'Retry via camera reset. If it persists the file is corrupt or blocked (storage CORS) — regenerate or upload a replacement.'}
+                </p>
+                <a className="btn btn-sm btn-outline" href={glb || usdz} target="_blank" rel="noreferrer" style={{ marginInline: 'auto' }}>{ar ? 'افتح رابط الملف للفحص' : 'Open the file URL'}</a>
+              </div>
+            </div>
+          )}
           {mv === 'ready' && !hasModel && (
-            <p className="small faint" style={{ padding: 24, textAlign: 'center' }}>{ar ? 'لا يوجد مجسم لهذا الصنف بعد — ولّده من الصورة أو ارفع ملف GLB.' : 'No model yet — generate one from the photo or upload a GLB.'}</p>
+            <div className="ms-empty">
+              <div className="card card-pad stack text-center" style={{ maxWidth: 340, gap: 8 }}>
+                <Icon name="shapes" size={30} className="faint" style={{ marginInline: 'auto' }} />
+                <strong className="small">{ar ? 'لا يوجد مجسم لهذا الصنف بعد' : 'No model for this item yet'}</strong>
+                <p className="xs faint" style={{ margin: 0, lineHeight: 1.7 }}>
+                  {ar ? 'ولّد مجسماً واقعياً من صورة الصنف بالأزرار المجاورة، أو ارفع ملف GLB جاهزاً — وسيظهر هنا فوراً.' : 'Generate a realistic model from the item photo, or upload a GLB — it appears here instantly.'}
+                </p>
+              </div>
+            </div>
           )}
           <div className="ms-ctrl">
             <button type="button" className={`chip ${autoRotate ? 'active' : ''}`} onClick={() => setAutoRotate((v) => !v)}>
