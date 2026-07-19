@@ -26,7 +26,7 @@ import { sectionTemplate, templateOptions } from '../../lib/systemTemplates.js'
 
 const blank = () => ({
   nameAr: '', nameEn: '', price: '', calories: '', categoryId: '',
-  descAr: '', descEn: '', kdsWarning: '', imageUrl: '', images: [], imageStyle: '', imageScale: 1, effect: '', arStandeeUrl: '', model3dUrl: '', available: true, availableFrom: '', availableTo: '', countsForLoyalty: true, featured: false, promoNotify: 'default', trackStock: false, stock: '',
+  descAr: '', descEn: '', kdsWarning: '', imageUrl: '', images: [], imageStyle: '', imageScale: 1, effect: '', arStandeeUrl: '', model3dUrl: '', model3dUsdzUrl: '', available: true, availableFrom: '', availableTo: '', countsForLoyalty: true, featured: false, promoNotify: 'default', trackStock: false, stock: '',
   prepTime: '', serves: '', rating: '', reviewsCount: '',
   ingredients: [], variants: [], modifierGroups: [], sortOrder: 0,
   recipe: [], variantRecipes: {},
@@ -558,6 +558,7 @@ function ItemEditor({ tenantId, cats, currency, value, onClose, onSaved, onDelet
       const url = res?.data?.url
       if (!url) throw new Error(lang === 'ar' ? 'لم يصل رابط المجسم' : 'No model URL returned')
       set('model3dUrl', url)
+      set('model3dUsdzUrl', res?.data?.usdzUrl || '')
       toast.success(lang === 'ar' ? 'اكتمل المجسم الواقعي — احفظ الصنف' : 'Realistic model ready — save the item')
     } catch (e) {
       toast.error(String(e?.message || e))
@@ -673,6 +674,7 @@ function ItemEditor({ tenantId, cats, currency, value, onClose, onSaved, onDelet
         effect: form.effect || '',
         arStandeeUrl: form.arStandeeUrl || '',
         model3dUrl: form.model3dUrl || '',
+        model3dUsdzUrl: form.model3dUsdzUrl || '',
         pairings: (form.pairings || []).filter(Boolean).slice(0, 3),
         available: form.available !== false,
         availableFrom: (form.availableFrom || '').trim(),
@@ -1082,7 +1084,7 @@ function ItemEditor({ tenantId, cats, currency, value, onClose, onSaved, onDelet
               </button>
             )}
             {(form.arStandeeUrl || form.model3dUrl) && (
-              <button type="button" className="btn-link xs" style={{ color: 'var(--danger)' }} onClick={() => { set('arStandeeUrl', ''); set('model3dUrl', '') }}>{lang === 'ar' ? 'إزالة' : 'Clear'}</button>
+              <button type="button" className="btn-link xs" style={{ color: 'var(--danger)' }} onClick={() => { set('arStandeeUrl', ''); set('model3dUrl', ''); set('model3dUsdzUrl', '') }}>{lang === 'ar' ? 'إزالة' : 'Clear'}</button>
             )}
           </div>
         </div>

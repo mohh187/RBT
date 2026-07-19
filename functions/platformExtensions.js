@@ -917,13 +917,14 @@ const imageTo3d = onCall({ timeoutSeconds: 540, memory: '1GiB' }, async (request
 
   // 2) poll (up to ~8 min inside the callable window)
   let glbUrl = ''
+  let usdzUrl = ''
   for (let i = 0; i < 48; i++) {
     await sleepMs(10000)
     const s = await fetch(`https://api.meshy.ai/openapi/v1/image-to-3d/${taskId}`, {
       headers: { Authorization: `Bearer ${key}` },
     }).then((r) => r.json()).catch(() => null)
     const st = s && s.status
-    if (st === 'SUCCEEDED') { glbUrl = s.model_urls && s.model_urls.glb; break }
+    if (st === 'SUCCEEDED') { glbUrl = s.model_urls && s.model_urls.glb; usdzUrl = (s.model_urls && s.model_urls.usdz) || ''; break }
     if (st === 'FAILED' || st === 'CANCELED') {
       await db.collection(`tenants/${tenantId}/ar3dJobs`).doc(String(taskId)).set({ status: 'failed' }, { merge: true }).catch(() => {})
       throw new HttpsError('internal', 'فشل التحويل لدى المزود: ' + ((s.task_error && s.task_error.message) || st))
@@ -933,18 +934,33 @@ const imageTo3d = onCall({ timeoutSeconds: 540, memory: '1GiB' }, async (request
     throw new HttpsError('deadline-exceeded', 'التحويل يستغرق أطول من المعتاد — المهمة مستمرة لدى المزود، أعد المحاولة بعد دقائق وسيكتمل أسرع.')
   }
 
-  // 3) store the GLB in the venue library + attach to the item
+  // 3) store the GLB (+ USDZ for iPhone Quick Look) in the venue library + attach to the item
   const buf = Buffer.from(await (await fetch(glbUrl)).arrayBuffer())
   const bucket = getStorage().bucket()
-  const path = `tenants/${tenantId}/library/ar/real-${Date.now()}.glb`
+  const stamp = Date.now()
+  const path = `tenants/${tenantId}/library/ar/real-${stamp}.glb`
   const token = nodeCrypto.randomUUID()
   await bucket.file(path).save(buf, {
     metadata: { contentType: 'model/gltf-binary', metadata: { firebaseStorageDownloadTokens: token } },
   })
   const url = `https://firebasestorage.googleapis.com/v0/b/${bucket.name}/o/${encodeURIComponent(path)}?alt=media&token=${token}`
-  if (itemId) await db.doc(`tenants/${tenantId}/items/${itemId}`).set({ model3dUrl: url }, { merge: true }).catch(() => {})
-  await db.collection(`tenants/${tenantId}/ar3dJobs`).doc(String(taskId)).set({ status: 'done', url }, { merge: true }).catch(() => {})
-  return { url }
+  // Without a USDZ, iPhones have no on-table AR at all (Quick Look accepts
+  // only USDZ) — Meshy provides one; a failure here must not lose the GLB.
+  let usdzStoredUrl = ''
+  if (usdzUrl) {
+    try {
+      const ubuf = Buffer.from(await (await fetch(usdzUrl)).arrayBuffer())
+      const upath = `tenants/${tenantId}/library/ar/real-${stamp}.usdz`
+      const utoken = nodeCrypto.randomUUID()
+      await bucket.file(upath).save(ubuf, {
+        metadata: { contentType: 'model/vnd.usdz+zip', metadata: { firebaseStorageDownloadTokens: utoken } },
+      })
+      usdzStoredUrl = `https://firebasestorage.googleapis.com/v0/b/${bucket.name}/o/${encodeURIComponent(upath)}?alt=media&token=${utoken}`
+    } catch (_) { /* GLB alone still works everywhere except iOS Quick Look */ }
+  }
+  if (itemId) await db.doc(`tenants/${tenantId}/items/${itemId}`).set({ model3dUrl: url, model3dUsdzUrl: usdzStoredUrl }, { merge: true }).catch(() => {})
+  await db.collection(`tenants/${tenantId}/ar3dJobs`).doc(String(taskId)).set({ status: 'done', url, usdzUrl: usdzStoredUrl }, { merge: true }).catch(() => {})
+  return { url, usdzUrl: usdzStoredUrl }
 })
 
 module.exports = {

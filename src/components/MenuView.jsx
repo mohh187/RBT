@@ -1406,9 +1406,20 @@ function ArStage({ item, tenant, lang, onClose }) {
     window.addEventListener('keydown', onKey)
     return () => window.removeEventListener('keydown', onKey)
   }, [onClose])
-  const glb = /\.usdz($|\?)/i.test(item.model3dUrl || '') ? (item.arStandeeUrl || '') : (item.model3dUrl || item.arStandeeUrl || '')
-  const usdz = /\.usdz($|\?)/i.test(item.model3dUrl || '') ? item.model3dUrl : ''
+  const isUsdzMain = /\.usdz($|\?)/i.test(item.model3dUrl || '')
+  const glb = isUsdzMain ? (item.arStandeeUrl || '') : (item.model3dUrl || item.arStandeeUrl || '')
+  // iPhone Quick Look accepts ONLY USDZ — the realistic pipeline stores one
+  // alongside the GLB (item.model3dUsdzUrl); an uploaded .usdz main model works too.
+  const usdz = item.model3dUsdzUrl || (isUsdzMain ? item.model3dUrl : '')
   const ar = lang === 'ar'
+  // Honest AR feedback: model-viewer reports 'ar-status' failed when the OS
+  // can't start AR (missing ARCore, in-app browser, unsupported device).
+  const [arFailed, setArFailed] = useState(false)
+  const bindAr = (el) => {
+    if (!el || el._rbtArBound) return
+    el._rbtArBound = true
+    el.addEventListener('ar-status', (e) => { if (e?.detail?.status === 'failed') setArFailed(true) })
+  }
   return (
     <div className="ar-stage" data-artheme={tenant?.ar?.style || 'noir'} onClick={(e) => e.stopPropagation()}>
       <div className="ar-stage-head">
@@ -1420,6 +1431,7 @@ function ArStage({ item, tenant, lang, onClose }) {
         {state === 'error' && <p className="small" style={{ textAlign: 'center', opacity: 0.8, padding: 24 }}>{ar ? 'تعذر تحميل عارض المجسمات — تحقق من اتصالك' : 'Could not load the 3D viewer'}</p>}
         {state === 'ready' && (glb || usdz) && (
           <model-viewer
+            ref={bindAr}
             src={glb || undefined}
             ios-src={usdz || undefined}
             ar=""
@@ -1433,7 +1445,15 @@ function ArStage({ item, tenant, lang, onClose }) {
         )}
         {state === 'ready' && <ItemFx kind={item.effect} scale={1.4} />}
       </div>
-      <p className="ar-stage-hint">{ar ? 'اضغط أيقونة AR داخل العارض ثم وجّه الكاميرا إلى الطاولة — سيقف الصنف عليها فعلياً.' : 'Tap the AR icon inside the viewer and point at your table.'}</p>
+      {arFailed ? (
+        <p className="ar-stage-hint" style={{ color: 'var(--danger, #e5484d)' }}>
+          {ar
+            ? 'تعذر بدء الواقع المعزز على هذا الجهاز: على أندرويد ثبّت «Google Play Services for AR» من المتجر وافتح الرابط في Chrome نفسه (لا من متصفح داخل تطبيق آخر)، وعلى آيفون افتح في Safari.'
+            : 'AR could not start: on Android install "Google Play Services for AR" and open in Chrome itself (not an in-app browser); on iPhone use Safari.'}
+        </p>
+      ) : (
+        <p className="ar-stage-hint">{ar ? 'اضغط أيقونة AR داخل العارض ثم وجّه الكاميرا إلى الطاولة — سيقف الصنف عليها فعلياً.' : 'Tap the AR icon inside the viewer and point at your table.'}</p>
+      )}
     </div>
   )
 }

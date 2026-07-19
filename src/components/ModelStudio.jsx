@@ -32,11 +32,17 @@ export default function ModelStudio({ open, onClose, tenantId, item, onChange })
   // Surfaced honestly instead of a silently-blank stage: model-viewer emits an
   // 'error' CustomEvent when the GLB fails to fetch/parse (bad URL, CORS, …).
   const [modelErr, setModelErr] = useState(false)
+  const [loadPct, setLoadPct] = useState(0) // 0..100, 100 = fully loaded
   const bindViewer = (el) => {
     if (!el || el._rbtErrBound) return
     el._rbtErrBound = true
     el.addEventListener('error', () => setModelErr(true))
-    el.addEventListener('load', () => setModelErr(false))
+    el.addEventListener('load', () => { setModelErr(false); setLoadPct(100) })
+    // Meshy GLBs can be tens of MB — without this, "downloading" looks broken.
+    el.addEventListener('progress', (e) => {
+      const p = Math.round((e?.detail?.totalProgress || 0) * 100)
+      setLoadPct((prev) => (p >= 100 ? 100 : Math.max(prev, p)))
+    })
   }
 
   useEffect(() => {
@@ -52,6 +58,9 @@ export default function ModelStudio({ open, onClose, tenantId, item, onChange })
     return () => clearInterval(iv)
   }, [regenSec >= 0]) // eslint-disable-line react-hooks/exhaustive-deps
 
+  // New model / camera reset -> fresh load cycle for the progress overlay.
+  useEffect(() => { setLoadPct(0); setModelErr(false) }, [item?.model3dUrl, item?.arStandeeUrl, resetKey])
+
   if (!open || !item) return null
 
   // model-viewer renders GLB inline; a .usdz main model goes to ios-src (Quick
@@ -59,7 +68,7 @@ export default function ModelStudio({ open, onClose, tenantId, item, onChange })
   const model = item.model3dUrl || ''
   const isUsdz = /\.usdz($|\?)/i.test(model)
   const glb = isUsdz ? (item.arStandeeUrl || '') : (model || item.arStandeeUrl || '')
-  const usdz = isUsdz ? model : ''
+  const usdz = item.model3dUsdzUrl || (isUsdz ? model : '')
   const hasModel = !!(glb || usdz)
   const downloadUrl = model || item.arStandeeUrl || ''
   const busy = uploadBusy || regenSec >= 0
@@ -73,7 +82,7 @@ export default function ModelStudio({ open, onClose, tenantId, item, onChange })
       const res = await httpsCallable(functions, 'imageTo3d', { timeout: 540000 })({ tenantId, itemId: item.id || '', imageUrl: item.imageUrl })
       const url = res?.data?.url
       if (!url) throw new Error(ar ? 'لم يصل رابط المجسم' : 'No model URL returned')
-      onChange?.({ model3dUrl: url })
+      onChange?.({ model3dUrl: url, model3dUsdzUrl: res?.data?.usdzUrl || '' })
       toast.success(ar ? 'اكتمل المجسم الجديد' : 'New model ready')
     } catch (e) {
       toast.error(String(e?.message || e))
@@ -97,7 +106,7 @@ export default function ModelStudio({ open, onClose, tenantId, item, onChange })
   const removeModel = () => {
     if (busy) return
     if (!window.confirm(ar ? 'إزالة المجسم الواقعي من هذا الصنف؟ (يبقى ملفه في المكتبة ويمكن رفعه من جديد)' : 'Remove the realistic model from this item?')) return
-    onChange?.({ model3dUrl: '' })
+    onChange?.({ model3dUrl: '', model3dUsdzUrl: '' })
     toast.success(ar ? 'أُزيل المجسم من الصنف' : 'Model removed from the item')
   }
 
@@ -129,6 +138,15 @@ export default function ModelStudio({ open, onClose, tenantId, item, onChange })
             />
           )}
           {mv === 'ready' && hasModel && !modelErr && <ItemFx kind={item.effect} scale={1.35} />}
+          {mv === 'ready' && hasModel && !modelErr && loadPct < 100 && (
+            <div className="ms-empty" style={{ pointerEvents: 'none' }}>
+              <div className="card card-pad stack text-center" style={{ gap: 6, minWidth: 180 }}>
+                <Spinner />
+                <strong className="small">{ar ? `يحمّل المجسم… ${loadPct}%` : `Loading model… ${loadPct}%`}</strong>
+                <p className="xs faint" style={{ margin: 0 }}>{ar ? 'المجسمات الواقعية كبيرة الحجم — أول تحميل يأخذ لحظات' : 'Realistic models are large — first load takes a moment'}</p>
+              </div>
+            </div>
+          )}
           {mv === 'ready' && hasModel && modelErr && (
             <div className="ms-empty">
               <div className="card card-pad stack text-center" style={{ maxWidth: 340, gap: 8, borderColor: 'var(--danger)' }}>
