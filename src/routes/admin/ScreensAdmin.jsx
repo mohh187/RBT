@@ -347,13 +347,21 @@ export default function ScreensAdmin() {
                   {sl.type === 'image' && <img src={sl.url} alt="" style={{ width: 56, height: 38, objectFit: 'cover', borderRadius: 6, flex: 'none' }} />}
                   {sl.type === 'video' && <video src={sl.url} muted style={{ width: 56, height: 38, objectFit: 'cover', borderRadius: 6, flex: 'none' }} />}
                   {sl.type === 'menu' && <Icon name="menu" size={22} style={{ color: 'var(--brand)', flex: 'none' }} />}
+                  {sl.type === 'prayer' && <Icon name="clock" size={22} style={{ color: 'var(--brand)', flex: 'none' }} />}
                   {sl.type === 'design' && (
                     <div style={{ width: 56, height: 38, borderRadius: 6, overflow: 'hidden', flex: 'none', pointerEvents: 'none', border: '1px solid var(--border)' }}>
                       <DesignSlideView slide={sl} data={liveData} />
                     </div>
                   )}
                   <div className="grow" style={{ minWidth: 0 }}>
-                    <div className="small bold">{sl.type === 'menu' ? (sl.title || (cats.find((c) => c.id === sl.categoryId) ? pickLang(cats.find((c) => c.id === sl.categoryId), 'name', lang) : (ar ? 'الأصناف المميزة' : 'Featured'))) : sl.type === 'design' ? (ar ? 'شريحة مصممة' : 'Designed slide') : sl.type === 'video' ? (ar ? 'فيديو' : 'Video') : (ar ? 'صورة' : 'Image')}</div>
+                    <div className="small bold">{sl.type === 'menu' ? (sl.title || (cats.find((c) => c.id === sl.categoryId) ? pickLang(cats.find((c) => c.id === sl.categoryId), 'name', lang) : (ar ? 'الأصناف المميزة' : 'Featured'))) : sl.type === 'prayer' ? (ar ? 'مواقيت الصلاة' : 'Prayer times') : sl.type === 'design' ? (ar ? 'شريحة مصممة' : 'Designed slide') : sl.type === 'video' ? (ar ? 'فيديو' : 'Video') : (ar ? 'صورة' : 'Image')}</div>
+                    {sl.type === 'prayer' && (
+                      <div className="row xs" style={{ gap: 6, alignItems: 'center', marginTop: 2 }}>
+                        <span className="faint">{ar ? 'المدينة:' : 'City:'}</span>
+                        <input className="input input-sm" dir="ltr" style={{ maxWidth: 130, height: 26 }} defaultValue={sl.city || 'Riyadh'}
+                          onBlur={(e) => { const v = e.target.value.trim() || 'Riyadh'; if (v !== (sl.city || 'Riyadh')) { const it = [...s.items]; it[i] = { ...it[i], city: v }; patchItems(s, it) } }} />
+                      </div>
+                    )}
                     {sl.type !== 'video' && <div className="xs faint">{sl.duration || 8} {ar ? 'ثانية' : 's'}{sl.type === 'design' ? ` · ${(sl.layers || []).length} ${ar ? 'طبقة' : 'layers'}` : ''}{sl.sched ? ` · ${ar ? 'مجدولة' : 'scheduled'}` : ''}</div>}
                   </div>
                   {sl.type === 'design' && (
@@ -383,6 +391,7 @@ export default function ScreensAdmin() {
                 <button className="btn btn-sm btn-outline" onClick={() => setDesigner({ screenId: s.id, index: null, slide: newDesignSlide() })}><Icon name="palette" size={14} /> {ar ? 'شريحة تصميم' : 'Design slide'}</button>
                 <button className="btn btn-sm btn-outline" onClick={() => setTplFor(s.id)}><Icon name="sparkles" size={14} /> {ar ? 'قوالب جاهزة' : 'Templates'}</button>
                 <button className="btn btn-sm btn-outline" onClick={() => addSlide(s, { type: 'menu', categoryId: '', duration: 12 })}><Icon name="menu" size={14} /> {ar ? 'شريحة المميزة' : 'Featured slide'}</button>
+                <button className="btn btn-sm btn-outline" title={ar ? 'مواقيت الصلاة لليوم — تُجلب تلقائياً وتُخفى الشريحة إن تعذّر الجلب' : "Today's prayer times (auto-fetched; slide hides on failure)"} onClick={() => addSlide(s, { type: 'prayer', city: 'Riyadh', duration: 12 })}><Icon name="clock" size={14} /> {ar ? 'مواقيت الصلاة' : 'Prayer times'}</button>
                 {cats.map((c) => (
                   <button key={c.id} className="btn btn-sm btn-outline" onClick={() => addSlide(s, { type: 'menu', categoryId: c.id, duration: 12 })}>+ {pickLang(c, 'name', lang)}</button>
                 ))}

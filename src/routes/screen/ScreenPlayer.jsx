@@ -10,7 +10,18 @@ import Icon from '../../components/Icon.jsx'
 // 6-char pairing code from Admin → Screens, and it plays the venue playlist
 // (images / videos / live menu slides) fullscreen with realtime updates.
 const CODE_KEY = 'ml.screen.code'
-const DUR = { image: 8, menu: 12, design: 10 }
+const DUR = { image: 8, menu: 12, design: 10, prayer: 12 }
+
+// ---- prayer-times slide (مواقيت الصلاة) helpers ----
+// Free keyless API: api.aladhan.com timingsByCity. Data is cached per city in a
+// ref + localStorage (6h TTL) and refreshed over the network at most once per
+// hour. A city with no VALID cached data (first fetch pending, API down, typo
+// city…) makes its slide be SKIPPED entirely — we never show empty/fake times.
+const PRAYER_LS = 'ml.screen.prayer'
+const PRAYER_KEYS = ['Fajr', 'Dhuhr', 'Asr', 'Maghrib', 'Isha']
+const PRAYER_AR = { Fajr: 'الفجر', Dhuhr: 'الظهر', Asr: 'العصر', Maghrib: 'المغرب', Isha: 'العشاء' }
+const normCity = (c) => String(c || '').trim() || 'Riyadh'
+const validTimings = (tm) => !!tm && PRAYER_KEYS.every((k) => /^\d{1,2}:\d{2}$/.test(String(tm[k] || '').slice(0, 5).trim()))
 
 // Does a { days:[0-6], start:'HH:MM', end:'HH:MM' } schedule match the current
 // wall clock? Empty days = every day; no time = all day; supports overnight wrap
@@ -80,6 +91,49 @@ export default function ScreenPlayer() {
 
   // wall-clock tick so per-slide schedules (days / time window) re-evaluate
   useEffect(() => { const iv = setInterval(() => setTick((n) => n + 1), 30000); return () => clearInterval(iv) }, [])
+
+  // prayer times per city — ref cache + localStorage (6h), network ≤ once/hour.
+  // `prayer[cityKey]` is { times, hijri, at } when verified, or 'fail' — the
+  // slides filter below SKIPS prayer slides without valid data (no fake times).
+  const [prayer, setPrayer] = useState({})
+  const prayerSt = useRef({}) // cityKey → { attemptAt, busy, data }
+  useEffect(() => {
+    const cities = [...new Set((screen?.items || []).filter((x) => x?.type === 'prayer').map((x) => normCity(x.city)))]
+    cities.forEach((city) => {
+      const key = city.toLowerCase()
+      const st = prayerSt.current[key] || (prayerSt.current[key] = { attemptAt: 0, busy: false, data: null })
+      const now = Date.now()
+      if (!st.data) {
+        try { // survive reloads/offline via localStorage (6h TTL)
+          const ls = JSON.parse(localStorage.getItem(`${PRAYER_LS}.${key}`) || 'null')
+          if (ls && validTimings(ls.times) && now - ls.at < 6 * 3600 * 1000) { st.data = ls; setPrayer((p) => ({ ...p, [key]: ls })) }
+        } catch (_) { /* ignore */ }
+      }
+      if (st.busy) return
+      if (st.data && now - st.data.at < 3600 * 1000) return // fresh (≤1h) — no network
+      if (now - st.attemptAt < 3600 * 1000) return // throttle: ≤1 attempt/hour even after failure
+      st.attemptAt = now
+      st.busy = true
+      fetch(`https://api.aladhan.com/v1/timingsByCity?city=${encodeURIComponent(city)}&country=SA&method=4`)
+        .then((r) => (r.ok ? r.json() : null))
+        .then((j) => {
+          const tm = j?.data?.timings
+          if (validTimings(tm)) {
+            const hj = j.data.date?.hijri
+            const data = {
+              times: Object.fromEntries(PRAYER_KEYS.map((k) => [k, String(tm[k]).slice(0, 5).trim()])),
+              hijri: hj ? `${hj.weekday?.ar || ''} ${hj.day} ${hj.month?.ar || ''} ${hj.year}`.replace(/\s+/g, ' ').trim() : '',
+              at: Date.now(),
+            }
+            st.data = data
+            try { localStorage.setItem(`${PRAYER_LS}.${key}`, JSON.stringify(data)) } catch (_) { /* ignore */ }
+            setPrayer((p) => ({ ...p, [key]: data }))
+          } else if (!st.data) setPrayer((p) => ({ ...p, [key]: 'fail' })) // keep any older valid cache
+        })
+        .catch(() => { if (!st.data) setPrayer((p) => ({ ...p, [key]: 'fail' })) })
+        .finally(() => { st.busy = false })
+    })
+  }, [screen, tick])
 
   // 1s heartbeat — kiosk/TV browsers throttle an idle page (no input), so a live
   // "order ready" update or its repaint is deferred until the mouse moves. This
@@ -190,7 +244,14 @@ export default function ScreenPlayer() {
       .slice(0, 4),
   [readyMap, beat])
 
-  const slides = useMemo(() => (screen?.items || []).filter((s) => (s.type === 'menu' || s.type === 'design' || s.url) && schedMatch(s.sched)), [screen, tick]) // eslint-disable-line
+  const slides = useMemo(() => (screen?.items || []).filter((s) => {
+    if (!schedMatch(s.sched)) return false
+    if (s.type === 'prayer') { // only with verified fetched times — otherwise the slide is skipped entirely
+      const d = prayer[normCity(s.city).toLowerCase()]
+      return !!d && d !== 'fail' && validTimings(d.times)
+    }
+    return s.type === 'menu' || s.type === 'design' || !!s.url
+  }), [screen, tick, prayer]) // eslint-disable-line
 
   // pick the active music playlist by schedule (e.g. morning / evening); a
   // scheduled playlist that matches now wins, else an unscheduled default, else

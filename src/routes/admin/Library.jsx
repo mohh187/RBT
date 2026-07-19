@@ -80,6 +80,60 @@ const extBadge = (m) => {
 }
 const baseName = (m) => (m.name || 'image').replace(/\.[^.]+$/, '')
 
+// ---- V3 helpers: duplicates + social sizes + auto-compress (all client-side) ----
+// Near-identical-name normalization: drop extension, copy markers ("(2)",
+// "copy", "نسخة"), trailing counters, then all punctuation/spacing noise.
+const normName = (s) => (s || '').toLowerCase()
+  .replace(/\.[a-z0-9]+$/, '')
+  .replace(/\(\d+\)|copy|نسخة/g, '')
+  .replace(/[-_ ]+\d+$/, '')
+  .replace(/[^a-z0-9ء-ي]+/g, '')
+
+// «تصدير مقاسات»: [suffix, w, h] — square 1:1, story 9:16, post 4:5.
+const SOCIAL_SIZES = [
+  ['square', 1080, 1080],
+  ['story', 1080, 1920],
+  ['post', 1080, 1350],
+]
+const loadImg = (url) => new Promise((resolve, reject) => {
+  const im = new Image()
+  im.crossOrigin = 'anonymous' // needed for canvas export; load fails if bucket CORS is off
+  im.onload = () => resolve(im)
+  im.onerror = () => reject(new Error('image load blocked'))
+  im.src = url
+})
+const canvasBlob = (c, type, q) => new Promise((resolve, reject) =>
+  c.toBlob((b) => (b ? resolve(b) : reject(new Error('canvas export failed'))), type, q))
+// Cover-crop centered re-draw (like CSS object-fit: cover) → webp blob.
+const coverCrop = async (img, w, h) => {
+  const c = document.createElement('canvas')
+  c.width = w; c.height = h
+  const scale = Math.max(w / (img.naturalWidth || 1), h / (img.naturalHeight || 1))
+  const dw = (img.naturalWidth || 1) * scale
+  const dh = (img.naturalHeight || 1) * scale
+  c.getContext('2d').drawImage(img, (w - dw) / 2, (h - dh) / 2, dw, dh)
+  return canvasBlob(c, 'image/webp', 0.9)
+}
+// «ضغط تلقائي»: images over 2MB → max 2000px webp 0.85 before upload.
+const COMPRESS_OVER_MB = 2
+const COMPRESS_MAX_PX = 2000
+const COMPRESS_SKIP_EXT = ['gif', 'svg'] // animation / vectors would be destroyed
+async function compressImage(f) {
+  const url = URL.createObjectURL(f)
+  try {
+    const img = await loadImg(url)
+    const scale = Math.min(1, COMPRESS_MAX_PX / Math.max(img.naturalWidth || 1, img.naturalHeight || 1))
+    const w = Math.max(1, Math.round((img.naturalWidth || 1) * scale))
+    const h = Math.max(1, Math.round((img.naturalHeight || 1) * scale))
+    const c = document.createElement('canvas')
+    c.width = w; c.height = h
+    c.getContext('2d').drawImage(img, 0, 0, w, h)
+    const blob = await canvasBlob(c, 'image/webp', 0.85)
+    if (blob.size >= f.size) return f // re-encode grew it → keep the original
+    return new File([blob], `${(f.name || 'image').replace(/\.[^.]+$/, '')}.webp`, { type: 'image/webp' })
+  } catch (_) { return f } finally { URL.revokeObjectURL(url) }
+}
+
 // ---- auto-organize heuristics (pure client-side, NO model call) ----
 const ORG = { products: 'صور المنتجات', logos: 'الشعارات', bgs: 'الخلفيات', videos: 'فيديوهات', audio: 'صوتيات', docs: 'مستندات' }
 function proposeFolder(m, itemNames) {

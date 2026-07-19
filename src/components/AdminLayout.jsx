@@ -235,6 +235,7 @@ export default function AdminLayout() {
     : loc.pathname.startsWith('/admin/campaigns') ? 'campaigns'
     : loc.pathname.startsWith('/admin/settings') ? 'settings'
     : loc.pathname.startsWith('/admin/customers') ? 'customers'
+    : loc.pathname.startsWith('/admin/library') ? 'library'
     : null
 
   return (

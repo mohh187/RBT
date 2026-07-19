@@ -36,6 +36,15 @@ const LAYOUT_LABELS_EN = { list: 'List', minimal: 'Minimal', cards: 'Cards', gri
 const BANNER_STYLES = [['full', 'كامل', 'Full'], ['rounded', 'دائري', 'Rounded'], ['card', 'بطاقة', 'Card'], ['tall', 'طويل', 'Tall']]
 const SHAPE_LABELS = { sharp: 'حادّ', soft: 'ناعم', round: 'دائري', pill: 'حبّة' }
 const SHAPE_LABELS_EN = { sharp: 'Sharp', soft: 'Soft', round: 'Round', pill: 'Pill' }
+// General-tab in-page groups — anchor ids + labels for the sticky chips bar.
+// Anchors/headers only: the cards themselves NEVER move (zero-risk reorg).
+const GENERAL_SECTIONS = [
+  ['sec-identity', 'الهوية والروابط', 'Identity & links'],
+  ['sec-location', 'الموقع والحضور', 'Location & attendance'],
+  ['sec-system', 'تفضيلات النظام', 'System preferences'],
+  ['sec-social', 'التواصل والظهور', 'Social & visibility'],
+  ['sec-ops', 'تشغيل الطلبات', 'Order operations'],
+]
 // Menu elements the venue can show/hide — [key, ar, en]
 const HIDEABLE = [['offers', 'زر العروض', 'Offers button'], ['events', 'الفعاليات', 'Events'], ['reservations', 'الحجوزات', 'Reservations'], ['promos', 'شريط العروض', 'Promos strip'], ['special', 'الأصناف المميّزة', 'Featured'], ['search', 'البحث', 'Search'], ['viewToggle', 'زر طريقة العرض', 'View toggle'], ['notifications', 'جرس الإشعارات', 'Notifications'], ['social', 'أيقونات التواصل', 'Social icons'], ['stories', 'الاستوري', 'Stories'], ['profile', 'زر البروفايل والأخبار', 'Profile button'], ['covers', 'أغلفة الفئات (واجهة العرض)', 'Category covers (Spotlight)'], ['pairings', 'توصيات «يُطلب معه»', 'Pairings'], ['bottomNav', 'القائمة السفلية كاملة', 'Bottom navigation bar']]
 // Per-element typography control — [key, ar, en, defaultPx]
@@ -159,6 +168,33 @@ export default function Settings() {
   const [q, setQ] = useState('')
   const [searchOpen, setSearchOpen] = useState(false)
   const [lastSavedAt, setLastSavedAt] = useState(null)
+  // General-tab sticky chips: which section anchor is currently in view.
+  const [genSec, setGenSec] = useState('sec-identity')
+  const jumpSec = (id) => {
+    const el = document.getElementById(id)
+    if (el) { setGenSec(id); el.scrollIntoView({ behavior: 'smooth', block: 'start' }) }
+  }
+  // Active-chip tracking — IntersectionObserver on the zero-height anchors,
+  // rAF-throttled; each firing recomputes "last anchor above the fold line"
+  // deterministically so scrolling up/down never leaves a stale highlight.
+  useEffect(() => {
+    if (tab !== 'general' || typeof IntersectionObserver === 'undefined') return
+    let raf = 0
+    const compute = () => {
+      raf = 0
+      let best = GENERAL_SECTIONS[0][0]
+      for (const [id] of GENERAL_SECTIONS) {
+        const el = document.getElementById(id)
+        if (el && el.getBoundingClientRect().top <= 130) best = id
+      }
+      setGenSec(best)
+    }
+    const io = new IntersectionObserver(() => { if (!raf) raf = requestAnimationFrame(compute) },
+      { rootMargin: '-120px 0px -55% 0px', threshold: 0 })
+    GENERAL_SECTIONS.forEach(([id]) => { const el = document.getElementById(id); if (el) io.observe(el) })
+    compute()
+    return () => { io.disconnect(); if (raf) cancelAnimationFrame(raf) }
+  }, [tab])
   // Kitchen (KDS) operational settings — categories for the station mapping +
   // the venue's late threshold, both saved instantly like the templates card.
   const [kdsCats, setKdsCats] = useState([])
@@ -745,11 +781,23 @@ export default function Settings() {
         )}
       </div>
 
+      {/* general-tab quick-nav — sticky chips scroll to the section anchors below */}
+      {tab === 'general' && (
+        <div className="set-chips">
+          {GENERAL_SECTIONS.map(([id, arLbl, enLbl]) => (
+            <button key={id} type="button" className={`chip ${genSec === id ? 'active' : ''}`} style={{ flex: 'none' }} onClick={() => jumpSec(id)}>{ar ? arLbl : enLbl}</button>
+          ))}
+        </div>
+      )}
+
       {/* ============ GENERAL SETUP ============ */}
       {tab === 'general' && (
         <div className="stack" style={{ gap: 'var(--sp-4)' }}>
           <InstallButton />
-          
+
+          <div className="set-anchor" id="sec-identity" />
+          <h3 className="set-sec">{ar ? 'الهوية والروابط' : 'Identity & links'}</h3>
+
           {/* Profile Card */}
           <div className="card card-pad stack" style={{ gap: 'var(--sp-3)' }}>
             <div className="row" style={{ gap: 6, alignItems: 'center' }}>
@@ -797,6 +845,9 @@ export default function Settings() {
             <a href={link} target="_blank" rel="noreferrer" className="btn btn-ghost btn-sm" style={{ color: 'var(--brand)', alignSelf: 'flex-start', gap: 5 }}>{ar ? 'فتح المنيو العام' : 'Open public menu'} <Icon name="next" size={13} style={{ transform: 'rotate(-45deg)' }} /></a>
           </div>
 
+          <div className="set-anchor" id="sec-location" />
+          <h3 className="set-sec">{ar ? 'الموقع والحضور' : 'Location & attendance'}</h3>
+
           {/* GPS Geofencing Location Card */}
           <div className="card card-pad stack" style={{ gap: 12 }}>
             <div className="row" style={{ gap: 6, alignItems: 'center' }}>
@@ -834,6 +885,9 @@ export default function Settings() {
             </details>
           </div>
 
+          <div className="set-anchor" id="sec-system" />
+          <h3 className="set-sec">{ar ? 'تفضيلات النظام' : 'System preferences'}</h3>
+
           {/* System Preferences Card */}
           <div className="card card-pad stack" style={{ gap: 12 }}>
             <div className="row" style={{ gap: 6, alignItems: 'center' }}>
@@ -854,6 +908,9 @@ export default function Settings() {
               </div>
             </div>
           </div>
+
+          <div className="set-anchor" id="sec-social" />
+          <h3 className="set-sec">{ar ? 'التواصل والظهور' : 'Social & visibility'}</h3>
 
           {/* Social profiles — icons under the menu name + on the rating screen.
               Only filled entries render; hide entirely via appearance "hidden elements". */}
@@ -896,6 +953,9 @@ export default function Settings() {
             </span>
             <Icon name="back" size={16} className="faint" style={{ transform: 'scaleX(-1)', flex: 'none' }} />
           </button>
+
+          <div className="set-anchor" id="sec-ops" />
+          <h3 className="set-sec">{ar ? 'تشغيل الطلبات' : 'Order operations'}</h3>
 
           {/* Kitchen (KDS) operational tuning: late threshold + category→station names */}
           <div className="card card-pad stack" style={{ gap: 12 }}>
