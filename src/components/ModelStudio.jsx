@@ -24,6 +24,9 @@ export default function ModelStudio({ open, onClose, tenantId, item, onChange })
   const ar = lang === 'ar'
   const [mv, setMv] = useState('loading') // loading | ready | error
   const [autoRotate, setAutoRotate] = useState(true)
+  // Customer preview reuses the SAME viewer instance shrunk into a phone frame
+  // (a second <model-viewer> proved unreliable — one instance, zero risk).
+  const [phoneView, setPhoneView] = useState(false)
   const [exposure, setExposure] = useState(1)
   const [env, setEnv] = useState('neutral') // model-viewer environment-image keyword
   const [resetKey, setResetKey] = useState(0) // remounts the viewer => camera reset
@@ -116,7 +119,7 @@ export default function ModelStudio({ open, onClose, tenantId, item, onChange })
       title={(ar ? 'استوديو المجسم — ' : 'Model studio — ') + (ar ? (item.nameAr || item.nameEn || '') : (item.nameEn || item.nameAr || ''))}
     >
       <div className="ms-grid">
-        <div className="ms-stage" style={{ position: 'relative' }}>
+        <div className={`ms-stage${phoneView ? ' ms-stage--phone' : ''}`} style={{ position: 'relative' }}>
           {mv === 'loading' && <div className="center" style={{ minHeight: 280 }}><Spinner /></div>}
           {mv === 'error' && <p className="small" style={{ padding: 24, textAlign: 'center' }}>{ar ? 'تعذر تحميل عارض المجسمات — تحقق من اتصالك ثم أعد المحاولة.' : 'Could not load the 3D viewer — check your connection.'}</p>}
           {mv === 'ready' && hasModel && (
@@ -195,26 +198,12 @@ export default function ModelStudio({ open, onClose, tenantId, item, onChange })
 
         <div className="ms-side stack" style={{ gap: 'var(--sp-3)' }}>
           <strong className="small">{ar ? 'كيف يظهر للعميل' : 'Customer preview'}</strong>
-          <div className="ms-phone" style={{ position: 'relative' }}>
-            {mv === 'ready' && hasModel && <ItemFx kind={item.effect} />}
-            {mv === 'ready' && hasModel ? (
-              <model-viewer
-                key={`mini-${resetKey}`}
-                src={glb || undefined}
-                ios-src={usdz || undefined}
-                auto-rotate=""
-                disable-zoom=""
-                interaction-prompt="none"
-                exposure={String(exposure)}
-                environment-image={env}
-                shadow-intensity="1"
-                loading="eager"
-                style={{ width: '100%', height: '100%' }}
-              />
-            ) : (
-              <div className="center" style={{ height: '100%' }}><Icon name="shapes" size={26} className="faint" /></div>
-            )}
-          </div>
+          <button type="button" className={`btn btn-sm ${phoneView ? 'btn-primary' : 'btn-outline'}`} disabled={!hasModel} onClick={() => setPhoneView((v) => !v)}>
+            <Icon name="phone" size={14} /> {phoneView ? (ar ? 'عودة للعرض الكامل' : 'Back to full view') : (ar ? 'معاينة بحجم الجوال' : 'Phone-size preview')}
+          </button>
+          <p className="xs faint" style={{ margin: 0 }}>
+            {ar ? 'يقلّص العارض نفسه إلى إطار جوال لترى المجسم كما سيراه العميل تماماً — بنفس الدوران والإضاءة.' : 'Shrinks the SAME viewer into a phone frame — exactly what the customer sees.'}
+          </p>
           <p className="xs faint" style={{ margin: 0 }}>
             {ar
               ? 'زر AR داخل العارض يعمل من الجوال، أما العرض على الطاولة فيفتحه العميل من المنيو مباشرة عبر «اعرضه على طاولتك».'

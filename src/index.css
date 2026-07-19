@@ -6557,3 +6557,10 @@ body:has(.sd2-root) .toast-wrap { z-index: 840; }
   .ms-phone { width: 150px; height: 266px; }
 }
 /* ==== /model-studio v1 ==== */
+
+/* ==== model-studio phone-toggle v1 ==== */
+.ms-stage--phone { max-width: 300px; min-height: 0; aspect-ratio: 9 / 18; margin-inline: auto; border: 7px solid var(--border-strong, #444); border-radius: 30px; }
+.ms-stage--phone model-viewer { min-height: 0; height: 100%; }
+.ms-stage--phone .ms-ctrl { inset-inline: 6px; bottom: 6px; padding: 5px 6px; gap: 5px; }
+.ms-stage--phone .ms-ctrl .field-inline input[type='range'] { width: 56px; }
+/* ==== /model-studio phone-toggle v1 ==== */
