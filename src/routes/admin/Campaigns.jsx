@@ -82,9 +82,26 @@ export default function Campaigns() {
   const openFromTemplate = (c) => openNew({ title: c.title || '', text: c.text || '', textB: c.textB || '', audience: c.audience || 'all', audienceIds: c.audienceIds || [], channels: c.channels || { whatsapp: true, notice: false }, couponCode: c.couponCode || '' })
 
   // Deep link: /admin/campaigns?to=<phone> — message ONE customer directly.
+  // Or a draft handed over by the behaviour planner («جهّز الحملة»), which
+  // carries a REAL audience: the phone numbers it computed from actual sessions.
   useEffect(() => {
     const to = digitsOf(params.get('to'))
-    if (to) openNew({ audience: 'custom', audienceIds: [to] })
+    if (to) { openNew({ audience: 'custom', audienceIds: [to] }); return }
+    if (params.get('draft') !== '1') return
+    try {
+      const raw = sessionStorage.getItem('rbt_campaign_draft')
+      sessionStorage.removeItem('rbt_campaign_draft')
+      if (!raw) return
+      const d = JSON.parse(raw)
+      const phones = (d?.audience?.phones || []).map((p) => digitsOf(p)).filter(Boolean)
+      openNew({
+        title: d?.title || '',
+        text: d?.text || d?.message || '',
+        couponCode: d?.couponCode || '',
+        purpose: d?.purpose || '',
+        ...(phones.length ? { audience: 'custom', audienceIds: phones } : {}),
+      })
+    } catch (_) { /* a malformed draft simply opens nothing */ }
   }, []) // eslint-disable-line react-hooks/exhaustive-deps
 
   const reach = useMemo(() => (form ? customers.filter((c) => matches(c, form.audience, form.audienceIds)).length : 0), [customers, form])

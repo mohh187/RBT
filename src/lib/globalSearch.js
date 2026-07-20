@@ -38,6 +38,8 @@ export const PAGE_INDEX = [
     keywords: ['طباعة', 'طباعه', 'بي دي اف', 'منيو ورقي', 'print', 'pdf', 'paper menu'] },
   { id: 'print-studio', ar: 'استوديو التصميم الحر', en: 'Print design studio', to: '/admin/print-studio', icon: 'penLine', cap: CAP.MANAGE_MENU,
     keywords: ['استوديو تصميم', 'تصميم حر', 'بوستر', 'مطبوعات', 'اشكال', 'عناصر', 'كانفا', 'design studio', 'poster', 'canvas'] },
+  { id: 'behavior', ar: 'سلوك العملاء', en: 'Guest behavior', to: '/admin/behavior', icon: 'trending', cap: CAP.VIEW_REPORTS,
+    keywords: ['سلوك', 'تحليل', 'جلسات', 'مسار', 'قمع', 'تحويل', 'شاهد ولم يطلب', 'تتبع', 'الغاء', 'توقف', 'behavior', 'analytics', 'funnel', 'sessions', 'heatmap'] },
   { id: 'accounting', ar: 'المحاسبة', en: 'Accounting', to: '/admin/accounting', icon: 'wallet', cap: CAP.VIEW_REVENUE,
     keywords: ['محاسبة', 'حسابات', 'دفتر', 'يومية', 'قائمة الدخل', 'ارباح', 'خساره', 'ضريبة', 'اقرار', 'مصروفات', 'فواتير', 'تدفق نقدي', 'ميزانية', 'accounting', 'ledger', 'p&l', 'vat', 'cash flow', 'expenses'] },
   { id: 'operations', ar: 'العمليات', en: 'Operations', to: '/admin/operations', icon: 'tables', cap: CAP.MANAGE_TABLES,

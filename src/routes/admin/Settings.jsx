@@ -1041,6 +1041,8 @@ export default function Settings() {
               ['sharedCartEnabled', ar ? 'الطلب الجماعي وتقسيم الفاتورة' : 'Shared table order', ar ? 'كل من على الطاولة يضيف من جواله لسلة واحدة' : 'One live basket per table'],
               ['kitchenTwinEnabled', ar ? 'توأم المطبخ (متابعة حية للأصناف)' : 'Kitchen twin', ar ? 'يرى العميل أصنافه تُنجز واحداً واحداً' : 'Live per-item progress'],
               ['leaderboardEnabled', ar ? 'لوحة صدارة اللعبة' : 'Game leaderboard', ar ? 'ترتيب شهري لأفضل اللاعبين' : 'Monthly top players'],
+              ['gamesEnabled', ar ? 'مركز الألعاب' : 'Games centre', ar ? 'ألعاب داخل المنيو تُفتح بتسجيل الاسم والجوال — تعمل حتى بدون طلبات' : 'Games unlocked by name+phone; works without ordering'],
+              ['analyticsEnabled', ar ? 'تتبّع سلوك الزوار' : 'Guest behaviour tracking', ar ? 'يغذّي صفحة «سلوك العملاء» والمخطِّط الذكي — بلا تتبع أي نص يكتبه الزائر عدا البحث' : 'Feeds the behaviour page and AI planner'],
             ].map(([key, label, hint]) => (
               <div key={key} className="row-between wrap" style={{ gap: 10, paddingBlock: 4, borderTop: '1px solid var(--border)' }}>
                 <div>
@@ -1052,6 +1054,11 @@ export default function Settings() {
               </div>
             ))}
           </div>
+
+          {/* Which games this venue shows — a café, a lounge, a sweets shop and
+              a perfumery each want a different set, so the picker is filtered by
+              venue-type tags and multi-select. */}
+          {tenant?.gamesEnabled !== false && <GamePicker ar={ar} tenant={tenant} saveNow={saveNow} updateTenantLocal={updateTenantLocal} toast={toast} t={t} />}
 
           {/* Kitchen (KDS) operational tuning: late threshold + category→station names */}
           <div className="card card-pad stack" style={{ gap: 12 }}>
@@ -3176,6 +3183,94 @@ export default function Settings() {
         <MediaLibrary open onClose={() => setLibPick(null)} kind={libPick.kind} tenantId={tenantId} lang={lang}
           onPick={(url, item) => { libPick.apply?.(url, item); setLibPick(null) }} />
       )}
+    </div>
+  )
+}
+
+// «ألعاب المنيو» — the venue picks WHICH games guests see. Different venue
+// types want different sets (a perfumery wants spice matching, a seafood
+// restaurant wants the fisher), so the list is filtered by venue-type tags and
+// is multi-select. tenant.games = array of game ids; unset = a starter set.
+function GamePicker({ ar, tenant, saveNow, updateTenantLocal, toast, t }) {
+  const [catalog, setCatalog] = useState(null)
+  const [tagList, setTagList] = useState([])
+  const [tag, setTag] = useState('all')
+  const [busy, setBusy] = useState('')
+
+  useEffect(() => {
+    let alive = true
+    import('../../lib/games.js')
+      .then((m) => {
+        if (!alive) return
+        setCatalog(m.GAMES || [])
+        // Labels come from the registry itself so they can never drift apart.
+        setTagList(m.GAME_TAGS || [])
+      })
+      .catch(() => { if (alive) setCatalog([]) })
+    return () => { alive = false }
+  }, [])
+
+  const chosen = Array.isArray(tenant?.games) ? tenant.games : null // null = defaults
+  const isOn = (id) => (chosen ? chosen.includes(id) : true)
+
+  const toggle = async (id) => {
+    if (busy) return
+    const base = chosen || (catalog || []).map((g) => g.id)
+    const next = base.includes(id) ? base.filter((x) => x !== id) : [...base, id]
+    setBusy(id)
+    try {
+      await saveNow({ games: next })
+      updateTenantLocal({ games: next })
+    } catch (_) { toast.error(t('error')) } finally { setBusy('') }
+  }
+
+  if (catalog === null) return null
+  if (!catalog.length) {
+    return (
+      <div className="card card-pad">
+        <p className="xs faint" style={{ margin: 0 }}>{ar ? 'مكتبة الألعاب غير متاحة في هذه النسخة.' : 'Game library unavailable.'}</p>
+      </div>
+    )
+  }
+
+  const present = new Set(catalog.flatMap((g) => g.tags || []))
+  const tags = (tagList.length ? tagList : [{ id: 'all', ar: 'الكل', en: 'All' }])
+    .filter((tg) => tg.id === 'all' || present.has(tg.id))
+  const shown = tag === 'all' ? catalog : catalog.filter((g) => (g.tags || []).includes(tag))
+  const onCount = catalog.filter((g) => isOn(g.id)).length
+
+  return (
+    <div className="card card-pad stack" style={{ gap: 10 }}>
+      <div className="row" style={{ gap: 6, alignItems: 'center' }}>
+        <Icon name="play" size={18} style={{ color: 'var(--brand)' }} />
+        <strong>{ar ? 'ألعاب المنيو' : 'Menu games'}</strong>
+        <span className="grow" />
+        <span className="xs faint num">{onCount} / {catalog.length}</span>
+      </div>
+      <p className="xs faint" style={{ margin: 0 }}>
+        {ar ? 'اختر الألعاب التي تظهر لعملائك — يمكن تفعيل أكثر من لعبة، وتُفتح للعميل بعد تسجيل اسمه وجواله فيدخل قاعدة عملائك.' : 'Pick the games guests see; several can run at once.'}
+      </p>
+      <div className="row scroll-x" style={{ gap: 6 }}>
+        {tags.map((tg) => (
+          <button key={tg.id} type="button" className={`chip ${tag === tg.id ? 'active' : ''}`} onClick={() => setTag(tg.id)}>{ar ? tg.ar : (tg.en || tg.ar)}</button>
+        ))}
+      </div>
+      <div className="stack" style={{ gap: 6 }}>
+        {shown.map((g) => (
+          <label key={g.id} className="row-between" style={{ gap: 10, cursor: 'pointer', paddingBlock: 6, borderTop: '1px solid var(--border)' }}>
+            <span className="row" style={{ gap: 10, alignItems: 'center' }}>
+              <span className="center" style={{ width: 34, height: 34, borderRadius: 10, background: 'var(--surface-2)', color: 'var(--brand)', flex: 'none' }}>
+                <Icon name={g.icon || 'play'} size={17} />
+              </span>
+              <span className="stack" style={{ gap: 1 }}>
+                <span className="small bold">{ar ? g.ar : (g.en || g.ar)}</span>
+                <span className="xs faint">{g.desc || ''}</span>
+              </span>
+            </span>
+            <input type="checkbox" checked={isOn(g.id)} disabled={busy === g.id} onChange={() => toggle(g.id)} style={{ width: 22, height: 22, flex: 'none' }} />
+          </label>
+        ))}
+      </div>
     </div>
   )
 }

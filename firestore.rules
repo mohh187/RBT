@@ -355,6 +355,22 @@ service cloud.firestore {
         allow delete: if isStaff(tid);
       }
 
+      // ---- behaviour sessions: one doc per guest visit, written by the diner's
+      // own device (anonymous) and read only by staff. Bounded so a hostile
+      // client cannot use it as free storage: the events/search arrays are
+      // capped by the SDK and re-checked here, and the doc may never change the
+      // session id it was created with. Guests never read each other's rows.
+      match /sessions/{sid} {
+        allow read: if isStaff(tid);
+        allow create: if request.resource.data.sid == sid
+          && request.resource.data.events.size() <= 300
+          && request.resource.data.search.size() <= 20;
+        allow update: if request.resource.data.sid == resource.data.sid
+          && request.resource.data.events.size() <= 300
+          && request.resource.data.search.size() <= 20;
+        allow delete: if isManager(tid);
+      }
+
       // ---- waiting-game scores («لوحة صدارة الصيادين»): guests post their own
       // score, everyone reads the board, managers can prune it.
       // Doc id is `${deviceId}_${YYYY-MM}` so a device owns exactly one row per

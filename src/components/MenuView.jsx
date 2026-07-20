@@ -18,6 +18,7 @@ import { createOrder, upsertCustomerOnOrder, getCustomerByPhone, getMemberByToke
 import { tierDiscountAmount, TIER_META, resolveMembershipPolicy } from '../lib/membership.js'
 import { evaluateOffers, activeAutoOffers, offerForItem, discountedPrice } from '../lib/offers.js'
 import { alertParty } from '../lib/notify.js'
+import { initTracking, identify, trackItemView, trackItemClose, trackCartAdd, trackSearch, trackCheckout, trackOrdered, trackGame } from '../lib/track.js'
 import ItemFx from './ItemFx.jsx'
 // Interactive guest experience — each lazily loaded so a diner who never opens
 // them pays no bytes (speech, vision, WebGL and Firestore-session code).
@@ -28,6 +29,7 @@ const Menu3DWorld = lazy(() => import('./Menu3DWorld.jsx'))
 const CompareItems = lazy(() => import('./CompareItems.jsx'))
 const SharedCart = lazy(() => import('./SharedCart.jsx'))
 const DishStoryReader = lazy(() => import('./DishStory.jsx'))
+const GamesCenter = lazy(() => import('./GamesCenter.jsx'))
 // tiny sync helpers (no heavy deps) so the item sheet can decide instantly
 import { hasStory, StoryBadge } from './DishStory.jsx'
 import { getLocalCustomer, setLocalCustomer, isRegisterDismissed, dismissRegister, fetchIp, getMyOrders, addMyOrder, getMemberToken, setMemberToken } from '../lib/customer.js'
@@ -348,6 +350,37 @@ export default function MenuView({ tenant, tenantId, items, categories, offers =
   const cartCount = cart.reduce((s, l) => s + l.qty, 0)
   const subtotal = cart.reduce((s, l) => s + l.unitPrice * l.qty, 0)
 
+  // Behaviour tracking: one session per visit, batched writes, no-op when the
+  // venue turned analytics off or when this is an admin preview.
+  useEffect(() => {
+    if (!tenantId || preview) return undefined
+    initTracking(tenantId, {
+      enabled: tenant?.analyticsEnabled !== false,
+      table: table?.label || table?.id || null,
+      source: table?.id ? 'table-qr' : 'direct',
+    })
+    return undefined
+  }, [tenantId, preview, tenant?.analyticsEnabled, table])
+
+  // Item dwell: opening an item starts its timer, closing/switching ends it —
+  // this is what makes «شاهدوه ولم يطلبوه» measurable.
+  const lastViewed = useRef(null)
+  useEffect(() => {
+    if (preview) return undefined
+    if (lastViewed.current && lastViewed.current !== viewItem) trackItemClose(lastViewed.current)
+    if (viewItem) trackItemView(viewItem)
+    lastViewed.current = viewItem || null
+    return undefined
+  }, [viewItem, preview])
+
+  // Searches (including the zero-result ones — what guests ask for and the
+  // venue does not have) are recorded after the guest stops typing.
+  useEffect(() => {
+    if (preview || !search.trim()) return undefined
+    const id = setTimeout(() => trackSearch(search.trim(), visibleItems.length), 900)
+    return () => clearTimeout(id)
+  }, [search, visibleItems.length, preview])
+
   // Table order: merge the shared session lines into THIS device's cart rather
   // than creating an order straight from session data. Prices are re-derived
   // from the live menu (session lines are written by unauthenticated phones and
@@ -385,6 +418,10 @@ export default function MenuView({ tenant, tenantId, items, categories, offers =
     if (on('compareEnabled') && visibleItems.length > 1) out.push({ id: 'compare', icon: 'scale', label: lang === 'ar' ? 'قارن الأصناف' : 'Compare' })
     if (orderingEnabled && on('sharedCartEnabled') && table?.id) out.push({ id: 'table', icon: 'customers', label: lang === 'ar' ? 'طلب الطاولة معاً' : 'Table order' })
     if (on('voiceMenuEnabled')) out.push({ id: 'read', icon: 'sound', label: lang === 'ar' ? 'اقرأ المنيو صوتياً' : 'Read aloud' })
+    // Games are deliberately NOT tied to ordering — browse-only venues (display
+    // menus, lounges, perfumeries) get the full games centre, and the required
+    // name+phone unlock feeds their CRM.
+    if (on('gamesEnabled')) out.push({ id: 'games', icon: 'play', label: lang === 'ar' ? 'الألعاب' : 'Games' })
     return out
   }, [tenant, orderingEnabled, visibleItems, table, lang])
 
@@ -410,6 +447,7 @@ export default function MenuView({ tenant, tenantId, items, categories, offers =
         countsForLoyalty: item.countsForLoyalty !== false,
       }]
     })
+    if (!preview) trackCartAdd(item, qty)
     toast.success(t('addToCart'))
   }
 
@@ -995,6 +1033,14 @@ export default function MenuView({ tenant, tenantId, items, categories, offers =
               onOpenItem={(it) => { setFxOpen(''); setViewItem(it) }}
             />
           )}
+          {fxOpen === 'games' && (
+            <GamesCenter
+              open tenantId={tenantId} tenant={tenant} items={visibleItems} lang={lang}
+              onClose={() => setFxOpen('')}
+              onIdentify={(who) => { try { setSavedCustomer(who); identify?.(who) } catch (_) { /* tracking is best-effort */ } }}
+              onGamePlay={(gameId, score) => { try { trackGame(gameId, score) } catch (_) { /* best-effort */ } }}
+            />
+          )}
           {fxOpen === 'table' && table?.id && (
             <SharedCart
               open tenantId={tenantId} table={table} currency={currency} lang={lang}
@@ -1011,6 +1057,7 @@ export default function MenuView({ tenant, tenantId, items, categories, offers =
         </Suspense>
       )}
 
+      {cartOpen && !preview && <CheckoutTracker />}
       {cartOpen && (
         <CartSheet
           cart={cart} subtotal={subtotal} currency={currency} offers={offers}
@@ -1987,6 +2034,7 @@ function CartSheet({ cart, subtotal, currency, offers, tenant, tenantId, table, 
       // Stock is decremented server-side (onNewOrder for cash/terminal; the
       // settlement path for online) — the client call is permission-denied for diners.
       addMyOrder(tenantId, { id: res.id, code: res.code })
+      trackOrdered(res.id, total)
       try { localStorage.setItem('rbt_paymethod', payMethod) } catch (_) { /* ignore */ }
       if (name || phone) {
         setLocalCustomer({ name, phone })
@@ -2273,4 +2321,12 @@ function ReviewShowcase({ tenantId, lang }) {
       </div>
     </div>
   )
+}
+
+// Fires the checkout funnel step exactly once per cart opening (mount = the
+// guest reached the checkout sheet). Kept as a component so the effect is tied
+// to the sheet's real lifecycle rather than a manual flag.
+function CheckoutTracker() {
+  useEffect(() => { trackCheckout() }, [])
+  return null
 }

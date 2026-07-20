@@ -116,6 +116,23 @@ export default function PostStudio() {
   const [posKey, setPosKey] = useState('bottom')
   const [band, setBand] = useState(true)
 
+  // Content brief handed over by the behaviour planner («صمّم بالذكاء»): it
+  // arrives via sessionStorage because it is a full brief, not a URL param.
+  useEffect(() => {
+    if (typeof window === 'undefined') return
+    if (!new URLSearchParams(window.location.search).get('draft')) return
+    try {
+      const raw = sessionStorage.getItem('rbt_content_draft')
+      sessionStorage.removeItem('rbt_content_draft')
+      if (!raw) return
+      const d = JSON.parse(raw)
+      const brief = [d?.subject, d?.style].filter(Boolean).join(' — ')
+      if (brief) setFreePrompt(brief)
+      if (d?.caption) setMCaption(String(d.caption))
+      if (Array.isArray(d?.itemIds) && d.itemIds[0]) setAiItemId(String(d.itemIds[0]))
+    } catch (_) { /* malformed brief: the studio simply opens empty */ }
+  }, [])
+
   // ---- publish-as-campaign sheet ----
   const [campFor, setCampFor] = useState(null) // draft doc
   const [campAudience, setCampAudience] = useState('all')

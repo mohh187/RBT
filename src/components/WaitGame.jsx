@@ -14,7 +14,9 @@ export function getBestScore(tid) {
   try { return Number(localStorage.getItem(bestKey(tid))) || 0 } catch (_) { return 0 }
 }
 
-export default function WaitGame({ open, onClose, tenantId, brand = '#0e7490', onLeaderboard }) {
+// `onScore` lets a host (the games centre shell) mirror the live score in its
+// own chrome; the standalone order-page usage simply omits it.
+export default function WaitGame({ open, onClose, tenantId, brand = '#0e7490', onLeaderboard, onScore }) {
   const canvasRef = useRef(null)
   const stateRef = useRef(null)
   const [phase, setPhase] = useState('ready') // ready | play | over
@@ -24,6 +26,10 @@ export default function WaitGame({ open, onClose, tenantId, brand = '#0e7490', o
   // frame() reads the phase via a ref so the rAF loop never re-subscribes
   const phaseRef = useRef(phase)
   useEffect(() => { phaseRef.current = phase }, [phase])
+  // Mirror the live score outward (ref-held so the game loop stays stable).
+  const onScoreRef = useRef(onScore)
+  useEffect(() => { onScoreRef.current = onScore }, [onScore])
+  useEffect(() => { onScoreRef.current?.(score) }, [score])
 
   // (re)start a round
   const start = () => {

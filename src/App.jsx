@@ -1,5 +1,5 @@
 import { lazy, Suspense, useEffect, useState } from 'react'
-import { Routes, Route, Navigate, useLocation } from 'react-router-dom'
+import { Routes, Route, Navigate, useLocation, useNavigate } from 'react-router-dom'
 import { useAuth } from './lib/auth.jsx'
 import { CAP } from './lib/permissions.js'
 import { FullSpinner } from './components/ui.jsx'
@@ -50,6 +50,7 @@ const Roles = lazy(() => import('./routes/admin/Roles.jsx'))
 const Policies = lazy(() => import('./routes/admin/Policies.jsx'))
 const Reports = lazy(() => import('./routes/admin/Reports.jsx'))
 const Accounting = lazy(() => import('./routes/admin/Accounting.jsx'))
+const Behavior = lazy(() => import('./routes/admin/Behavior.jsx'))
 const DailyReport = lazy(() => import('./routes/admin/DailyReport.jsx'))
 const Staff = lazy(() => import('./routes/admin/Staff.jsx'))
 const Settings = lazy(() => import('./routes/admin/Settings.jsx'))
@@ -148,6 +149,23 @@ function RequireCap({ cap, anyOf, children }) {
   if (anyOf && !anyOf.some((c) => can(c))) return <Navigate to="/portal" replace />
   if (cap && !can(cap)) return <Navigate to="/portal" replace />
   return children
+}
+
+// The behaviour planner hands a ready draft to the campaigns / post-studio
+// pages. The draft travels through sessionStorage (it carries a real phone
+// list that has no business sitting in a URL) and the target page picks it up.
+function BehaviorRoute() {
+  const navigate = useNavigate()
+  const hand = (key, to) => (draft) => {
+    try { sessionStorage.setItem(key, JSON.stringify(draft || {})) } catch (_) { /* private mode: the page just opens blank */ }
+    navigate(to)
+  }
+  return (
+    <Behavior
+      onCreateCampaign={hand('rbt_campaign_draft', '/admin/campaigns?draft=1')}
+      onCreateContent={hand('rbt_content_draft', '/admin/posts-studio?draft=1')}
+    />
+  )
 }
 
 // Delivery drivers get their own focused portal, never the admin dashboard.
@@ -406,6 +424,7 @@ export default function App() {
         <Route path="complaints" element={<RequireCap cap={CAP.VIEW_COMPLAINTS}><Complaints /></RequireCap>} />
         <Route path="reports" element={<RequireCap cap={CAP.VIEW_REPORTS}><PlanGate feature="reports"><Reports /></PlanGate></RequireCap>} />
         <Route path="accounting" element={<RequireCap cap={CAP.VIEW_REVENUE}><Accounting /></RequireCap>} />
+        <Route path="behavior" element={<RequireCap cap={CAP.VIEW_REPORTS}><BehaviorRoute /></RequireCap>} />
         <Route path="daily" element={<RequireCap cap={CAP.VIEW_REPORTS}><PlanGate feature="reports"><DailyReport /></PlanGate></RequireCap>} />
         <Route path="hr" element={<RequireCap cap={CAP.ATTENDANCE}><PlanGate feature="staff"><StaffHub /></PlanGate></RequireCap>} />
         <Route path="roles" element={<RequireCap cap={CAP.MANAGE_STAFF}><PlanGate feature="staff"><Roles /></PlanGate></RequireCap>} />
