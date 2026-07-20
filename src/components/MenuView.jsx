@@ -626,6 +626,12 @@ export default function MenuView({ tenant, tenantId, items, categories, offers =
         </div>
       )}
 
+      {/* Google-reviews showcase strip — the ReviewsStudio toggle
+          (tenant.reviewShowcase.enabled) finally has its render surface. */}
+      {tenant?.reviewShowcase?.enabled && !search.trim() && !preview && (
+        <ReviewShowcase tenantId={tenantId} lang={lang} />
+      )}
+
       {/* special dishes */}
       {special.length > 0 && !search.trim() && !isHidden('special') && menuLayout !== 'storefront' && (
         <div className="container special-sec" data-menu-layout={menuLayout} data-featured-style={tenant?.featuredStyle || 'soft'} style={{ marginTop: 'var(--sp-4)' }}>
@@ -2097,5 +2103,47 @@ function CartSheet({ cart, subtotal, currency, offers, tenant, tenantId, table, 
         </div>
       )}
     </Sheet>
+  )
+}
+
+// Horizontal strip of imported GENERAL Google reviews (itemId empty — item-level
+// ones live inside each item's tab). Shown when the venue enables the showcase
+// in the reviews studio; loads once, renders nothing while empty. Honest badge.
+function ReviewShowcase({ tenantId, lang }) {
+  const [rows, setRows] = useState(null)
+  useEffect(() => {
+    let alive = true
+    ;(async () => {
+      try {
+        const { collection, getDocs, query, where, limit } = await import('firebase/firestore')
+        const { db } = await import('../lib/firebase.js')
+        const s = await getDocs(query(collection(db, 'tenants', tenantId, 'reviews'), where('source', '==', 'google'), limit(30)))
+        const general = s.docs.map((d) => d.data()).filter((r) => !r.itemId && (r.comment || '').trim())
+        if (alive) setRows(general.slice(0, 12))
+      } catch (_) { if (alive) setRows([]) }
+    })()
+    return () => { alive = false }
+  }, [tenantId])
+  if (!rows || rows.length === 0) return null
+  return (
+    <div className="container" style={{ marginTop: 'var(--sp-3)' }}>
+      <div className="row" style={{ gap: 6, alignItems: 'center', marginBottom: 6 }}>
+        <Icon name="star" size={15} style={{ color: 'var(--gold, #d4a017)' }} />
+        <strong className="small">{lang === 'ar' ? 'من تقييمات جوجل' : 'From Google reviews'}</strong>
+      </div>
+      <div className="rvs-strip scroll-x">
+        {rows.map((r, i) => (
+          <figure key={i} className="rvs-card">
+            <span className="rvs-stars" aria-label={`${r.rating || 5} / 5`}>
+              {Array.from({ length: Math.max(1, Math.min(5, Number(r.rating) || 5)) }, (_, k) => (
+                <Icon key={k} name="star" size={12} fill="currentColor" strokeWidth={0} />
+              ))}
+            </span>
+            <blockquote className="rvs-text">{r.comment}</blockquote>
+            {r.name && <figcaption className="rvs-name">{r.name}</figcaption>}
+          </figure>
+        ))}
+      </div>
+    </div>
   )
 }

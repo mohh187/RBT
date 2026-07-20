@@ -7152,3 +7152,84 @@ body:has(.sd2-root) .toast-wrap { z-index: 840; }
   .ps-sel-outline, .ps-h, .ps-h-rot, .ps-lockmark, .ps-guide { display: none !important; }
 }
 /* ==== /print-studio v1 ==== */
+
+/* ==== print-studio overlay-fix v1 ==== */
+/* Root cause of the clipped canvas: the editor lived INSIDE the admin container
+   (app-bar + paddings + sidebar) so its 100dvh overflowed below the viewport.
+   The editor is now a true full-screen takeover above the admin chrome
+   (z 120 — still under sheets at --z-sheet:310 so pickers open on top). */
+.ps-edit-root {
+  position: fixed;
+  inset: 0;
+  z-index: 120;
+  background: var(--bg, #eceef1);
+  height: 100dvh;
+  max-height: 100dvh;
+  padding: 0;
+  margin: 0;
+}
+.ps-toolbar { padding-top: calc(8px + env(safe-area-inset-top, 0px)); }
+@media (max-width: 900px) {
+  .ps-panel { z-index: 130; }
+}
+/* ==== /print-studio overlay-fix v1 ==== */
+
+/* ==== wait-game v1 ==== */
+.wg-overlay { position: fixed; inset: 0; z-index: 320; background: #083b66; display: flex; flex-direction: column; }
+.wg-canvas { flex: 1; width: 100%; touch-action: none; cursor: pointer; }
+.wg-top {
+  position: absolute; top: 0; inset-inline: 0; z-index: 2;
+  display: flex; align-items: center; gap: 12px;
+  padding: calc(10px + env(safe-area-inset-top, 0px)) 14px 10px;
+}
+.wg-x { background: rgba(0,0,0,.35); color: #fff; }
+.wg-score { font-size: 26px; font-weight: 900; color: #ffd166; text-shadow: 0 2px 8px rgba(0,0,0,.4); margin-inline-start: auto; direction: ltr; }
+.wg-time { font-size: 15px; font-weight: 800; color: #fff; background: rgba(0,0,0,.35); padding: 3px 12px; border-radius: 999px; direction: ltr; }
+.wg-card {
+  position: absolute; inset-inline: 18px; top: 50%; transform: translateY(-50%);
+  max-width: 380px; margin-inline: auto; z-index: 2;
+  background: rgba(255,255,255,.96); border-radius: 20px;
+  padding: 22px; text-align: center; display: grid; gap: 10px;
+  box-shadow: 0 20px 60px rgba(0,0,0,.35);
+}
+.wg-title { font-size: 24px; font-weight: 900; color: #083b66; }
+.wg-line { margin: 0; font-size: 14px; line-height: 1.8; color: #33475c; }
+.wg-line.faint { color: #7b8ba0; font-size: 12px; }
+.wg-btn { justify-content: center; font-size: 16px; padding-block: 12px; }
+.wg-invite {
+  display: flex; align-items: center; gap: 12px; width: 100%;
+  border: none; cursor: pointer; text-align: start;
+  background: linear-gradient(135deg, #0e7490, #083b66);
+  color: #fff; border-radius: 16px; padding: 14px 16px;
+  box-shadow: 0 8px 24px rgba(8, 59, 102, .3);
+}
+.wg-invite:active { transform: scale(.98); }
+.wg-invite-ico { flex: none; width: 44px; height: 44px; border-radius: 12px; background: rgba(255,255,255,.15); display: grid; place-items: center; }
+.wg-invite-txt { display: grid; gap: 2px; }
+.wg-invite-txt b { font-size: 15px; }
+.wg-invite-txt span { font-size: 12px; opacity: .85; }
+/* ==== /wait-game v1 ==== */
+
+/* ==== editorial scroll-fix v1 ==== */
+/* The inner full-height snap scroller trapped the page scroll under the hero
+   (audit finding). Editorial now rides the PAGE scroll like spotlight does:
+   tall snap-aligned sections, no inner overflow container. */
+.edt-stage { height: auto; overflow-y: visible; }
+.edt-sec { min-height: 92svh; scroll-snap-align: none; scroll-snap-stop: normal; }
+/* ==== /editorial scroll-fix v1 ==== */
+
+/* ==== review-showcase v1 ==== */
+.rvs-strip { display: flex; gap: 10px; padding-bottom: 6px; }
+.rvs-card {
+  flex: none; width: 240px; margin: 0;
+  background: var(--surface); border: 1px solid var(--border);
+  border-radius: var(--r-lg, 14px); padding: 12px 14px;
+  display: grid; gap: 6px;
+}
+.rvs-stars { color: var(--gold, #d4a017); display: inline-flex; gap: 2px; }
+.rvs-text {
+  margin: 0; font-size: 12.5px; line-height: 1.7; color: var(--text-muted);
+  display: -webkit-box; -webkit-line-clamp: 3; -webkit-box-orient: vertical; overflow: hidden;
+}
+.rvs-name { font-size: 11px; font-weight: 700; color: var(--text-faint); }
+/* ==== /review-showcase v1 ==== */

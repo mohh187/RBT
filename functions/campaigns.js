@@ -57,17 +57,27 @@ function matchesAudience(c, audience, ids) {
 // Send with bounded concurrency. textFor(c, i) may vary per customer (A/B).
 // creds (optional, from waCredsFor) → messages go out from the VENUE's own number.
 async function fanOut(customers, textFor, creds) {
+  // HONEST counters: sendWhatsAppText never throws — it returns {ok, skipped?}.
+  // A message counts as SENT only when Meta actually accepted it; missing
+  // credentials count as skipped, Meta rejections as failed. Anything else
+  // would fabricate delivery numbers the owner trusts.
   let sent = 0
   let failed = 0
+  let skipped = 0
   const BATCH = 8
   for (let i = 0; i < customers.length; i += BATCH) {
     await Promise.all(customers.slice(i, i + BATCH).map(async (c, j) => {
       const to = digits(c.phone)
       if (!to) return
-      try { await sendWhatsAppText(to, textFor(c, i + j), creds); sent += 1 } catch (_) { failed += 1 }
+      try {
+        const res = await sendWhatsAppText(to, textFor(c, i + j), creds)
+        if (res && res.ok) sent += 1
+        else if (res && res.skipped) skipped += 1
+        else failed += 1
+      } catch (_) { failed += 1 }
     }))
   }
-  return { sent, failed }
+  return { sent, failed, skipped }
 }
 
 // ---------------------------------------------------------------------------
@@ -105,6 +115,7 @@ const processCampaigns = onSchedule(
 
         let sent = 0
         let failed = 0
+        let skipped = 0
         let capped = 0
         if (camp.channels?.whatsapp !== false && targets.length) {
           const quota = await takeQuota(db, tid, targets.length)
@@ -113,7 +124,7 @@ const processCampaigns = onSchedule(
           const hasB = !!(camp.textB && camp.textB.trim())
           const creds = await waCredsFor(db, tid)
           const r = await fanOut(targets, (c, i) => fill(hasB && i % 2 === 1 ? camp.textB : camp.text, { name: c.name, venue }), creds)
-          sent = r.sent; failed = r.failed
+          sent = r.sent; failed = r.failed; skipped = r.skipped
         }
         if (camp.channels?.notice) {
           await db.collection(`tenants/${tid}/notices`).add({
@@ -125,6 +136,9 @@ const processCampaigns = onSchedule(
         const totals = {
           sentCount: (Number(camp.sentCount) || 0) + sent,
           failCount: (Number(camp.failCount) || 0) + failed,
+          // creds missing => WhatsApp not connected: surfaced in the UI so the
+          // owner is never told «وصلت» about messages that never left.
+          skippedCount: (Number(camp.skippedCount) || 0) + skipped,
           runs: (Number(camp.runs) || 0) + 1,
         }
         if (camp.repeat === 'weekly' || camp.repeat === 'daily') {

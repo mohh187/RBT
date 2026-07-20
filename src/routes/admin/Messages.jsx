@@ -243,6 +243,7 @@ export default function Messages() {
                         <span className="xs num">
                           {ar ? `مُرسلة: ${c.sentCount || 0}` : `Sent: ${c.sentCount || 0}`}
                           {` · ${ar ? 'فاشلة' : 'Failed'}: ${c.failCount || 0}`}
+                          {c.skippedCount ? <b style={{ color: 'var(--warning)' }}>{` · ${c.skippedCount} ${ar ? 'لم تُرسل (واتساب غير مربوط)' : 'skipped (WhatsApp not connected)'}`}</b> : ''}
                           {c.cappedCount ? ` · ${c.cappedCount} ${ar ? 'تجاوز السقف' : 'capped'}` : ''}
                         </span>
                       )}

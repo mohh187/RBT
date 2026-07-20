@@ -1009,6 +1009,21 @@ export default function Settings() {
           <div className="set-anchor" id="sec-ops" />
           <h3 className="set-sec">{ar ? 'تشغيل الطلبات' : 'Order operations'}</h3>
 
+          {/* Waiting mini-game on the order-tracking page */}
+          <div className="card card-pad stack" style={{ gap: 10 }}>
+            <div className="row" style={{ gap: 6, alignItems: 'center' }}>
+              <Icon name="play" size={18} style={{ color: 'var(--brand)' }} />
+              <strong>{ar ? 'لعبة الانتظار «صياد البحر»' : 'Waiting game'}</strong>
+            </div>
+            <div className="row-between wrap" style={{ gap: 10 }}>
+              <p className="xs faint" style={{ margin: 0, maxWidth: '46ch' }}>
+                {ar ? 'أثناء تحضير الطلب تظهر للعميل دعوة للعب لعبة صيد ممتعة (45 ثانية، أفضل نتيجة تُحفظ على جهازه) — تجربة انتظار لا يملكها غيرك.' : 'While the kitchen works, guests can play a 45-second fishing game with a saved best score.'}
+              </p>
+              <input type="checkbox" checked={tenant?.waitGameEnabled !== false} style={{ width: 22, height: 22 }}
+                onChange={async (e) => { try { await saveNow({ waitGameEnabled: e.target.checked }); updateTenantLocal({ waitGameEnabled: e.target.checked }); toast.success(t('saved')) } catch (_) { toast.error(t('error')) } }} />
+            </div>
+          </div>
+
           {/* Kitchen (KDS) operational tuning: late threshold + category→station names */}
           <div className="card card-pad stack" style={{ gap: 12 }}>
             <div className="row" style={{ gap: 6, alignItems: 'center' }}>

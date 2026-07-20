@@ -7,6 +7,8 @@ import Icon from '../../components/Icon.jsx'
 import { Spinner, Empty } from '../../components/ui.jsx'
 import { Price } from '../../components/Riyal.jsx'
 import { PLANS } from '../../lib/plans.js'
+import { startPayment } from '../../lib/payments.js'
+import { useToast } from '../../components/Toast.jsx'
 
 // «الفوترة والاشتراك» — the venue's money page: current plan, every subscription
 // invoice (platformInvoices scoped to this tenant), purchased AI credits, and
@@ -20,6 +22,7 @@ const fmtDate = (ts, lang) => {
 export default function Billing() {
   const { t, lang } = useI18n()
   const ar = lang === 'ar'
+  const toast = useToast()
   const { tenantId, tenant } = useAuth()
   const [invoices, setInvoices] = useState(null)
   const [creditReqs, setCreditReqs] = useState([])
@@ -101,6 +104,12 @@ export default function Billing() {
                   <span className={`badge ${st.cls}`}>{ar ? st.ar : inv.status}</span>
                   {inv.payUrl && inv.status !== 'paid' && (
                     <a className="btn btn-sm btn-primary" href={inv.payUrl} target="_blank" rel="noreferrer">{ar ? 'ادفع الآن' : 'Pay now'}</a>
+                  )}
+                  {!inv.payUrl && inv.status === 'pending' && (
+                    <button className="btn btn-sm btn-primary" onClick={async () => {
+                      try { await startPayment('subscription', tenantId, inv.id) }
+                      catch (_) { toast.error(ar ? 'تعذر فتح صفحة الدفع — أعد المحاولة' : 'Could not open checkout') }
+                    }}>{ar ? 'ادفع الآن' : 'Pay now'}</button>
                   )}
                 </div>
               </div>

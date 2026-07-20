@@ -52,13 +52,15 @@ export default function EditorialLayout({ cats, itemsByCat, visibleItems, filter
     return out
   }, [filtered, visibleItems, cats, itemsByCat])
 
-  // Progress: which section currently owns the viewport (IO root = the snap scroller).
+  // Progress: which section currently owns the viewport. Sections ride the
+  // PAGE scroll (no inner scroller — it trapped the scroll under the hero),
+  // so the IO root is the viewport itself.
   useEffect(() => {
     const root = stageRef.current
     if (!root || typeof IntersectionObserver === 'undefined') return undefined
     const io = new IntersectionObserver((entries) => {
       entries.forEach((e) => { if (e.isIntersecting) setCur(Number(e.target.dataset.idx) || 0) })
-    }, { root, threshold: 0.55 })
+    }, { threshold: 0.55 })
     root.querySelectorAll('.edt-sec').forEach((el) => io.observe(el))
     return () => io.disconnect()
   }, [flat])

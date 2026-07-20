@@ -44,9 +44,13 @@ export default function ChoosePlan() {
       if (!invoiceId) throw new Error(ar ? 'تعذر إنشاء الفاتورة' : 'Invoice failed')
       await startPayment('subscription', tenantId, invoiceId) // navigates to /pay/:id
     } catch (e) {
-      toast.error(String(e?.message || e).includes('internal')
-        ? (ar ? 'الدفع غير مفعّل بعد على الخادم (انشر الدوال) — ابدأ بالتجربة المجانية الآن' : 'Checkout not deployed yet — start the free trial')
-        : String(e?.message || e))
+      // Friendly mapping: raw provider/config errors (moyasar:, not-found, …)
+      // must never leak to a signing-up owner — offer the trial path instead.
+      const msg = String(e?.message || e)
+      const technical = /internal|moyasar|not.?found|not configured|MOYASAR/i.test(msg)
+      toast.error(technical
+        ? (ar ? 'الدفع الإلكتروني غير جاهز بعد — ابدأ بالتجربة المجانية 14 يوماً وسنفعّل الدفع قريباً' : 'Checkout is not ready yet — start the 14-day free trial')
+        : msg)
       setBusy('')
     }
   }

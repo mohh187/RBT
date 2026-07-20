@@ -80,8 +80,11 @@ export default function PaymentSheet({ open, onClose, order, currency = 'SAR', l
 
         <button className="btn btn-success btn-block" style={{ minHeight: 46, fontWeight: 800 }} disabled={mixShort} onClick={() => {
           const breakdown = isMixed ? Object.fromEntries(Object.entries(mix).map(([k, v]) => [k, Number(v) || 0]).filter(([, v]) => v > 0)) : null
+          // Money-safety: closing is the CALLER's decision on success only
+          // (Cashier.confirmPay -> setPayTarget(null)). Closing here on every
+          // tap would dismiss the sheet even when charging fails, so the
+          // cashier could assume "paid" after an error.
           onConfirm?.({ method, tip: partial ? 0 : Number(tip) || 0, amountPaid: isMixed ? null : (paidNow === '' ? null : (Number(paidNow) || 0)), breakdown })
-          onClose?.()
         }}>
           {mixShort ? (ar ? `ناقص ${(due - mixSum).toFixed(2)}` : `Short ${(due - mixSum).toFixed(2)}`) : partial ? (ar ? 'تسجيل دفعة' : 'Record payment') : (ar ? 'تأكيد الدفع' : 'Confirm')}{!mixShort ? <> · <Price value={confirmAmt} currency={currency} lang={lang} /></> : null}
         </button>

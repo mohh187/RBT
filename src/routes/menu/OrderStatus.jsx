@@ -17,6 +17,7 @@ import { isRated, markRated, isArrived, markArrived } from '../../lib/customer.j
 import { startPayment } from '../../lib/payments.js'
 import { createVenueReview } from '../../lib/reviewImport.js'
 import NotificationSettings from '../../components/NotificationSettings.jsx'
+import WaitGame, { getBestScore } from '../../components/WaitGame.jsx'
 
 const STEPS = ['pending', 'accepted', 'preparing', 'ready', 'served']
 const STEP_LABEL = {
@@ -47,6 +48,7 @@ export default function OrderStatus() {
   const [arrived, setArrived] = useState(() => isArrived(orderId))
   const [arriving, setArriving] = useState(false)
   const [paying, setPaying] = useState(false)
+  const [gameOpen, setGameOpen] = useState(false)
   const prevStatus = useRef(null)
 
   const [venue, setVenue] = useState(null) // social links + Google Maps CTA
@@ -248,6 +250,18 @@ export default function OrderStatus() {
             </div>
           </div>
         )}
+
+        {/* «صياد البحر» — the waiting mini-game, while the kitchen works. Venue-togglable. */}
+        {!cancelled && currentIdx < STEPS.indexOf('ready') && venue?.waitGameEnabled !== false && (
+          <button type="button" className="wg-invite" onClick={() => setGameOpen(true)}>
+            <span className="wg-invite-ico"><Icon name="play" size={22} /></span>
+            <span className="wg-invite-txt">
+              <b>{lang === 'ar' ? 'العب «صياد البحر» أثناء التحضير' : 'Play the fishing game while you wait'}</b>
+              <span>{lang === 'ar' ? `اصطد الأسماك واجمع النقاط — أفضل نتيجتك: ${getBestScore(tid)}` : `Catch fish, beat your best: ${getBestScore(tid)}`}</span>
+            </span>
+          </button>
+        )}
+        {gameOpen && <WaitGame open onClose={() => setGameOpen(false)} tenantId={tid} brand={venue?.brandColor || '#0e7490'} />}
 
         <div className="card card-pad stack">
           <strong>{t('yourOrder')}</strong>
