@@ -66,15 +66,17 @@ const temperatureOf = (h) => (h < 55 || h >= 320 ? 'دافئة' : h >= 165 && h 
 function describeColor(hex) {
   const hsl = hexToHsl(hex)
   if (!hsl) return null
+  // adjectives agree with «لون» (masculine) / «درجة» (feminine) respectively
   const sat = hsl.s < 12 ? 'رمادية شبه محايدة' : hsl.s < 40 ? 'هادئة' : hsl.s < 72 ? 'متوسطة الحيوية' : 'صريحة وقوية'
-  const light = hsl.l < 28 ? 'داكنة' : hsl.l < 55 ? 'متوسطة' : hsl.l < 80 ? 'فاتحة' : 'فاتحة جداً'
+  const light = hsl.l < 28 ? 'داكن' : hsl.l < 55 ? 'متوسط' : hsl.l < 80 ? 'فاتح' : 'فاتح جداً'
   return {
     hex, hsl,
     hue: hueName(hsl.h),
     temperature: temperatureOf(hsl.h),
     saturation: sat,
     lightness: light,
-    ar: `${hueName(hsl.h)} ${light}، درجة ${sat}`,
+    dark: hsl.l < 45,
+    ar: `لون ${hueName(hsl.h)} ${light}، درجة إشباع ${sat}`,
   }
 }
 
@@ -196,7 +198,7 @@ export function analyzeBrand({ tenant = null, items = [], posts = [], categories
 
   // --- identity -------------------------------------------------------------
   const typeSet = !!tenant?.type
-  if (!typeSet) unknown.push('نوع المنشأة غير محدد في الإعدادات — الوصف أدناه عام وليس مخصصاً لنشاطها')
+  if (!typeSet) unknown.push('نوع المنشأة غير محدد في الإعدادات — هذا الملف عام وليس مخصصاً لنشاطها')
 
   // --- palette --------------------------------------------------------------
   const brandHex = tenant?.skin?.overrides?.brand || tenant?.themeColor || ''
@@ -211,7 +213,9 @@ export function analyzeBrand({ tenant = null, items = [], posts = [], categories
     brand, accent, skinId: skinId || null, skinMood,
     known: !!brand,
     temperature: brand?.temperature || null,
-    darkUi: brand ? brand.hsl.l < 35 : null,
+    // the BRAND COLOUR is dark. This says nothing about whether the interface
+    // renders dark — that is a separate setting we do not read here.
+    darkBrand: brand ? brand.hsl.l < 35 : null,
   }
 
   // --- menu shape -----------------------------------------------------------
@@ -227,7 +231,8 @@ export function analyzeBrand({ tenant = null, items = [], posts = [], categories
     .sort((a, b) => b[1] - a[1])
     .slice(0, 8)
     .map(([id, count]) => ({ id, name: catName(id), count, share: pct(count, list.length) }))
-  if (!list.length) unknown.push('لا توجد أصناف بعد — لا يمكن استنتاج نبرة الكتابة ولا مستوى الأسعار ولا الأسلوب البصري')
+  const ITEMS_W = lex(tenant, 'items')
+  if (!list.length) unknown.push(`لم تُضف ${ITEMS_W} بعد — لا يمكن استنتاج نبرة الكتابة ولا مستوى الأسعار ولا الأسلوب البصري`)
   else if (!withPhoto) unknown.push('لا توجد صور منتجات — الأسلوب البصري للمنشأة غير معروف')
   if (list.length && !catList.length) unknown.push('أسماء التصنيفات غير ممررة — عُرضت المعرفات بدل الأسماء')
   const menu = {
@@ -240,7 +245,7 @@ export function analyzeBrand({ tenant = null, items = [], posts = [], categories
 
   // --- tone + price ---------------------------------------------------------
   const tone = analyzeTone(list)
-  if (list.length && !tone.describedCount) unknown.push('لا يوجد وصف مكتوب لأي صنف — نبرة الكتابة غير معروفة')
+  if (list.length && !tone.describedCount) unknown.push(`لا يوجد وصف مكتوب لأي ${lex(tenant, 'item')} — نبرة الكتابة غير معروفة`)
   const price = analyzePrice(list, tenant?.currency || 'SAR')
   if (price.unknown) unknown.push('لا أسعار صالحة — مستوى التسعير غير معروف')
   if (price.band && price.currency !== 'SAR') unknown.push('العملة ليست الريال — لم يُصنَّف مستوى السعر')
@@ -292,8 +297,9 @@ export function brandParagraph(profile) {
   )
 
   if (palette.known) {
-    const a = palette.accent ? `، ولون مميز ${palette.accent.ar} (${palette.accent.hex})` : ''
-    out.push(`الألوان: اللون الأساسي ${palette.brand.ar} (${palette.brand.hex})${a} — لوحة ${palette.brand.temperature}${palette.darkUi ? ' على واجهة داكنة' : ''}.`)
+    const phrase = (c) => `${c.hue} ${c.lightness} (إشباع ${c.saturation}) ${c.hex}`
+    const a = palette.accent ? `، واللون المميز ${phrase(palette.accent)}` : ''
+    out.push(`الألوان: اللون الأساسي ${phrase(palette.brand)}${a} — لوحة ${palette.brand.temperature}.`)
   } else {
     out.push('الألوان: لا يوجد لون هوية محفوظ.')
   }
@@ -302,25 +308,25 @@ export function brandParagraph(profile) {
   if (menu.total) {
     const top = menu.categories[0]
     out.push(
-      `${L.menu}: ${n(menu.total)} من ${L.items} في ${n(menu.categoryCount)} تصنيفاً` +
+      `${L.menu}: العدد ${n(menu.total)} موزعة على ${n(menu.categoryCount)} من ${L.categories}` +
       (top ? `، أكبرها «${top.name}» بنسبة ${n(top.share)} بالمئة` : '') +
       `. الصور: ${n(menu.withPhoto)} من ${n(menu.total)} (${n(menu.photoPct)} بالمئة)` +
-      (menu.with3d ? `، و${n(menu.with3d)} بمجسم ثلاثي الأبعاد` : '') + '.'
+      (menu.with3d ? `، ومنها ${n(menu.with3d)} بمجسم ثلاثي الأبعاد` : '') + '.'
     )
   } else {
-    out.push(`${L.menu}: لا ${L.items} بعد.`)
+    out.push(`${L.menu}: لم تُضف ${L.items} بعد.`)
   }
 
   if (tone.describedCount) {
     out.push(
-      `الكتابة: ${n(tone.describedCount)} من ${L.items} لها وصف (${n(tone.describedPct)} بالمئة)، بمتوسط ${n(tone.avgDescWords)} كلمة للوصف` +
+      `الكتابة: ${n(tone.describedCount)} من ${L.items} لها وصف مكتوب (${n(tone.describedPct)} بالمئة)، ومتوسط عدد كلمات الوصف ${n(tone.avgDescWords)}` +
       (tone.bilingualPct ? `، و${n(tone.bilingualPct)} بالمئة لها اسم إنجليزي` : '') + '.' +
       (tone.dominant
-        ? ` النبرة الغالبة: ${tone.dominant.ar} (بناءً على ${n(tone.dominant.matches)} تطابقاً لكلمات مفتاحية — مؤشر لغوي لا حكم نهائي).`
+        ? ` النبرة الغالبة: ${tone.dominant.ar} (عدد تطابقات الكلمات المفتاحية: ${n(tone.dominant.matches)} — مؤشر لغوي لا حكم نهائي).`
         : ' لا تظهر نبرة غالبة واضحة من الكلمات المستخدمة.')
     )
   } else if (menu.total) {
-    out.push('الكتابة: لا يوجد وصف مكتوب لأي صنف، فنبرة الكتابة غير معروفة.')
+    out.push(`الكتابة: لا يوجد وصف مكتوب لأي ${L.item}، فنبرة الكتابة غير معروفة.`)
   }
 
   if (price.count) {
@@ -335,7 +341,7 @@ export function brandParagraph(profile) {
   }
 
   out.push(
-    `استخدم هذه المعطيات كموجّه أسلوبي: التزم بلوحة ألوانها ونبرتها، وسمِّ المنتج «${L.item}» و${L.menu} بمسماها الصحيح، ولا تقترح أي شيء لا تبيعه هذه المنشأة.`
+    `استخدم هذه المعطيات كموجّه أسلوبي: التزم بلوحة ألوانها ونبرتها، واستخدم كلمة «${L.item}» لوحدة البيع و«${L.menu}» للقائمة، ولا تقترح أي شيء لا تبيعه هذه المنشأة.`
   )
 
   if (unknown.length) out.push(`ما لا نعرفه (لا تخترعه): ${unknown.join(' | ')}.`)
@@ -354,7 +360,7 @@ export function brandVisualDirective(profile) {
   const { palette, venue, price } = profile
   if (venue.typeSet && venue.typeEn) bits.push(`a ${venue.typeEn}`)
   if (palette.known) {
-    bits.push(`brand palette built on ${palette.brand.hex}${palette.accent ? ` with ${palette.accent.hex}` : ''} (${palette.brand.temperature === 'دافئة' ? 'warm' : palette.brand.temperature === 'باردة' ? 'cool' : 'neutral'} ${palette.brand.lightness === 'داكنة' ? 'dark' : 'light'} tones) — keep this the dominant colour mood`)
+    bits.push(`brand palette built on ${palette.brand.hex}${palette.accent ? ` with ${palette.accent.hex}` : ''} (${palette.brand.temperature === 'دافئة' ? 'warm' : palette.brand.temperature === 'باردة' ? 'cool' : 'neutral'} ${palette.brand.dark ? 'dark' : 'light'} tones) — keep this the dominant colour mood`)
   }
   if (palette.skinMood) bits.push(palette.skinMood.en)
   if (price?.band) bits.push(`${price.band.id === 'value' ? 'accessible everyday' : price.band.id === 'premium' ? 'high-end premium' : price.band.id === 'upper' ? 'upscale' : 'mid-market'} positioning`)

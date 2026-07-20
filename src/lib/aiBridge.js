@@ -21,24 +21,38 @@ export const aiConfigured = () => firebaseReady
 // withSearch: true grounds the answer in live Google Search results (market
 // research / competitor / trend questions) — run as a SEPARATE call because
 // Gemini does not mix google_search with function-calling in one request.
-export async function aiQuick(prompt, { model = 'gemini-2.5-flash', withSearch = false } = {}) {
+// `logAs` opts this call into «سجل التوليد»: pass { tid, kind, section } and
+// the prompt, result and duration are recorded (successes and failures alike).
+// Omit it and nothing is logged — internal/system calls stay out of the log.
+export async function aiQuick(prompt, { model = 'gemini-2.5-flash', withSearch = false, logAs = null } = {}) {
   if (!firebaseReady) throw new Error('AI not configured')
   const body = {
     contents: [{ role: 'user', parts: [{ text: prompt }] }],
     ...(withSearch ? { tools: [{ google_search: {} }] } : {}),
   }
+  let gen = null
+  if (logAs?.tid) {
+    const { startGen } = await import('./genLog.js')
+    gen = startGen(logAs.tid, { kind: logAs.kind || 'text', section: logAs.section || '', prompt, model, itemId: logAs.itemId || null })
+  }
+  const ok = (text) => { gen?.done({ text }); return text }
   try {
     const res = await httpsCallable(functions, 'geminiProxy')({ model, body })
-    return res.data?.candidates?.[0]?.content?.parts?.map((p) => p.text).filter(Boolean).join('').trim() || ''
+    return ok(res.data?.candidates?.[0]?.content?.parts?.map((p) => p.text).filter(Boolean).join('').trim() || '')
   } catch (e) {
     const key = import.meta.env.VITE_GEMINI_API_KEY
-    if (!key) throw new Error('AI error: ' + (e?.message || e))
-    const r = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${key}`, {
-      method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body),
-    })
-    if (!r.ok) throw new Error('AI error: ' + r.status)
-    const j = await r.json()
-    return j.candidates?.[0]?.content?.parts?.map((p) => p.text).filter(Boolean).join('').trim() || ''
+    if (!key) { gen?.fail(String(e?.message || e)); throw new Error('AI error: ' + (e?.message || e)) }
+    try {
+      const r = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${key}`, {
+        method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body),
+      })
+      if (!r.ok) throw new Error('AI error: ' + r.status)
+      const j = await r.json()
+      return ok(j.candidates?.[0]?.content?.parts?.map((p) => p.text).filter(Boolean).join('').trim() || '')
+    } catch (e2) {
+      gen?.fail(String(e2?.message || e2))
+      throw e2
+    }
   }
 }
 
@@ -230,8 +244,20 @@ export async function runAssistant({ tid, tenant, actor = '', history = [], atta
   let model = cfg.model || AI_MODELS[mode] || AI_MODELS.fast
   if (/gemini-1\.5/i.test(model)) model = AI_MODELS[mode] || AI_MODELS.fast
 
-  const ctx = await buildContext(tid, tenant).catch(() => ({}))
-  const sys = systemPrompt(ctx, cfg)
+  // The live snapshot + the venue's measured brand profile are gathered in
+  // parallel. The brand profile is best-effort: any failure (or a venue with no
+  // type set) simply leaves it null and the prompt degrades to its old wording.
+  const [ctx, insight] = await Promise.all([
+    buildContext(tid, tenant).catch(() => ({})),
+    (tenant?.type
+      ? Promise.all([listItems(tid).catch(() => []), listCategories(tid).catch(() => [])])
+        .then(([items, categories]) => analyzeBrand({ tenant, items, categories }))
+        .catch(() => null)
+      : Promise.resolve(null)),
+  ])
+  const sys = systemPrompt(ctx, cfg, tenant, insight)
+  // Same tools, same parameters — described in this venue's vocabulary.
+  const toolDecls = toolDeclarationsFor(tenant) || TOOL_DECLARATIONS
 
   // Build the model turns from the visible history. This MUST be sanitized or a
   // single bad turn silently breaks the whole conversation:
@@ -351,7 +377,7 @@ export async function runAssistant({ tid, tenant, actor = '', history = [], atta
   // few and forced the user to keep typing "continue". The model still stops
   // itself as soon as the task is done (a turn with no tool calls returns).
   for (let step = 0; step < 48; step++) {
-    const body = { systemInstruction: { parts: [{ text: sys }] }, contents, tools: [{ functionDeclarations: TOOL_DECLARATIONS }], ...(Object.keys(genCfg).length ? { generationConfig: genCfg } : {}) }
+    const body = { systemInstruction: { parts: [{ text: sys }] }, contents, tools: [{ functionDeclarations: toolDecls }], ...(Object.keys(genCfg).length ? { generationConfig: genCfg } : {}) }
     const json = await requestWithRetry(body)
 
     const parts = json.candidates?.[0]?.content?.parts || []

@@ -8,6 +8,7 @@ import { functions, firebaseReady } from './firebase.js'
 import { aiQuick } from './aiBridge.js'
 import { venueType, venueAiContext, lex } from './venueTypes.js'
 import { brandVisualDirective } from './brandInsight.js'
+import { startGen } from './genLog.js'
 
 export const IMAGE_MODEL = 'gemini-2.5-flash-image'
 
@@ -46,7 +47,7 @@ export function brandContext(tenant, insight = null) {
   if (tenant.type) {
     const brief = venueAiContext(tenant)
     if (brief) lines.push(`Venue brief (Arabic, authoritative): ${brief}`)
-    lines.push(`SUBJECT LOCK: this venue sells ${venueEnglishLabel(tenant)} products. Do NOT introduce food, drink, props or scenery that this venue does not sell.`)
+    lines.push(`SUBJECT LOCK: this is a ${venueEnglishLabel(tenant)} business — depict ONLY products it actually sells. Do NOT introduce food, drink, props or scenery belonging to a different kind of business.`)
   }
   const directive = insight ? brandVisualDirective(insight) : ''
   if (directive) lines.push(directive)
@@ -157,7 +158,7 @@ function b64ToBlob(b64, mime = 'image/png') {
 // proceeds as a free scene from the description instead of failing (the old
 // hard-throw stranded users behind the missing bucket CORS config).
 // Returns an image Blob. Throws a clear Arabic message only on MODEL failure.
-export async function generatePostImage({ itemImageUrls = [], refFiles = [], stylePrompt = '', venueName = '', tenant = null, imitate = false, insight = null } = {}) {
+export async function generatePostImage({ itemImageUrls = [], refFiles = [], stylePrompt = '', venueName = '', tenant = null, imitate = false, insight = null, section = '', itemId = '' } = {}) {
   if (!firebaseReady) throw new Error('الذكاء غير مهيأ — أكمل إعداد Firebase أولاً.')
   const refs = []
   for (const f of (refFiles || []).filter(Boolean).slice(0, 3)) {
@@ -182,12 +183,31 @@ export async function generatePostImage({ itemImageUrls = [], refFiles = [], sty
     contents: [{ role: 'user', parts: [...refs.map((r) => ({ inlineData: r })), { text: prompt }] }],
     generationConfig: { responseModalities: ['TEXT', 'IMAGE'] },
   }
-  const json = await sendGemini(IMAGE_MODEL, body)
+  // Logged centrally here so EVERY caller (item editor, post studio, library,
+  // print studio, backdrops) lands in «سجل التوليد» without each having to
+  // remember to log. Failures are recorded too — that history is how an owner
+  // learns which prompts do not work.
+  const gen = startGen(tenant?.id, {
+    kind: 'image', section: section || 'generate', prompt, model: IMAGE_MODEL,
+    refUrls: (itemImageUrls || []).filter(Boolean).slice(0, 3), itemId: itemId || null,
+  })
+  let json
+  try {
+    json = await sendGemini(IMAGE_MODEL, body)
+  } catch (e) {
+    gen.fail(String(e?.message || e))
+    throw e
+  }
   const img = json?.candidates?.[0]?.content?.parts?.find((p) => p.inlineData?.data)
   if (!img) {
     const said = (json?.candidates?.[0]?.content?.parts || []).map((p) => p.text).filter(Boolean).join(' ').trim().slice(0, 140)
-    throw new Error(said ? `لم يُرجع النموذج صورة: ${said}` : 'لم يُرجع النموذج صورة — أعد المحاولة أو غيّر النمط.')
+    const msg = said ? `لم يُرجع النموذج صورة: ${said}` : 'لم يُرجع النموذج صورة — أعد المحاولة أو غيّر النمط.'
+    gen.fail(msg)
+    throw new Error(msg)
   }
+  // The blob has no URL yet (callers upload it), so the log records the intent
+  // and the caller may patch a url in later via logGeneration if it wants one.
+  gen.done({ meta: { mime: img.inlineData.mimeType || 'image/png' } })
   return b64ToBlob(img.inlineData.data, img.inlineData.mimeType || 'image/png')
 }
 

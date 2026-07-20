@@ -51,13 +51,13 @@ export default function PlayersTable({ players = [], ar = true, onOpen }) {
             {SORTS.map((s) => (
               <button
                 key={s.key} type="button"
-                className={`chip${sort === s.key ? ' is-active' : ''}`}
+                className={`chip${sort === s.key ? ' active' : ''}`}
                 aria-pressed={sort === s.key}
                 onClick={() => setSort(s.key)}
               >{ar ? s.ar : s.en}</button>
             ))}
             <button
-              type="button" className={`chip${onlyPhone ? ' is-active' : ''}`}
+              type="button" className={`chip${onlyPhone ? ' active' : ''}`}
               aria-pressed={onlyPhone} onClick={() => setOnlyPhone((v) => !v)}
             >{ar ? 'من يمكن مراسلته فقط' : 'Reachable only'}</button>
           </div>

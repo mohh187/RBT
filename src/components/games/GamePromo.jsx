@@ -203,7 +203,7 @@ function Scene({ art, c }) {
     case 'grid':
       return (
         <g>
-          {[0, 1, 2].map((col) => [0, 1].map((row) => {
+          {[[0, 0], [1, 0], [2, 0], [0, 1], [1, 1], [2, 1]].map(([col, row]) => {
             const on = (col + row) % 3 === 0
             return (
               <rect
@@ -217,7 +217,7 @@ function Scene({ art, c }) {
                 opacity={on ? 0.95 : 0.5}
               />
             )
-          }))}
+          })}
           <path d="M33 27 l16 16 M49 27 l-16 16" stroke={c[0]} strokeWidth="3" opacity="0.55" {...common} />
         </g>
       )

@@ -23,6 +23,7 @@ import ModelStudio from '../../components/ModelStudio.jsx'
 import ItemFx from '../../components/ItemFx.jsx'
 import DishHotspots from '../../components/DishHotspots.jsx'
 import { ITEM_EFFECTS } from '../../lib/itemEffects.js'
+import { lex, venueType } from '../../lib/venueTypes.js'
 import { sectionTemplate, templateOptions } from '../../lib/systemTemplates.js'
 
 const blank = () => ({
@@ -608,7 +609,11 @@ function ItemEditor({ tenantId, cats, currency, value, onClose, onSaved, onDelet
     try {
       const { aiQuick } = await import('../../lib/aiBridge.js')
       const ing = (form.ingredients || []).map((x) => x.nameAr || x.nameEn).filter(Boolean).join('، ')
-      const out = await aiQuick(`اكتب وصفاً شهياً قصيراً (15-25 كلمة) لصنف اسمه "${label}"${ing ? ` مكوناته: ${ing}` : ''} في منيو مقهى. بلا رموز تعبيرية وبلا مبالغة مبتذلة. أجب بالوصف فقط.`)
+      // The venue's own vocabulary — a perfumery must not be told it is a cafe.
+      const out = await aiQuick(
+        `اكتب وصفاً جذاباً قصيراً (15-25 كلمة) لـ${lex(tnt, 'item')} اسمه "${label}"${ing ? ` مكوناته: ${ing}` : ''} في ${lex(tnt, 'menu')} الخاص بـ${venueType(tnt).ar}. بلا رموز تعبيرية وبلا مبالغة مبتذلة. أجب بالوصف فقط.`,
+        { logAs: { tid: tenantId, kind: 'text', section: 'item-editor', itemId: form.id || '' } },
+      )
       const clean = String(out || '').trim()
       if (!clean) throw new Error(lang === 'ar' ? 'لم يصل رد' : 'No response')
       set('descAr', clean)
@@ -631,9 +636,10 @@ function ItemEditor({ tenantId, cats, currency, value, onClose, onSaved, onDelet
       const { aiQuick } = await import('../../lib/aiBridge.js')
       const ing = (form.ingredients || []).map((x) => x.nameAr || x.nameEn).filter(Boolean).join('، ')
       const out = await aiQuick(
-        `اكتب «قصة طبق» قصيرة لمنيو مطعم عن صنف اسمه "${label}"${ing ? ` ومكوناته: ${ing}` : ''}${form.descAr ? ` ووصفه: ${form.descAr}` : ''}.`
-        + ' أعد JSON فقط بالمفاتيح: title (عنوان جذاب 3-6 كلمات)، body (60-90 كلمة بأسلوب أدبي دافئ)، sourceLine (سطر واحد عن الطزاجة أو التحضير)، chefLine (جملة قصيرة على لسان الشيف).'
+        `اكتب «قصة» قصيرة عن ${lex(tnt, 'item')} اسمه "${label}" في ${venueType(tnt).ar}${ing ? ` ومكوناته: ${ing}` : ''}${form.descAr ? ` ووصفه: ${form.descAr}` : ''}.`
+        + ' أعد JSON فقط بالمفاتيح: title (عنوان جذاب 3-6 كلمات)، body (60-90 كلمة بأسلوب أدبي دافئ)، sourceLine (سطر واحد عن الطزاجة أو التحضير)، chefLine (جملة قصيرة على لسان صاحب المكان).'
         + ' لا تخترع ادعاءات محددة عن مصدر جغرافي أو جوائز أو شهادات. بلا رموز تعبيرية. JSON فقط بلا أي نص آخر.',
+        { logAs: { tid: tenantId, kind: 'story', section: 'item-editor', itemId: form.id || '' } },
       )
       const raw = String(out || '')
       const m = raw.match(/\{[\s\S]*\}/)

@@ -191,8 +191,13 @@ export function recordAnswer(playId, answer = {}) {
   } catch (_) { return false }
 }
 
-// Save a resume point. Oversized states are DROPPED, not truncated — a
-// half-serialized state would restore a corrupt game, which is worse than none.
+// Save a resume point.
+//
+// An oversized or unserializable state is DROPPED, never truncated — a
+// half-serialized state would restore a corrupt game, which is worse than no
+// resume at all. Critically, dropping it also does NOT erase the last good
+// resume point: the guest keeps the furthest position we could actually store,
+// and only the stage advances. Passing `null` explicitly is the way to clear.
 export function saveProgress(playId, resumeState, stage) {
   try {
     const slot = LIVE.get(playId)
@@ -201,19 +206,26 @@ export function saveProgress(playId, resumeState, stage) {
     if (stage != null) rec.stage = intIn(stage, 0, 9999)
 
     let state = null
-    if (resumeState && typeof resumeState === 'object') {
+    let usable = true
+    if (resumeState === null || resumeState === undefined) {
+      state = null // explicit clear
+    } else if (typeof resumeState === 'object') {
       let s = ''
       try { s = JSON.stringify(resumeState) } catch (_) { s = '' }
       if (s && s.length <= MAX_RESUME_CHARS) state = JSON.parse(s)
+      else usable = false // too big / cyclic — keep whatever we already had
+    } else {
+      usable = false
     }
-    rec.resumeState = state
+
+    if (usable) rec.resumeState = state
 
     // The device copy is what resume actually reads.
     writeLS(lsResume(slot.tid, rec.gameId, rec.deviceId), {
-      playId, resumeState: state, stage: rec.stage, at: nowMs(),
+      playId, resumeState: rec.resumeState, stage: rec.stage, at: nowMs(),
     })
     touch(playId)
-    return true
+    return usable
   } catch (_) { return false }
 }
 

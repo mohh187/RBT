@@ -1,0 +1,463 @@
+/* «ألعاب البصيرة» — TasteProfile / MindMirror / DecisionStyle.
+   Owned by the insight games only. Never edit index.css for these.
+
+   Hard rules honoured here:
+     • every scroll container hides its scrollbar (scrollbar-width + webkit)
+     • no emoji, no Arabic-Indic digits (numbers formatted in JS with -nu-latn)
+     • logical properties throughout so RTL/LTR both read correctly
+   The hub owns the shell, the close button and the live score — these styles
+   only ever fill the parent stage. */
+
+.ins-root {
+  position: relative;
+  width: 100%;
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  background:
+    radial-gradient(120% 90% at 50% 0%, rgba(255, 255, 255, 0.07), transparent 60%),
+    linear-gradient(165deg, #14232f, #0a1219 60%, #070d13);
+  color: #eef4f8;
+  font-size: 15px;
+  -webkit-user-select: none;
+  user-select: none;
+}
+
+/* ---- shared scroll surface: no visible scrollbar, ever ---- */
+.ins-scroll {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  overflow-x: hidden;
+  -webkit-overflow-scrolling: touch;
+  overscroll-behavior: contain;
+  scrollbar-width: none;
+  -ms-overflow-style: none;
+}
+.ins-scroll::-webkit-scrollbar { width: 0; height: 0; }
+
+.ins-pad { padding: 46px 16px 22px; display: flex; flex-direction: column; align-items: center; gap: 14px; }
+
+/* ---- header strip: progress + step count ---- */
+.ins-top {
+  position: absolute;
+  inset-inline: 12px;
+  top: 10px;
+  z-index: 5;
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  pointer-events: none;
+}
+.ins-prog {
+  flex: 1;
+  height: 5px;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.13);
+  overflow: hidden;
+}
+.ins-prog i {
+  display: block;
+  height: 100%;
+  border-radius: 999px;
+  transition: width 0.35s cubic-bezier(0.22, 1, 0.36, 1);
+}
+.ins-step {
+  font-size: 11px;
+  font-weight: 800;
+  letter-spacing: 0.02em;
+  color: rgba(255, 255, 255, 0.62);
+  white-space: nowrap;
+  font-variant-numeric: tabular-nums;
+}
+
+/* ---- typography ---- */
+.ins-title { margin: 0; font-size: clamp(20px, 5.6vw, 27px); font-weight: 800; letter-spacing: -0.015em; line-height: 1.35; text-align: center; }
+.ins-sub { margin: 0; max-width: 34ch; font-size: 14px; line-height: 1.8; color: rgba(255, 255, 255, 0.72); text-align: center; }
+.ins-q { margin: 0; max-width: 30ch; font-size: clamp(16px, 4.7vw, 20px); font-weight: 800; line-height: 1.65; text-align: center; }
+.ins-hint { margin: 0; font-size: 12px; color: rgba(255, 255, 255, 0.5); text-align: center; }
+
+.ins-kicker {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 12px;
+  border-radius: 999px;
+  font-size: 11px;
+  font-weight: 800;
+  letter-spacing: 0.04em;
+  color: rgba(255, 255, 255, 0.85);
+  background: rgba(255, 255, 255, 0.09);
+  border: 1px solid rgba(255, 255, 255, 0.14);
+}
+
+/* ---- buttons ---- */
+.ins-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  min-height: 46px;
+  padding: 0 24px;
+  border: 0;
+  border-radius: 13px;
+  font: inherit;
+  font-size: 15px;
+  font-weight: 800;
+  color: #fff;
+  cursor: pointer;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.38);
+  transition: transform 0.14s ease;
+  touch-action: manipulation;
+}
+.ins-btn:active { transform: translateY(1px) scale(0.99); }
+.ins-btn.ghost {
+  background: transparent !important;
+  border: 1px solid rgba(255, 255, 255, 0.24);
+  box-shadow: none;
+  color: rgba(255, 255, 255, 0.85);
+  font-weight: 700;
+}
+.ins-btnrow { display: flex; flex-wrap: wrap; gap: 9px; justify-content: center; }
+
+/* ---- either/or duo (TasteProfile) ---- */
+.ins-duo {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 10px;
+  width: min(460px, 100%);
+  align-items: stretch;
+}
+.ins-duo-card {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 9px 12px;
+  border: 1px solid rgba(255, 255, 255, 0.14);
+  border-radius: 16px;
+  background: rgba(255, 255, 255, 0.055);
+  color: inherit;
+  font: inherit;
+  cursor: pointer;
+  text-align: center;
+  overflow: hidden;
+  transition: transform 0.16s ease, border-color 0.16s ease, background 0.16s ease;
+  touch-action: manipulation;
+}
+.ins-duo-card:active { transform: scale(0.975); }
+.ins-duo-card.picked { border-color: currentColor; background: rgba(255, 255, 255, 0.12); }
+.ins-duo-card.faded { opacity: 0.34; }
+.ins-duo-card:disabled { cursor: default; }
+
+.ins-duo-media {
+  width: 100%;
+  aspect-ratio: 1 / 1;
+  border-radius: 12px;
+  overflow: hidden;
+  background: rgba(255, 255, 255, 0.07);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: rgba(255, 255, 255, 0.45);
+}
+.ins-duo-media img { width: 100%; height: 100%; object-fit: cover; display: block; }
+.ins-duo-name {
+  font-size: 13.5px;
+  font-weight: 700;
+  line-height: 1.45;
+  color: #fff;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+.ins-duo-meta { font-size: 11px; color: rgba(255, 255, 255, 0.5); font-variant-numeric: tabular-nums; }
+.ins-or {
+  font-size: 11px;
+  font-weight: 800;
+  letter-spacing: 0.08em;
+  color: rgba(255, 255, 255, 0.4);
+  text-align: center;
+}
+
+/* ---- option list (MindMirror / DecisionStyle) ---- */
+.ins-opts { display: grid; gap: 9px; width: min(440px, 100%); }
+.ins-opt {
+  min-height: 52px;
+  padding: 11px 15px;
+  border: 1px solid rgba(255, 255, 255, 0.15);
+  border-radius: 13px;
+  background: rgba(255, 255, 255, 0.055);
+  color: #fff;
+  font: inherit;
+  font-size: 14px;
+  font-weight: 600;
+  line-height: 1.65;
+  text-align: start;
+  cursor: pointer;
+  transition: transform 0.14s ease, background 0.14s ease, border-color 0.14s ease;
+  touch-action: manipulation;
+}
+.ins-opt:active { transform: scale(0.985); }
+.ins-opt.picked { background: rgba(255, 255, 255, 0.14); border-color: currentColor; }
+.ins-opt.faded { opacity: 0.35; }
+.ins-opt:disabled { cursor: default; }
+
+/* ---- reveal ---- */
+.ins-reveal { width: min(520px, 100%); display: flex; flex-direction: column; gap: 15px; }
+
+.ins-crown {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 9px;
+  padding: 20px 16px 18px;
+  border-radius: 20px;
+  border: 1px solid rgba(255, 255, 255, 0.14);
+  background: linear-gradient(160deg, rgba(255, 255, 255, 0.11), rgba(255, 255, 255, 0.035));
+  text-align: center;
+}
+.ins-seal {
+  width: 54px;
+  height: 54px;
+  border-radius: 18px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: #fff;
+  box-shadow: 0 10px 26px rgba(0, 0, 0, 0.4);
+}
+.ins-arch { margin: 0; font-size: clamp(21px, 6vw, 28px); font-weight: 800; letter-spacing: -0.02em; color: #fff; }
+.ins-fit { font-size: 11.5px; font-weight: 700; color: rgba(255, 255, 255, 0.55); font-variant-numeric: tabular-nums; }
+.ins-portrait { margin: 0; font-size: 14.5px; line-height: 1.95; color: rgba(255, 255, 255, 0.9); }
+
+.ins-sec {
+  padding: 14px 15px;
+  border-radius: 16px;
+  border: 1px solid rgba(255, 255, 255, 0.11);
+  background: rgba(255, 255, 255, 0.045);
+}
+.ins-sec-h {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  margin: 0 0 9px;
+  font-size: 12.5px;
+  font-weight: 800;
+  letter-spacing: 0.02em;
+  color: rgba(255, 255, 255, 0.62);
+}
+.ins-body { margin: 0; font-size: 14px; line-height: 1.9; color: rgba(255, 255, 255, 0.86); }
+.ins-list { margin: 0; padding: 0; list-style: none; display: grid; gap: 8px; }
+.ins-list li {
+  position: relative;
+  padding-inline-start: 17px;
+  font-size: 13.5px;
+  line-height: 1.8;
+  color: rgba(255, 255, 255, 0.86);
+}
+.ins-list li::before {
+  content: '';
+  position: absolute;
+  inset-inline-start: 3px;
+  top: 0.72em;
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: currentColor;
+  opacity: 0.65;
+}
+
+/* numbered predictions — the "check this against your own life" block */
+.ins-preds { margin: 0; padding: 0; list-style: none; display: grid; gap: 10px; counter-reset: insp; }
+.ins-pred {
+  position: relative;
+  padding-inline-start: 34px;
+  font-size: 13.5px;
+  line-height: 1.85;
+  color: rgba(255, 255, 255, 0.9);
+}
+.ins-pred-n {
+  position: absolute;
+  inset-inline-start: 0;
+  top: 0.1em;
+  width: 24px;
+  height: 24px;
+  border-radius: 8px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 12px;
+  font-weight: 800;
+  color: #fff;
+  font-variant-numeric: tabular-nums;
+}
+
+/* ---- trait bars ---- */
+.ins-bars { display: grid; gap: 11px; }
+.ins-bar-top {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 8px;
+  font-size: 12px;
+  margin-bottom: 5px;
+}
+.ins-bar-nm { font-weight: 800; color: rgba(255, 255, 255, 0.9); }
+.ins-bar-val { font-weight: 700; color: rgba(255, 255, 255, 0.55); font-variant-numeric: tabular-nums; }
+.ins-bar-track {
+  position: relative;
+  height: 8px;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.1);
+  overflow: hidden;
+}
+.ins-bar-track::after {
+  content: '';
+  position: absolute;
+  inset-inline-start: 50%;
+  top: 0;
+  bottom: 0;
+  width: 1px;
+  background: rgba(255, 255, 255, 0.22);
+}
+.ins-bar-fill {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  border-radius: 999px;
+  transition: inset-inline-start 0.7s cubic-bezier(0.22, 1, 0.36, 1), width 0.7s cubic-bezier(0.22, 1, 0.36, 1);
+}
+.ins-bar-poles {
+  display: flex;
+  justify-content: space-between;
+  gap: 8px;
+  margin-top: 4px;
+  font-size: 10.5px;
+  color: rgba(255, 255, 255, 0.42);
+}
+.ins-bar.low-conf .ins-bar-fill { opacity: 0.5; }
+.ins-bar.low-conf .ins-bar-nm { color: rgba(255, 255, 255, 0.6); }
+
+/* ---- recommendations ---- */
+.ins-recs { display: grid; gap: 9px; }
+.ins-rec {
+  display: flex;
+  align-items: center;
+  gap: 11px;
+  padding: 9px;
+  border-radius: 14px;
+  border: 1px solid rgba(255, 255, 255, 0.11);
+  background: rgba(255, 255, 255, 0.05);
+}
+.ins-rec-media {
+  flex: none;
+  width: 56px;
+  height: 56px;
+  border-radius: 12px;
+  overflow: hidden;
+  background: rgba(255, 255, 255, 0.08);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: rgba(255, 255, 255, 0.42);
+}
+.ins-rec-media img { width: 100%; height: 100%; object-fit: cover; display: block; }
+.ins-rec-body { min-width: 0; display: grid; gap: 3px; }
+.ins-rec-nm { font-size: 14px; font-weight: 800; color: #fff; }
+.ins-rec-why { font-size: 12px; line-height: 1.65; color: rgba(255, 255, 255, 0.66); }
+.ins-rec-price { font-size: 11.5px; font-weight: 700; color: rgba(255, 255, 255, 0.5); font-variant-numeric: tabular-nums; }
+
+/* ---- share-worthy result card ---- */
+.ins-cardish {
+  border-radius: 20px;
+  padding: 18px 16px;
+  border: 1px solid rgba(255, 255, 255, 0.16);
+  background: linear-gradient(150deg, rgba(255, 255, 255, 0.14), rgba(255, 255, 255, 0.03));
+  display: grid;
+  gap: 10px;
+  text-align: center;
+}
+.ins-cardish .ins-who { font-size: 12px; color: rgba(255, 255, 255, 0.6); font-weight: 700; }
+.ins-cardish .ins-line { font-size: 13.5px; line-height: 1.85; color: rgba(255, 255, 255, 0.88); }
+.ins-chips { display: flex; flex-wrap: wrap; gap: 6px; justify-content: center; }
+.ins-chip {
+  font-size: 11px;
+  font-weight: 800;
+  padding: 4px 10px;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.12);
+  border: 1px solid rgba(255, 255, 255, 0.15);
+  color: rgba(255, 255, 255, 0.88);
+}
+
+/* ---- disclaimer + resume + empty ---- */
+.ins-disc {
+  margin: 4px 0 0;
+  max-width: 40ch;
+  font-size: 11px;
+  line-height: 1.75;
+  color: rgba(255, 255, 255, 0.42);
+  text-align: center;
+}
+.ins-resume {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  font-size: 12px;
+  font-weight: 700;
+  color: rgba(255, 255, 255, 0.66);
+  padding: 6px 12px;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.07);
+  border: 1px solid rgba(255, 255, 255, 0.12);
+}
+.ins-empty {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 12px;
+  padding: 24px;
+  text-align: center;
+}
+.ins-empty-ico {
+  width: 48px;
+  height: 48px;
+  border-radius: 15px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: #fff;
+}
+
+/* ---- motion ---- */
+.ins-fade { animation: insFade 0.32s cubic-bezier(0.22, 1, 0.36, 1) both; }
+@keyframes insFade {
+  from { opacity: 0; transform: translateY(9px); }
+  to { opacity: 1; transform: none; }
+}
+.ins-rise { animation: insRise 0.45s cubic-bezier(0.22, 1, 0.36, 1) both; }
+@keyframes insRise {
+  from { opacity: 0; transform: translateY(16px) scale(0.985); }
+  to { opacity: 1; transform: none; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .ins-fade, .ins-rise { animation: none; }
+  .ins-prog i, .ins-bar-fill { transition: none; }
+  .ins-btn:active, .ins-opt:active, .ins-duo-card:active { transform: none; }
+  .ins-btn, .ins-opt, .ins-duo-card { transition: none; }
+}
+
+/* very short stages (landscape phones): tighten so nothing needs scrolling */
+@media (max-height: 520px) {
+  .ins-pad { padding-top: 40px; gap: 10px; }
+  .ins-duo-media { aspect-ratio: 4 / 3; }
+  .ins-opt { min-height: 44px; padding: 8px 13px; font-size: 13px; }
+  .ins-title { font-size: 19px; }
+}

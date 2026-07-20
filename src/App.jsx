@@ -51,6 +51,8 @@ const Policies = lazy(() => import('./routes/admin/Policies.jsx'))
 const Reports = lazy(() => import('./routes/admin/Reports.jsx'))
 const Accounting = lazy(() => import('./routes/admin/Accounting.jsx'))
 const Behavior = lazy(() => import('./routes/admin/Behavior.jsx'))
+const GuestPlay = lazy(() => import('./routes/admin/GuestPlay.jsx'))
+const GenHistory = lazy(() => import('./routes/admin/GenHistory.jsx'))
 const DailyReport = lazy(() => import('./routes/admin/DailyReport.jsx'))
 const Staff = lazy(() => import('./routes/admin/Staff.jsx'))
 const Settings = lazy(() => import('./routes/admin/Settings.jsx'))
@@ -164,6 +166,20 @@ function BehaviorRoute() {
     <Behavior
       onCreateCampaign={hand('rbt_campaign_draft', '/admin/campaigns?draft=1')}
       onCreateContent={hand('rbt_content_draft', '/admin/posts-studio?draft=1')}
+    />
+  )
+}
+
+// Play analytics hands its segments to campaigns the same way the behaviour
+// planner does — one shared handoff shape, one place that knows the URL.
+function GuestPlayRoute() {
+  const navigate = useNavigate()
+  return (
+    <GuestPlay
+      onCreateCampaign={(draft) => {
+        try { sessionStorage.setItem('rbt_campaign_draft', JSON.stringify(draft || {})) } catch (_) { /* private mode */ }
+        navigate('/admin/campaigns?draft=1')
+      }}
     />
   )
 }
@@ -425,6 +441,8 @@ export default function App() {
         <Route path="reports" element={<RequireCap cap={CAP.VIEW_REPORTS}><PlanGate feature="reports"><Reports /></PlanGate></RequireCap>} />
         <Route path="accounting" element={<RequireCap cap={CAP.VIEW_REVENUE}><Accounting /></RequireCap>} />
         <Route path="behavior" element={<RequireCap cap={CAP.VIEW_REPORTS}><BehaviorRoute /></RequireCap>} />
+        <Route path="guest-play" element={<RequireCap cap={CAP.VIEW_REPORTS}><GuestPlayRoute /></RequireCap>} />
+        <Route path="gen-history" element={<RequireCap anyOf={[CAP.MANAGE_CAMPAIGNS, CAP.MANAGE_MENU, CAP.MANAGE_APPEARANCE]}><GenHistory /></RequireCap>} />
         <Route path="daily" element={<RequireCap cap={CAP.VIEW_REPORTS}><PlanGate feature="reports"><DailyReport /></PlanGate></RequireCap>} />
         <Route path="hr" element={<RequireCap cap={CAP.ATTENDANCE}><PlanGate feature="staff"><StaffHub /></PlanGate></RequireCap>} />
         <Route path="roles" element={<RequireCap cap={CAP.MANAGE_STAFF}><PlanGate feature="staff"><Roles /></PlanGate></RequireCap>} />

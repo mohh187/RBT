@@ -907,9 +907,12 @@ export function toolDeclarationsFor(tenant) {
   // alternatives first. This is what stops «صنف» from being replaced inside
   // «تصنيف»: the longer word is matched and consumed before the shorter one is
   // ever tried. Identity pairs stay in the map so they still consume their text.
+  // Bare indefinite plurals map to THEMSELVES on purpose: the lex plurals carry
+  // «ال», so swapping «3 أصناف» would produce «3 المنتجات». They stay in the map
+  // only so the scan consumes them (that is what protects «تصنيف» from «صنف»).
   const AR = {
-    'التصنيفات': categories, 'تصنيفات': categories, 'التصنيف': definite(category), 'تصنيف': category,
-    'الأصناف': items, 'أصناف': items, 'الصنف': definite(item), 'صنف': item,
+    'التصنيفات': categories, 'تصنيفات': 'تصنيفات', 'التصنيف': definite(category), 'تصنيف': category,
+    'الأصناف': items, 'أصناف': 'أصناف', 'الصنف': definite(item), 'صنف': item,
     'قائمة الطعام': menu, 'المنيو': menu,
   }
   const arKeys = Object.keys(AR).filter((k) => AR[k]).sort((a, b) => b.length - a.length)
