@@ -86,7 +86,7 @@ export default function Offers() {
       itemId: one || '',
       startTime: draft?.window?.startTime || '',
       endTime: draft?.window?.endTime || '',
-      daysOfWeek: Array.isArray(draft?.window?.days) ? draft.window.days : [],
+      daysOfWeek: Array.isArray(draft?.window?.daysOfWeek) ? draft.window.daysOfWeek : [],
     })
     setOpen(true)
   }

@@ -357,11 +357,17 @@ service cloud.firestore {
 
       // ---- waiting-game scores («لوحة صدارة الصيادين»): guests post their own
       // score, everyone reads the board, managers can prune it.
+      // Doc id is `${deviceId}_${YYYY-MM}` so a device owns exactly one row per
+      // month — enforced structurally here rather than by query. Diners are
+      // anonymous, so the score RANGE is the real guard (a hostile client can
+      // still post any value inside it; this is a game board, not money).
       match /gameScores/{id} {
         allow read: if true;
-        allow create, update: if request.resource.data.score is number
+        allow create, update: if request.resource.data.score is int
           && request.resource.data.score >= 0
-          && request.resource.data.score <= 100000;
+          && request.resource.data.score <= 100000
+          && request.resource.data.name.size() <= 24
+          && id == request.resource.data.deviceId + '_' + request.resource.data.month;
         allow delete: if isManager(tid);
       }
 

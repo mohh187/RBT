@@ -7643,6 +7643,7 @@ body:has(.sd2-root) .toast-wrap { z-index: 840; }
 .vw-typed-row { display: flex; gap: 8px; }
 .vw-typed-row .input { flex: 1; min-width: 0; }
 
+/* ==== accounting v1 (cont.) ==== */
 /* --- ledger table + filters --- */
 .acc-filters { display: grid; grid-template-columns: 1fr auto auto; gap: 8px; align-items: center; }
 .acc-filters .input { font-size: 12.5px; padding-block: 7px; min-width: 0; }
@@ -7879,6 +7880,7 @@ body:has(.sd2-root) .toast-wrap { z-index: 840; }
   .m3d-rail { scroll-behavior: auto; }
 }
 
+/* ==== accounting v1 (cont.) ==== */
 /* --- P&L statement + drill-down --- */
 .acc-pnl { display: grid; gap: 1px; background: var(--border); border: 1px solid var(--border); border-radius: var(--r-md, 10px); overflow: hidden; }
 .acc-pnl-row {
@@ -8173,6 +8175,7 @@ body:has(.sd2-root) .toast-wrap { z-index: 840; }
 .po-conf-fill { display: block; height: 100%; border-radius: 999px; background: linear-gradient(90deg, var(--brand), var(--accent)); }
 .po-conf-n { font-size: 11px; font-weight: 800; color: var(--text-faint); }
 
+/* ==== accounting v1 (cont.) ==== */
 /* --- VAT declaration --- */
 .acc-decl-head {
   display: flex; flex-wrap: wrap; align-items: flex-start; justify-content: space-between;
@@ -8473,6 +8476,7 @@ body:has(.sd2-root) .toast-wrap { z-index: 840; }
 }
 /* ==== /voice-photo v1 ==== */
 
+/* ==== accounting v1 (cont.) ==== */
 /* --- bills vault: form, table actions, gallery, lightbox --- */
 .acc-form-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(160px, 1fr)); gap: 10px; }
 .acc-field { display: grid; gap: 4px; min-width: 0; }
@@ -8641,6 +8645,7 @@ body:has(.sd2-root) .toast-wrap { z-index: 840; }
 }
 /* ==== /insights-play v1 · part 2 (year wrapped) ==== */
 
+/* ==== accounting v1 (cont.) ==== */
 /* --- margins + inventory valuation --- */
 .acc-item-name { font-weight: 600; }
 .acc-loss-tag,
@@ -8815,6 +8820,7 @@ body:has(.sd2-root) .toast-wrap { z-index: 840; }
 .soa-snap::-webkit-scrollbar { display: none; width: 0; height: 0; }
 /* ==== /insights-play v1 · part 3 (smart offer advisor) ==== */
 
+/* ==== accounting v1 (cont.) ==== */
 /* --- dashboard: chart, break-even, findings --- */
 .acc-chart { width: 100%; height: 200px; }
 .acc-legend { display: inline-flex; align-items: center; gap: 6px; font-size: 11px; color: var(--text-faint); }
@@ -8866,6 +8872,9 @@ body:has(.sd2-root) .toast-wrap { z-index: 840; }
 .exp-chip:active { transform: scale(.97); }
 @media (prefers-reduced-motion: reduce) { .exp-chip { transition: none; } }
 
+/* ==== /experience-bar v1 ==== */
+
+/* ==== accounting v1 (cont.) ==== */
 /* --- page chrome: payroll accrual notice, footer, print --- */
 .acc-accrual {
   padding: 9px 11px; border-radius: var(--r-md, 10px);

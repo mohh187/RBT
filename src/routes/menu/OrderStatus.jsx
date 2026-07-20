@@ -13,15 +13,16 @@ import { orderNumber } from '../../lib/format.js'
 import { Price } from '../../components/Riyal.jsx'
 import { vibrate, alertParty } from '../../lib/notify.js'
 import { getPrefs } from '../../lib/notifyPrefs.js'
-import { isRated, markRated, isArrived, markArrived } from '../../lib/customer.js'
+import { isRated, markRated, isArrived, markArrived, getMyOrders, getLocalCustomer } from '../../lib/customer.js'
 import { startPayment } from '../../lib/payments.js'
 import { createVenueReview } from '../../lib/reviewImport.js'
 import NotificationSettings from '../../components/NotificationSettings.jsx'
 import WaitGame, { getBestScore } from '../../components/WaitGame.jsx'
-import { deviceGuestId } from '../../lib/tableSession.js'
+import { deviceKey } from '../../lib/device.js'
 // heavy/rarely-opened guest overlays
 const Leaderboard = lazy(() => import('../../components/Leaderboard.jsx'))
 const KitchenTwin = lazy(() => import('../../components/KitchenTwin.jsx'))
+const YearWrapped = lazy(() => import('../../components/YearWrapped.jsx'))
 
 const STEPS = ['pending', 'accepted', 'preparing', 'ready', 'served']
 const STEP_LABEL = {
@@ -56,7 +57,10 @@ export default function OrderStatus() {
   const [boardOpen, setBoardOpen] = useState(false)
   const [twinOpen, setTwinOpen] = useState(false)
   const [lastScore, setLastScore] = useState(0)
-  const gameDeviceId = deviceGuestId()
+  const gameDeviceId = deviceKey()
+  const [wrapBusy, setWrapBusy] = useState(false)
+  const [wrapStats, setWrapStats] = useState(null)
+  const [wrapItems, setWrapItems] = useState([])
   const prevStatus = useRef(null)
 
   const [venue, setVenue] = useState(null) // social links + Google Maps CTA
@@ -149,6 +153,31 @@ export default function OrderStatus() {
     setPaying(true)
     try { await startPayment('order', tid, orderId) }
     catch (_) { setPaying(false); toast.error(lang === 'ar' ? 'تعذّر فتح صفحة الدفع' : 'Could not open payment') }
+  }
+
+  // Loads the guest's own year: their orders (by the phone on this order) plus
+  // the menu, then computes real stats. Nothing runs until they ask for it.
+  const openWrapped = async () => {
+    if (wrapBusy) return
+    setWrapBusy(true)
+    try {
+      const [{ customerYear }, { listOrdersSince, listItems }] = await Promise.all([
+        import('../../lib/forecast.js'),
+        import('../../lib/db.js'),
+      ])
+      const since = new Date(new Date().getFullYear(), 0, 1)
+      const [orders, menu] = await Promise.all([listOrdersSince(tid, since), listItems(tid)])
+      const phone = order.customerPhone || getLocalCustomer()?.phone || ''
+      const stats = customerYear({ orders: orders || [], customer: { phone }, year: new Date().getFullYear() })
+      if (!stats || !stats.hasData) {
+        toast.info?.(lang === 'ar' ? 'لم نجد زيارات كافية بعد' : 'Not enough visits yet')
+        return
+      }
+      setWrapItems(menu || [])
+      setWrapStats(stats)
+    } catch (_) {
+      toast.error(lang === 'ar' ? 'تعذّر تجهيز القصة' : 'Could not build your story')
+    } finally { setWrapBusy(false) }
   }
 
   const doArrive = async () => {
@@ -294,6 +323,24 @@ export default function OrderStatus() {
         {twinOpen && (
           <Suspense fallback={null}>
             <KitchenTwin open onClose={() => setTwinOpen(false)} tenantId={tid} orderId={orderId} lang={lang} />
+          </Suspense>
+        )}
+
+        {/* «سنتك معنا» — the guest's own year in review. Offered only to real
+            regulars (3+ remembered orders on this device); the heavy history
+            query runs on tap, never on page load. */}
+        {(order.status === 'served' || order.status === 'paid') && (getMyOrders(tid) || []).length >= 3 && (
+          <button type="button" className="wg-invite" style={{ background: 'linear-gradient(135deg, #6d28d9, #2563eb)' }} disabled={wrapBusy} onClick={openWrapped}>
+            <span className="wg-invite-ico"><Icon name="award" size={22} /></span>
+            <span className="wg-invite-txt">
+              <b>{wrapBusy ? (lang === 'ar' ? 'نجهّز قصتك…' : 'Building your story…') : (lang === 'ar' ? 'سنتك معنا' : 'Your year with us')}</b>
+              <span>{lang === 'ar' ? 'زياراتك وأطباقك المفضلة في بطاقات جميلة' : 'Your visits and favourites'}</span>
+            </span>
+          </button>
+        )}
+        {wrapStats && (
+          <Suspense fallback={null}>
+            <YearWrapped open onClose={() => setWrapStats(null)} stats={wrapStats} venueName={venue?.name || ''} lang={lang} currency={currency} items={wrapItems} />
           </Suspense>
         )}
 
