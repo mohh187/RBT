@@ -20,6 +20,7 @@ import AdShapePicker from '../../components/ads/AdShapePicker.jsx'
 import AdCanvas from '../../components/ads/AdCanvas.jsx'
 import AdTargeting from '../../components/ads/AdTargeting.jsx'
 import AdSchedule from '../../components/ads/AdSchedule.jsx'
+import AdReport from '../../components/ads/AdReport.jsx'
 import AdRewardStep from '../../components/ads/AdRewardStep.jsx'
 import AdPreview from '../../components/ads/AdPreview.jsx'
 import '../../styles/ads.css'
@@ -48,6 +49,7 @@ export default function AdsStudio() {
 
   const [draft, setDraft] = useState(null)  // the ad being edited (normalized)
   const [editId, setEditId] = useState('')  // '' while creating
+  const [view, setView] = useState('list')  // 'list' | 'report'
   const [step, setStep] = useState('shape')
   const [busy, setBusy] = useState(false)
 
@@ -77,7 +79,9 @@ export default function AdsStudio() {
     setStep('shape')
   }
 
-  async function onSave() {
+  // `back` returns to the list after saving (the normal finish-and-review
+  // flow), while «حفظ ومتابعة» keeps the editor open for a long design session.
+  async function onSave({ back = true } = {}) {
     if (!draft || !tenantId) return
     if (!draft.name.trim()) { toast.error(ar ? 'اكتب اسماً للإعلان' : 'Name the ad'); return }
     setBusy(true)
@@ -86,7 +90,11 @@ export default function AdsStudio() {
       delete payload.id
       const id = await saveAd(tenantId, editId || null, payload)
       if (!editId && typeof id === 'string') setEditId(id)
-      toast.success(ar ? 'حُفظ الإعلان' : 'Saved')
+      const inactive = !draft.active
+      toast.success(inactive
+        ? (ar ? 'حُفظ — فعّله من البطاقة ليظهر للعملاء' : 'Saved — activate it to go live')
+        : (ar ? 'حُفظ الإعلان وهو نشط الآن' : 'Saved and live'))
+      if (back) { setDraft(null); setEditId('') }
     } catch (e) {
       toast.error(String(e?.message || e))
     } finally {
@@ -145,9 +153,12 @@ export default function AdsStudio() {
               <Icon name="back" size={16} />
               {ar ? 'رجوع' : 'Back'}
             </button>
-            <button type="button" className="btn btn-primary" onClick={onSave} disabled={busy}>
+            <button type="button" className="btn" onClick={() => onSave({ back: false })} disabled={busy}>
+              {ar ? 'حفظ ومتابعة' : 'Save & keep editing'}
+            </button>
+            <button type="button" className="btn btn-primary" onClick={() => onSave({ back: true })} disabled={busy}>
               {busy ? <Spinner /> : <Icon name="check" size={16} />}
-              {ar ? 'حفظ' : 'Save'}
+              {ar ? 'حفظ وعرض الإعلانات' : 'Save & view ads'}
             </button>
           </div>
         </div>
@@ -230,7 +241,25 @@ export default function AdsStudio() {
         </button>
       </div>
 
-      {list === null ? <Spinner lg /> : null}
+      <div className="row" style={{ gap: 6, marginBottom: 12 }}>
+        <button type="button" className={`chip ${view === 'list' ? 'active' : ''}`} onClick={() => setView('list')}>
+          <Icon name="grid" size={13} /> {ar ? 'الإعلانات' : 'Ads'}
+        </button>
+        <button type="button" className={`chip ${view === 'report' ? 'active' : ''}`} onClick={() => setView('report')}>
+          <Icon name="chartBar" size={13} /> {ar ? 'السجل والنتائج' : 'Results'}
+        </button>
+      </div>
+
+      {view === 'report' ? (
+        <AdReport
+          tenantId={tenantId}
+          ads={rows}
+          lang={lang}
+          onOpenAd={(ad) => { setDraft(normalizeAd(ad)); setEditId(ad.id); setView('list') }}
+        />
+      ) : null}
+
+      {view === 'report' ? null : list === null ? <Spinner lg /> : null}
 
       {list !== null && !rows.length ? (
         <Empty

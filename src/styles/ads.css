@@ -898,3 +898,39 @@
   white-space: nowrap;
 }
 .ads-pick.active { border-color: var(--brand); background: var(--brand-soft); color: var(--brand-strong); }
+
+/* ---- «سجل الإعلانات»: results tied to real guests ---- */
+.ads-report { display: grid; gap: 12px; }
+.ads-rep-head { display: flex; align-items: center; justify-content: space-between; gap: 10px; flex-wrap: wrap; }
+.ads-rep-note { margin: 0; font-size: 12px; line-height: 1.8; color: var(--text-faint); }
+.ads-rep-err { margin: 0; font-size: 12px; color: var(--warning); }
+.ads-rep-kpis { display: grid; grid-template-columns: repeat(auto-fit, minmax(120px, 1fr)); gap: 8px; }
+.ads-rep-kpis > div {
+  background: var(--surface-2); border-radius: var(--r-md, 12px); padding: 10px 12px;
+  display: grid; gap: 2px;
+}
+.ads-rep-kpis span { font-size: 11px; color: var(--text-faint); }
+.ads-rep-kpis b { font-size: 19px; font-weight: 800; direction: ltr; }
+.ads-rep-row { padding: 12px; display: grid; gap: 8px; }
+.ads-rep-row-top { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+.ads-rep-name { background: none; border: none; padding: 0; cursor: pointer; font-weight: 800; font-size: 14px; color: var(--text); text-align: start; }
+.ads-rep-name:hover { color: var(--brand); }
+.ads-rep-nums { display: flex; flex-wrap: wrap; gap: 12px; font-size: 12px; color: var(--text-muted); }
+.ads-rep-nums b { color: var(--text); font-weight: 800; direction: ltr; margin-inline-start: 3px; }
+.ads-rep-toggle {
+  display: inline-flex; align-items: center; gap: 6px; align-self: flex-start;
+  background: none; border: none; cursor: pointer; padding: 2px 0;
+  font-size: 12px; font-weight: 700; color: var(--brand);
+}
+.ads-rep-people { display: grid; gap: 4px; max-height: 320px; overflow-y: auto; scrollbar-width: none; }
+.ads-rep-people::-webkit-scrollbar { width: 0; }
+.ads-rep-person {
+  display: flex; align-items: center; gap: 10px; flex-wrap: wrap;
+  padding: 6px 8px; border-radius: 8px; background: var(--surface-2); font-size: 12px;
+}
+.ads-rep-who { font-weight: 700; }
+.ads-rep-phone { color: var(--text-faint); }
+.ads-rep-flags { display: inline-flex; gap: 8px; margin-inline-start: auto; }
+.ads-rep-flags .ok { color: var(--success); font-weight: 800; }
+.ads-rep-when { color: var(--text-faint); font-size: 11px; direction: ltr; }
+.ads-rep-none, .ads-rep-more { margin: 0; font-size: 12px; color: var(--text-faint); }

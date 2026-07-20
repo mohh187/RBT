@@ -265,7 +265,11 @@ export const GAMES = [
 
 // A venue that has never touched the picker gets this starter set: one game per
 // flavour (skill, luck, memory, reflex) and nothing that needs a rich menu.
-export const DEFAULT_GAME_IDS = ['fishing', 'waiterDash', 'catchBasket', 'prizeWheel']
+// A venue that has never opened the picker gets EVERY game. The centre is a
+// destination, not a sampler: showing four arcade titles left three of the four
+// shelves (ألغاز / معرفة / شخصية) empty, which read as a broken screen. Owners
+// narrow the list in Settings when they want to.
+export const DEFAULT_GAME_IDS = GAMES.map((g) => g.id)
 
 export function gameById(id) {
   return GAMES.find((g) => g.id === id) || null

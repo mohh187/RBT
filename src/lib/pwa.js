@@ -37,7 +37,12 @@ export function applyVenueManifest(tenant, slug) {
 
     const onPlatform = isPlatformHost()
     // Custom domain serves the menu at root; shared host at /m/slug.
-    const startUrl = onPlatform ? `/m/${slug}` : '/'
+    // ABSOLUTE on purpose: this manifest is served from a blob: URL, and a
+    // relative start_url/scope would be resolved against that blob — which the
+    // browser rejects ("property 'start_url' ignored, URL is invalid"), losing
+    // the venue's install target. Anchoring to the real origin fixes both.
+    const origin = window.location.origin
+    const startUrl = new URL(onPlatform ? `/m/${slug}` : '/', origin).href
     const name = tenant.name || 'Menu'
     const brand = safeColor(tenant.themeColor, safeColor(readVar('--brand'), '#8B5E3C'))
     const bg = safeColor(readVar('--bg'), '#ffffff')

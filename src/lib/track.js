@@ -477,6 +477,21 @@ export function trackGame(gameId, score) {
   push('game', gameId, { score: num(score) })
 }
 
+// Ad interactions ride the SAME session as everything else, so an ad is
+// analysed like any other touchpoint: it lands on the guest's timeline, is
+// linked to their profile the moment they register, and the behaviour page can
+// answer "did people who saw this ad order more?" without a parallel system.
+// action: 'impression' | 'click' | 'dismiss' | 'convert'
+export function trackAd(adId, action, meta) {
+  if (!enabled || !S) return
+  const act = safeStr(action) || 'impression'
+  if (!S.counts.adImpressions) S.counts.adImpressions = 0
+  if (!S.counts.adClicks) S.counts.adClicks = 0
+  if (act === 'impression') S.counts.adImpressions++
+  if (act === 'click' || act === 'convert') S.counts.adClicks++
+  push('ad', safeStr(adId), { action: act, name: safeStr(meta?.name) || '' })
+}
+
 export function trackCartAdd(item, qty) {
   if (!enabled || !S) return
   const it = readItem(item)

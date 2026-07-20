@@ -24,6 +24,7 @@ import {
   watchAds, pickAd, markSeen, readSeen, sessionId, noteVisit,
   resolveTarget, claimAdReward, normalizeAd,
 } from '../lib/ads.js'
+import { trackAd } from '../lib/track.js'
 import '../styles/ads.css'
 
 // On a touch device there is no "pointer left toward the address bar", so an
@@ -172,6 +173,7 @@ export default function AdPopup({
     if (impressionRef.current !== ad.id) {
       impressionRef.current = ad.id
       markSeen(tenantId, ad.id, deviceId, 'impression')
+      trackAd(ad.id, 'impression', { name: ad.name })
     }
   }, [ads, adsOff, done, shown, tenantId, visits, isMember, seconds, scrollPct, exitIntent, deviceId])
 
@@ -198,19 +200,20 @@ export default function AdPopup({
   useEffect(() => () => clearTimeout(closeTimerRef.current), [])
 
   const dismiss = useCallback(() => {
-    if (shown) markSeen(tenantId, shown.id, deviceId, 'dismiss')
+    if (shown) { markSeen(tenantId, shown.id, deviceId, 'dismiss'); trackAd(shown.id, 'dismiss', { name: shown.name }) }
     finish()
   }, [shown, tenantId, deviceId, finish])
 
   const onCta = useCallback(() => {
     if (!shown) return
     markSeen(tenantId, shown.id, deviceId, 'click')
+    trackAd(shown.id, 'click', { name: shown.name })
 
     // A configured reward takes over the CTA: claim it and show the code here.
     if (shown.reward.kind !== 'none') {
       const res = claimAdReward(tenantId, shown, { deviceId })
       setClaimed(res)
-      if (res.ok) markSeen(tenantId, shown.id, deviceId, 'convert')
+      if (res.ok) { markSeen(tenantId, shown.id, deviceId, 'convert'); trackAd(shown.id, 'convert', { name: shown.name }) }
       return
     }
 
