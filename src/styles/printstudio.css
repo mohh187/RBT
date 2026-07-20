@@ -1,0 +1,432 @@
+/* =========================================================================
+   FREE-FORM PRINT STUDIO — all studio styling lives here (moved out of
+   src/index.css). Imported from src/routes/admin/PrintStudio.jsx.
+
+   Two classes of surface, deliberately styled by DIFFERENT rules:
+
+   1. STUDIO CHROME (toolbar, panels, gallery, overlays) — follows the system
+      theme via tokens (--surface / --text / --border / --brand). Must read in
+      BOTH light and dark. No hardcoded greys.
+
+   2. THE SHEET (.ps-sheet and everything inside it) — is PAPER. It must look
+      identical in light and dark mode, because it is exactly what prints and
+      exactly what the PNG rasterizer draws. So it declares `color-scheme:
+      light`, fixed ink colours, and NEVER reads a theme token. Editor chrome
+      drawn on top of the paper (handles, guides, marquee) uses fixed
+      --ps-ui / --ps-guide colours for the same reason: --brand shifts between
+      themes and would be unreadable on white paper in dark mode.
+
+   RTL NOTE: the sheet is scaled with `transform-origin: 0 0`, so its anchor
+   MUST be the physical top-left. Every position that participates in the
+   scaled page geometry (sheet, handles, guides, marquee) is therefore written
+   with PHYSICAL left/right/top/bottom, never inset-inline-*. Under
+   <html dir="rtl"> the logical properties resolve to the right edge and the
+   sheet renders a full page-width away from its box.
+   ========================================================================= */
+
+/* ---------------------------------------------------------------- gallery */
+.ps-presets { padding: 14px; margin-bottom: 14px; display: grid; gap: 12px; }
+.ps-presets-row { display: flex; gap: 12px; flex-wrap: wrap; align-items: flex-end; }
+.ps-preset {
+  display: flex; flex-direction: column; align-items: center; gap: 6px;
+  background: none; border: none; cursor: pointer; padding: 6px; color: var(--text);
+}
+.ps-preset-box {
+  width: 54px; max-height: 76px; border-radius: 6px;
+  background: #fff; border: 2px solid var(--border-strong);
+  box-shadow: 0 1px 4px rgba(0, 0, 0, .12);
+  transition: border-color .2s, transform .15s;
+}
+.ps-preset[aria-pressed='true'] .ps-preset-box { border-color: var(--brand); }
+.ps-preset:hover .ps-preset-box { border-color: var(--brand); transform: translateY(-2px); }
+.ps-preset-dim { direction: ltr; unicode-bidi: isolate; }
+
+.ps-size-custom { display: flex; align-items: flex-end; gap: 8px; flex-wrap: wrap; }
+.ps-size-custom label { display: flex; flex-direction: column; gap: 3px; }
+.ps-size-custom .input { width: 92px; }
+.ps-unit-toggle { display: inline-flex; border: 1px solid var(--border); border-radius: 8px; overflow: hidden; }
+.ps-unit-toggle button {
+  border: none; background: var(--surface-2); color: var(--text-muted);
+  padding: 6px 10px; font-size: 11px; font-weight: 700; cursor: pointer;
+}
+.ps-unit-toggle button.active { background: var(--brand); color: var(--on-brand); }
+
+.ps-tpl-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(124px, 1fr)); gap: 10px; }
+.ps-tpl {
+  display: flex; flex-direction: column; gap: 6px; align-items: stretch;
+  padding: 8px; border: 1px solid var(--border); border-radius: 12px;
+  background: var(--surface-2); color: var(--text); cursor: pointer;
+  transition: border-color .15s, transform .12s;
+}
+.ps-tpl:hover { border-color: var(--brand); transform: translateY(-2px); }
+.ps-tpl-prev {
+  position: relative; width: 100%; background: #fff; border-radius: 7px;
+  border: 1px solid rgba(0, 0, 0, .12); overflow: hidden;
+}
+.ps-tpl-prev i { position: absolute; background: #9aa0a6; border-radius: 1px; display: block; }
+.ps-tpl-prev i.b { background: #5f6368; }
+.ps-tpl-prev i.a { background: var(--brand); }
+.ps-tpl-name { font-size: 11px; font-weight: 700; text-align: center; }
+
+.ps-gallery { display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: 14px; }
+.ps-dcard { padding: 0; overflow: hidden; cursor: pointer; position: relative; }
+.ps-dthumb { position: relative; width: 100%; overflow: hidden; border-bottom: 1px solid var(--border); }
+.ps-dthumb img { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; }
+.ps-dcount {
+  position: absolute; inset-block-end: 6px; inset-inline-end: 6px;
+  background: rgba(0, 0, 0, .62); color: #fff; padding: 1px 8px; border-radius: 999px;
+}
+.ps-dmeta { padding: 8px 10px; display: flex; flex-direction: column; gap: 2px; }
+.ps-dname { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.ps-dacts {
+  position: absolute; top: 6px; inset-inline-start: 6px;
+  display: flex; gap: 4px; opacity: 0; transition: opacity .2s;
+}
+.ps-dcard:hover .ps-dacts, .ps-dcard:focus-within .ps-dacts { opacity: 1; }
+.ps-dacts .icon-btn { background: rgba(0, 0, 0, .58); color: #fff; }
+
+/* ----------------------------------------------------------- editor shell */
+/* Full-screen takeover: the editor cannot live inside the admin container
+   (app-bar + paddings + sidebar) or its 100dvh overflows below the viewport.
+   z-index 120 sits above the admin chrome but under sheets (--z-sheet: 310)
+   so MediaLibrary and other pickers still open on top. */
+/* .ps-root.ps-edit-root (0,2,0) deliberately outranks the shared `.page` rule
+   (padding + fade-up animation), which must not apply to a full-screen editor.
+   Do not weaken this selector to a single class. */
+.ps-root.ps-edit-root {
+  position: fixed; inset: 0; z-index: 120;
+  display: flex; flex-direction: column;
+  height: 100dvh; max-height: 100dvh;
+  padding: 0; margin: 0; gap: 0; overflow: hidden;
+  background: var(--bg);
+  animation: none;
+  /* panel widths: one place to tune, shrunk down the breakpoints so the page
+     never gets squeezed on laptops and tablets */
+  --ps-side: 268px;
+  --ps-pad: 28px; /* MUST stay in sync with FIT_PAD in PrintCanvas.jsx */
+}
+
+.ps-toolbar {
+  display: flex; align-items: center; gap: 6px; flex-wrap: wrap;
+  padding: calc(8px + env(safe-area-inset-top, 0px)) 12px 8px;
+  border-bottom: 1px solid var(--border);
+  background: var(--surface); color: var(--text); flex: none;
+}
+.ps-name { width: 160px; max-width: 34vw; }
+.ps-tools-sep { width: 1px; align-self: stretch; background: var(--border); margin-inline: 2px; }
+.ps-flip { transform: scaleX(-1); }
+.ps-zoom { display: inline-flex; align-items: center; gap: 4px; }
+.ps-zoom .num { min-width: 44px; text-align: center; direction: ltr; unicode-bidi: isolate; }
+.ps-export-btn { background: var(--brand); color: var(--on-brand); }
+.ps-export-btn:disabled { opacity: .6; }
+.icon-btn.is-on { background: var(--brand-soft); color: var(--brand); }
+
+.ps-editor {
+  flex: 1; min-height: 0; min-width: 0;
+  display: grid;
+  grid-template-columns: var(--ps-side) minmax(0, 1fr) var(--ps-side);
+}
+
+/* -------------------------------------------------------------- panels */
+.ps-panel {
+  background: var(--surface); color: var(--text);
+  min-height: 0; min-width: 0; overflow-y: auto;
+  scrollbar-width: none; -ms-overflow-style: none;
+}
+.ps-panel::-webkit-scrollbar { width: 0; height: 0; }
+.ps-lib { border-inline-end: 1px solid var(--border); }
+.ps-props { border-inline-start: 1px solid var(--border); }
+
+.ps-tabs {
+  display: flex; position: sticky; top: 0; z-index: 2;
+  background: var(--surface); border-bottom: 1px solid var(--border);
+}
+.ps-tab {
+  flex: 1; min-width: 0;
+  display: flex; flex-direction: column; align-items: center; gap: 2px;
+  padding: 9px 2px; background: none; border: none; cursor: pointer;
+  /* --text-muted (not --text-faint): faint fails contrast on dark surfaces */
+  color: var(--text-muted); font-size: 10px; font-weight: 700;
+  border-bottom: 2px solid transparent;
+}
+.ps-tab span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; max-width: 100%; }
+.ps-tab:hover { color: var(--text); }
+.ps-tab.active { color: var(--brand); border-bottom-color: var(--brand); background: var(--brand-soft); }
+.ps-tabbody { padding: 12px; display: flex; flex-direction: column; gap: 10px; }
+.ps-sect { font-size: 11px; font-weight: 800; color: var(--text-muted); margin-top: 2px; }
+
+.ps-chips { display: flex; flex-wrap: wrap; gap: 5px; }
+.ps-shapes-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 6px; }
+.ps-shape-btn {
+  aspect-ratio: 1; display: grid; place-items: center; padding: 8px;
+  border: 1px solid var(--border); border-radius: 10px; background: var(--surface-2);
+  color: var(--text); cursor: pointer; transition: border-color .15s, transform .12s;
+}
+.ps-shape-btn:hover { border-color: var(--brand); color: var(--brand); transform: translateY(-2px); }
+.ps-shape-btn svg { width: 100%; height: 100%; }
+
+.ps-textpreset {
+  text-align: start; padding: 8px 12px; border: 1px solid var(--border);
+  border-radius: 10px; background: var(--surface-2); color: var(--text);
+  cursor: pointer; line-height: 1.2; overflow: hidden;
+  text-overflow: ellipsis; white-space: nowrap;
+}
+.ps-textpreset:hover { border-color: var(--brand); }
+
+/* brand tint that stays visible on a dark surface (a 6% tint over transparent
+   vanishes in dark mode — mix into --surface-2 instead) */
+.ps-ai-box {
+  display: grid; gap: 7px; padding: 10px;
+  border: 1px dashed var(--border-strong); border-radius: 12px;
+  background: color-mix(in srgb, var(--brand) 10%, var(--surface-2));
+}
+.ps-ai-btn { background: var(--brand); color: var(--on-brand); }
+.ps-suggest {
+  display: grid; gap: 8px; padding: 10px; border-radius: 10px;
+  background: var(--surface-2); border: 1px solid var(--border); color: var(--text);
+}
+
+.ps-items-list { display: grid; gap: 4px; max-height: 46vh; overflow-y: auto; scrollbar-width: none; }
+.ps-items-list::-webkit-scrollbar { width: 0; height: 0; }
+.ps-item-row {
+  display: flex; align-items: center; gap: 8px; padding: 6px;
+  border: none; background: none; color: var(--text);
+  cursor: pointer; border-radius: 8px; text-align: start;
+}
+.ps-item-row:hover { background: var(--surface-2); }
+.ps-item-row img, .ps-item-noimg { width: 34px; height: 34px; border-radius: 8px; object-fit: cover; flex: none; }
+.ps-item-noimg { display: grid; place-items: center; background: var(--surface-2); color: var(--text-muted); }
+.ps-item-name { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
+.ps-field { display: flex; align-items: center; justify-content: space-between; gap: 8px; font-size: 12px; }
+.ps-field > span { color: var(--text-muted); flex: none; }
+.ps-field input[type='color'] {
+  width: 40px; height: 26px; padding: 0; border: 1px solid var(--border);
+  border-radius: 6px; background: none; cursor: pointer;
+}
+.ps-field input[type='range'] { flex: 1; min-width: 0; accent-color: var(--brand); }
+.ps-xywh { display: grid; grid-template-columns: 1fr 1fr; gap: 6px; }
+.ps-xywh label { display: flex; flex-direction: column; gap: 2px; }
+.ps-check { display: flex; align-items: center; justify-content: space-between; gap: 8px; font-size: 12px; color: var(--text); }
+.ps-check input { accent-color: var(--brand); }
+
+/* alignment / distribute grid */
+.ps-align-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 5px; }
+.ps-align-btn {
+  display: grid; place-items: center; height: 32px;
+  border: 1px solid var(--border); border-radius: 8px;
+  background: var(--surface-2); color: var(--text-muted); cursor: pointer;
+}
+.ps-align-btn:hover:not(:disabled) { border-color: var(--brand); color: var(--brand); }
+.ps-align-btn:disabled { opacity: .38; cursor: default; }
+.ps-align-btn svg { display: block; }
+
+/* layers panel */
+.ps-layers { display: flex; flex-direction: column; gap: 3px; }
+.ps-layer {
+  display: flex; align-items: center; gap: 6px; padding: 5px 6px;
+  border: 1px solid transparent; border-radius: 8px;
+  background: none; color: var(--text); cursor: pointer; text-align: start; width: 100%;
+}
+.ps-layer:hover { background: var(--surface-2); }
+.ps-layer.sel { background: var(--brand-soft); border-color: var(--brand); }
+.ps-layer-ico { flex: none; display: grid; place-items: center; color: var(--text-muted); }
+.ps-layer.sel .ps-layer-ico { color: var(--brand); }
+.ps-layer-name { flex: 1; min-width: 0; font-size: 12px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.ps-layer.off .ps-layer-name { opacity: .45; text-decoration: line-through; }
+.ps-layer-acts { display: flex; gap: 2px; flex: none; }
+.ps-layer-acts .icon-btn { width: 24px; height: 24px; }
+.ps-layer-empty { font-size: 12px; color: var(--text-muted); text-align: center; padding: 12px 0; }
+
+/* ------------------------------------------------------------ the canvas */
+.ps-canvas-wrap {
+  min-width: 0; min-height: 0; position: relative;
+  background:
+    radial-gradient(circle at 50% 0%, color-mix(in srgb, var(--brand) 7%, transparent), transparent 62%),
+    var(--bg-2);
+}
+.ps-viewport {
+  width: 100%; height: 100%; overflow: auto;
+  scrollbar-width: none; -ms-overflow-style: none;
+  touch-action: none; cursor: default;
+}
+.ps-viewport::-webkit-scrollbar { width: 0; height: 0; }
+.ps-viewport.can-pan { cursor: grab; }
+.ps-viewport.panning { cursor: grabbing; }
+.ps-stage-box { margin: var(--ps-pad, 28px) auto; position: relative; }
+
+/* PAPER. Physical left/top + origin 0 0 — see the RTL note at the top. */
+.ps-sheet {
+  position: absolute; left: 0; top: 0; right: auto;
+  transform-origin: 0 0;
+  overflow: hidden;
+  box-shadow: 0 10px 44px rgba(0, 0, 0, .28), 0 0 0 1px rgba(0, 0, 0, .1);
+  /* the sheet is paper: never inherit the system theme */
+  color-scheme: light;
+  color: #1c1c1e;
+  --ps-ui: #1d6ff2;      /* selection chrome — fixed, must read on white paper */
+  --ps-guide: #ff2d78;   /* snap guides */
+}
+.ps-bgimg { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; pointer-events: none; }
+.ps-grid {
+  position: absolute; inset: 0; pointer-events: none; z-index: 0;
+  background-image:
+    repeating-linear-gradient(to right, rgba(29, 111, 242, .16) 0 1px, transparent 1px var(--gs, 40px)),
+    repeating-linear-gradient(to bottom, rgba(29, 111, 242, .16) 0 1px, transparent 1px var(--gs, 40px));
+}
+
+.ps-el { position: absolute; box-sizing: border-box; }
+.ps-el:not(.is-locked) { cursor: move; }
+.ps-text { overflow: hidden; }
+.ps-ph {
+  width: 100%; height: 100%; display: grid; place-items: center;
+  background: rgba(0, 0, 0, .05); color: #9a9aa5; border: 1px dashed #c8c8cf;
+}
+.ps-shape { width: 100%; height: 100%; }
+.ps-shape svg { width: 100%; height: 100%; display: block; }
+
+/* Every number here has a twin in the IC constant of components/print/exportPng.js.
+   Change one, change the other, or the PNG stops matching the editor. */
+.ps-itemcard {
+  width: 100%; height: 100%; display: flex; gap: 8px; padding: 8px;
+  border-radius: 12px; overflow: hidden; box-sizing: border-box;
+  border: 1px solid rgba(0, 0, 0, .08);
+  font-family: 'Tajawal', system-ui, -apple-system, 'Segoe UI', sans-serif;
+  line-height: 1.35;
+}
+.ps-ic-v { flex-direction: column; }
+.ps-ic-img { width: 100%; flex: 1; min-height: 0; object-fit: cover; border-radius: 8px; }
+.ps-ic-h .ps-ic-img { width: 40%; height: 100%; flex: none; }
+.ps-ic-main { display: flex; flex-direction: column; gap: 3px; min-width: 0; flex: 1; }
+.ps-ic-v .ps-ic-main { text-align: center; align-items: center; }
+.ps-ic-name, .ps-ic-desc {
+  max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+.ps-ic-name { font-size: 15px; font-weight: 800; }
+.ps-ic-desc { font-size: 12px; font-weight: 400; opacity: .68; }
+.ps-ic-price { margin-top: auto; font-size: 14px; font-weight: 800; }
+
+.ps-text-edit {
+  width: 100%; height: 100%; border: none; outline: 2px solid var(--ps-ui);
+  background: rgba(255, 255, 255, .72); resize: none; padding: 0;
+  box-sizing: border-box; overflow: hidden;
+}
+
+/* selection chrome */
+.ps-sel-outline { position: absolute; inset: 0; outline: 1.5px solid var(--ps-ui); outline-offset: 0; pointer-events: none; }
+.ps-el.is-multi .ps-sel-outline { outline-style: dashed; }
+.ps-h {
+  position: absolute; width: var(--hs, 9px); height: var(--hs, 9px);
+  background: #fff; border: 1.5px solid var(--ps-ui); border-radius: 2px;
+  z-index: 3; touch-action: none; box-sizing: border-box;
+}
+.ps-h::before { content: ''; position: absolute; inset: -7px; } /* fat hit area */
+.ps-h-nw { top: 0; left: 0; transform: translate(-50%, -50%); cursor: nwse-resize; }
+.ps-h-n  { top: 0; left: 50%; transform: translate(-50%, -50%); cursor: ns-resize; }
+.ps-h-ne { top: 0; right: 0; transform: translate(50%, -50%); cursor: nesw-resize; }
+.ps-h-e  { top: 50%; right: 0; transform: translate(50%, -50%); cursor: ew-resize; }
+.ps-h-se { bottom: 0; right: 0; transform: translate(50%, 50%); cursor: nwse-resize; }
+.ps-h-s  { bottom: 0; left: 50%; transform: translate(-50%, 50%); cursor: ns-resize; }
+.ps-h-sw { bottom: 0; left: 0; transform: translate(-50%, 50%); cursor: nesw-resize; }
+.ps-h-w  { top: 50%; left: 0; transform: translate(-50%, -50%); cursor: ew-resize; }
+.ps-h-rot {
+  position: absolute; top: calc(-1 * var(--ro, 22px)); left: 50%;
+  transform: translateX(-50%);
+  width: var(--hs, 12px); height: var(--hs, 12px);
+  background: var(--ps-ui); border: 2px solid #fff; border-radius: 50%;
+  cursor: grab; z-index: 3; touch-action: none; box-sizing: border-box;
+}
+.ps-h-rot::before { content: ''; position: absolute; inset: -8px; }
+.ps-lockmark {
+  position: absolute; top: 2px; right: 2px; color: var(--ps-ui);
+  background: #fff; border-radius: 4px; padding: 1px; display: grid; z-index: 3;
+}
+.ps-guide { position: absolute; left: 0; top: 0; background: var(--ps-guide); z-index: 6; pointer-events: none; }
+.ps-guide-v { height: 100%; }
+.ps-guide-h { width: 100%; }
+.ps-marquee {
+  position: absolute; z-index: 7; pointer-events: none;
+  border: 1px solid var(--ps-ui);
+  background: rgba(29, 111, 242, .12);
+}
+
+/* --------------------------------------------------------- help overlay */
+.ps-help-back {
+  position: fixed; inset: 0; z-index: 200; display: grid; place-items: center;
+  background: rgba(0, 0, 0, .5); padding: 20px;
+}
+.ps-help {
+  width: min(560px, 100%); max-height: 82dvh; overflow-y: auto;
+  scrollbar-width: none; -ms-overflow-style: none;
+  background: var(--surface); color: var(--text);
+  border: 1px solid var(--border); border-radius: 18px; padding: 18px;
+  box-shadow: 0 24px 70px rgba(0, 0, 0, .4);
+}
+.ps-help::-webkit-scrollbar { width: 0; height: 0; }
+.ps-help-rows { display: grid; gap: 2px; margin-top: 12px; }
+.ps-help-row {
+  display: flex; align-items: center; gap: 10px; justify-content: space-between;
+  padding: 7px 8px; border-radius: 8px; font-size: 12.5px;
+}
+.ps-help-row:nth-child(odd) { background: var(--surface-2); }
+.ps-help-row kbd {
+  flex: none; direction: ltr; unicode-bidi: isolate;
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 11px;
+  background: var(--bg-2); color: var(--text);
+  border: 1px solid var(--border-strong); border-bottom-width: 2px;
+  border-radius: 6px; padding: 2px 7px;
+}
+
+/* -------------------------------------------------- narrow screens (<=900) */
+@media (max-width: 1280px) { .ps-root.ps-edit-root { --ps-side: 232px; } }
+@media (max-width: 1080px) { .ps-root.ps-edit-root { --ps-side: 206px; --ps-pad: 18px; } }
+@media (max-width: 900px) {
+  .ps-root.ps-edit-root { --ps-side: 0px; --ps-pad: 14px; }
+  .ps-editor { grid-template-columns: minmax(0, 1fr); }
+  .ps-panel {
+    position: fixed; inset-block-end: 0; inset-inline: 0;
+    max-height: 62dvh; z-index: 130;
+    border-top: 1px solid var(--border); border-inline: none;
+    box-shadow: 0 -8px 30px rgba(0, 0, 0, .28);
+    transform: translateY(102%); transition: transform .25s ease;
+    border-radius: 18px 18px 0 0;
+    padding-bottom: env(safe-area-inset-bottom, 0px);
+  }
+  .ps-panel.open { transform: none; }
+  .ps-canvas-wrap { grid-row: 1; }
+}
+@media (min-width: 901px) { .ps-sheet-toggle { display: none; } }
+@media (prefers-reduced-motion: reduce) {
+  .ps-panel, .ps-preset-box, .ps-shape-btn, .ps-tpl { transition: none; }
+}
+
+/* ------------------------------------------------------------ print / PDF */
+/* Only the sheet survives, un-scaled, at the physical page origin. @page size
+   is injected at runtime from design.page (see PrintStudio.jsx). */
+@media print {
+  html, body { margin: 0 !important; padding: 0 !important; background: #fff !important; height: auto !important; }
+  body * { visibility: hidden !important; }
+  #ps-sheet, #ps-sheet * { visibility: visible !important; }
+  .no-print { display: none !important; }
+  /* Placeholders mark MISSING content — they must never end up on paper.
+     The selector is ID-qualified on purpose: `#ps-sheet *` above is (1,0,1)
+     and would otherwise out-rank a plain `.ps-ph`, both being !important. */
+  #ps-sheet .ps-ph, #ps-sheet .ps-grid, #ps-sheet .ps-marquee { visibility: hidden !important; }
+  .ps-root.ps-edit-root {
+    position: static !important; inset: auto !important; z-index: auto !important;
+    display: block !important; height: auto !important; max-height: none !important;
+    overflow: visible !important; background: none !important;
+  }
+  .ps-editor, .ps-canvas-wrap, .ps-viewport, .ps-stage-box {
+    display: block !important; position: static !important;
+    overflow: visible !important; margin: 0 !important; padding: 0 !important;
+    background: none !important; height: auto !important; width: auto !important;
+  }
+  #ps-sheet {
+    position: absolute !important; left: 0 !important; top: 0 !important;
+    right: auto !important; bottom: auto !important;
+    transform: none !important; box-shadow: none !important;
+    -webkit-print-color-adjust: exact; print-color-adjust: exact;
+  }
+  .ps-sel-outline, .ps-h, .ps-h-rot, .ps-lockmark, .ps-guide { display: none !important; }
+}

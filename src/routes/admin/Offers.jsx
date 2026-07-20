@@ -49,6 +49,18 @@ export default function Offers() {
     return () => { u1(); u2(); u3() }
   }, [tenantId])
 
+  // A draft handed over by the growth page («الساعات الهادئة») or any other
+  // advisor: same sessionStorage convention used across the product.
+  useEffect(() => {
+    if (typeof window === 'undefined') return
+    if (!new URLSearchParams(window.location.search).get('draft')) return
+    try {
+      const raw = sessionStorage.getItem('rbt_offer_draft')
+      sessionStorage.removeItem('rbt_offer_draft')
+      if (raw) openNewFromDraft(JSON.parse(raw))
+    } catch (_) { /* malformed draft simply opens nothing */ }
+  }, []) // eslint-disable-line react-hooks/exhaustive-deps
+
   useEffect(() => {
     if (!advisorOpen || !tenantId || advOrders.length) return
     let alive = true

@@ -33,6 +33,7 @@ const CompareItems = lazy(() => import('./CompareItems.jsx'))
 const SharedCart = lazy(() => import('./SharedCart.jsx'))
 const DishStoryReader = lazy(() => import('./DishStory.jsx'))
 const GamesCenter = lazy(() => import('./GamesCenter.jsx'))
+const AdPopup = lazy(() => import('./AdPopup.jsx'))
 // tiny sync helpers (no heavy deps) so the item sheet can decide instantly
 import { hasStory, StoryBadge } from './DishStory.jsx'
 import { getLocalCustomer, setLocalCustomer, isRegisterDismissed, dismissRegister, fetchIp, getMyOrders, addMyOrder, getMemberToken, setMemberToken } from '../lib/customer.js'
@@ -997,6 +998,27 @@ export default function MenuView({ tenant, tenantId, items, categories, offers =
       ) : (
         <ItemSheet item={viewItem} tenant={tenant} currency={currency} tenantId={tenantId} detail={itemDetail} siblings={visibleItems} onNavigate={setViewItem} onClose={() => setViewItem(null)} onOpenStory={(it) => setStoryItem(it)} onAdd={(variant, mods, qty) => { addLine(viewItem, variant, mods, qty); setViewItem(null) }} />
       ))}
+
+      {/* Venue ad / welcome popup. It decides for itself whether anything is
+          due (schedule, audience, trigger, per-guest frequency) and renders
+          nothing when it is not — so mounting it is always safe. */}
+      {!preview && tenant?.adsEnabled !== false && (
+        <Suspense fallback={null}>
+          <AdPopup
+            tenant={tenant} tenantId={tenantId} items={visibleItems} categories={sortedCats} lang={lang}
+            ctx={{ visitCount: (getMyOrders(tenantId) || []).length, isMember: !!memberCard?.active }}
+            onNavigate={(target) => {
+              // resolveTarget() already verified the item/category still exists
+              // and handled the url case itself, so this only routes in-app.
+              if (!target) return
+              if (target.link === 'item' && target.item) setViewItem(target.item)
+              else if (target.link === 'category' && target.categoryId) setActiveCat(target.categoryId)
+              else if (target.link === 'games') setFxOpen('games')
+              else if (target.link === 'story') setFxOpen('')
+            }}
+          />
+        </Suspense>
+      )}
 
       {/* interactive-experience overlays (lazy; one at a time) */}
       {fxOpen && (

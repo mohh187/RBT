@@ -1,0 +1,218 @@
+/* ===== Settings information architecture (2026-07-20) =====
+   The settings page grew tab-by-tab through many feature waves; this file gives
+   it ONE persistent section index instead:
+     - desktop (>=1200px): a sticky rail on the inline-start side
+     - tablet / phone:      a sticky horizontal strip under the page title
+   Layout + navigation only. Every control card keeps the app's own .card
+   styling, and every rule here is scoped under .settings-page so nothing
+   leaks into other screens. index.css is never touched. */
+
+/* ---- top bar: search + studio undo/redo ---- */
+.settings-page .set-topbar {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+  padding-bottom: 10px;
+  border-bottom: 1px solid var(--border);
+}
+.settings-page .set-search {
+  position: relative;
+  flex: 1 1 220px;
+  min-width: 180px;
+  max-width: 340px;
+}
+.settings-page .set-search > .set-search-ico {
+  position: absolute;
+  inset-inline-start: 9px;
+  top: 50%;
+  transform: translateY(-50%);
+  pointer-events: none;
+  color: var(--text-faint, var(--text-muted));
+}
+.settings-page .set-search input {
+  width: 100%;
+  padding-inline-start: 28px;
+}
+.settings-page .set-search-pop {
+  position: absolute;
+  top: calc(100% + 4px);
+  inset-inline: 0;
+  z-index: 60; /* above the sticky nav strip (40), below sheets */
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: 4px;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  background: var(--surface);
+  box-shadow: var(--sh-2);
+  max-height: 320px;
+  overflow-y: auto;
+  scrollbar-width: none;
+}
+.settings-page .set-search-pop::-webkit-scrollbar { display: none; }
+.settings-page .set-search-item {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  width: 100%;
+  padding: 7px 9px;
+  border: none;
+  border-radius: 8px;
+  background: none;
+  color: var(--text);
+  font-size: var(--fs-xs);
+  text-align: start;
+  cursor: pointer;
+}
+.settings-page .set-search-item:hover,
+.settings-page .set-search-item:focus-visible { background: var(--surface-2); }
+.settings-page .set-search-item .set-search-where {
+  flex: none;
+  font-size: var(--fs-xs);
+  color: var(--text-muted);
+}
+.settings-page .set-search-empty {
+  padding: 9px;
+  font-size: var(--fs-xs);
+  color: var(--text-muted);
+}
+
+/* ---- shell: nav + body ---- */
+.settings-page .set-shell {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: var(--sp-3);
+  align-items: start;
+}
+@media (min-width: 1200px) {
+  .settings-page .set-shell {
+    grid-template-columns: 216px minmax(0, 1fr);
+    gap: var(--sp-4);
+  }
+}
+
+/* ---- the section index ---- */
+.settings-page .set-nav {
+  position: sticky;
+  top: calc(var(--appbar-h) + var(--safe-t));
+  z-index: 40;
+  display: flex;
+  gap: 6px;
+  padding: 8px 4px;
+  margin-inline: -4px;
+  overflow-x: auto;
+  overscroll-behavior-x: contain;
+  background: color-mix(in srgb, var(--bg) 84%, transparent);
+  backdrop-filter: saturate(1.3) blur(10px);
+  -webkit-backdrop-filter: saturate(1.3) blur(10px);
+  scrollbar-width: none;
+}
+.settings-page .set-nav::-webkit-scrollbar { display: none; }
+
+.settings-page .set-nav-item {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  flex: none;
+  white-space: nowrap;
+  padding: 7px 12px;
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  background: var(--surface);
+  color: var(--text);
+  font: inherit;
+  font-size: var(--fs-xs);
+  font-weight: 700;
+  cursor: pointer;
+  transition: background .18s ease, color .18s ease, border-color .18s ease;
+}
+.settings-page .set-nav-item:hover { border-color: var(--border-strong); }
+.settings-page .set-nav-item.active {
+  background: var(--sel, var(--brand));
+  border-color: transparent;
+  color: #fff;
+}
+.settings-page .set-nav-ico { flex: none; color: var(--text-muted); }
+.settings-page .set-nav-item.active .set-nav-ico { color: inherit; }
+
+@media (min-width: 1200px) {
+  .settings-page .set-nav {
+    top: calc(var(--appbar-h) + var(--safe-t) + 12px);
+    flex-direction: column;
+    gap: 2px;
+    padding: 0;
+    margin-inline: 0;
+    overflow: visible;
+    background: none;
+    backdrop-filter: none;
+    -webkit-backdrop-filter: none;
+  }
+  .settings-page .set-nav-item {
+    display: flex;
+    width: 100%;
+    padding: 9px 11px;
+    border-radius: var(--r-md);
+    border-color: transparent;
+    background: transparent;
+    text-align: start;
+  }
+  .settings-page .set-nav-item:hover { background: var(--surface-2); border-color: transparent; }
+  .settings-page .set-nav-item.active {
+    background: var(--surface);
+    border-color: var(--border);
+    color: var(--text);
+    box-shadow: var(--sh-1);
+  }
+  .settings-page .set-nav-item.active .set-nav-ico { color: var(--sel, var(--brand)); }
+  .settings-page .set-nav-item.active::before {
+    content: '';
+    position: absolute;
+    inset-inline-start: 0;
+    top: 18%;
+    bottom: 18%;
+    width: 3px;
+    border-radius: 3px;
+    background: var(--sel, var(--brand));
+  }
+}
+
+/* ---- section body ---- */
+.settings-page .set-body {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-4);
+  min-width: 0;
+}
+.settings-page .set-head { min-width: 0; }
+.settings-page .set-head h3 {
+  margin: 0;
+  font-size: var(--fs-lg);
+  font-weight: 800;
+  letter-spacing: 0.2px;
+}
+.settings-page .set-head p {
+  margin: 4px 0 0;
+  max-width: 72ch;
+  font-size: var(--fs-xs);
+  line-height: 1.7;
+  color: var(--text-muted);
+}
+/* honest footnote for sections whose every control writes on change */
+.settings-page .set-instant {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  padding: 9px 12px;
+  border: 1px dashed var(--border-strong);
+  border-radius: var(--r-md);
+  font-size: var(--fs-xs);
+  color: var(--text-muted);
+}
+.settings-page .set-saved {
+  text-align: center;
+  font-size: var(--fs-xs);
+  color: var(--text-muted);
+}

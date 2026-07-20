@@ -355,6 +355,17 @@ service cloud.firestore {
         allow delete: if isStaff(tid);
       }
 
+      // ---- ads / menu popups: guests must READ them to see them, but only the
+      // marketing role may create or edit. The stats counters are the one part
+      // a guest device may touch, and only by incrementing — so an impression
+      // can be recorded without opening the whole document to the public.
+      match /ads/{id} {
+        allow read: if true;
+        allow create, delete: if hasCap(tid, 'manage_campaigns');
+        allow update: if hasCap(tid, 'manage_campaigns')
+          || request.resource.data.diff(resource.data).affectedKeys().hasOnly(['stats']);
+      }
+
       // ---- game plays: the full record of what a guest played and answered.
       // The diner's own device writes it (anonymous); only staff read it. Same
       // bounding philosophy as sessions — capped arrays, immutable identity.

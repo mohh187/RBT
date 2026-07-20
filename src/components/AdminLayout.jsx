@@ -45,6 +45,7 @@ const moreGroups = [
     { to: '/admin/posts-studio', icon: 'camera', label: { ar: 'استوديو المنشورات', en: 'Post studio' }, cap: CAP.MANAGE_CAMPAIGNS },
     { to: '/admin/messages', icon: 'message', label: { ar: 'سجل الرسائل والتحليلات', en: 'Messages log' }, cap: CAP.MANAGE_CAMPAIGNS },
     { to: '/admin/library', icon: 'folder', label: { ar: 'المكتبة', en: 'Library' }, anyOf: [CAP.MANAGE_MENU, CAP.MANAGE_CAMPAIGNS, CAP.MANAGE_STORIES, CAP.MANAGE_APPEARANCE] },
+    { to: '/admin/ads', icon: 'image', label: { ar: 'استوديو الإعلانات', en: 'Ads studio' }, cap: CAP.MANAGE_CAMPAIGNS },
     { to: '/admin/gen-history', icon: 'sparkles', label: { ar: 'سجل التوليد', en: 'Generation log' }, anyOf: [CAP.MANAGE_CAMPAIGNS, CAP.MANAGE_MENU, CAP.MANAGE_APPEARANCE] },
     { to: '/admin/stories', icon: 'camera', label: { ar: 'الاستوري', en: 'Stories' }, cap: CAP.MANAGE_STORIES },
     { to: '/admin/posts', icon: 'events', label: { ar: 'البروفايل والأخبار', en: 'Profile & news' }, cap: CAP.MANAGE_STORIES },
@@ -66,6 +67,7 @@ const moreGroups = [
     { to: '/admin/accounting', icon: 'wallet', label: { ar: 'المحاسبة', en: 'Accounting' }, cap: CAP.VIEW_REVENUE },
     { to: '/admin/behavior', icon: 'trending', label: { ar: 'سلوك العملاء', en: 'Guest behavior' }, cap: CAP.VIEW_REPORTS },
     { to: '/admin/guest-play', icon: 'play', label: { ar: 'نشاط الألعاب', en: 'Play activity' }, cap: CAP.VIEW_REPORTS },
+    { to: '/admin/growth', icon: 'trending', label: { ar: 'فرص النمو', en: 'Growth' }, cap: CAP.VIEW_REPORTS },
   ] },
   { title: { ar: 'النظام والمساعدة', en: 'System & help' }, items: [
     { to: '/admin/assistant', icon: 'sparkles', label: { ar: 'المساعد الذكي', en: 'AI assistant' }, cap: CAP.USE_ASSISTANT },

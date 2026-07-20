@@ -1,10 +1,15 @@
 // Free-form print studio — native PNG rasterizer. We OWN the document model, so
-// the export draws it directly onto a real <canvas> at 2x scale: images via
+// the export draws it directly onto a real <canvas> at `scale`x: images via
 // drawImage (crossOrigin anonymous — bucket CORS is configured), text via
-// fillText with document.fonts loading, shapes via SVG-blob → drawImage (the
-// same svg string the DOM renders, so colors match exactly), QR from its
-// dataURL. Any element that fails to rasterize is SKIPPED and reported by name
-// — the caller toasts the list honestly.
+// fillText after document.fonts has actually loaded the family, shapes via
+// SVG-blob → drawImage (the SAME svg string the DOM renders, so colours match
+// exactly), QR from its dataURL. Any element that fails to rasterize is SKIPPED
+// and reported by name — the caller toasts the list honestly rather than
+// silently shipping a hole in the page.
+//
+// FIDELITY CONTRACT: every constant here mirrors a rule in printstudio.css.
+// Item cards, text wrapping/clipping and borders are drawn from the same
+// numbers the DOM uses, so the PNG matches the editor and the print output.
 import { fontStacks } from '../../lib/skins.js'
 import { shapeById, renderShapeSvg } from '../../lib/printShapes.js'
 
@@ -16,6 +21,9 @@ const RIYAL_PATHS = [
 ]
 
 const TYPE_AR = { text: 'نص', image: 'صورة', shape: 'شكل', qr: 'رمز QR', itemcard: 'بطاقة صنف' }
+
+// --- item-card metrics, mirroring .ps-itemcard in printstudio.css (page units)
+const IC = { pad: 8, gap: 8, radius: 12, imgRadius: 8, name: 15, desc: 12, price: 14, lh: 1.35, rowGap: 3 }
 
 function loadImg(src, cross = true) {
   return new Promise((res, rej) => {
@@ -29,7 +37,7 @@ function loadImg(src, cross = true) {
 
 function roundRectPath(ctx, x, y, w, h, r) {
   ctx.beginPath()
-  if (typeof ctx.roundRect === 'function') ctx.roundRect(x, y, w, h, Math.max(0, r))
+  if (typeof ctx.roundRect === 'function') ctx.roundRect(x, y, w, h, Math.max(0, Math.min(r, w / 2, h / 2)))
   else ctx.rect(x, y, w, h)
 }
 
@@ -59,6 +67,19 @@ function wrapLines(ctx, text, maxW) {
     out.push(line)
   }
   return out
+}
+
+// single-line ellipsis, matching the DOM's text-overflow on card names
+function ellipsize(ctx, text, maxW) {
+  const s = String(text || '')
+  if (!s || ctx.measureText(s).width <= maxW) return s
+  let lo = 0, hi = s.length
+  while (lo < hi) {
+    const mid = Math.ceil((lo + hi) / 2)
+    if (ctx.measureText(`${s.slice(0, mid)}…`).width <= maxW) lo = mid
+    else hi = mid - 1
+  }
+  return `${s.slice(0, lo)}…`
 }
 
 function drawRiyal(ctx, x, y, size, color) {
@@ -91,32 +112,148 @@ function setTextStyle(ctx, el, k) {
   ctx.font = `${el.weight || 400} ${(el.size || 18) * k}px ${fonts.display}`
   ctx.direction = el.dir || 'rtl'
   if ('letterSpacing' in ctx) ctx.letterSpacing = `${(el.letterSpacing || 0) * k}px`
+  // canvas "left"/"right" are physical, like CSS text-align on a dir'd box
   ctx.textAlign = el.align === 'center' ? 'center' : el.align === 'left' ? 'left' : 'right'
   ctx.textBaseline = 'middle'
 }
 
+// Mirrors .ps-text: wrapped, top-aligned, CLIPPED to the element box.
 function drawTextBox(ctx, el, k) {
+  const w = el.w * k, h = el.h * k
+  ctx.save()
+  ctx.beginPath()
+  ctx.rect(0, 0, w, h)
+  ctx.clip()
   setTextStyle(ctx, el, k)
   ctx.fillStyle = el.color || '#1c1c1e'
-  const w = el.w * k
   const lineH = (el.size || 18) * (el.lineHeight || 1.4) * k
   const lines = wrapLines(ctx, el.text, w)
   const tx = el.align === 'center' ? w / 2 : el.align === 'left' ? 0 : w
   lines.forEach((line, i) => ctx.fillText(line, tx, i * lineH + lineH / 2))
+  ctx.restore()
 }
 
-// preload every font family used by the design so fillText is faithful
+// Mirrors .ps-itemcard / .ps-ic-h / .ps-ic-v.
+async function drawItemCard(ctx, el, k, it, currency, skipped) {
+  const w = el.w * k, h = el.h * k
+  const ink = el.ink || '#1c1c1e'
+  const accent = el.accent || '#1c1c1e'
+  const pad = IC.pad * k
+  const vertical = (el.layout || 'h') === 'v'
+  const fam = fontStacks('tajawal').display
+
+  ctx.save()
+  roundRectPath(ctx, 0, 0, w, h, IC.radius * k)
+  ctx.fillStyle = el.bg || '#ffffff'
+  ctx.fill()
+  ctx.strokeStyle = 'rgba(0,0,0,0.08)'
+  ctx.lineWidth = 1 * k
+  ctx.stroke()
+  ctx.clip()
+
+  const hasDesc = !!(el.showDesc && (it?.descAr || it?.descEn))
+  const hasPrice = el.showPrice !== false && !!it
+  // text column height, from the same font sizes the DOM uses
+  const rows = [IC.name, ...(hasDesc ? [IC.desc] : []), ...(hasPrice ? [IC.price] : [])]
+  const textH = (rows.reduce((a, b) => a + b * IC.lh, 0) + IC.rowGap * (rows.length - 1)) * k
+
+  let colX0 = pad, colX1 = w - pad, colTop = pad, colBottom = h - pad
+
+  if (it?.imageUrl) {
+    try {
+      const img = await loadImg(it.imageUrl)
+      if (vertical) {
+        // .ps-ic-v .ps-ic-img { flex: 1 } — image takes whatever the text leaves
+        const ih = Math.max(0, h - pad * 2 - textH - IC.gap * k)
+        if (ih > 4) {
+          ctx.save()
+          roundRectPath(ctx, pad, pad, w - pad * 2, ih, IC.imgRadius * k)
+          ctx.clip()
+          const f = fitRect(img.naturalWidth, img.naturalHeight, w - pad * 2, ih, 'cover')
+          ctx.drawImage(img, f.sx, f.sy, f.sw, f.sh, pad + f.dx, pad + f.dy, f.dw, f.dh)
+          ctx.restore()
+          colTop = pad + ih + IC.gap * k
+        }
+      } else {
+        // .ps-ic-h .ps-ic-img { width: 40% } — RTL row, so the image sits RIGHT
+        const iw = (w - pad * 2) * 0.4
+        const ih = h - pad * 2
+        ctx.save()
+        roundRectPath(ctx, w - pad - iw, pad, iw, ih, IC.imgRadius * k)
+        ctx.clip()
+        const f = fitRect(img.naturalWidth, img.naturalHeight, iw, ih, 'cover')
+        ctx.drawImage(img, f.sx, f.sy, f.sw, f.sh, w - pad - iw + f.dx, pad + f.dy, f.dw, f.dh)
+        ctx.restore()
+        colX1 = w - pad - iw - IC.gap * k
+      }
+    } catch (_) { skipped.push(`صورة الصنف (${it.nameAr || it.nameEn || ''})`) }
+  }
+
+  const colW = Math.max(1, colX1 - colX0)
+  ctx.direction = 'rtl'
+  ctx.textBaseline = 'middle'
+  if ('letterSpacing' in ctx) ctx.letterSpacing = '0px'
+  const cx = vertical ? colX0 + colW / 2 : colX1
+  ctx.textAlign = vertical ? 'center' : 'right'
+
+  let y = colTop
+  ctx.fillStyle = ink
+  ctx.font = `800 ${IC.name * k}px ${fam}`
+  const name = it ? (it.nameAr || it.nameEn || '') : 'صنف غير موجود'
+  ctx.fillText(ellipsize(ctx, name, colW), cx, y + (IC.name * IC.lh * k) / 2)
+  y += IC.name * IC.lh * k + IC.rowGap * k
+
+  if (hasDesc) {
+    ctx.font = `400 ${IC.desc * k}px ${fam}`
+    ctx.globalAlpha *= 0.68 // .ps-ic-desc { opacity: .68 }
+    ctx.fillText(ellipsize(ctx, it.descAr || it.descEn || '', colW), cx, y + (IC.desc * IC.lh * k) / 2)
+    ctx.globalAlpha /= 0.68
+    y += IC.desc * IC.lh * k + IC.rowGap * k
+  }
+
+  if (hasPrice) {
+    // .ps-ic-price { margin-top: auto } — pinned to the bottom of the column
+    const py = Math.max(y, colBottom - IC.price * IC.lh * k) + (IC.price * IC.lh * k) / 2
+    ctx.font = `800 ${IC.price * k}px ${fam}`
+    ctx.fillStyle = accent
+    const num = String(priceOf(it))
+    if (currency && currency !== 'SAR') {
+      ctx.fillText(`${currency} ${num}`, cx, py)
+    } else {
+      // <Price lang="ar"> renders dir=ltr with the riyal glyph LEFT of the number
+      ctx.textAlign = 'left'
+      const numW = ctx.measureText(num).width
+      const symS = IC.price * 0.92 * k
+      const total = numW + symS + 4 * k
+      const startX = vertical ? colX0 + (colW - total) / 2 : colX1 - total
+      drawRiyal(ctx, startX, py - symS / 2, symS, accent)
+      ctx.fillText(num, startX + symS + 4 * k, py)
+    }
+  }
+  ctx.restore()
+}
+
+// Preload every family/weight the design actually uses, so fillText is faithful
+// instead of silently falling back to a system face.
 async function preloadFonts(design, k) {
   const jobs = []
+  const want = new Set()
   for (const el of design.elements || []) {
-    if (el.type !== 'text' && el.type !== 'itemcard') continue
-    const fam = fontStacks(el.fontKey || 'tajawal').display
-    const size = Math.round((el.size || 18) * k)
-    jobs.push(document.fonts.load(`${el.weight || 700} ${size}px ${fam}`).catch(() => {}))
-    jobs.push(document.fonts.load(`400 ${size}px ${fam}`).catch(() => {}))
+    if (el.hidden) continue
+    if (el.type === 'text') {
+      const fam = fontStacks(el.fontKey || 'tajawal').display
+      want.add(`${el.weight || 400} ${Math.round((el.size || 18) * k)}px ${fam}`)
+      want.add(`400 ${Math.round((el.size || 18) * k)}px ${fam}`)
+    } else if (el.type === 'itemcard') {
+      const fam = fontStacks('tajawal').display
+      for (const [wt, sz] of [[800, IC.name], [400, IC.desc], [800, IC.price]]) {
+        want.add(`${wt} ${Math.round(sz * k)}px ${fam}`)
+      }
+    }
   }
-  jobs.push(document.fonts.ready.catch?.(() => {}) || Promise.resolve())
+  for (const spec of want) jobs.push(document.fonts.load(spec).catch(() => {}))
   await Promise.all(jobs)
+  try { await document.fonts.ready } catch (_) { /* older browsers */ }
 }
 
 // Renders the design onto a canvas at `scale`x and returns { blob, skipped }.
@@ -147,8 +284,11 @@ export async function exportDesignPng({ design, items = [], currency = 'SAR', qr
     } catch (_) { skipped.push('صورة الخلفية') }
   }
 
-  // ---- elements in z order ----
-  const sorted = [...(design.elements || [])].sort((a, b) => (a.z || 0) - (b.z || 0))
+  // ---- elements in z order (hidden layers are not drawn, exactly like the DOM)
+  const sorted = [...(design.elements || [])]
+    .filter((el) => !el.hidden)
+    .sort((a, b) => (a.z || 0) - (b.z || 0))
+
   for (const el of sorted) {
     const w = el.w * k, h = el.h * k
     ctx.save()
@@ -162,7 +302,7 @@ export async function exportDesignPng({ design, items = [], currency = 'SAR', qr
       } else if (el.type === 'image' && el.url) {
         const img = await loadImg(el.url)
         if (el.shadow) {
-          // draw only the shadow: huge offset trick keeps the caster off-canvas
+          // draw the shadow only: a huge offset keeps the caster off-canvas
           ctx.save()
           ctx.shadowColor = 'rgba(0,0,0,0.35)'
           ctx.shadowBlur = 28 * k
@@ -181,11 +321,14 @@ export async function exportDesignPng({ design, items = [], currency = 'SAR', qr
         ctx.drawImage(img, f.sx, f.sy, f.sw, f.sh, f.dx, f.dy, f.dw, f.dh)
         ctx.restore()
         if (el.borderW) {
-          roundRectPath(ctx, el.borderW * k / 2, el.borderW * k / 2, w - el.borderW * k, h - el.borderW * k, (el.radius || 0) * k)
+          // border-box: the stroke sits INSIDE the element bounds, like CSS
+          roundRectPath(ctx, (el.borderW * k) / 2, (el.borderW * k) / 2, w - el.borderW * k, h - el.borderW * k, (el.radius || 0) * k)
           ctx.strokeStyle = el.borderColor || '#1c1c1e'
           ctx.lineWidth = el.borderW * k
           ctx.stroke()
         }
+      } else if (el.type === 'image') {
+        throw new Error('no image url')
       } else if (el.type === 'shape') {
         const sh = shapeById(el.shapeId)
         if (!sh) throw new Error('shape missing')
@@ -196,75 +339,7 @@ export async function exportDesignPng({ design, items = [], currency = 'SAR', qr
         const img = await loadImg(qrSrc)
         ctx.drawImage(img, 0, 0, w, h)
       } else if (el.type === 'itemcard') {
-        const it = itemsMap.get(el.itemId)
-        // card chrome (mirrors the DOM card: white, radius 12, hairline border)
-        roundRectPath(ctx, 0, 0, w, h, 12 * k)
-        ctx.fillStyle = '#ffffff'
-        ctx.fill()
-        ctx.strokeStyle = 'rgba(0,0,0,0.08)'
-        ctx.lineWidth = 1 * k
-        ctx.stroke()
-        const pad = 8 * k
-        const vertical = (el.layout || 'h') === 'v'
-        let textX0 = pad, textX1 = w - pad, textTop = pad
-        if (it?.imageUrl) {
-          try {
-            const img = await loadImg(it.imageUrl)
-            if (vertical) {
-              const ih = Math.min(h * 0.55, h - 40 * k)
-              ctx.save()
-              roundRectPath(ctx, pad, pad, w - pad * 2, ih, 8 * k)
-              ctx.clip()
-              const f = fitRect(img.naturalWidth, img.naturalHeight, w - pad * 2, ih, 'cover')
-              ctx.drawImage(img, f.sx, f.sy, f.sw, f.sh, pad + f.dx, pad + f.dy, f.dw, f.dh)
-              ctx.restore()
-              textTop = pad + ih + 6 * k
-            } else {
-              const s = h - pad * 2
-              ctx.save()
-              roundRectPath(ctx, w - pad - s, pad, s, s, 8 * k)
-              ctx.clip()
-              const f = fitRect(img.naturalWidth, img.naturalHeight, s, s, 'cover')
-              ctx.drawImage(img, f.sx, f.sy, f.sw, f.sh, w - pad - s + f.dx, pad + f.dy, f.dw, f.dh)
-              ctx.restore()
-              textX1 = w - pad - s - 8 * k
-            }
-          } catch (_) { skipped.push(`صورة الصنف (${it.nameAr || it.nameEn || ''})`) }
-        }
-        const fam = fontStacks('tajawal').display
-        ctx.direction = 'rtl'
-        ctx.textBaseline = 'middle'
-        const name = it ? (it.nameAr || it.nameEn || '') : 'صنف غير موجود'
-        ctx.fillStyle = '#1c1c1e'
-        ctx.font = `700 ${15 * k}px ${fam}`
-        ctx.textAlign = vertical ? 'center' : 'right'
-        const nx = vertical ? w / 2 : textX1
-        ctx.fillText(name, nx, textTop + 11 * k, textX1 - textX0)
-        let cy2 = textTop + 24 * k
-        if (el.showDesc && (it?.descAr || it?.descEn)) {
-          ctx.fillStyle = '#6b6b70'
-          ctx.font = `400 ${11 * k}px ${fam}`
-          const desc = (it.descAr || it.descEn || '').slice(0, 90)
-          ctx.fillText(desc, nx, cy2, textX1 - textX0)
-          cy2 += 16 * k
-        }
-        if (el.showPrice !== false && it) {
-          const num = String(priceOf(it))
-          ctx.fillStyle = '#1c1c1e'
-          ctx.font = `800 ${14 * k}px ${fam}`
-          if (currency && currency !== 'SAR') {
-            ctx.fillText(`${currency} ${num}`, nx, cy2 + 6 * k)
-          } else {
-            // dir ltr pair: symbol on the left of the number (matches <Price lang="ar">)
-            ctx.textAlign = 'left'
-            const numW = ctx.measureText(num).width
-            const symS = 13 * k
-            const total = numW + symS + 4 * k
-            const startX = vertical ? (w - total) / 2 : (textX1 - total)
-            drawRiyal(ctx, startX, cy2, symS, '#1c1c1e')
-            ctx.fillText(num, startX + symS + 4 * k, cy2 + 6 * k)
-          }
-        }
+        await drawItemCard(ctx, el, k, itemsMap.get(el.itemId), currency, skipped)
       }
     } catch (_) {
       skipped.push(TYPE_AR[el.type] || el.type)

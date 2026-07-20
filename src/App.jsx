@@ -53,6 +53,8 @@ const Accounting = lazy(() => import('./routes/admin/Accounting.jsx'))
 const Behavior = lazy(() => import('./routes/admin/Behavior.jsx'))
 const GuestPlay = lazy(() => import('./routes/admin/GuestPlay.jsx'))
 const GenHistory = lazy(() => import('./routes/admin/GenHistory.jsx'))
+const AdsStudio = lazy(() => import('./routes/admin/AdsStudio.jsx'))
+const Growth = lazy(() => import('./routes/admin/Growth.jsx'))
 const DailyReport = lazy(() => import('./routes/admin/DailyReport.jsx'))
 const Staff = lazy(() => import('./routes/admin/Staff.jsx'))
 const Settings = lazy(() => import('./routes/admin/Settings.jsx'))
@@ -176,6 +178,25 @@ function GuestPlayRoute() {
   const navigate = useNavigate()
   return (
     <GuestPlay
+      onCreateCampaign={(draft) => {
+        try { sessionStorage.setItem('rbt_campaign_draft', JSON.stringify(draft || {})) } catch (_) { /* private mode */ }
+        navigate('/admin/campaigns?draft=1')
+      }}
+    />
+  )
+}
+
+// Growth hands its findings to the pages that already know how to act on them:
+// offer drafts to Offers, audience drafts to Campaigns. Same handoff shape the
+// behaviour planner uses, so there is one convention across the product.
+function GrowthRoute() {
+  const navigate = useNavigate()
+  return (
+    <Growth
+      onCreateOffer={(draft) => {
+        try { sessionStorage.setItem('rbt_offer_draft', JSON.stringify(draft || {})) } catch (_) { /* private mode */ }
+        navigate('/admin/offers?draft=1')
+      }}
       onCreateCampaign={(draft) => {
         try { sessionStorage.setItem('rbt_campaign_draft', JSON.stringify(draft || {})) } catch (_) { /* private mode */ }
         navigate('/admin/campaigns?draft=1')
@@ -443,6 +464,8 @@ export default function App() {
         <Route path="behavior" element={<RequireCap cap={CAP.VIEW_REPORTS}><BehaviorRoute /></RequireCap>} />
         <Route path="guest-play" element={<RequireCap cap={CAP.VIEW_REPORTS}><GuestPlayRoute /></RequireCap>} />
         <Route path="gen-history" element={<RequireCap anyOf={[CAP.MANAGE_CAMPAIGNS, CAP.MANAGE_MENU, CAP.MANAGE_APPEARANCE]}><GenHistory /></RequireCap>} />
+        <Route path="ads" element={<RequireCap cap={CAP.MANAGE_CAMPAIGNS}><AdsStudio /></RequireCap>} />
+        <Route path="growth" element={<RequireCap cap={CAP.VIEW_REPORTS}><GrowthRoute /></RequireCap>} />
         <Route path="daily" element={<RequireCap cap={CAP.VIEW_REPORTS}><PlanGate feature="reports"><DailyReport /></PlanGate></RequireCap>} />
         <Route path="hr" element={<RequireCap cap={CAP.ATTENDANCE}><PlanGate feature="staff"><StaffHub /></PlanGate></RequireCap>} />
         <Route path="roles" element={<RequireCap cap={CAP.MANAGE_STAFF}><PlanGate feature="staff"><Roles /></PlanGate></RequireCap>} />
