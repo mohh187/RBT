@@ -1,5 +1,7 @@
-import QRCode from 'qrcode'
-
+// The `qrcode` package is ~73 kB and is ONLY needed to rasterise a QR image.
+// The url helpers below are plain string builders that admin shells (and other
+// eager modules) import, so a static import dragged the whole encoder into the
+// entry chunk. qrDataUrl was already async, so loading it on demand is free.
 export function publicBaseUrl() {
   return import.meta.env.VITE_PUBLIC_BASE_URL || window.location.origin
 }
@@ -20,6 +22,7 @@ export function passUrl(slug, kind, id, token) {
 }
 
 export async function qrDataUrl(text, opts = {}) {
+  const { default: QRCode } = await import('qrcode')
   return QRCode.toDataURL(text, {
     width: opts.width || 512,
     margin: opts.margin ?? 2,

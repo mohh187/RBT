@@ -31,6 +31,7 @@
 // Firestore — it calls onMove(move) and re-renders from the live `room`.
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import Icon from '../Icon.jsx'
+import { botMoveFor, botLabel, takeSoloIntent, BOT_DELAY_MS } from '../../lib/gameBots.js'
 import '../../styles/boardgames.css'
 
 export const GAME_ID = 'dominoes'
@@ -498,6 +499,9 @@ export default function Dominoes({
   onMove,
   onProgress,
   resumeState,
+  // «العب ضد الكمبيوتر»: one to three machine seats. The player is always seat
+  // zero, so the seat count of a solo match is soloBots + 1.
+  soloBots = null,
 }) {
   const t = TXT[lang === 'en' ? 'en' : 'ar']
   const mp = !!room
@@ -506,28 +510,46 @@ export default function Dominoes({
   useEffect(() => { onScoreRef.current = onScore }, [onScore])
   useEffect(() => { onProgressRef.current = onProgress }, [onProgress])
 
+  // Latched on the first render and never recomputed: the lobby's hand-off
+  // expires after a minute, and re-reading it every render would silently turn
+  // a bot match back into a hot-seat match mid-match.
+  const [bots] = useState(() => {
+    if (mp) return 0
+    const n = Number(soloBots)
+    if (Number.isFinite(n) && n > 0) return Math.max(1, Math.min(3, n))
+    const it = takeSoloIntent(GAME_ID)
+    return it ? Math.max(1, Math.min(3, Number(it.bots) || 1)) : 0
+  })
+  const vsBot = bots > 0
+
   const [local, setLocal] = useState(() => {
     const saved = resumeState && resumeState.game === GAME_ID && resumeState.state
-    return sane(saved) ? saved : initialState(2)
+    // A saved hot-seat match must not be resumed into a bot match with a
+    // different seat count — that would deal the player somebody else's hand.
+    if (!vsBot && sane(saved)) return saved
+    return initialState(vsBot ? bots + 1 : 2)
   })
   const st = useMemo(() => {
     const raw = mp ? room.state : local
     return sane(raw) ? raw : initialState(mp && Array.isArray(room.players) ? room.players.length : 2)
   }, [mp, room, local])
 
-  const seat = mp ? (Number.isInteger(mySeat) ? mySeat : null) : st.turn
+  // Hot-seat play passes the phone, so the acting seat follows the turn.
+  // Against the computer the player keeps seat zero for the whole match.
+  const seat = mp ? (Number.isInteger(mySeat) ? mySeat : null) : (vsBot ? 0 : st.turn)
   const myTurn = st.phase === 'play' && seat !== null && seat === st.turn
 
-  // single-device play hides the hand between turns
+  // single-device play hides the hand between turns — but there is nobody to
+  // hide it from when the other seats are machines
   const [revealed, setRevealed] = useState(() => (mp ? null : st.turn))
-  const veiled = !mp && st.phase === 'play' && revealed !== st.turn
+  const veiled = !mp && !vsBot && st.phase === 'play' && revealed !== st.turn
 
   const [sel, setSel] = useState(null)
 
   const hand = useMemo(() => {
-    const owner = mp ? seat : st.turn
+    const owner = (mp || vsBot) ? seat : st.turn
     return owner === null ? [] : st.hands[String(owner)] || []
-  }, [mp, seat, st])
+  }, [mp, vsBot, seat, st])
 
   const ends = endsOf(st.line)
   const placed = useMemo(() => layoutSnake(st.line || []), [st.line])
@@ -551,6 +573,26 @@ export default function Dominoes({
 
   // reveal the new player's hand only after they acknowledge the handover
   useEffect(() => { if (mp) return; if (st.phase !== 'play') setRevealed(st.turn) }, [mp, st.phase, st.turn])
+
+  // ---- machine seats ------------------------------------------------------
+  // Every bot move is chosen by src/lib/gameBots.js and validated by THIS
+  // file's `reduce` before it is returned, so a machine seat is bound by the
+  // same rulebook as the player. The bot reads only its own hand and the chain;
+  // it never looks at the tiles the other seats hold, even though the shared
+  // state object physically contains them.
+  //
+  // Round and match transitions are NOT automated: the player taps «الجولة
+  // التالية» so the result screen is actually read before the board resets.
+  useEffect(() => {
+    if (!vsBot || st.phase !== 'play') return undefined
+    if (st.turn === 0) return undefined
+    const id = setTimeout(() => {
+      const mv = botMoveFor(GAME_ID, st, st.turn, { reduce, room: null })
+      if (!mv) return
+      setLocal((prev) => reduce(prev, { ...mv, seat: prev.turn }, null).state)
+    }, BOT_DELAY_MS)
+    return () => clearTimeout(id)
+  }, [vsBot, st])
 
   useEffect(() => {
     if (!mp) onProgressRef.current?.({ game: GAME_ID, state: st })
@@ -576,6 +618,7 @@ export default function Dominoes({
   const nameFor = (s) => {
     const p = players.find((x) => x.seat === s)
     if (p && p.name) return p.name
+    if (vsBot && s > 0) return botLabel(s - 1, bots, lang)
     if (!mp && playerName && s === 0) return playerName
     return `${t.player} ${s + 1}`
   }

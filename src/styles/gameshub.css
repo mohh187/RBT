@@ -137,6 +137,11 @@
     calc(var(--gh-pad) + env(safe-area-inset-left, 0px));
 }
 .gh-body::-webkit-scrollbar { width: 0; height: 0; }
+/* A scrolling flex column SHRINKS its children instead of overflowing, so the
+   player card and the tab row were squashed to slivers by the shelves below
+   them. Nothing here may shrink: the body scrolls, the cards keep their height.
+   This is the root fix — do not patch it with per-card min-height. */
+.gh-body > * { flex: 0 0 auto; }
 
 /* ===========================================================================
    thumbnails — pure SVG, no assets

@@ -55,6 +55,7 @@
 // `forceSkip`. No game decision depends on the clock.
 // ---------------------------------------------------------------------------
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { botMoveFor, botLabel, takeSoloIntent, BOT_DELAY_MS, BOT_DELAY_FAST } from '../../lib/gameBots.js'
 import '../../styles/ludo.css'
 
 // ===========================================================================
@@ -199,6 +200,45 @@ function capturesAt(st, seat, to) {
     if (countOn(st, s, idx) > 0) return true
   }
   return false
+}
+
+// ---------------------------------------------------------------------------
+// helpers the bot layer needs. They are exported rather than reimplemented in
+// src/lib/gameBots.js on purpose: the ring geometry lives here, and a second
+// copy of it would drift the first time this board changes.
+// ---------------------------------------------------------------------------
+function isSafeRel(seat, rel) {
+  if (rel < 0 || rel > LAST_RING) return false
+  return SAFE.has(ringIndexOf(seat, rel))
+}
+
+// How many opponent tokens sit one to six squares behind the square (seat, rel)
+// and could therefore land on it with a single roll. Zero on a safe square.
+//
+// HONEST APPROXIMATION: it does not check whether that opponent token would
+// overshoot into its own home column instead of landing here, so very late
+// tokens are counted as threats when they are not. It over-states danger; it
+// never misses it.
+function riskAt(st, seat, rel) {
+  if (rel < 0 || rel > LAST_RING) return 0
+  const idx = ringIndexOf(seat, rel)
+  if (SAFE.has(idx)) return 0
+  let n = 0
+  for (let s = 0; s < 4; s += 1) {
+    if (s === seat) continue
+    const arr = (st.tokens && st.tokens[s]) || []
+    for (let t = 0; t < arr.length; t += 1) {
+      const p = arr[t]
+      if (p < 0 || p > LAST_RING) continue
+      const d = ((idx - ringIndexOf(s, p)) % RING.length + RING.length) % RING.length
+      if (d >= 1 && d <= 6) n += 1
+    }
+  }
+  return n
+}
+
+export const botHelpers = {
+  legalMoves, capturesAt, isSafe: isSafeRel, riskAt, YARD, COL_FIRST, HOME, LAST_RING,
 }
 
 function seatsFromRoom(room) {
@@ -461,12 +501,12 @@ const T = {
     solo: 'العب الآن',
     soloTitle: 'الليدو',
     soloSub: 'اختر عدد اللاعبين وطريقة اللعب، أو انتظر انضمام الآخرين إلى الغرفة.',
-    vsBots: 'ضد الحاسوب',
+    vsBots: 'ضد الكمبيوتر',
     sameDevice: 'على نفس الجهاز',
     players: 'لاعبون',
     start: 'ابدأ',
     you: 'أنت',
-    bot: 'حاسوب',
+    bot: 'الكمبيوتر',
     place: 'المركز',
     winner: 'الفائز',
     n: {
@@ -503,7 +543,7 @@ const T = {
     players: 'players',
     start: 'Start',
     you: 'You',
-    bot: 'Bot',
+    bot: 'Computer',
     place: 'Place',
     winner: 'Winner',
     n: {
@@ -579,25 +619,6 @@ function Die({ value, spinning }) {
   )
 }
 
-// A deliberately simple, honest bot: it plays through the SAME reduce, so it
-// cannot do anything a human could not. Priority: finish > capture > leave the
-// yard > enter the home column > push the most advanced token.
-function botPick(st, seat, opts) {
-  let best = null
-  let bestScore = -1
-  for (let i = 0; i < opts.length; i += 1) {
-    const o = opts[i]
-    let sc
-    if (o.to === HOME) sc = 100
-    else if (capturesAt(st, seat, o.to)) sc = 90
-    else if (o.from === YARD) sc = 62
-    else if (o.to >= COL_FIRST) sc = 56
-    else sc = 10 + o.to * 0.4 + (SAFE.has(ringIndexOf(seat, o.to)) ? 6 : 0)
-    if (sc > bestScore) { bestScore = sc; best = o }
-  }
-  return best
-}
-
 export default function Ludo({
   onScore,
   lang = 'ar',
@@ -607,6 +628,10 @@ export default function Ludo({
   mySeat = null,
   onMove,
   isHost = false,
+  // «العب ضد الكمبيوتر»: how many machine seats to open. The hub passes this
+  // when the lobby routed a solo round; when it does not, the lobby's own
+  // hand-off (takeSoloIntent) supplies the same answer.
+  soloBots = null,
 }) {
   const L = T[lang === 'en' ? 'en' : 'ar']
   const online = !!(room && room.roomId)
@@ -651,19 +676,25 @@ export default function Ludo({
     })
   }, [])
 
-  const startLocal = useCallback(() => {
-    const n = Math.max(2, Math.min(4, setup.count))
+  const startLocal = useCallback((cfg) => {
+    const bots = cfg && cfg.bots !== undefined ? !!cfg.bots : setup.bots
+    const n = Math.max(2, Math.min(4, Number(cfg && cfg.count) || setup.count))
     const st = initialState(n)
     st.seats = Array.from({ length: n }, (_, i) => i)
     const players = st.seats.map((s) => ({
-      id: `local-${s}`,
-      name: s === 0 ? (playerName || L.you) : (setup.bots ? `${L.bot} ${fmt(s)}` : `${L.players} ${fmt(s + 1)}`),
+      // A machine seat is named «الكمبيوتر» and carries `bot: true`. It is never
+      // shown as a person, and never given the player's name.
+      id: bots && s !== 0 ? `bot-${s}` : `local-${s}`,
+      name: s === 0
+        ? (playerName || L.you)
+        : (bots ? botLabel(s - 1, n - 1, lang) : `${L.players} ${fmt(s + 1)}`),
+      bot: bots && s !== 0,
       seat: s,
       connected: true,
       score: 0,
     }))
     setLocal({
-      bots: setup.bots,
+      bots,
       youSeat: 0,
       state: st,
       room: {
@@ -677,7 +708,20 @@ export default function Ludo({
         winnerSeat: null,
       },
     })
-  }, [setup, playerName, L])
+  }, [setup, playerName, L, lang])
+
+  // The lobby already asked «كم خصماً؟» — do not ask again on the board. An
+  // explicit `soloBots` prop wins; otherwise the lobby's hand-off is read once.
+  const soloRef = useRef(false)
+  useEffect(() => {
+    if (online || local || soloRef.current) return
+    soloRef.current = true
+    const n = Number(soloBots)
+    const intent = Number.isFinite(n) && n > 0 ? { bots: n } : takeSoloIntent('ludo')
+    if (!intent) return
+    const bots = Math.max(1, Math.min(3, Number(intent.bots) || 1))
+    startLocal({ count: bots + 1, bots: true })
+  }, [online, local, soloBots, startLocal])
 
   const submit = useCallback((mv) => {
     if (online) {
@@ -709,19 +753,21 @@ export default function Ludo({
     return () => clearTimeout(t)
   }, [rollFp])
 
-  // bots
+  // ---- machine seats ----------------------------------------------------
+  // The bot decides through src/lib/gameBots.js, which validates every candidate
+  // against THIS file's `reduce` before returning it — so a bot seat can only
+  // ever submit a move a human sitting there could have made. The delay is not
+  // cosmetic: without it the three machine turns resolve inside one frame and
+  // the player never sees who moved what.
   useEffect(() => {
     if (online || !local || !local.bots) return undefined
     const st = local.state
     const ts = local.room.turn.seat
     if (!st || st.phase === 'over' || ts === local.youSeat) return undefined
     const t = setTimeout(() => {
-      if (st.phase === 'roll') applyLocal({ type: 'roll', seat: ts })
-      else if (st.phase === 'move') {
-        const pick = botPick(st, ts, legalMoves(st, ts, st.die))
-        if (pick) applyLocal({ type: 'move', token: pick.token, seat: ts })
-      }
-    }, st.phase === 'roll' ? 640 : 540)
+      const mv = botMoveFor('ludo', st, ts, { reduce, room: local.room, helpers: botHelpers })
+      if (mv) applyLocal(mv)
+    }, st.phase === 'roll' ? BOT_DELAY_MS : BOT_DELAY_FAST)
     return () => clearTimeout(t)
   }, [online, local, applyLocal])
 
@@ -866,7 +912,7 @@ export default function Ludo({
             <button type="button" className={`lud-segb${setup.bots ? ' is-on' : ''}`} onClick={() => setSetup((s) => ({ ...s, bots: true }))}>{L.vsBots}</button>
             <button type="button" className={`lud-segb${!setup.bots ? ' is-on' : ''}`} onClick={() => setSetup((s) => ({ ...s, bots: false }))}>{L.sameDevice}</button>
           </div>
-          <button type="button" className="lud-cta" onClick={startLocal}>{L.start}</button>
+          <button type="button" className="lud-cta" onClick={() => startLocal({ count: setup.count, bots: setup.bots })}>{L.start}</button>
           <button type="button" className="lud-link" onClick={() => setShowRules(true)}>{L.rules}</button>
         </div>
         {showRules ? <RulesSheet L={L} onClose={() => setShowRules(false)} /> : null}

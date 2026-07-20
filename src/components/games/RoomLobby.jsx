@@ -36,7 +36,9 @@ import {
   HEARTBEAT_MS,
   MAX_SEATS,
 } from '../../lib/gameRoom.js'
+import { setSoloIntent, clearSoloIntent, botNote, botLabel } from '../../lib/gameBots.js'
 import '../../styles/room.css'
+import '../../styles/gamebots.css'
 
 const T = {
   lobby: { ar: 'غرفة اللعب', en: 'Game room' },
@@ -69,6 +71,25 @@ const T = {
   go: { ar: 'دخول', en: 'Join' },
   rules: { ar: 'كيف نلعب', en: 'How to play' },
   retry: { ar: 'أعد المحاولة', en: 'Try again' },
+
+  // ---- «العب ضد الكمبيوتر» ----
+  soloH: { ar: 'العب ضد الكمبيوتر', en: 'Play the computer' },
+  soloWhy: {
+    ar: 'وحدك على الطاولة؟ ابدأ الآن دون انتظار أحد — تلعب على جهازك فقط، بلا غرفة وبلا رابط.',
+    en: 'On your own? Start now without waiting — played on your device alone, no room, no link.',
+  },
+  soloCount: { ar: 'عدد الخصوم', en: 'Opponents' },
+  soloFixed: {
+    ar: 'هذه اللعبة لأربعة لاعبين، فتلعب مع شريك وخصمين يديرهم الجهاز.',
+    en: 'This game seats four, so you get one computer partner and two computer opponents.',
+  },
+  soloFixed2: {
+    ar: 'الشطرنج للاعبين اثنين، فيلعب الكمبيوتر بالأسود وتلعب أنت بالأبيض.',
+    en: 'Chess seats two: the computer takes black, you take white.',
+  },
+  soloGo: { ar: 'ابدأ ضد الكمبيوتر', en: 'Start against the computer' },
+  soloYou: { ar: 'أنت', en: 'You' },
+  soloTable: { ar: 'الطاولة', en: 'At the table' },
 }
 
 // Arabic ordinals for the honest waiting line («بانتظار لاعب ثالث…»).
@@ -83,6 +104,11 @@ export default function RoomLobby({
   lang = 'ar',
   onStart,
   onExit,
+  // Called when the player chooses «العب ضد الكمبيوتر»: { gameId, bots }.
+  // The hub owns that route because a solo round is a normal single-player run
+  // (play history, restart, exit) and NOT a room. When the hub has not wired it
+  // yet, `onStart('')` is used instead — see doSolo.
+  onSolo,
 }) {
   const ar = lang !== 'en'
   const t = useCallback((k) => (ar ? T[k].ar : T[k].en), [ar])
@@ -112,6 +138,21 @@ export default function RoomLobby({
   const maxPlayers = Math.max(2, Math.min(MAX_SEATS, Number(game?.maxPlayers) || 2))
   const minPlayers = Math.max(2, Math.min(maxPlayers, Number(game?.minPlayers) || 2))
   const gameName = ar ? (game?.ar || '') : (game?.en || game?.ar || '')
+
+  // ---- «العب ضد الكمبيوتر» ----
+  // The player always takes seat zero, so the number of machine seats is bounded
+  // by the game's own registry entry: at least enough to reach minPlayers, never
+  // more than maxPlayers allows. Nothing here invents a seat count.
+  const minBots = Math.max(1, minPlayers - 1)
+  const maxBots = Math.max(minBots, maxPlayers - 1)
+  const botChoices = useMemo(() => {
+    const out = []
+    for (let n = minBots; n <= maxBots; n += 1) out.push(n)
+    return out
+  }, [minBots, maxBots])
+  const [botCount, setBotCount] = useState(minBots)
+  useEffect(() => { setBotCount(minBots) }, [minBots])
+  const strength = botNote(game?.id, lang)
 
   // ---- load the game module once, for RULES_AR and initialState() ----
   useEffect(() => {
@@ -169,8 +210,22 @@ export default function RoomLobby({
   }, [tid, roomId, me.id])
 
   // ---- actions ----
+  // The player chose people over machines: drop any solo hand-off before it can
+  // be picked up by the board this room is about to open.
+  const doSolo = useCallback(() => {
+    if (busy || !game?.id) return
+    const n = Math.max(minBots, Math.min(maxBots, Number(botCount) || minBots))
+    setSoloIntent({ gameId: game.id, bots: n })
+    if (typeof onSolo === 'function') { onSolo({ gameId: game.id, bots: n }); return }
+    // The hub has not wired `onSolo` yet. `onStart('')` still lands on the same
+    // board with no room attached, which is exactly what solo mode is; the
+    // hand-off above tells the game how many machine seats to open.
+    onStart?.('')
+  }, [busy, game?.id, botCount, minBots, maxBots, onSolo, onStart])
+
   const doCreate = useCallback(async () => {
     if (busy) return
+    clearSoloIntent()
     setBusy('create'); setErr('')
     try {
       const id = await createRoom({
@@ -194,6 +249,7 @@ export default function RoomLobby({
 
   const doJoin = useCallback(async (id) => {
     if (busy || !id) return
+    clearSoloIntent()
     setBusy('join'); setErr('')
     try {
       const { seat } = await joinRoom({ tid, roomId: id, player: me })
@@ -425,6 +481,72 @@ export default function RoomLobby({
       {header}
       <div className="rm-scroll">
         <div className="rm-wrap">
+          {/* First on the screen on purpose: a guest sitting alone should not
+              have to read past two "invite someone" options to find the one
+              answer that works for them. */}
+          <div className="rm-card rm-fade gbot-card">
+            <div className="rm-card-h">
+              <Icon name="zap" size={16} />
+              {t('soloH')}
+            </div>
+            <p className="gbot-note">{t('soloWhy')}</p>
+
+            {botChoices.length > 1 ? (
+              <div className="gbot-count">
+                <span className="gbot-count-l">{t('soloCount')}</span>
+                <span className="gbot-seg" role="group" aria-label={t('soloCount')}>
+                  {botChoices.map((n) => (
+                    <button
+                      type="button"
+                      key={n}
+                      className={`gbot-segb${botCount === n ? ' is-on' : ''}`}
+                      aria-pressed={botCount === n}
+                      onClick={() => setBotCount(n)}
+                    >
+                      {n}
+                    </button>
+                  ))}
+                </span>
+              </div>
+            ) : (
+              <p className="gbot-note">{game?.id === 'chess' ? t('soloFixed2') : t('soloFixed')}</p>
+            )}
+
+            {/* Who will actually be at the table. A machine seat is labelled
+                «الكمبيوتر», never given a name, never shown as a person. */}
+            <ul className="gbot-seats" aria-label={t('soloTable')}>
+              <li className="gbot-seatchip" data-you="1">
+                <Icon name="user" size={13} />
+                {me.name || t('soloYou')}
+              </li>
+              {Array.from({ length: botCount }).map((_, i) => (
+                <li className="gbot-seatchip" key={i}>
+                  <Icon name="grid" size={13} />
+                  {botLabel(i, botCount, lang)}
+                </li>
+              ))}
+            </ul>
+
+            {/* The one claim this screen makes about how well it plays. It
+                describes what the bot computes, not how strong it feels. */}
+            {strength ? (
+              <p className="gbot-strength">
+                <Icon name="notepad" size={13} />
+                <span>{strength}</span>
+              </p>
+            ) : null}
+
+            <button
+              type="button"
+              className="rm-btn rm-btn-primary rm-press"
+              onClick={doSolo}
+              disabled={busy !== ''}
+            >
+              <Icon name="play" size={17} />
+              {t('soloGo')}
+            </button>
+          </div>
+
           <div className="rm-card rm-fade">
             <div className="rm-card-h">
               <Icon name="tables" size={16} />

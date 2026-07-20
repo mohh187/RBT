@@ -94,19 +94,54 @@
   color: var(--lud-dim);
 }
 
-/* ---------- board ---------- */
+/* ---------- board ----------
+   ROOT SIZING MODEL — read before changing anything here.
+
+   The board must be a square that fits BOTH remaining axes at once, at every
+   viewport, with no scrolling (hard repo rule) and with the players strip above
+   and the action bar below always reachable.
+
+   The old model was `height: 100%` + `aspect-ratio: 1/1` + `max-width: 100%`.
+   That is broken: the height is the *specified* side, so the width is derived
+   from it; `max-width` then clamps the derived width WITHOUT feeding back into
+   the height. A tall-and-narrow stage therefore produced a square far wider
+   than the screen, which is why only the top-left corner of the board was
+   visible on a phone. It also depended on a percentage height resolving against
+   a grid row that is itself content-sized — circular, and browser-dependent.
+
+   The fix computes the square directly instead of deriving it:
+     · .lud-stage takes exactly the space the strip and the bar leave over
+       (flex: 1 1 0 — an explicit zero basis, so nothing content-driven leaks in)
+     · it becomes a SIZE QUERY CONTAINER, so `cqw`/`cqh` are its own content box
+     · the board asks for min(100cqw, 100cqh) on BOTH axes — one value, no
+       transfer, no clamping feedback, so it can never exceed either axis.
+   This is axis-symmetric, so portrait, landscape and short desktop windows all
+   fall out of the same rule. Do not reintroduce per-breakpoint board sizes. */
 .lud-stage {
-  flex: 1 1 auto;
+  flex: 1 1 0;
   min-height: 0;
+  min-width: 0;
   display: grid;
   place-items: center;
+  container-type: size;
 }
 .lud-boardbox {
-  height: 100%;
-  aspect-ratio: 1 / 1;
+  /* the largest square that fits the stage, on both axes */
+  width: min(100cqw, 100cqh);
+  height: min(100cqw, 100cqh);
   max-width: 100%;
   max-height: 100%;
   display: block;
+}
+/* Pre-container-query engines: width is the specified side here, so the ratio
+   is always honoured and the board can never be wider than its stage. The dvh
+   term is the height guard (dvh, not vh — mobile chrome changes the viewport). */
+@supports not (container-type: size) {
+  .lud-boardbox {
+    width: min(100%, 72dvh);
+    height: auto;
+    aspect-ratio: 1 / 1;
+  }
 }
 .lud-board {
   width: 100%;
@@ -388,6 +423,23 @@
   .lud-pmeta { display: none; }
   .lud-rollbtn span { display: none; }
   .lud-rollbtn { padding: 5px; }
+}
+
+/* ---------- short viewports (landscape phones, short desktop windows) ----------
+   Correctness does not depend on this block — the board already fits from the
+   sizing model above. This only hands the board back the pixels the chrome does
+   not need, so it stays legible when height is the binding axis. */
+@media (max-height: 560px) {
+  .lud-root { gap: 4px; padding: 5px; }
+  .lud-p { padding: 3px 6px; border-radius: 9px; }
+  .lud-pavatar { width: 15px; height: 15px; }
+  .lud-pavatar > span { width: 6px; height: 6px; }
+  .lud-pname { font-size: 0.64rem; }
+  .lud-pmeta { display: none; }
+  .lud-bar { padding: 4px 6px; border-radius: 11px; }
+  .lud-note { display: none; }
+  .lud-die { width: 24px; height: 24px; }
+  .lud-rollbtn { padding: 4px 9px 4px 6px; font-size: 0.7rem; }
 }
 
 /* ---------- motion off ---------- */

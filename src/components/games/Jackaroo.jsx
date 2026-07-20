@@ -79,6 +79,7 @@
 // room can read. The UI never shows them, but the network payload does.
 // Hiding them needs per-seat subcollections plus rules, outside this file.
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { botMoveFor, botLabel, takeSoloIntent, BOT_DELAY_MS } from '../../lib/gameBots.js'
 import '../../styles/cardgames.css'
 
 // ---------------------------------------------------------------------------
@@ -334,6 +335,16 @@ function teamHome(marbles, t) {
   let n = 0
   for (const s of [t, t + 2]) for (const p of marbles[s]) if (isLane(p)) n += 1
   return n
+}
+
+// What the computer opponents are allowed to borrow from this file: the legal
+// descriptor generator and the descriptor runner — i.e. the rulebook itself, so
+// a bot cannot invent a move — plus the board vocabulary needed to score a
+// resulting position. Nothing here exposes another seat's cards.
+// See src/lib/gameBots.js.
+export const botHelpers = {
+  movesForCard, runDescriptor, activeOwner, team, partnerOf,
+  isBase, isLane, isTrack, rankOf, TRACK, LANE, L0, BASE,
 }
 
 // ---------------------------------------------------------------------------
@@ -633,15 +644,20 @@ function Marble({ x, y, color, live, picked, onClick }) {
 // ---------------------------------------------------------------------------
 const LOCAL_NAMES = ['اللاعب الأول', 'اللاعب الثاني', 'اللاعب الثالث', 'اللاعب الرابع']
 
-function makeLocalRoom(playerName) {
+// `bots` true builds the «العب ضد الكمبيوتر» table: seat zero is the player,
+// the other three are machine seats — named as machines, flagged as machines.
+function makeLocalRoom(playerName, bots, lang) {
   return {
     roomId: 'local',
     gameId: 'jackaroo',
     status: 'playing',
     local: true,
     players: [0, 1, 2, 3].map((seat) => ({
-      id: 'local-' + seat,
-      name: seat === 0 ? (playerName || LOCAL_NAMES[0]) : LOCAL_NAMES[seat],
+      id: (bots && seat > 0 ? 'bot-' : 'local-') + seat,
+      name: seat === 0
+        ? (playerName || LOCAL_NAMES[0])
+        : (bots ? botLabel(seat - 1, 3, lang) : LOCAL_NAMES[seat]),
+      bot: !!bots && seat > 0,
       seat,
       connected: true,
       score: 0,
@@ -667,10 +683,16 @@ export default function Jackaroo({
   mySeat = null,
   onMove,
   isHost = false,
+  // Jackaroo is a fixed four-seat partnership game, so a solo round always
+  // means three machine seats; any positive value here selects it.
+  soloBots = null,
 }) {
   const ar = lang !== 'en'
   const remote = !!room
-  const [localRoom, setLocalRoom] = useState(() => makeLocalRoom(playerName))
+  // Latched on the first render: the lobby hand-off expires after a minute and
+  // re-reading it every render would turn a bot table back into a hot-seat one.
+  const [vsBot] = useState(() => !remote && (Number(soloBots) > 0 || !!takeSoloIntent('jackaroo')))
+  const [localRoom, setLocalRoom] = useState(() => makeLocalRoom(playerName, vsBot, lang))
   const [rules, setRules] = useState(false)
   const [sel, setSel] = useState(null) // { i, card }
   const [split, setSplit] = useState(null) // null | 7 | 1..6
@@ -679,9 +701,11 @@ export default function Jackaroo({
   const table = remote ? room : localRoom
   const st = useMemo(() => normalise(table?.state), [table])
 
+  // hot-seat follows the turn (the phone is handed round); against the computer
+  // the player holds seat zero for the whole game
   const seat = remote
     ? (Number.isInteger(mySeat) ? mySeat : 0)
-    : (Number.isInteger(st.turnSeat) ? st.turnSeat : 0)
+    : (vsBot ? 0 : (Number.isInteger(st.turnSeat) ? st.turnSeat : 0))
 
   const host = remote ? !!isHost : true
   const players = Array.isArray(table?.players) ? table.players : []
@@ -720,6 +744,29 @@ export default function Jackaroo({
     dealtRef.current = true
     submit({ t: 'deal', dealer: 0 })
   }, [remote, isHost, st.phase, filled, submit])
+
+  // A solo table is already full, so it deals itself instead of asking the one
+  // player present to press «ابدأ اللعب» against three machines.
+  useEffect(() => {
+    if (!vsBot || st.phase !== 'waiting') return undefined
+    const id = setTimeout(() => submit({ t: 'deal', dealer: 3 }), 260)
+    return () => clearTimeout(id)
+  }, [vsBot, st.phase, submit])
+
+  // ---- machine seats ------------------------------------------------------
+  // The bot enumerates its options with THIS file's own `movesForCard` and its
+  // chosen move is re-validated by `reduce` before it is submitted, so a
+  // machine seat is held to the same rulebook as the player. It reads only its
+  // own hand; the marbles it scores are public on the board.
+  useEffect(() => {
+    if (!vsBot || st.phase !== 'play') return undefined
+    if (st.turnSeat === 0) return undefined
+    const id = setTimeout(() => {
+      const mv = botMoveFor('jackaroo', st, st.turnSeat, { reduce, room: localRoom, helpers: botHelpers })
+      if (mv) submit(mv)
+    }, BOT_DELAY_MS)
+    return () => clearTimeout(id)
+  }, [vsBot, st, localRoom, submit])
 
   // clear the selection whenever the board moves on
   const stamp = st.round + ':' + st.turnSeat + ':' + (st.hands[seat] || []).length
@@ -857,7 +904,9 @@ export default function Jackaroo({
     setSel((cur) => (cur && cur.i === i ? null : { i, card }))
   }, [])
 
-  const showLobby = st.phase === 'waiting'
+  // The "waiting for the table" overlay has nothing true to say when the other
+  // three seats are machines and the deal is a quarter-second away.
+  const showLobby = st.phase === 'waiting' && !vsBot
   const showEnd = st.phase === 'end'
   const selDead = sel ? legal.length === 0 : false
 

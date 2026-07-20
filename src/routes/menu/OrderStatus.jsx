@@ -16,7 +16,10 @@ import { getPrefs } from '../../lib/notifyPrefs.js'
 import { isRated, markRated, isArrived, markArrived, getMyOrders, getLocalCustomer } from '../../lib/customer.js'
 import { startPayment } from '../../lib/payments.js'
 import { createVenueReview } from '../../lib/reviewImport.js'
-import NotificationSettings from '../../components/NotificationSettings.jsx'
+// NotificationSettings -> push.js -> firebase/messaging + installations (~85 kB)
+// for a panel most diners never open. Loaded on first open instead; it stays
+// mounted afterwards so the sheet keeps its close animation.
+const NotificationSettings = lazy(() => import('../../components/NotificationSettings.jsx'))
 import WaitGame, { getBestScore } from '../../components/WaitGame.jsx'
 import { deviceKey } from '../../lib/device.js'
 // heavy/rarely-opened guest overlays
@@ -37,6 +40,7 @@ export default function OrderStatus() {
   const [tid, setTid] = useState(null)
   const [order, setOrder] = useState(undefined)
   const [notifOpen, setNotifOpen] = useState(false)
+  const [notifMounted, setNotifMounted] = useState(false)
   const [notifOn, setNotifOn] = useState(getPrefs().enabled)
   const [ratings, setRatings] = useState({})
   const [comment, setComment] = useState('')
@@ -213,7 +217,7 @@ export default function OrderStatus() {
     <div style={{ minHeight: '100dvh' }}>
       <DinerBar
         tenant={{ name: order.tableLabel || t('trackOrder') }}
-        right={<button className="icon-btn" onClick={() => setNotifOpen(true)} title={t('notifSettings')}><Icon name={notifOn ? 'bell' : 'bellOff'} size={20} /></button>}
+        right={<button className="icon-btn" onClick={() => { setNotifMounted(true); setNotifOpen(true) }} title={t('notifSettings')}><Icon name={notifOn ? 'bell' : 'bellOff'} size={20} /></button>}
       />
       <div className="container page stack" style={{ gap: 'var(--sp-5)' }}>
         <div className="text-center stack" style={{ gap: 10, alignItems: 'center' }}>
@@ -457,7 +461,11 @@ export default function OrderStatus() {
         </div>
       </Sheet>
 
-      <NotificationSettings open={notifOpen} onClose={() => { setNotifOpen(false); setNotifOn(getPrefs().enabled) }} />
+      {notifMounted && (
+        <Suspense fallback={null}>
+          <NotificationSettings open={notifOpen} onClose={() => { setNotifOpen(false); setNotifOn(getPrefs().enabled) }} />
+        </Suspense>
+      )}
     </div>
   )
 }

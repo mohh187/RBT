@@ -1,30 +1,44 @@
 import { lazy, Suspense, useEffect, useState } from 'react'
 import { Routes, Route, Navigate, useLocation, useNavigate } from 'react-router-dom'
 import { useAuth } from './lib/auth.jsx'
+import { useI18n } from './lib/i18n.jsx'
+import ChunkBoundary from './components/ChunkBoundary.jsx'
 import { CAP } from './lib/permissions.js'
 import { FullSpinner } from './components/ui.jsx'
 import { isPlatformHost, resolveHostVenue } from './lib/domains.js'
 import FirebaseSetup from './components/FirebaseSetup.jsx'
-import AdminLayout from './components/AdminLayout.jsx'
 import OfflineBanner from './components/OfflineBanner.jsx'
 import UploadProgress from './components/UploadProgress.jsx'
 import LiquidFilters from './components/LiquidFilters.jsx'
 import PlanGate from './components/PlanGate.jsx'
 
-// Public/entry routes load eagerly (diners hit these first — keep them in the main chunk).
-import Landing from './routes/Landing.jsx'
-import Login from './routes/Login.jsx'
-import Signup from './routes/Signup.jsx'
-import Onboarding from './routes/Onboarding.jsx'
+// The public menu is THE first paint for diners (QR scan -> /m/:slug or a venue
+// domain root), so it stays in the entry chunk: making it lazy would add a
+// second round trip to the single most common load in the product.
 import PublicMenu from './routes/menu/PublicMenu.jsx'
-import PreviewMenu from './routes/menu/PreviewMenu.jsx'
-import TableMenu from './routes/menu/TableMenu.jsx'
-import OrderStatus from './routes/menu/OrderStatus.jsx'
-import PublicEvents from './routes/events/PublicEvents.jsx'
-import BookReservation from './routes/events/BookReservation.jsx'
-import BookTable from './routes/menu/BookTable.jsx'
-import Pass from './routes/events/Pass.jsx'
-import MemberCard from './routes/member/MemberCard.jsx'
+
+// Every OTHER public route is code-split. They share MenuView/db/ui with the
+// entry chunk already, so their own chunks are small, and a diner reading a
+// menu no longer downloads the marketing landing, signup, onboarding, events,
+// passes or the order-status screen (which drags in firebase/messaging).
+const Landing = lazy(() => import('./routes/Landing.jsx'))
+const Login = lazy(() => import('./routes/Login.jsx'))
+const Signup = lazy(() => import('./routes/Signup.jsx'))
+const Onboarding = lazy(() => import('./routes/Onboarding.jsx'))
+const PreviewMenu = lazy(() => import('./routes/menu/PreviewMenu.jsx'))
+const TableMenu = lazy(() => import('./routes/menu/TableMenu.jsx'))
+const OrderStatus = lazy(() => import('./routes/menu/OrderStatus.jsx'))
+const PublicEvents = lazy(() => import('./routes/events/PublicEvents.jsx'))
+const BookReservation = lazy(() => import('./routes/events/BookReservation.jsx'))
+const BookTable = lazy(() => import('./routes/menu/BookTable.jsx'))
+const Pass = lazy(() => import('./routes/events/Pass.jsx'))
+const MemberCard = lazy(() => import('./routes/member/MemberCard.jsx'))
+
+// The admin shell itself was eager, which put the sidebar, global search index,
+// page-guide catalogue, tour scripts, pin lock and the QR encoder in the entry
+// chunk for everyone. It is staff-only — it belongs behind the same lazy
+// boundary as the pages it wraps.
+const AdminLayout = lazy(() => import('./components/AdminLayout.jsx'))
 
 // Staff/admin routes are code-split — diners never download the back-office bundle.
 const Dashboard = lazy(() => import('./routes/admin/Dashboard.jsx'))
@@ -52,6 +66,7 @@ const Reports = lazy(() => import('./routes/admin/Reports.jsx'))
 const Accounting = lazy(() => import('./routes/admin/Accounting.jsx'))
 const Behavior = lazy(() => import('./routes/admin/Behavior.jsx'))
 const GuestPlay = lazy(() => import('./routes/admin/GuestPlay.jsx'))
+const GamesHub = lazy(() => import('./routes/admin/GamesHub.jsx'))
 const GenHistory = lazy(() => import('./routes/admin/GenHistory.jsx'))
 const AdsStudio = lazy(() => import('./routes/admin/AdsStudio.jsx'))
 const JoinRoom = lazy(() => import('./routes/JoinRoom.jsx'))
@@ -270,6 +285,8 @@ function RootRoute() {
 
 export default function App() {
   const { firebaseReady } = useAuth()
+  const location = useLocation()
+  const { lang } = useI18n()
   if (!firebaseReady) return <FirebaseSetup />
 
   return (
@@ -277,6 +294,10 @@ export default function App() {
       <OfflineBanner />
       <UploadProgress />
       <LiquidFilters />
+    {/* Routes are code-split, so a dead network or a fresh deploy can make a
+        chunk fetch fail. Without this boundary that throw unmounts everything
+        and the visitor gets a white screen. */}
+    <ChunkBoundary routeKey={location.pathname} lang={lang}>
     <Suspense fallback={<FullSpinner />}>
     <Routes>
       {/* public marketing + auth (venue menu at root on a custom domain) */}
@@ -464,6 +485,7 @@ export default function App() {
         <Route path="accounting" element={<RequireCap cap={CAP.VIEW_REVENUE}><Accounting /></RequireCap>} />
         <Route path="behavior" element={<RequireCap cap={CAP.VIEW_REPORTS}><BehaviorRoute /></RequireCap>} />
         <Route path="guest-play" element={<RequireCap cap={CAP.VIEW_REPORTS}><GuestPlayRoute /></RequireCap>} />
+        <Route path="games-hub" element={<RequireCap cap={CAP.VIEW_REPORTS}><GamesHub /></RequireCap>} />
         <Route path="gen-history" element={<RequireCap anyOf={[CAP.MANAGE_CAMPAIGNS, CAP.MANAGE_MENU, CAP.MANAGE_APPEARANCE]}><GenHistory /></RequireCap>} />
         <Route path="ads" element={<RequireCap cap={CAP.MANAGE_CAMPAIGNS}><AdsStudio /></RequireCap>} />
         <Route path="growth" element={<RequireCap cap={CAP.VIEW_REPORTS}><GrowthRoute /></RequireCap>} />
@@ -543,6 +565,7 @@ export default function App() {
       <Route path="*" element={<NotFound />} />
     </Routes>
     </Suspense>
+    </ChunkBoundary>
     </>
   )
 }

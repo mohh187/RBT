@@ -1,0 +1,58 @@
+/* ===========================================================================
+   gameart.css — helpers for the hand-authored shelf artwork in GamePromo.jsx.
+
+   Imported by GamePromo.jsx ONLY. Everything here is a `.ga-` prefixed class
+   applied to an SVG <g> inside a .gh-thumb, so nothing can leak into the hub.
+
+   Why a stylesheet rather than SVG <filter> elements: the shelf renders one
+   thumbnail per game, so a per-tile filter primitive would mean a filter graph
+   per card. A CSS drop-shadow on a group is one composited layer and reads the
+   same at thumbnail size.
+
+   House rules honoured: no emoji, no Arabic-Indic digits, nothing animates
+   here (a shelf of twenty tiles must stay still and cheap), no pure #000.
+   =========================================================================== */
+
+/* A board / tile / card sitting ON the tile's gradient rather than printed
+   into it. Kept soft — at 84px wide a hard shadow reads as a black smear. */
+.ga-lift { filter: drop-shadow(0 3px 5px rgba(6, 12, 18, 0.46)); }
+
+/* The same, tuned for the small loose objects (single cards, marbles) that sit
+   in front of a board and need to separate from it without a heavy edge. */
+.ga-lift-sm { filter: drop-shadow(0 2px 3px rgba(6, 12, 18, 0.4)); }
+
+/* Hairline separating a light play surface from whatever is behind it. Used as
+   a stroke on the plate rects so a cream board never bleeds into a pale tile.
+
+   NOTE: these two set the stroke COLOUR only, never stroke-width. Each scene
+   draws inside its own transform (the Ludo board runs at scale(5.5), the chess
+   board at 1), so a width declared here would land at a different visual
+   thickness in each one. A CSS declaration also beats a presentation
+   attribute, so declaring it here would silently override the per-element
+   strokeWidth the scenes pass. Widths stay on the elements. */
+.ga-edge {
+  stroke: rgba(10, 16, 22, 0.34);
+  fill: none;
+}
+
+/* Grid rulings on a play surface: present enough to read as a board, faint
+   enough not to buzz once the tile is scaled down to the shelf. */
+.ga-rule {
+  stroke: rgba(24, 32, 42, 0.26);
+  stroke-linecap: square;
+  fill: none;
+}
+
+/* Some engines still paint a hairline seam between exactly-abutting SVG rects.
+   Shape rendering hints the rasteriser to snap them instead. */
+.ga-crisp { shape-rendering: crispEdges; }
+
+@media (prefers-reduced-motion: reduce) {
+  /* Nothing in this file animates. The block is kept as the guard rail for any
+     motion added later, so a future edit cannot ship un-gated animation. */
+  .ga-lift,
+  .ga-lift-sm {
+    animation: none !important;
+    transition: none !important;
+  }
+}

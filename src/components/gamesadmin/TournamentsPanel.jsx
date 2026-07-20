@@ -1,0 +1,598 @@
+// «البطولات» — create a competition, watch it score itself, freeze the result.
+//
+// The standings on this screen are computed by src/lib/tournaments.js from the
+// venue's own gamePlays inside the tournament's own window. That is why this
+// panel fetches its plays SEPARATELY from the rest of the page: a tournament's
+// dates have nothing to do with the period picker at the top, and scoring a
+// competition over the wrong window would be worse than showing nothing.
+//
+// Three honesty rules are enforced here rather than in CSS:
+//   • no qualifying play  -> «لا نتائج بعد», and no table is drawn at all.
+//   • a prize is only ever the text the venue typed. Nothing is suggested.
+//   • «إنهاء وإعلان الفائزين» freezes exactly the rows on screen. If that is an
+//     empty list, the tournament closes with an empty list and says so.
+import { useCallback, useEffect, useMemo, useState } from 'react'
+import Icon from '../Icon.jsx'
+import { Spinner } from '../ui.jsx'
+import { GAMES, gameById } from '../../lib/games.js'
+import {
+  TOURNAMENT_MODES, PRIZE_KINDS, STATUS_AR,
+  watchTournaments, saveTournament, deleteTournament, standings, finalize, reopen,
+  newTournament, normalizeTournament, validateTournament, statusOf, modeInfo,
+  toDayInput, fromDayInput, valueLabel, MAX_WINNERS,
+} from '../../lib/tournaments.js'
+import { fetchPlays, fmtInt, dateTime, dayStamp, MAX_PLAYS } from './engine.jsx'
+
+const num = (v, f = 0) => {
+  const n = Number(v)
+  return Number.isFinite(n) ? n : f
+}
+
+const maskPhone = (p) => {
+  const s = String(p || '')
+  return s.length > 6 ? `${s.slice(0, 5)}***${s.slice(-3)}` : s
+}
+
+const shortDevice = (d) => {
+  const s = String(d || '')
+  return s.length > 8 ? `${s.slice(0, 4)}…${s.slice(-4)}` : s
+}
+
+const rowName = (r, ar) => r.name || (r.phone ? maskPhone(r.phone) : `${ar ? 'ضيف' : 'Guest'} · ${shortDevice(r.deviceId)}`)
+
+const gameName = (id, ar) => {
+  if (!id || id === 'any') return ar ? 'كل الألعاب' : 'All games'
+  const g = gameById(id)
+  return g ? (ar ? g.ar : (g.en || g.ar)) : id
+}
+
+// The venue's prize, rendered from the venue's own words. `kind` only decides
+// which unit is appended — it never generates a prize that was not typed.
+function prizeText(prize, ar) {
+  const p = prize || {}
+  const label = String(p.label || '').trim()
+  const v = num(p.value)
+  if (p.kind === 'discount' && v > 0) {
+    return `${ar ? 'خصم' : ''} ${v.toLocaleString('ar-SA-u-nu-latn')}٪${label ? ` — ${label}` : ''}`.trim()
+  }
+  if (p.kind === 'points' && v > 0) {
+    return `${v.toLocaleString('ar-SA-u-nu-latn')} ${ar ? 'نقطة ولاء' : 'points'}${label ? ` — ${label}` : ''}`
+  }
+  return label
+}
+
+// ---------------------------------------------------------------------------
+// editor
+// ---------------------------------------------------------------------------
+function Editor({ ar, draft, onChange, onSave, onCancel, saving }) {
+  const problems = validateTournament(draft)
+  const set = (patch) => onChange({ ...draft, ...patch })
+  const setPrize = (patch) => onChange({ ...draft, prize: { ...(draft.prize || {}), ...patch } })
+  const kind = draft.prize?.kind || 'custom'
+  const needsValue = kind === 'discount' || kind === 'points'
+
+  return (
+    <div className="ga-card">
+      <div className="ga-card-t">
+        <Icon name="award" size={15} /> {draft.createdAtExisting ? (ar ? 'تعديل بطولة' : 'Edit') : (ar ? 'بطولة جديدة' : 'New tournament')}
+      </div>
+
+      <label className="ga-field">
+        <span>{ar ? 'اسم البطولة' : 'Name'}</span>
+        <input
+          className="ga-input" type="text" maxLength={60} value={draft.name || ''}
+          placeholder={ar ? 'مثال: بطولة نهاية الأسبوع' : 'e.g. Weekend cup'}
+          onChange={(e) => set({ name: e.target.value })}
+        />
+      </label>
+
+      <div className="ga-two">
+        <label className="ga-field">
+          <span>{ar ? 'اللعبة' : 'Game'}</span>
+          <select className="ga-input" value={draft.gameId || 'any'} onChange={(e) => set({ gameId: e.target.value })}>
+            <option value="any">{ar ? 'كل الألعاب' : 'All games'}</option>
+            {GAMES.map((g) => <option key={g.id} value={g.id}>{ar ? g.ar : (g.en || g.ar)}</option>)}
+          </select>
+        </label>
+        <label className="ga-field">
+          <span>{ar ? 'طريقة الترتيب' : 'Mode'}</span>
+          <select className="ga-input" value={draft.mode || 'highscore'} onChange={(e) => set({ mode: e.target.value })}>
+            {TOURNAMENT_MODES.map((m) => <option key={m.id} value={m.id}>{ar ? m.ar : m.en}</option>)}
+          </select>
+        </label>
+      </div>
+      <p className="ga-hint">{modeInfo(draft.mode).howAr}</p>
+
+      <div className="ga-two">
+        <label className="ga-field">
+          <span>{ar ? 'من تاريخ' : 'From'}</span>
+          <input
+            className="ga-input" type="date" value={toDayInput(draft.from)}
+            onChange={(e) => set({ from: fromDayInput(e.target.value, false) })}
+          />
+        </label>
+        <label className="ga-field">
+          <span>{ar ? 'إلى تاريخ' : 'To'}</span>
+          <input
+            className="ga-input" type="date" value={toDayInput(draft.to)}
+            onChange={(e) => set({ to: fromDayInput(e.target.value, true) })}
+          />
+        </label>
+      </div>
+
+      <div className="ga-two">
+        <label className="ga-field">
+          <span>{ar ? 'نوع الجائزة' : 'Prize kind'}</span>
+          <select className="ga-input" value={kind} onChange={(e) => setPrize({ kind: e.target.value })}>
+            {PRIZE_KINDS.map((k) => <option key={k.id} value={k.id}>{k.ar}</option>)}
+          </select>
+        </label>
+        {needsValue && (
+          <label className="ga-field">
+            <span>{kind === 'discount' ? (ar ? 'نسبة الخصم' : 'Discount %') : (ar ? 'عدد النقاط' : 'Points')}</span>
+            <input
+              className="ga-input ga-num" type="number" inputMode="numeric" min="1"
+              max={kind === 'discount' ? 100 : undefined}
+              value={draft.prize?.value || ''}
+              onChange={(e) => setPrize({ value: e.target.value })}
+            />
+          </label>
+        )}
+      </div>
+
+      <label className="ga-field">
+        <span>{ar ? 'الجائزة كما تكتبها للضيف' : 'Prize, in your words'}</span>
+        <input
+          className="ga-input" type="text" maxLength={80} value={draft.prize?.label || ''}
+          placeholder={ar ? 'مثال: قهوة مجانية لمدة أسبوع' : 'e.g. Free coffee for a week'}
+          onChange={(e) => setPrize({ label: e.target.value })}
+        />
+      </label>
+      <p className="ga-hint">
+        {ar
+          ? 'الجائزة تُعرض بنصّها كما كتبته بالضبط. النظام لا يقترح جوائز ولا يعِد الضيف بشيء لم تكتبه أنت.'
+          : 'The prize is shown verbatim. Nothing is generated or promised on your behalf.'}
+      </p>
+
+      <label className="ga-check">
+        <input type="checkbox" checked={draft.active !== false} onChange={(e) => set({ active: e.target.checked })} />
+        <span>{ar ? 'مفعّلة' : 'Active'}</span>
+      </label>
+      <label className="ga-check">
+        <input type="checkbox" checked={draft.autoAnnounce === true} onChange={(e) => set({ autoAnnounce: e.target.checked })} />
+        <span>{ar ? 'وسم للإعلان التلقائي' : 'Flag for auto-announce'}</span>
+      </label>
+      <p className="ga-hint">
+        {ar
+          ? 'هذا الخيار يُحفظ كوسم فقط — لا يُرسل النظام أي رسالة أو إشعار تلقائي اليوم. الإعلان يتم بضغطك على «إنهاء وإعلان الفائزين».'
+          : 'Stored as a flag only — nothing is sent automatically today.'}
+      </p>
+
+      {problems.length > 0 && (
+        <div className="ga-warn">
+          <Icon name="warning" size={15} />
+          <span>{problems.join(' ')}</span>
+        </div>
+      )}
+
+      <div className="ga-actions">
+        <button
+          type="button" className="ga-btn is-primary"
+          disabled={saving || problems.length > 0} onClick={onSave}
+        >
+          <Icon name="check" size={14} /> {ar ? 'حفظ' : 'Save'}
+        </button>
+        <button type="button" className="ga-btn" disabled={saving} onClick={onCancel}>
+          {ar ? 'إلغاء' : 'Cancel'}
+        </button>
+      </div>
+    </div>
+  )
+}
+
+// ---------------------------------------------------------------------------
+// standings table (live) / frozen winners
+// ---------------------------------------------------------------------------
+function StandingsTable({ ar, mode, rows, frozen = false }) {
+  return (
+    <div className="ga-tablewrap">
+      <table className="ga-table">
+        <thead>
+          <tr>
+            <th>{ar ? 'المركز' : 'Rank'}</th>
+            <th>{ar ? 'اللاعب' : 'Player'}</th>
+            <th>{ar ? 'النتيجة المعتمدة' : 'Value'}</th>
+            {!frozen && <th>{ar ? 'الدليل' : 'Evidence'}</th>}
+            {!frozen && <th>{ar ? 'آخر نشاط' : 'Last seen'}</th>}
+          </tr>
+        </thead>
+        <tbody>
+          {rows.map((r) => (
+            <tr key={r.deviceId || r.rank}>
+              <td className="ga-num">{fmtInt(r.rank)}</td>
+              <td>
+                <div className="ga-cellname">
+                  <strong>{rowName(r, ar)}</strong>
+                  <small className="ga-num">{r.phone ? maskPhone(r.phone) : (ar ? 'بلا رقم جوال' : 'no phone')}</small>
+                </div>
+              </td>
+              <td className="ga-num"><strong>{valueLabel(mode, frozen ? r.score : r.value, ar)}</strong></td>
+              {!frozen && (
+                <td className="ga-evi">
+                  <span className="ga-num">{fmtInt(r.plays)} {ar ? 'جولة' : 'plays'}</span>
+                  <span className="ga-num">{fmtInt(r.activeDays)} {ar ? 'يوم نشط' : 'active days'}</span>
+                  {r.bestGameId ? <span>{gameName(r.bestGameId, ar)}</span> : null}
+                  {r.bestAt ? <span className="ga-num">{ar ? 'أفضل جولة' : 'best'}: {dateTime(r.bestAt)}</span> : null}
+                  {r.boardBest != null && r.boardBest !== r.bestScore && (
+                    <span className="ga-thin">
+                      {ar ? 'لوحة الشهر تسجّل' : 'monthly board'} <span className="ga-num">{fmtInt(r.boardBest)}</span>
+                    </span>
+                  )}
+                </td>
+              )}
+              {!frozen && <td className="ga-num">{dateTime(r.lastAt)}</td>}
+            </tr>
+          ))}
+        </tbody>
+      </table>
+    </div>
+  )
+}
+
+// ---------------------------------------------------------------------------
+// one tournament, opened
+// ---------------------------------------------------------------------------
+function Detail({
+  ar, tenantId, t, scores, profiles, canEdit, onBack, onEdit, onChanged,
+}) {
+  const [plays, setPlays] = useState(null)
+  const [err, setErr] = useState('')
+  const [confirming, setConfirming] = useState(false)
+  const [working, setWorking] = useState(false)
+
+  useEffect(() => {
+    if (!tenantId || !t.from || !t.to) { setPlays([]); return undefined }
+    let alive = true
+    setPlays(null); setErr(''); setConfirming(false)
+    fetchPlays(tenantId, t.from, t.to)
+      .then((rows) => { if (alive) setPlays(rows) })
+      .catch((e) => { if (alive) { setPlays([]); setErr(String(e?.message || e)) } })
+    return () => { alive = false }
+  }, [tenantId, t.id, t.from, t.to])
+
+  const computed = useMemo(
+    () => (plays ? standings({ tournament: t, plays, scores, profiles }) : null),
+    [plays, t, scores, profiles],
+  )
+
+  const status = statusOf(t)
+  const truncated = Array.isArray(plays) && plays.length >= MAX_PLAYS
+
+  const doFinalize = async () => {
+    if (!computed || working) return
+    setWorking(true)
+    try {
+      await finalize(tenantId, t, computed)
+      setConfirming(false)
+      onChanged?.()
+    } catch (e) {
+      setErr(String(e?.message || e))
+    } finally { setWorking(false) }
+  }
+
+  const doReopen = async () => {
+    if (working) return
+    setWorking(true)
+    try { await reopen(tenantId, t); onChanged?.() } catch (e) { setErr(String(e?.message || e)) } finally { setWorking(false) }
+  }
+
+  return (
+    <div className="ga-stack">
+      <div className="ga-sheet-head">
+        <button type="button" className="ga-back" onClick={onBack}>
+          <Icon name="back" size={16} /> <span>{ar ? 'كل البطولات' : 'All tournaments'}</span>
+        </button>
+        <span className="ga-grow" />
+        <span className={`ga-pill is-${status}`}>{STATUS_AR[status]}</span>
+        {canEdit && !t.finalizedAt && (
+          <button type="button" className="ga-btn" onClick={() => onEdit(t)}>
+            <Icon name="edit" size={14} /> {ar ? 'تعديل' : 'Edit'}
+          </button>
+        )}
+      </div>
+
+      <div className="ga-card">
+        <div className="ga-sheet-title">
+          <span className="ga-ico"><Icon name="award" size={22} /></span>
+          <div className="ga-sheet-t">
+            <strong>{t.name}</strong>
+            <span className="ga-num">{dayStamp(t.from)} — {dayStamp(t.to)}</span>
+          </div>
+        </div>
+        <div className="ga-figs">
+          <div className="ga-fig">
+            <span className="ga-fig-l">{ar ? 'اللعبة' : 'Game'}</span>
+            <strong className="ga-fig-v">{gameName(t.gameId, ar)}</strong>
+          </div>
+          <div className="ga-fig">
+            <span className="ga-fig-l">{ar ? 'الترتيب' : 'Mode'}</span>
+            <strong className="ga-fig-v">{modeInfo(t.mode).ar}</strong>
+          </div>
+          <div className="ga-fig">
+            <span className="ga-fig-l">{ar ? 'الجائزة' : 'Prize'}</span>
+            <strong className="ga-fig-v">
+              {prizeText(t.prize, ar) || <span className="ga-of">{ar ? 'لم تُكتب جائزة' : 'none written'}</span>}
+            </strong>
+          </div>
+        </div>
+        <p className="ga-hint">{modeInfo(t.mode).howAr}</p>
+      </div>
+
+      {err && (
+        <div className="ga-warn">
+          <Icon name="warning" size={15} />
+          <span>{ar ? 'تعذّرت العملية: ' : 'Failed: '}{err}</span>
+        </div>
+      )}
+
+      {/* frozen result */}
+      {t.finalizedAt ? (
+        <div className="ga-card">
+          <div className="ga-card-t">
+            <Icon name="award" size={15} /> {ar ? 'النتيجة المعلَنة' : 'Announced result'}
+            <span className="ga-grow" />
+            <span className="ga-of ga-num">{dateTime(t.finalizedAt)}</span>
+          </div>
+          {t.winners.length ? (
+            <>
+              <StandingsTable ar={ar} mode={t.mode} rows={t.winners} frozen />
+              <p className="ga-hint">
+                {ar
+                  ? `هذه النتيجة مجمّدة على البطولة ولا تتغيّر بعد اليوم، حتى لو سُجّلت جولات جديدة. أعلى ${fmtInt(MAX_WINNERS)} مراكز تُحفظ.`
+                  : 'Frozen — later plays do not change it.'}
+              </p>
+            </>
+          ) : (
+            <p className="ga-hint">
+              {ar
+                ? 'أُغلقت هذه البطولة دون أي فائز، لأن ولا جولة واحدة استوفت شروطها داخل فترتها. لم يُخترع فائز.'
+                : 'Closed with no winner: nothing qualified. No winner was invented.'}
+            </p>
+          )}
+          {canEdit && (
+            <div className="ga-actions">
+              <button type="button" className="ga-btn" disabled={working} onClick={doReopen}>
+                <Icon name="undo" size={14} /> {ar ? 'إعادة فتح البطولة' : 'Reopen'}
+              </button>
+            </div>
+          )}
+        </div>
+      ) : (
+        <div className="ga-card">
+          <div className="ga-card-t">
+            <Icon name="chartBar" size={15} /> {ar ? 'الترتيب المباشر' : 'Live standings'}
+          </div>
+
+          {plays === null && <div className="ga-loading"><Spinner /></div>}
+
+          {plays !== null && computed && (
+            computed.rows.length ? (
+              <>
+                <StandingsTable ar={ar} mode={t.mode} rows={computed.rows} />
+                <p className="ga-hint ga-num">{computed.noteAr}</p>
+                {computed.thin && (
+                  <p className="ga-hint">
+                    {ar
+                      ? `العيّنة صغيرة (أقل من ${fmtInt(computed.minSample)} جولة). الترتيب صحيح لكنه قد ينقلب بجولة واحدة.`
+                      : 'Thin sample — the order can flip on a single play.'}
+                  </p>
+                )}
+                {truncated && (
+                  <div className="ga-warn">
+                    <Icon name="warning" size={15} />
+                    <span>
+                      {ar
+                        ? `بلغت القراءة حدّها (${fmtInt(MAX_PLAYS)} جولة). هذا الترتيب محسوب على هذه الجولات وحدها — ضيّق فترة البطولة لنتيجة قاطعة.`
+                        : `Read cap reached (${MAX_PLAYS}). This ranking covers that slice only.`}
+                    </span>
+                  </div>
+                )}
+              </>
+            ) : (
+              <>
+                <p className="ga-empty-t">{ar ? 'لا نتائج بعد' : 'No results yet'}</p>
+                <p className="ga-hint">{computed.noteAr}</p>
+                <p className="ga-hint">
+                  {ar
+                    ? 'يظهر الترتيب هنا تلقائياً عند أول جولة تستوفي شروط البطولة. لن يُعرض ترتيب مُختلق لملء الفراغ.'
+                    : 'The table appears on the first qualifying play. No placeholder ranking is drawn.'}
+                </p>
+              </>
+            )
+          )}
+
+          {canEdit && plays !== null && computed && (
+            <div className="ga-actions">
+              {!confirming ? (
+                <button type="button" className="ga-btn is-primary" disabled={working} onClick={() => setConfirming(true)}>
+                  <Icon name="award" size={14} /> {ar ? 'إنهاء وإعلان الفائزين' : 'Finalize & announce'}
+                </button>
+              ) : (
+                <>
+                  <span className="ga-hint">
+                    {computed.rows.length
+                      ? (ar
+                        ? `سيُجمَّد أعلى ${fmtInt(Math.min(computed.rows.length, MAX_WINNERS))} مركز كما هو على الشاشة، وتُغلق البطولة.`
+                        : 'The visible ranking will be frozen and the tournament closed.')
+                      : (ar
+                        ? 'لا يوجد أي فائز مؤهّل. الإغلاق سيسجّل «بلا فائز» ولن يخترع أحداً.'
+                        : 'Nobody qualified — it will close with no winner.')}
+                  </span>
+                  <button type="button" className="ga-btn is-primary" disabled={working} onClick={doFinalize}>
+                    <Icon name="check" size={14} /> {ar ? 'تأكيد' : 'Confirm'}
+                  </button>
+                  <button type="button" className="ga-btn" disabled={working} onClick={() => setConfirming(false)}>
+                    {ar ? 'تراجع' : 'Cancel'}
+                  </button>
+                </>
+              )}
+            </div>
+          )}
+        </div>
+      )}
+    </div>
+  )
+}
+
+// ---------------------------------------------------------------------------
+// panel
+// ---------------------------------------------------------------------------
+export default function TournamentsPanel({
+  ar = true, tenantId, canEdit = false, scores = [], profiles = [],
+}) {
+  const [list, setList] = useState(null)
+  const [listErr, setListErr] = useState('')
+  const [draft, setDraft] = useState(null)
+  const [openId, setOpenId] = useState('')
+  const [saving, setSaving] = useState(false)
+  const [opErr, setOpErr] = useState('')
+
+  useEffect(() => {
+    if (!tenantId) { setList([]); return undefined }
+    setList(null); setListErr('')
+    const unsub = watchTournaments(tenantId, ({ rows, error }) => {
+      setList(rows)
+      setListErr(error || '')
+    })
+    return () => { try { unsub() } catch (_) { /* already gone */ } }
+  }, [tenantId])
+
+  const rows = list || []
+  const open = openId ? rows.find((x) => x.id === openId) : null
+
+  const onChanged = useCallback(() => { /* the listener re-emits; nothing to pull */ }, [])
+
+  const save = async () => {
+    if (!draft || saving) return
+    setSaving(true); setOpErr('')
+    try {
+      const id = await saveTournament(tenantId, draft)
+      setDraft(null)
+      setOpenId(id)
+    } catch (e) {
+      setOpErr(String(e?.message || e))
+    } finally { setSaving(false) }
+  }
+
+  const remove = async (t) => {
+    if (!canEdit) return
+    setOpErr('')
+    try {
+      await deleteTournament(tenantId, t.id)
+      if (openId === t.id) setOpenId('')
+    } catch (e) { setOpErr(String(e?.message || e)) }
+  }
+
+  if (draft) {
+    return (
+      <div className="ga-stack">
+        {opErr && (
+          <div className="ga-warn"><Icon name="warning" size={15} /><span>{opErr}</span></div>
+        )}
+        <Editor
+          ar={ar} draft={draft} saving={saving}
+          onChange={setDraft} onSave={save} onCancel={() => { setDraft(null); setOpErr('') }}
+        />
+      </div>
+    )
+  }
+
+  if (open) {
+    return (
+      <Detail
+        ar={ar} tenantId={tenantId} t={open} scores={scores} profiles={profiles}
+        canEdit={canEdit} onBack={() => setOpenId('')} onChanged={onChanged}
+        onEdit={(t) => setDraft({ ...normalizeTournament(t), createdAtExisting: true })}
+      />
+    )
+  }
+
+  return (
+    <div className="ga-stack">
+      <div className="ga-card">
+        <div className="ga-card-t">
+          <Icon name="award" size={15} /> {ar ? 'بطولات هذا المكان' : 'Tournaments'}
+          <span className="ga-grow" />
+          {canEdit && (
+            <button type="button" className="ga-btn is-primary" onClick={() => setDraft(newTournament())}>
+              <Icon name="add" size={14} /> {ar ? 'بطولة جديدة' : 'New'}
+            </button>
+          )}
+        </div>
+        <p className="ga-hint">
+          {ar
+            ? 'البطولة تُرتَّب من جولات اللعب الحقيقية داخل فترتها — لا يُدخل أحد النتائج يدوياً، ولا يظهر فائز لم يلعب.'
+            : 'Ranked from real recorded plays inside its own window.'}
+        </p>
+      </div>
+
+      {opErr && <div className="ga-warn"><Icon name="warning" size={15} /><span>{opErr}</span></div>}
+
+      {list === null && <div className="ga-card"><div className="ga-loading"><Spinner /></div></div>}
+
+      {list !== null && listErr && (
+        <div className="ga-warn">
+          <Icon name="warning" size={15} />
+          <span>
+            {listErr === 'permission'
+              ? (ar ? 'لا تملك صلاحية قراءة بطولات هذا المكان.' : 'No permission to read tournaments.')
+              : listErr === 'unavailable'
+                ? (ar ? 'الاتصال بقاعدة البيانات غير مُهيَّأ في هذه البيئة.' : 'Database not configured.')
+                : `${ar ? 'تعذّرت قراءة البطولات: ' : 'Could not read tournaments: '}${listErr}`}
+          </span>
+        </div>
+      )}
+
+      {list !== null && !listErr && rows.length === 0 && (
+        <div className="ga-card">
+          <p className="ga-empty-t">{ar ? 'لا بطولة بعد' : 'No tournaments yet'}</p>
+          <p className="ga-hint">
+            {ar
+              ? 'أنشئ بطولة، حدّد اللعبة والفترة وطريقة الترتيب واكتب الجائزة. من لحظة إنشائها يبدأ النظام بترتيب اللاعبين من جولاتهم الفعلية، ويظهر الترتيب هنا مباشرة.'
+              : 'Create one: pick a game, a window, a mode, and write the prize.'}
+          </p>
+        </div>
+      )}
+
+      {rows.map((t) => {
+        const st = statusOf(t)
+        return (
+          <div key={t.id} className="ga-row is-block">
+            <button type="button" className="ga-rowmain" onClick={() => setOpenId(t.id)}>
+              <span className="ga-rowname">
+                {t.name || (ar ? 'بلا اسم' : 'Untitled')}
+                <span className={`ga-pill is-${st}`}>{STATUS_AR[st]}</span>
+              </span>
+              <span className="ga-rowstats ga-num">
+                <span>{gameName(t.gameId, ar)}</span>
+                <span>{modeInfo(t.mode).ar}</span>
+                <span>{dayStamp(t.from)} — {dayStamp(t.to)}</span>
+                {t.finalizedAt
+                  ? <span>{fmtInt(t.winners.length)} {ar ? 'فائز' : 'winners'}</span>
+                  : null}
+              </span>
+            </button>
+            {canEdit && (
+              <button
+                type="button" className="ga-icobtn" title={ar ? 'حذف' : 'Delete'}
+                onClick={() => remove(t)}
+              >
+                <Icon name="delete" size={15} />
+              </button>
+            )}
+          </div>
+        )
+      })}
+    </div>
+  )
+}

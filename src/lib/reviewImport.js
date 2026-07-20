@@ -15,8 +15,14 @@
 
 import { collection, doc, addDoc, deleteDoc, onSnapshot, query, where, serverTimestamp } from 'firebase/firestore'
 import { db } from './firebase.js'
-import { aiQuick } from './aiBridge.js'
 import { normalizeAr } from './globalSearch.js'
+
+// aiBridge pulls in the whole assistant tool registry (actions.js, ~120 kB) plus
+// firebase/functions. Only the Google-review IMPORT helpers below need it — the
+// diner-facing createVenueReview does not — and this module is reachable from
+// the public order-status screen, so a static import put all of that on the
+// diner's critical path. Both call sites are already async.
+const aiQuick = async (...args) => (await import('./aiBridge.js')).aiQuick(...args)
 
 const reviewsCol = (tid) => collection(db, 'tenants', tid, 'reviews')
 

@@ -66,7 +66,8 @@ const moreGroups = [
     { to: '/admin/daily', icon: 'chartBar', label: { ar: 'تقرير اليوم', en: 'Daily report' }, cap: CAP.VIEW_REPORTS, feature: 'reports' },
     { to: '/admin/accounting', icon: 'wallet', label: { ar: 'المحاسبة', en: 'Accounting' }, cap: CAP.VIEW_REVENUE },
     { to: '/admin/behavior', icon: 'trending', label: { ar: 'سلوك العملاء', en: 'Guest behavior' }, cap: CAP.VIEW_REPORTS },
-    { to: '/admin/guest-play', icon: 'play', label: { ar: 'نشاط الألعاب', en: 'Play activity' }, cap: CAP.VIEW_REPORTS },
+    { to: '/admin/games-hub', icon: 'play', label: { ar: 'مركز الألعاب', en: 'Games centre' }, cap: CAP.VIEW_REPORTS },
+    { to: '/admin/guest-play', icon: 'chartBar', label: { ar: 'نشاط الألعاب', en: 'Play activity' }, cap: CAP.VIEW_REPORTS },
     { to: '/admin/growth', icon: 'trending', label: { ar: 'فرص النمو', en: 'Growth' }, cap: CAP.VIEW_REPORTS },
   ] },
   { title: { ar: 'النظام والمساعدة', en: 'System & help' }, items: [

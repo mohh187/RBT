@@ -366,6 +366,62 @@ service cloud.firestore {
           || request.resource.data.diff(resource.data).affectedKeys().hasOnly(['stats']);
       }
 
+      // ---- tournaments: the venue defines them, guests only watch the board.
+      match /tournaments/{id} {
+        allow read: if true;
+        allow write: if hasCap(tid, 'manage_campaigns') || isManager(tid);
+
+        // A player posts their OWN standing row and nobody else's: the doc id is
+        // the device id, so overwriting a rival's score is structurally
+        // impossible rather than merely discouraged. The guest board reads these
+        // instead of gamePlays on purpose — gamePlays carry customer phones.
+        match /entries/{deviceId} {
+          allow read: if true;
+          allow create, update: if request.resource.data.deviceId == deviceId
+            && request.resource.data.score is number
+            && request.resource.data.score >= 0
+            && request.resource.data.score <= 100000
+            && request.resource.data.name.size() <= 24;
+          allow delete: if isManager(tid);
+        }
+      }
+
+      // ---- group happy hour: same one-row-per-device-per-day scheme as
+      // gameScores, pinned by doc id for the same reason.
+      match /happyHourScores/{id} {
+        allow read: if true;
+        allow create, update: if request.resource.data.score is number
+          && request.resource.data.score >= 0
+          && request.resource.data.score <= 100000
+          && request.resource.data.name.size() <= 24
+          && id == request.resource.data.deviceId + '_' + request.resource.data.day;
+        allow delete: if isManager(tid);
+      }
+
+      // ---- open challenges left for the next guest. Anyone may post one and
+      // anyone may record beating it, so the text is bounded here as well as
+      // sanitized client-side: this is user content shown to strangers.
+      match /challenges/{id} {
+        allow read: if true;
+        allow create: if request.resource.data.message.size() <= 120
+          && request.resource.data.score is number
+          && request.resource.data.byName.size() <= 24;
+        allow update: if request.resource.data.gameId == resource.data.gameId
+          && request.resource.data.byDeviceId == resource.data.byDeviceId
+          && request.resource.data.beatenBy.size() <= 50;
+        allow delete: if isStaff(tid);
+      }
+
+      // ---- table-versus-table matches: created and scored by the playing
+      // devices, bounded to the two tables they name.
+      match /matches/{id} {
+        allow read: if true;
+        allow create, update: if request.resource.data.gameId is string
+          && request.resource.data.scoreA is number
+          && request.resource.data.scoreB is number;
+        allow delete: if isStaff(tid);
+      }
+
       // ---- multiplayer rooms: four phones around one table (or an invited
       // friend) share a live board. Guests are anonymous, so this is open like
       // waiterCalls but bounded: the room keeps its identity, and the arrays

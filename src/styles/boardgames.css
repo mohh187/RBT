@@ -191,27 +191,39 @@
 .bgm-chess-stage {
   flex: 1 1 auto;
   min-height: 0;
+  min-width: 0;
   display: flex;
   flex-direction: column;
-  align-items: center;
+  align-items: stretch;
   gap: 8px;
 }
 
-/* The board is a hard square that never exceeds the space it is given. */
+/* ROOT SIZING MODEL — see the long note in ludo.css; both boards share it.
+   The wrap absorbs whatever height the rail leaves over and becomes a SIZE
+   QUERY CONTAINER; the board then asks for min(100cqw, 100cqh) on both axes,
+   so the square is computed rather than derived-then-clamped. The old
+   `width: min(100%, 62vh)` + `aspect-ratio` + `max-height: 100%` could not
+   shrink the width back when height was the binding axis, so on a short
+   viewport the board overflowed instead of scaling. `62vh` was also the wrong
+   unit twice over: it ignored the rail's height, and `vh` does not track
+   mobile browser chrome. */
 .bgm-boardwrap {
   position: relative;
-  flex: 0 1 auto;
+  flex: 1 1 auto;
   min-height: 0;
-  aspect-ratio: 1 / 1;
-  width: min(100%, 62vh);
-  max-height: 100%;
-  margin-inline: auto;
+  min-width: 0;
+  width: 100%;
+  container-type: size;
 }
 
 .bgm-board {
   direction: ltr;
   position: absolute;
+  /* inset 0 + a definite square + margin auto = centred on both axes */
   inset: 0;
+  margin: auto;
+  width: min(100cqw, 100cqh);
+  height: min(100cqw, 100cqh);
   display: grid;
   grid-template-columns: repeat(8, 1fr);
   grid-template-rows: repeat(8, 1fr);
@@ -220,6 +232,18 @@
   border: 1px solid rgba(0, 0, 0, 0.5);
   box-shadow: 0 10px 34px rgba(0, 0, 0, 0.45);
   touch-action: manipulation;
+}
+
+/* Pre-container-query engines: width is the specified side, so the ratio always
+   holds and the board can never be wider than its wrap. dvh, not vh. */
+@supports not (container-type: size) {
+  .bgm-boardwrap {
+    flex: 0 1 auto;
+    aspect-ratio: 1 / 1;
+    width: min(100%, 56dvh);
+    margin-inline: auto;
+  }
+  .bgm-board { width: auto; height: auto; margin: 0; }
 }
 
 .bgm-sq {
@@ -302,8 +326,12 @@
 .bgm-coord[data-kind='file'] { inset-block-end: 2px; inset-inline-end: 3px; }
 .bgm-coord[data-kind='rank'] { inset-block-start: 2px; inset-inline-start: 3px; }
 
-/* the column beside (or under) the board: status, move list, controls */
+/* the column beside (or under) the board: status, move list, controls.
+   `flex: 0 0 auto` is load-bearing: the rail keeps its natural height and the
+   board (flex: 1 1 auto, min-height: 0) is the part that gives way, so the
+   controls stay reachable no matter how short the viewport gets. */
 .bgm-rail {
+  flex: 0 0 auto;
   width: 100%;
   min-width: 0;
   display: flex;
@@ -407,15 +435,25 @@
 .bgm-dom-stage {
   flex: 1 1 auto;
   min-height: 0;
+  min-width: 0;
   display: flex;
   flex-direction: column;
   gap: 8px;
 }
 
+/* The snake is the only part that may grow, so it is also the only part that
+   may shrink. Its floor is viewport-relative rather than a flat 120px: a flat
+   floor plus the fixed-height ends row, hand and score row added up to more
+   than a landscape phone has, which pushed the hand off-screen. */
 .bgm-snake {
   position: relative;
-  flex: 1 1 auto;
-  min-height: 120px;
+  /* `1 1 0`, not `1 1 auto`: with an auto basis the snake's own SVG counted
+     towards the column's required height, so on a landscape phone the column
+     asked for more than it had and pushed the score row off the bottom edge.
+     A zero basis means the snake only ever consumes space the fixed rows have
+     already left over, and `min-height` is then its floor rather than its ask. */
+  flex: 1 1 0;
+  min-height: clamp(56px, 18dvh, 220px);
   border-radius: 16px;
   border: 1px solid var(--bgm-line);
   background:
@@ -497,7 +535,10 @@
   -ms-overflow-style: none;
   padding-block: 8px;
   margin-block: -8px;
-  min-height: 92px;
+  /* height comes from the tiles, which are themselves viewport-relative — a
+     flat 92px floor stole space the snake needed on short screens */
+  min-height: 0;
+  flex: 0 0 auto;
 }
 .bgm-hand::-webkit-scrollbar { width: 0; height: 0; }
 
@@ -514,7 +555,15 @@
     filter 180ms var(--bgm-ease);
   touch-action: manipulation;
 }
-.bgm-tile svg { display: block; width: 44px; height: 84px; }
+/* The tile SVG viewBox is "-0.58 -1.08 1.16 2.16", i.e. exactly 29:54 — the
+   ratio is declared so width is the only specified side and the tile can scale
+   with the viewport without ever distorting. */
+.bgm-tile svg {
+  display: block;
+  width: clamp(28px, 6dvh, 44px);
+  height: auto;
+  aspect-ratio: 29 / 54;
+}
 .bgm-tile[data-playable='0'] { opacity: 0.36; filter: grayscale(0.7); cursor: default; }
 .bgm-tile[data-playable='1'] { filter: drop-shadow(0 0 0 rgba(52, 211, 153, 0)); }
 .bgm-tile[data-playable='1']:not([data-sel='1']) { animation: none; }
@@ -616,9 +665,19 @@
 /* ---------- responsive: give the chess board a side rail on wide screens ---------- */
 @media (min-width: 860px) and (orientation: landscape) {
   .bgm-chess-stage { flex-direction: row; align-items: stretch; }
-  .bgm-boardwrap { width: auto; height: 100%; flex: 0 1 auto; }
+  /* Still the same rule — only the axis the wrap grows along changes. Height is
+     now the stretched (definite) side and width comes from the flex grow, so
+     min(100cqw, 100cqh) keeps producing the largest fitting square. */
+  @supports (container-type: size) {
+    .bgm-boardwrap { flex: 1 1 auto; width: auto; height: 100%; }
+  }
+  /* fallback path: height is the specified side here, so cap the wrap's width
+     instead of letting the ratio derive an unclampable one */
+  @supports not (container-type: size) {
+    .bgm-boardwrap { flex: 0 1 auto; height: 100%; width: auto; max-width: 60%; }
+  }
   .bgm-rail {
-    flex: 1 1 240px;
+    flex: 0 1 260px;
     min-width: 0;
     display: flex;
     flex-direction: column;

@@ -61,6 +61,7 @@
 // who inspects the network payload can. Truly hiding it needs per-seat
 // subcollections plus security rules, which live outside this component.
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { botMoveFor, botLabel, takeSoloIntent, BOT_DELAY_MS } from '../../lib/gameBots.js'
 import '../../styles/cardgames.css'
 
 // ---------------------------------------------------------------------------
@@ -131,6 +132,11 @@ function trickWinner(trick, trump) {
   }
   return best.seat
 }
+
+// The narrow window the computer opponents are given onto this file. It is
+// deliberately small: the trick logic and the card ordering, nothing that would
+// let a bot read a hand it does not own. See src/lib/gameBots.js.
+export const botHelpers = { suitOf, rankOf, rankVal, trickWinner, team, SUITS, MIN_BID, MAX_BID }
 
 // ---------------------------------------------------------------------------
 // state
@@ -478,15 +484,21 @@ function CardFace({ code }) {
 // ---------------------------------------------------------------------------
 const LOCAL_NAMES = ['اللاعب الأول', 'اللاعب الثاني', 'اللاعب الثالث', 'اللاعب الرابع']
 
-function makeLocalRoom(playerName) {
+// `bots` true builds the «العب ضد الكمبيوتر» table: the player keeps seat zero
+// and the other three are machine seats, named as machines and flagged as such
+// so nothing in the UI can present one as a person.
+function makeLocalRoom(playerName, bots, lang) {
   return {
     roomId: 'local',
     gameId: 'wist',
     status: 'playing',
     local: true,
     players: [0, 1, 2, 3].map((seat) => ({
-      id: 'local-' + seat,
-      name: seat === 0 ? (playerName || LOCAL_NAMES[0]) : LOCAL_NAMES[seat],
+      id: (bots && seat > 0 ? 'bot-' : 'local-') + seat,
+      name: seat === 0
+        ? (playerName || LOCAL_NAMES[0])
+        : (bots ? botLabel(seat - 1, 3, lang) : LOCAL_NAMES[seat]),
+      bot: !!bots && seat > 0,
       seat,
       connected: true,
       score: 0,
@@ -512,10 +524,16 @@ export default function Wist({
   mySeat = null,
   onMove,
   isHost = false,
+  // Wist is a fixed four-seat game, so a solo round always means three machine
+  // seats; any positive value here selects it.
+  soloBots = null,
 }) {
   const ar = lang !== 'en'
   const remote = !!room
-  const [localRoom, setLocalRoom] = useState(() => makeLocalRoom(playerName))
+  // Latched on the first render: the lobby hand-off expires after a minute and
+  // re-reading it every render would turn a bot table back into a hot-seat one.
+  const [vsBot] = useState(() => !remote && (Number(soloBots) > 0 || !!takeSoloIntent('wist')))
+  const [localRoom, setLocalRoom] = useState(() => makeLocalRoom(playerName, vsBot, lang))
   const [rules, setRules] = useState(false)
   const [covered, setCovered] = useState(false)
   const [pickSuit, setPickSuit] = useState(null)
@@ -524,9 +542,11 @@ export default function Wist({
   const st = useMemo(() => normalise(table?.state), [table])
 
   // remote: my fixed seat. local hot-seat: whoever is on turn holds the phone.
+  // against the computer: seat zero for the whole match, because the phone is
+  // never handed over and the hand shown must stay the player's own.
   const seat = remote
     ? (Number.isInteger(mySeat) ? mySeat : 0)
-    : (Number.isInteger(st.turnSeat) ? st.turnSeat : 0)
+    : (vsBot ? 0 : (Number.isInteger(st.turnSeat) ? st.turnSeat : 0))
 
   const host = remote ? !!isHost : true
   const players = Array.isArray(table?.players) ? table.players : []
@@ -566,15 +586,49 @@ export default function Wist({
     submit({ t: 'deal', seed: newSeed(), dealer: 0 })
   }, [remote, isHost, st.phase, filled, submit])
 
-  // hot-seat privacy: hide the hand between turns on a shared device
+  // hot-seat privacy: hide the hand between turns on a shared device. Never
+  // against the computer — there is no second person to hide it from, and a
+  // "pass the phone" curtain every third of a second would be nonsense.
   const prevSeat = useRef(seat)
   useEffect(() => {
-    if (remote) return
+    if (remote || vsBot) return
     if (prevSeat.current !== seat) {
       prevSeat.current = seat
       if (st.phase === 'bid' || st.phase === 'play' || st.phase === 'trump') setCovered(true)
     }
-  }, [seat, remote, st.phase])
+  }, [seat, remote, vsBot, st.phase])
+
+  // A solo table is complete the moment it is built, so the FIRST deal happens
+  // by itself rather than asking the one player present to press «وزّع الورق»
+  // against three machines. Later hands still wait for «اليد التالية» — the
+  // result of a hand has to be readable before the next one wipes it.
+  useEffect(() => {
+    if (!vsBot || st.phase !== 'waiting') return undefined
+    const id = setTimeout(() => submit({ t: 'deal', seat: 0, seed: newSeed(), dealer: st.dealer }), 260)
+    return () => clearTimeout(id)
+  }, [vsBot, st.phase, st.dealer, submit])
+
+  // ---- machine seats ------------------------------------------------------
+  // Each bot decides in src/lib/gameBots.js and every candidate it considers is
+  // run through THIS file's `reduce` first, so it can only submit a card a
+  // player in that seat could legally play. It is handed `botHelpers` — the
+  // trick logic and card ordering — and reads `state.hands` at its OWN seat
+  // only; the shared state carries all four hands but the bot never opens them.
+  useEffect(() => {
+    if (!vsBot) return undefined
+    const acting = st.phase === 'bid' ? st.bidTurn : st.phase === 'trump' ? (st.highBid?.seat ?? -1) : st.turnSeat
+    if (st.phase !== 'bid' && st.phase !== 'trump' && st.phase !== 'play') return undefined
+    if (!Number.isInteger(acting) || acting <= 0) return undefined
+    // A finished trick sits on the table until its winner leads again. When
+    // that winner is a machine, hold the four cards up for long enough to see
+    // who took it before they are swept away.
+    const wait = st.doneWinner != null ? 1400 : BOT_DELAY_MS
+    const id = setTimeout(() => {
+      const mv = botMoveFor('wist', st, acting, { reduce, room: localRoom, helpers: botHelpers })
+      if (mv) submit(mv)
+    }, wait)
+    return () => clearTimeout(id)
+  }, [vsBot, st, localRoom, submit])
 
   // report an absolute score to the hub: my side's match total, floored at zero
   const myTeam = team(seat)
@@ -626,10 +680,12 @@ export default function Wist({
   const bidFloor = st.highBid ? st.highBid.n + 1 : MIN_BID
   const overlap = myHand.length > 10 ? -20 : myHand.length > 7 ? -14 : -8
 
-  const showLobby = st.phase === 'waiting'
+  // Against the computer the table is already full, so the "waiting for the
+  // table" overlay would flash for a quarter of a second and say nothing true.
+  const showLobby = st.phase === 'waiting' && !vsBot
   const showHandEnd = st.phase === 'handEnd'
   const showMatchEnd = st.phase === 'matchEnd'
-  const showCover = covered && !remote && !showLobby && !showHandEnd && !showMatchEnd
+  const showCover = covered && !remote && !vsBot && !showLobby && !showHandEnd && !showMatchEnd
 
   const trumpChip = st.trump
     ? (

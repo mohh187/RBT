@@ -521,7 +521,7 @@ export default function MenuView({ tenant, tenantId, items, categories, offers =
     const { nameStyle, priceStyle } = resolveItemStyles(it)
     return (
       <button key={it.id} className={`food-card ${out ? 'unavailable' : ''}`} onClick={() => !out && setViewItem(it)} disabled={out} data-item-layout={it.namePriceLayout || ''}>
-        {it.imageUrl ? <img className="food-img" src={it.imageUrl} alt="" /> : <div className="food-img center muted"><Icon name="coffee" size={26} /></div>}
+        {it.imageUrl ? <img className="food-img" src={it.imageUrl} alt="" loading="lazy" decoding="async" /> : <div className="food-img center muted"><Icon name="coffee" size={26} /></div>}
         <div className="body">
           <div className="name" style={nameStyle}>{pickLang(it, 'name', lang)}</div>
           <div className="row" style={{ gap: 12 }}>
@@ -567,7 +567,7 @@ export default function MenuView({ tenant, tenantId, items, categories, offers =
     const { nameStyle, priceStyle } = resolveItemStyles(it)
     return (
       <button key={it.id} className={`showcase-card ${out ? 'unavailable' : ''}`} onClick={() => !out && setViewItem(it)} disabled={out} data-item-layout={it.namePriceLayout || ''}>
-        {it.imageUrl ? <img className="showcase-img" data-imgstyle={it.imageStyle || ''} src={it.imageUrl} alt="" /> : <div className="showcase-img center muted"><Icon name="coffee" size={34} /></div>}
+        {it.imageUrl ? <img className="showcase-img" data-imgstyle={it.imageStyle || ''} src={it.imageUrl} alt="" loading="lazy" decoding="async" /> : <div className="showcase-img center muted"><Icon name="coffee" size={34} /></div>}
         <div className="showcase-name" style={nameStyle}>{pickLang(it, 'name', lang)}</div>
         {menuLayout === 'coffeepan' && pickLang(it, 'desc', lang) && (
           <div className="coffeepan-desc">{pickLang(it, 'desc', lang)}</div>
@@ -597,7 +597,7 @@ export default function MenuView({ tenant, tenantId, items, categories, offers =
     const { nameStyle, priceStyle } = resolveItemStyles(it)
     return (
       <button key={it.id} className={`cl-row ${out ? 'unavailable' : ''}`} onClick={() => !out && setViewItem(it)} disabled={out} data-item-layout={it.namePriceLayout || ''}>
-        <span className="cl-media" data-imgstyle={it.imageStyle || ''}>{it.imageUrl ? <img src={it.imageUrl} alt="" /> : <Icon name="coffee" size={22} />}</span>
+        <span className="cl-media" data-imgstyle={it.imageStyle || ''}>{it.imageUrl ? <img src={it.imageUrl} alt="" loading="lazy" decoding="async" /> : <Icon name="coffee" size={22} />}</span>
         <div className="cl-body">
           <div className="cl-name" style={nameStyle}>{pickLang(it, 'name', lang)}</div>
           {pickLang(it, 'desc', lang) && <div className="cl-desc">{pickLang(it, 'desc', lang)}</div>}
@@ -622,7 +622,7 @@ export default function MenuView({ tenant, tenantId, items, categories, offers =
     const { nameStyle, priceStyle } = resolveItemStyles(it)
     return (
       <button key={it.id} className={`store-card ${out ? 'unavailable' : ''}`} onClick={() => !out && setViewItem(it)} disabled={out} data-item-layout={it.namePriceLayout || ''}>
-        <span className="store-card-media" data-imgstyle={it.imageStyle || ''}>{it.imageUrl ? <img src={it.imageUrl} alt="" /> : <Icon name="coffee" size={40} />}</span>
+        <span className="store-card-media" data-imgstyle={it.imageStyle || ''}>{it.imageUrl ? <img src={it.imageUrl} alt="" loading="lazy" decoding="async" /> : <Icon name="coffee" size={40} />}</span>
         <div className="store-card-name" style={nameStyle}>{pickLang(it, 'name', lang)}</div>
         <div className="store-card-price" style={priceStyle}><Price value={offer ? discountedPrice(it.price, offer) : it.price} currency={currency} lang={lang} />{offer && <span className="price-was"><Price value={it.price} currency={currency} lang={lang} /></span>}</div>
         {!out && <span className="store-add"><Icon name="add" size={16} /></span>}
@@ -680,7 +680,7 @@ export default function MenuView({ tenant, tenantId, items, categories, offers =
           <div className="menu-hero-cover menu-hero-grad" />
         )}
         <div className="container menu-hero-body">
-          {tenant?.logoUrl && <img className="menu-hero-logo" src={tenant.logoUrl} alt="" />}
+          {tenant?.logoUrl && <img className="menu-hero-logo" src={tenant.logoUrl} alt="" decoding="async" />}
           <h2 className="menu-hero-title" style={{ marginTop: tenant?.logoUrl ? 4 : 44 }}>{tenant?.name}</h2>
           {tenant?.descAr && <p className="muted small" style={{ maxWidth: 520 }}>{tenant.descAr}</p>}
           {!isHidden('social') && <SocialLinks social={tenant?.social} appearance={tenant?.socialStyle} className="menu-hero-social" />}
@@ -844,7 +844,7 @@ export default function MenuView({ tenant, tenantId, items, categories, offers =
                 {featuredMode === 'auto'
                   ? <span className="special-badge special-rank">{idx + 1}</span>
                   : <span className="special-badge special-star" aria-hidden="true"><Icon name="star" size={11} /></span>}
-                {it.imageUrl ? <img src={it.imageUrl} alt="" /> : <span className="special-ph" aria-hidden="true"><Icon name="image" size={26} /></span>}
+                {it.imageUrl ? <img src={it.imageUrl} alt="" loading="lazy" decoding="async" /> : <span className="special-ph" aria-hidden="true"><Icon name="image" size={26} /></span>}
                 <div className="bold small" style={{ whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{pickLang(it, 'name', lang)}</div>
                 <div className="price small" style={{ color: 'var(--brand)' }}><Price value={it.price} currency={currency} lang={lang} /></div>
               </button>
@@ -902,7 +902,7 @@ export default function MenuView({ tenant, tenantId, items, categories, offers =
               <div className="store-hero scroll-x" ref={heroRef} onScroll={(e) => { const w = e.currentTarget.clientWidth || 1; setHeroIdx(Math.min(special.length - 1, Math.round(Math.abs(e.currentTarget.scrollLeft) / w))) }}>
                 {special.slice(0, 6).map((it) => (
                   <button key={it.id} className="store-hero-item" onClick={() => setViewItem(it)}>
-                    <span className="store-hero-media" data-imgstyle={it.imageStyle || ''}>{it.imageUrl ? <img src={it.imageUrl} alt="" /> : <Icon name="coffee" size={48} />}</span>
+                    <span className="store-hero-media" data-imgstyle={it.imageStyle || ''}>{it.imageUrl ? <img src={it.imageUrl} alt="" decoding="async" /> : <Icon name="coffee" size={48} />}</span>
                     <strong className="store-hero-name">{pickLang(it, 'name', lang)}</strong>
                     <span className="store-hero-price"><Price value={it.price} currency={currency} lang={lang} /></span>
                   </button>
@@ -912,7 +912,7 @@ export default function MenuView({ tenant, tenantId, items, categories, offers =
                 <div className="store-thumbs scroll-x">
                   {special.slice(0, 6).map((it, i) => (
                     <button key={it.id} className={`store-thumb ${heroIdx === i ? 'on' : ''}`} onClick={() => heroRef.current?.children[i]?.scrollIntoView({ behavior: 'smooth', inline: 'center', block: 'nearest' })}>
-                      {it.imageUrl ? <img src={it.imageUrl} alt="" /> : <Icon name="coffee" size={18} />}
+                      {it.imageUrl ? <img src={it.imageUrl} alt="" loading="lazy" decoding="async" /> : <Icon name="coffee" size={18} />}
                     </button>
                   ))}
                 </div>
@@ -968,7 +968,7 @@ export default function MenuView({ tenant, tenantId, items, categories, offers =
                 const img = (itemsByCat[c.id] || [])[0]?.imageUrl
                 return (
                   <button key={c.id} className={`cat-circle ${activeCat === c.id ? 'on' : ''}`} onClick={() => setActiveCat(c.id)}>
-                    <span className="cat-circle-img">{img ? <img src={img} alt="" /> : <Icon name="coffee" size={20} />}</span>
+                    <span className="cat-circle-img">{img ? <img src={img} alt="" loading="lazy" decoding="async" /> : <Icon name="coffee" size={20} />}</span>
                     <span className="cat-circle-lbl">{pickLang(c, 'name', lang)}</span>
                   </button>
                 )
@@ -1272,7 +1272,7 @@ function SpotSlide({ it, slideId, currency, offers, catName, suggestions = [], o
               {it.videoUrl
                 ? <video className="spot-img" src={it.videoUrl} autoPlay muted loop playsInline />
                 : it.imageUrl
-                  ? <img className="spot-img" src={it.imageUrl} alt="" />
+                  ? <img className="spot-img" src={it.imageUrl} alt="" decoding="async" />
                   : <span className="spot-img spot-noimg"><Icon name="coffee" size={90} /></span>}
               {it.effect
                 ? <ItemFx kind={it.effect} />
@@ -1331,7 +1331,7 @@ function SpotSlide({ it, slideId, currency, offers, catName, suggestions = [], o
                 <div className="spot-pair-row">
                   {suggestions.map((s) => (
                     <button key={s.id} type="button" className="spot-pair-item" onClick={() => onQuickAdd(s)}>
-                      <span className="spot-pair-media">{s.imageUrl ? <img src={s.imageUrl} alt="" /> : <Icon name="coffee" size={16} />}</span>
+                      <span className="spot-pair-media">{s.imageUrl ? <img src={s.imageUrl} alt="" loading="lazy" decoding="async" /> : <Icon name="coffee" size={16} />}</span>
                       <span className="spot-pair-name">{pickLang(s, 'name', lang)}</span>
                       <span className="spot-pair-add"><Icon name="add" size={12} /></span>
                     </button>
@@ -1618,7 +1618,7 @@ export function ItemSheet({ item, tenant, currency, tenantId, onClose, onAdd, de
         )}
         {gallery.length === 1 ? (
           <span style={{ position: 'relative', display: 'inline-block' }}>
-            <img className="dish-circle" data-imgstyle={imgStyle} src={gallery[0]} alt={pickLang(item, 'name', lang)} onClick={() => setZoom(true)} style={{ cursor: 'zoom-in', ...scaleStyle }} />
+            <img className="dish-circle" data-imgstyle={imgStyle} src={gallery[0]} alt={pickLang(item, 'name', lang)} decoding="async" onClick={() => setZoom(true)} style={{ cursor: 'zoom-in', ...scaleStyle }} />
             <ItemFx kind={item.effect} />
           </span>
         ) : gallery.length > 1 ? (
@@ -1626,7 +1626,7 @@ export function ItemSheet({ item, tenant, currency, tenantId, onClose, onAdd, de
             <div className="dish-carousel" onScroll={(e) => { const w = e.currentTarget.clientWidth || 1; setImgIdx(Math.min(gallery.length - 1, Math.round(Math.abs(e.currentTarget.scrollLeft) / w))) }}>
               {gallery.map((src, i) => (
                 <div key={i} className="dish-slide" style={{ position: 'relative' }}>
-                  <img className="dish-circle" data-imgstyle={imgStyle} src={src} alt="" onClick={() => setZoom(true)} style={{ cursor: 'zoom-in', ...scaleStyle }} />
+                  <img className="dish-circle" data-imgstyle={imgStyle} src={src} alt="" decoding="async" onClick={() => setZoom(true)} style={{ cursor: 'zoom-in', ...scaleStyle }} />
                   {i === imgIdx && <ItemFx kind={item.effect} />}
                 </div>
               ))}
@@ -1637,7 +1637,7 @@ export function ItemSheet({ item, tenant, currency, tenantId, onClose, onAdd, de
         {zoom && gallery.length > 0 && portalRoot && createPortal(
           <div className="img-zoom" onClick={() => setZoom(false)} role="dialog" aria-modal="true">
             <div className="img-zoom-track" onClick={(e) => e.stopPropagation()}>
-              {gallery.map((src, i) => <img key={i} src={src} alt="" />)}
+              {gallery.map((src, i) => <img key={i} src={src} alt="" loading="lazy" decoding="async" />)}
             </div>
             <button className="img-zoom-x" onClick={() => setZoom(false)} aria-label={t('close')}><Icon name="close" size={22} /></button>
           </div>,
@@ -1852,7 +1852,7 @@ function OffersSheet({ open, onClose, promos, offeredItems, currency, onPick }) 
               <div className="stack" style={{ gap: 'var(--sp-2)' }}>
                 {offeredItems.map(({ it, offer }) => (
                   <button key={it.id} className="list-row" onClick={() => onPick(it)}>
-                    {it.imageUrl ? <img src={it.imageUrl} alt="" style={{ width: 46, height: 46, borderRadius: 10, objectFit: 'cover' }} /> : <Icon name="offers" size={22} />}
+                    {it.imageUrl ? <img src={it.imageUrl} alt="" loading="lazy" decoding="async" style={{ width: 46, height: 46, borderRadius: 10, objectFit: 'cover' }} /> : <Icon name="offers" size={22} />}
                     <div className="grow">
                       <div className="bold small">{pickLang(it, 'name', lang)}</div>
                       <div className="row" style={{ gap: 6, alignItems: 'center' }}>

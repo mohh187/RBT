@@ -24,6 +24,15 @@ import { getLocalCustomer, setLocalCustomer } from '../lib/customer.js'
 import { submitScore, watchTopScores, currentMonth, myRank } from '../lib/leaderboard.js'
 import { deviceKey } from '../lib/device.js'
 import { watchRoom, applyMove, heartbeat, leaveRoom, HEARTBEAT_MS } from '../lib/gameRoom.js'
+import {
+  watchLiveTournament, recordTournamentPlay, recordHappyHourPlay, rememberRoom,
+} from '../lib/socialPlay.js'
+import WeeklyTournament from './social/WeeklyTournament.jsx'
+import HangingChallenge from './social/HangingChallenge.jsx'
+import TableVsTable from './social/TableVsTable.jsx'
+import TableChampions from './social/TableChampions.jsx'
+import HappyHourBanner from './social/HappyHourBanner.jsx'
+import PlayedWith from './social/PlayedWith.jsx'
 const RoomLobby = lazy(() => import('./games/RoomLobby.jsx'))
 import {
   rewardsFor, rewardsNote, evaluateReward, claimReward, readClaims,
@@ -280,6 +289,25 @@ export default function GamesCenter({
   const [memResume, setMemResume] = useState({})
   const [reveal, setReveal] = useState(null)
 
+  // The running tournament is watched here rather than inside the card, because
+  // a finished round must be posted to it even when the card is scrolled away.
+  const [tour, setTour] = useState(null)
+  const tourRef = useRef(null)
+  useEffect(() => { tourRef.current = tour }, [tour])
+  useEffect(() => {
+    if (!tenantId || !open) return undefined
+    return watchLiveTournament(tenantId, setTour)
+  }, [tenantId, open])
+
+  // The last finished round, handed to the challenge card so it can offer
+  // «اترك تحدياً» with a real score instead of asking the player to retype one.
+  const [lastRun, setLastRun] = useState(null)
+
+  const socialPlayer = useMemo(
+    () => ({ id: deviceId, name: store.name || '' }),
+    [deviceId, store.name],
+  )
+
   const runScoreRef = useRef(0)
   const activeRef = useRef(null)
   const playIdRef = useRef('') // the open durable play record for this round
@@ -329,10 +357,13 @@ export default function GamesCenter({
       const mod = await g.load()
       reduceRef.current = typeof mod.reduce === 'function' ? mod.reduce : null
     } catch (_) { reduceRef.current = null }
+    // Remember the room locally so «من لعبت معهم» still knows these people
+    // tomorrow — the room doc itself is not queryable by participant.
+    rememberRoom(tenantId, rid)
     setRoomId(rid)
     setView('play')
     setRunKey((k) => k + 1)
-  }, [])
+  }, [tenantId])
 
   // Arriving from an invite link: the join page already seated this guest, so
   // go straight to the board instead of making them find the game again.
@@ -458,7 +489,18 @@ export default function GamesCenter({
     })
   }, [])
 
-  const startGame = useCallback((id) => {
+  // «العب ضد الكمبيوتر»: a solo round against machine seats. It is a normal
+  // single-player run (durable play record, restart, exit) and NOT a room, so it
+  // costs no Firestore writes. `soloRef` is read by commitRun, which keeps these
+  // rounds off the shared boards — beating a fixed heuristic is not the same
+  // achievement as beating three people, and mixing them would make the board a lie.
+  const [soloBots, setSoloBots] = useState(0)
+  const soloRef = useRef(0)
+  useEffect(() => { soloRef.current = soloBots }, [soloBots])
+
+  const startGame = useCallback((id, bots = 0) => {
+    setSoloBots(bots)
+    soloRef.current = bots
     rememberScroll()
     // Open a durable play record for this round. It is fire-and-forget: if the
     // write fails the guest still plays, and the local store still counts it.
@@ -549,11 +591,29 @@ export default function GamesCenter({
       }
       writeStore(tenantId, next)
       setStore(next)
-      if (s > 0 && tenantId && deviceId) {
+      // A computer round counts for this guest — points, rounds, personal best,
+      // and the durable record below — but is NEVER posted to the venue's shared
+      // boards, nor offered as a challenge others must beat.
+      const solo = soloRef.current > 0
+      if (s > 0 && tenantId && deviceId && !solo) {
         submitScore(tenantId, { name: next.name, score: s, deviceId }).catch(() => { /* board is best-effort */ })
       }
       // Report the finished run to behaviour analytics (which game, what score).
       onGamePlay?.(id, s)
+      if (!solo) setLastRun({ gameId: id, score: s, at: Date.now() })
+      // ...and to the two social boards. Both are self-written rows keyed by
+      // this device, and both no-op when nothing is running, so this is a plain
+      // "post the round" call rather than a conditional the caller has to get
+      // right. Without it the tournament and happy-hour boards render empty no
+      // matter how much anyone plays.
+      if (!solo) {
+        recordTournamentPlay({
+          tid: tenantId, tournament: tourRef.current, deviceId, name: next.name, gameId: id, score: s,
+        }).catch(() => { /* board is best-effort; the run is already recorded */ })
+        recordHappyHourPlay({
+          tid: tenantId, deviceId, name: next.name, gameId: id, score: s, cfg: tenant?.gameHappyHour,
+        }).catch(() => { /* ditto */ })
+      }
       // ...and to the durable play record, so «نشاط الألعاب» and the player's
       // own history actually contain something. This was the missing link:
       // the hub previously guessed at a memory API that did not exist, so no
@@ -675,6 +735,10 @@ export default function GamesCenter({
     if (tenantId && roomId) leaveRoom({ tid: tenantId, roomId, playerId: deviceKey() })
     setRoomId('')
     setRoom(null)
+    // commitRun() ran at the top of this callback, so it already read soloRef
+    // before it is cleared here.
+    setSoloBots(0)
+    soloRef.current = 0
     reduceRef.current = null
     setActiveId(null)
     activeRef.current = null
@@ -807,6 +871,7 @@ export default function GamesCenter({
               mySeat={mySeat}
               isHost={room ? room.hostId === deviceId : false}
               onMove={submitMove}
+              soloBots={soloBots}
             />
           </Suspense>
         </div>
@@ -821,6 +886,7 @@ export default function GamesCenter({
               player={{ id: deviceId, name: store.name, phone: store.phone }}
               lang={lang}
               onStart={enterRoom}
+              onSolo={({ gameId, bots }) => startGame(gameId || activeRef.current, bots)}
               onExit={() => { setActiveId(null); activeRef.current = null; setView('browse'); restoreScroll() }}
             />
           </Suspense>
@@ -910,6 +976,42 @@ export default function GamesCenter({
                 </ul>
               ) : null}
             </section>
+          ) : null}
+
+          {/* The social shelf. Every card self-hides when it has nothing true
+              to show — no tournament running, no challenge left, no table —
+              so mounting them all permanently costs an empty render, not a
+              row of hollow placeholders. */}
+          {store.registered ? (
+            <>
+              <HappyHourBanner
+                tenantId={tenantId} tenant={tenant} lang={lang} table={table}
+                player={socialPlayer} onPlay={pickGame}
+              />
+              <WeeklyTournament
+                tenantId={tenantId} tenant={tenant} lang={lang} table={table}
+                player={socialPlayer} onPlay={pickGame}
+              />
+              <HangingChallenge
+                tenantId={tenantId} tenant={tenant} lang={lang} table={table}
+                player={socialPlayer} onPlay={pickGame} result={lastRun}
+              />
+              <TableVsTable
+                tenantId={tenantId} tenant={tenant} lang={lang} table={table}
+                player={socialPlayer} onOpenRoom={enterRoom}
+              />
+              {/* There is no separate post-round screen — a finished run drops
+                  the player back here — so the champions board lives on the
+                  shelf, narrowed to whatever they just played. */}
+              <TableChampions
+                tenantId={tenantId} tenant={tenant} lang={lang} table={table}
+                player={socialPlayer} gameId={lastRun?.gameId || ''}
+              />
+              <PlayedWith
+                tenantId={tenantId} tenant={tenant} lang={lang} table={table}
+                player={socialPlayer}
+              />
+            </>
           ) : null}
 
           {enabled.length === 0 ? (

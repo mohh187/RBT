@@ -36,6 +36,7 @@
 // Firestore — it calls onMove(move) and re-renders from the live `room`.
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import Icon from '../Icon.jsx'
+import { botMoveFor, botLabel, takeSoloIntent, BOT_DELAY_MS } from '../../lib/gameBots.js'
 import '../../styles/boardgames.css'
 
 export const GAME_ID = 'chess'
@@ -255,7 +256,7 @@ function applyRaw(st, mv) {
   }
 }
 
-function legalMoves(st) {
+export function legalMoves(st) {
   const foe = other(st.turn)
   const res = []
   for (const mv of pseudoMoves(st)) {
@@ -265,6 +266,11 @@ function legalMoves(st) {
   }
   return res
 }
+
+// The one thing the computer opponent is allowed to borrow from this file. It
+// is THE legal move generator — the same list `reduce` validates against — so
+// the bot can never consider a move a human sitting there could not make.
+export const botHelpers = { legalMoves }
 
 const posKey = (st) => `${st.board}|${st.turn}|${st.castling || '-'}|${st.ep === null || st.ep === undefined ? '-' : st.ep}`
 
@@ -585,6 +591,9 @@ const TXT = {
     fiftyReady: 'يمكنك طلب التعادل بقاعدة الخمسين نقلة',
     threeReady: 'يمكنك طلب التعادل بتكرار الوضع',
     hotseat: 'لعب على جهاز واحد: مرّر الجهاز بعد كل نقلة.',
+    // Deliberately understated: this is a material count one half-move deep,
+    // and calling it anything grander would be a lie the board itself exposes.
+    botLine: 'تلعب ضد الكمبيوتر — حساب مادي بسيط بعمق نقلة واحدة، ليس محرك شطرنج.',
     moves: 'النقلات',
     noMoves: 'لم تبدأ النقلات بعد',
   },
@@ -624,6 +633,7 @@ const TXT = {
     fiftyReady: 'A fifty-move draw can be claimed',
     threeReady: 'A repetition draw can be claimed',
     hotseat: 'One-device play: pass the device after each move.',
+    botLine: 'Playing the computer — a one-ply material heuristic, not a chess engine.',
     moves: 'Moves',
     noMoves: 'No moves yet',
   },
@@ -643,9 +653,16 @@ export default function Chess({
   onMove,
   onProgress,
   resumeState,
+  // «العب ضد الكمبيوتر». Chess is a two-seat game, so any positive value means
+  // "one machine opponent"; the player always takes white.
+  soloBots = null,
 }) {
   const t = TXT[lang === 'en' ? 'en' : 'ar']
   const mp = !!room
+  // Latched on the first render and never recomputed: the lobby's hand-off
+  // expires after a minute, and re-reading it every render would silently turn
+  // a bot match back into a hot-seat match mid-game.
+  const [vsBot] = useState(() => !mp && (Number(soloBots) > 0 || !!takeSoloIntent(GAME_ID)))
   const onScoreRef = useRef(onScore)
   const onProgressRef = useRef(onProgress)
   useEffect(() => { onScoreRef.current = onScore }, [onScore])
@@ -654,6 +671,10 @@ export default function Chess({
   // single-device fallback: the very same reduce drives it, so the rules can
   // never drift between the two modes
   const [local, setLocal] = useState(() => {
+    // A saved position belongs to the hot-seat game it was saved from. Dropping
+    // the player into it against the computer would hand them somebody else's
+    // half-finished board, so a bot round always starts from the opening.
+    if (vsBot) return initialState()
     const saved = resumeState && resumeState.game === GAME_ID && resumeState.state
     return saved && typeof saved.board === 'string' && saved.board.length === 64 ? saved : initialState()
   })
@@ -662,7 +683,10 @@ export default function Chess({
     return raw && typeof raw.board === 'string' && raw.board.length === 64 ? raw : initialState()
   }, [mp, room, local])
 
-  const seat = mp ? (Number.isInteger(mySeat) ? mySeat : null) : seatOfSide(st.turn)
+  // Hot-seat play hands the phone round, so the acting seat follows the side to
+  // move. Against the computer it must NOT: the player owns white for the whole
+  // game, otherwise the board would flip to the bot's view on its turn.
+  const seat = mp ? (Number.isInteger(mySeat) ? mySeat : null) : (vsBot ? 0 : seatOfSide(st.turn))
   const mySide = seat === null ? null : sideOfSeat(seat)
   const myTurn = st.status === 'playing' && mySide !== null && mySide === st.turn
 
@@ -670,7 +694,11 @@ export default function Chess({
   const [promo, setPromo] = useState(null) // { from, to }
   const [askResign, setAskResign] = useState(false)
   const [flipPin, setFlipPin] = useState(null)
-  const flipped = flipPin !== null ? flipPin : mp ? mySeat === 1 : st.turn === 'b'
+  // Hot-seat rotates the board to whoever is holding the phone. Against the
+  // computer the player never lets go of it, so the view stays on white.
+  const flipped = flipPin !== null
+    ? flipPin
+    : mp ? mySeat === 1 : (vsBot ? false : st.turn === 'b')
 
   const legal = useMemo(() => (st.status === 'playing' ? legalMoves(st) : []), [st])
   const targets = useMemo(() => {
@@ -706,6 +734,47 @@ export default function Chess({
     setPromo(null)
   }, [mp, onMove, seat])
 
+  // ---- the computer opponent ---------------------------------------------
+  // It plays black through src/lib/gameBots.js, which runs every candidate
+  // through THIS file's `reduce` before returning one — so the machine seat is
+  // held to exactly the rules the player is held to. The delay lets the player
+  // see the reply land instead of it appearing in the same frame as their own.
+  useEffect(() => {
+    if (!vsBot || st.status !== 'playing') return undefined
+    if (st.turn !== 'b') return undefined
+    // A pending offer is answered before anything is moved, so the two timers
+    // below can never race for the same tick.
+    if (st.drawOffer === 0) return undefined
+    const id = setTimeout(() => {
+      const mv = botMoveFor(GAME_ID, st, 1, { reduce, room: null, helpers: botHelpers })
+      if (mv) setLocal((prev) => reduce(prev, { ...mv, seat: seatOfSide(prev.turn) }, null).state)
+    }, BOT_DELAY_MS)
+    return () => clearTimeout(id)
+  }, [vsBot, st])
+
+  // A draw offer needs an answer, and «الكمبيوتر» answering by material is the
+  // only honest thing it can do — it has no plan to weigh the offer against.
+  useEffect(() => {
+    if (!vsBot || st.status !== 'playing') return undefined
+    if (st.drawOffer !== 0) return undefined
+    const id = setTimeout(() => {
+      let bal = 0
+      for (let i = 0; i < 64; i += 1) {
+        const c = st.board[i]
+        if (c === '.') continue
+        const v = PIECE_VALUE[c.toLowerCase()] || 0
+        bal += isUpper(c) ? v : -v
+      }
+      // bal > 0 means white (the player) is ahead, so black takes the draw
+      setLocal((prev) => reduce(
+        prev,
+        { type: bal >= 3 ? 'acceptDraw' : 'declineDraw', seat: 1 },
+        null,
+      ).state)
+    }, BOT_DELAY_MS)
+    return () => clearTimeout(id)
+  }, [vsBot, st])
+
   // persist single-device games; report the result to the hub once
   const reportedRef = useRef(false)
   useEffect(() => {
@@ -740,14 +809,17 @@ export default function Chess({
   const canClaimFifty = myTurn && (st.halfmove || 0) >= 100
   const canClaimThree = myTurn && repCount(st) >= 3
   const hasOffer = st.drawOffer !== null && st.drawOffer !== undefined
-  // on one device both sides sit here, so any pending offer is answerable
-  const offerFromFoe = hasOffer && (!mp || st.drawOffer !== seat)
-  const offerFromMe = hasOffer && mp && st.drawOffer === seat
+  // On one shared device both sides sit here, so any pending offer is
+  // answerable. Against the computer they are not: the machine answers its own
+  // side, and the player must never be shown "accept" for their own offer.
+  const offerFromFoe = hasOffer && ((mp || vsBot) ? st.drawOffer !== seat : true)
+  const offerFromMe = hasOffer && (mp || vsBot) && st.drawOffer === seat
 
   const players = mp && Array.isArray(room.players) ? room.players : []
   const nameFor = (s) => {
     const p = players.find((x) => x.seat === s)
     if (p && p.name) return p.name
+    if (vsBot && s === 1) return botLabel(0, 1, lang)
     if (!mp && playerName && s === 0) return playerName
     return s === 0 ? t.white : t.black
   }
@@ -855,6 +927,8 @@ export default function Chess({
             <div className="bgm-banner"><span>{t.offeredMine}</span></div>
           ) : mp && players.length < 2 ? (
             <div className="bgm-banner"><Icon name="clock" size={15} /><span>{t.waiting}</span></div>
+          ) : vsBot ? (
+            <div className="bgm-banner"><Icon name="grid" size={15} /><span>{t.botLine}</span></div>
           ) : !mp ? (
             <div className="bgm-banner"><span>{t.hotseat}</span></div>
           ) : null}
