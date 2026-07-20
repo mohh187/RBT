@@ -57,6 +57,19 @@ service firebase.storage {
       allow delete: if isTenantStaff(tid) || isPlatformAdmin();
     }
 
+    // Supplier bills & accounting documents: the accountant scans a paper
+    // invoice (image) or files the supplier's PDF, so this path must accept
+    // PDFs which the generic asset rule below deliberately does not. Money
+    // documents are manager-grade, but staff upload is allowed because the
+    // Firestore expense doc that references the file is manager-write only.
+    match /tenants/{tid}/accounting/{allPaths=**} {
+      allow read: if isTenantStaff(tid) || isPlatformAdmin();
+      allow create, update: if (isTenantStaff(tid) || isPlatformAdmin())
+        && (isImage() || request.resource.contentType == 'application/pdf')
+        && underLimit(20);
+      allow delete: if isTenantStaff(tid) || isPlatformAdmin();
+    }
+
     // Tenant assets (item photos, logo, cover, event images, background videos).
     match /tenants/{tid}/{allPaths=**} {
       allow read: if true;

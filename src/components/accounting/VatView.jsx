@@ -25,7 +25,7 @@ export default function VatView({ vat, ar = true, lang = 'ar', currency = 'SAR',
 
   return (
     <div className="acc-stack">
-      <div className="acc-card acc-print-area" id="acc-print-vat">
+      <div className="acc-card" id="acc-print-vat">
         <div className="row-between" style={{ flexWrap: 'wrap', gap: 8 }}>
           <span className="acc-card-title"><Icon name="receipt" size={17} /> {ar ? 'الإقرار الضريبي' : 'VAT return'}</span>
           <span className="acc-no-print row" style={{ gap: 6 }}>
