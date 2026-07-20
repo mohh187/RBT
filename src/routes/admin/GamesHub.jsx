@@ -142,11 +142,13 @@ export default function GamesHub() {
   const scores = data ? data.scores : []
   // Two DIFFERENT facts, and the page must not collapse them:
   //   covered  — every play in the window was provably read;
-  //   capped   — the read hit its limit, so history older than it is unread.
-  // A past window beyond the cap's reach yields zero rows AND covered=false;
-  // reporting that as «لا جولات» would retire the venue's best games on an
-  // artefact of the read. The banner below therefore keys off `covered`, which
-  // is computed BEFORE the window filter, not after it.
+  //   capped   — the paged read stopped at the safety ceiling, so part of the
+  //              window is still unread.
+  // A window holding more plays than the ceiling scans yields a partial slice AND
+  // covered=false; reporting that as «لا جولات» would retire the venue's best
+  // games on an artefact of the read. The banner below therefore keys off
+  // `covered`, which is computed BEFORE the window filter, not after it — and it
+  // names the one action that clears it, a shorter period.
   // A failed fetch is also "not covered": the catalogue must not print a clean
   // zero per game underneath an error banner.
   const covered = !err && (!read || read.covers)
@@ -239,11 +241,11 @@ export default function GamesHub() {
           <span>
             {plays.length === 0
               ? (ar
-                ? `القراءة بلغت حدّها (${fmtInt(read.cap)} جولة) قبل أن تصل إلى هذه الفترة${oldestRead ? `، وأقدم جولة قرأناها بتاريخ ${oldestRead}` : ''}. الأصفار المعروضة أدناه تعني «لم تُقرأ»، لا «لم تُلعب» — لا تُبنَ عليها قرارات إخفاء ألعاب. اختر فترة أحدث أو أقصر.`
-                : `The read hit its cap (${read.cap} plays) before reaching this period${oldestRead ? `; the oldest play read is dated ${oldestRead}` : ''}. The zeros below mean "not read", not "not played". Pick a more recent or shorter period.`)
+                ? `قُرئت ${fmtInt(read.scanned)} جولة ثم توقف المسح عند سقف الأمان (${fmtInt(read.cap)} جولة) قبل أن يستوفي هذه الفترة${oldestRead ? `، وأقدم جولة قرأناها بتاريخ ${oldestRead}` : ''}. الأصفار المعروضة أدناه تعني «لم تُقرأ»، لا «لم تُلعب» — لا تُبنَ عليها قرارات إخفاء ألعاب. اختر فترة أقصر ليكتمل المسح.`
+                : `Read ${read.scanned} plays, then stopped at the safety ceiling (${read.cap}) before finishing this period${oldestRead ? `; the oldest play read is dated ${oldestRead}` : ''}. The zeros below mean "not read", not "not played". Pick a shorter period so the scan can finish.`)
               : (ar
-                ? `القراءة بلغت حدّها (${fmtInt(read.cap)} جولة) ولم تغطِّ هذه الفترة كاملة${oldestRead ? ` — أقدم جولة قرأناها بتاريخ ${oldestRead}` : ''}. كل رقم أدناه حدّ أدنى لا حصيلة نهائية. ضيّق الفترة لصورة كاملة.`
-                : `The read hit its cap (${read.cap} plays) and does not cover the whole period${oldestRead ? `; oldest play read is dated ${oldestRead}` : ''}. Every figure below is a floor, not a total.`)}
+                ? `قُرئت ${fmtInt(read.scanned)} جولة ثم توقف المسح عند سقف الأمان (${fmtInt(read.cap)} جولة) دون أن يستوفي هذه الفترة${oldestRead ? ` — أقدم جولة قرأناها بتاريخ ${oldestRead}` : ''}. كل رقم أدناه حدّ أدنى لا حصيلة نهائية. اختر فترة أقصر ليكتمل المسح.`
+                : `Read ${read.scanned} plays, then stopped at the safety ceiling (${read.cap}) without finishing this period${oldestRead ? `; oldest play read is dated ${oldestRead}` : ''}. Every figure below is a floor, not a total. Pick a shorter period.`)}
           </span>
         </div>
       )}

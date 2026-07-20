@@ -60,9 +60,11 @@ export default function HangingChallenge({
     { challenges: [], mine: [], truncated: false, error: null },
   )
 
-  // `truncated` means the venue has at least a full page of challenges, so the
-  // number beside the title counts what we could READ, not what exists. It is
-  // shown as a floor and explained below the list — never as a total.
+  // `truncated` means the read stopped before the open set was exhausted, so
+  // the number beside the title counts what we could READ, not what exists: it
+  // is shown as a floor and explained below the list. When it is false the
+  // count is the whole truth and is printed plainly — hedging an exact number
+  // into «فأكثر» misstates it just as badly in the other direction.
   const floor = Boolean(state.truncated)
 
   const [msg, setMsg] = useState('')
@@ -215,12 +217,17 @@ export default function HangingChallenge({
         </div>
       ) : null}
 
-      {floor ? (
+      {/* Only alongside a list, and worded as the doubt it is. The read was cut
+          before the open set provably ended, which means older challenges MAY
+          still be open and unread — not that they exist. Asserting «هناك المزيد»
+          over an empty list, or over a set we could prove complete, would be
+          stating a measurement nobody took. */}
+      {floor && state.challenges.length ? (
         <p className="sp-note">
           {pick(
             lang,
-            'نعرض أحدث التحديات فقط — هناك المزيد في هذا المكان.',
-            'Showing the most recent challenges only — this venue has more.',
+            'نعرض أحدث التحديات فقط — قد تكون هناك تحديات أقدم لا تظهر هنا.',
+            'Showing the most recent challenges only — older ones may not appear here.',
           )}
         </p>
       ) : null}

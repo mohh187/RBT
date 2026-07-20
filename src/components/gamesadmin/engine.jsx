@@ -8,7 +8,7 @@
 //   2. Every read carries a limit and a progressive fallback, so a missing
 //      composite index or a strict rule degrades to "fewer rows" — never to a
 //      thrown error and never to a spinner that hangs.
-import { collection, getDocs, query, where, orderBy, limit } from 'firebase/firestore'
+import { collection, getDocs, query, where, orderBy, limit, startAfter } from 'firebase/firestore'
 import { db, firebaseReady } from '../../lib/firebase.js'
 import { GAMES } from '../../lib/games.js'
 import { isSoloPlay } from '../../lib/gameMemory.js'
@@ -19,7 +19,13 @@ export { isSoloPlay }
 // --------------------------------------------------------------------------
 // read bounds
 // --------------------------------------------------------------------------
-export const MAX_PLAYS = 500
+// Documents per round trip. NOT the coverage limit — the play read pages until
+// the window is exhausted, so this only decides how many round trips it takes.
+export const PLAYS_PAGE = 500
+// The hard safety ceiling across ALL pages of one play read. A venue with more
+// history than this inside a single window costs bounded reads and gets an
+// honest "not covered" instead of an unbounded bill.
+export const MAX_PLAYS_SCAN = 5000
 export const MAX_PROFILES = 400
 export const MAX_SCORES = 300
 export const MAX_CLAIMS = 500
@@ -254,26 +260,41 @@ export function recentPlaysFor(plays = [], gameId, max = 12) {
 // --------------------------------------------------------------------------
 const rowsOf = (snap) => snap.docs.map((d) => ({ id: d.id, ...d.data() }))
 
-// A play read is NEWEST-FIRST and capped, which means it truncates at the OLD
-// end. That has a consequence the caller must never be allowed to forget: ask
-// for a window that sits further back than the cap reaches, and the filter
-// returns zero rows — indistinguishable, in a bare array, from "nothing was
-// played". Worse, a cap warning computed off the FILTERED length would also be
-// zero, so the one signal that could correct the reading is silenced by the
-// same truncation it is meant to report.
+// A play read must answer a question a single capped page cannot: did we see
+// EVERY play in [fromMs, toMs]? A one-shot newest-first read truncates at the
+// OLD end, so a busy window comes back as a newest-N slice, and the rows the
+// caller filters out are indistinguishable — in a bare array — from "nothing
+// was played". Worse, a cap warning computed off the FILTERED length would also
+// be zero, silencing the one signal that could correct the reading.
 //
-// So this returns a REPORT, not an array:
+// So the read PAGES the window instead of truncating it, and this returns a
+// REPORT, not an array:
 //   rows            plays inside [fromMs, toMs]
-//   scanned         documents actually read, before the window filter
-//   capped          the read hit its limit, so older documents exist unread
+//   scanned         documents actually read, across every page
+//   pages           round trips it took
+//   exhausted       the query ran out of documents — the window was fully walked
+//   capped          the safety ceiling stopped the walk early, so rows are unread
+//   cap             that ceiling
 //   oldestScannedMs the furthest back the read reached (null if unknowable)
 //   covers          TRUE only when every play in the window was provably seen
 //   ok              the read itself succeeded
+//
+// `covers` is a PROOF, never an assumption. There are exactly two proofs:
+//   • `exhausted` — the paged query returned less than it was allowed to, so
+//     there is nothing left behind it. For a both-bounds query that walks the
+//     window itself, this is proof for the window.
+//   • `reachedBack` — an unbounded newest-first walk that got to a document at
+//     or before `fromMs`. Descending order then guarantees everything newer,
+//     which is the whole window, was already read.
 // `covers === false` means the figures are a floor, and zero means "not read",
 // never "did not happen". The UI must say so rather than print a clean zero.
-export function playsReadReport(raw, fromMs, toMs, cap, mode, ok = true) {
+export function playsReadReport(raw, fromMs, toMs, cap, mode, ok = true, walk = {}) {
+  const w = walk && typeof walk === 'object' ? walk : {}
   const scanned = raw.length
-  const capped = ok && scanned >= cap
+  const exhausted = ok && w.exhausted === true
+  // "capped" now means one thing only: the SAFETY CEILING cut the walk short.
+  // It is no longer implied by "the page was full".
+  const capped = ok && !exhausted && scanned >= cap
   let oldestScannedMs = null
   let newestScannedMs = null
   for (const p of raw) {
@@ -282,9 +303,9 @@ export function playsReadReport(raw, fromMs, toMs, cap, mode, ok = true) {
     if (oldestScannedMs == null || t < oldestScannedMs) oldestScannedMs = t
     if (newestScannedMs == null || t > newestScannedMs) newestScannedMs = t
   }
-  // A sorted read that still reached back past the start of the window saw the
-  // whole window, cap or no cap. An unordered read proves nothing once capped.
-  const reachedBack = mode !== 'unordered'
+  // Only a walk that was actually ordered newest-first can argue from how far
+  // back it reached. An unordered read proves nothing except by exhaustion.
+  const reachedBack = (mode === 'ordered' || mode === 'range')
     && oldestScannedMs != null && oldestScannedMs <= fromMs
   return {
     rows: raw.filter((p) => {
@@ -292,30 +313,78 @@ export function playsReadReport(raw, fromMs, toMs, cap, mode, ok = true) {
       return t >= fromMs && t <= toMs
     }),
     scanned,
+    pages: num(w.pages),
     cap,
     capped,
+    exhausted,
     mode,
     oldestScannedMs,
     newestScannedMs,
-    covers: ok && (!capped || reachedBack),
+    covers: ok && (exhausted || reachedBack),
     ok,
   }
 }
 
-export async function fetchPlays(tid, fromMs, toMs, cap = MAX_PLAYS) {
+// Walk a query in pages until it runs out, a caller-supplied stop condition is
+// met, or `ceiling` documents have been read. Every page is the SAME query plus
+// a `startAfter` cursor, so no extra index is ever required beyond the one the
+// first page already needed.
+//
+// Returns { rows, exhausted, pages }. `exhausted` is true ONLY when a page came
+// back shorter than it was allowed to be — the one fact that proves nothing was
+// left behind. Stopping on `ceiling` or on `stopAt` never sets it.
+async function walkPages(ref, constraints, ceiling, stopAt = null) {
+  const rows = []
+  let cursor = null
+  let exhausted = false
+  let pages = 0
+  while (rows.length < ceiling) {
+    const want = Math.min(PLAYS_PAGE, ceiling - rows.length)
+    const parts = cursor ? [...constraints, startAfter(cursor), limit(want)] : [...constraints, limit(want)]
+    // eslint-disable-next-line no-await-in-loop -- pages are cursor-chained: page N+1 needs page N's last doc
+    const snap = await getDocs(query(ref, ...parts))
+    pages += 1
+    const docs = snap.docs
+    for (const d of docs) rows.push({ id: d.id, ...d.data() })
+    if (docs.length < want) { exhausted = true; break }
+    cursor = docs[docs.length - 1]
+    if (stopAt && stopAt(rows[rows.length - 1])) break
+  }
+  return { rows, exhausted, pages }
+}
+
+// Read every play in [fromMs, toMs], in pages, up to a hard ceiling.
+//
+// The primary query bounds the window on BOTH sides. Both bounds sit on the one
+// field `startedAt`, and the sort is on that same field, so this is still a
+// single-field query: no composite index, exactly like the old one-shot read.
+// The difference is that it walks the WINDOW rather than the newest N documents
+// of the collection, which is why exhausting it is a real proof of coverage —
+// and why "narrow the window", the advice the UI gives, now actually works.
+export async function fetchPlays(tid, fromMs, toMs, ceiling = MAX_PLAYS_SCAN) {
+  const cap = Math.max(PLAYS_PAGE, Math.round(num(ceiling, MAX_PLAYS_SCAN)))
   if (!firebaseReady || !tid) return playsReadReport([], fromMs, toMs, cap, 'none', false)
   const ref = collection(db, 'tenants', tid, 'gamePlays')
   try {
-    const raw = rowsOf(await getDocs(query(ref, where('startedAt', '>=', fromMs), orderBy('startedAt', 'desc'), limit(cap))))
-    return playsReadReport(raw, fromMs, toMs, cap, 'range')
-  } catch (_) { /* no index for the range — try a plain sort */ }
+    const w = await walkPages(ref, [
+      where('startedAt', '>=', fromMs),
+      where('startedAt', '<=', toMs),
+      orderBy('startedAt', 'desc'),
+    ], cap)
+    return playsReadReport(w.rows, fromMs, toMs, cap, 'range', true, w)
+  } catch (_) { /* range refused — fall back to a plain sort */ }
   try {
-    const raw = rowsOf(await getDocs(query(ref, orderBy('startedAt', 'desc'), limit(cap))))
-    return playsReadReport(raw, fromMs, toMs, cap, 'ordered')
+    // No window bound available, so walk newest-first and stop the moment the
+    // walk has passed the start of the window: everything newer is now in hand.
+    const w = await walkPages(ref, [orderBy('startedAt', 'desc')], cap,
+      (row) => num(row.startedAt) > 0 && num(row.startedAt) <= num(fromMs))
+    return playsReadReport(w.rows, fromMs, toMs, cap, 'ordered', true, w)
   } catch (_) { /* no sort allowed — take whatever is readable */ }
   try {
-    const raw = rowsOf(await getDocs(query(ref, limit(cap))))
-    return playsReadReport(raw, fromMs, toMs, cap, 'unordered')
+    // Unordered: only total exhaustion of the collection can prove anything, and
+    // walkPages reports exactly that.
+    const w = await walkPages(ref, [], cap)
+    return playsReadReport(w.rows, fromMs, toMs, cap, 'unordered', true, w)
   } catch (_) {
     return playsReadReport([], fromMs, toMs, cap, 'failed', false)
   }

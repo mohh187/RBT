@@ -82,6 +82,10 @@ export const MAX_TABLES = 120
 export const MAX_MESSAGE = 90         // characters of guest-written challenge text
 export const MAX_NAME = 24
 export const CHALLENGE_DEFAULT_DAYS = 3
+// The longest a challenge postChallenge will ever write can stay open. It is a
+// constant rather than a literal because pageCutOpenSet reasons with it: that
+// proof is only sound while it matches the ceiling actually written.
+export const CHALLENGE_MAX_DAYS = 14
 export const PEER_MEMORY = 40         // room ids remembered on this device
 
 const DAY_MS = 24 * 60 * 60 * 1000
@@ -426,6 +430,40 @@ export function normalizeChallenge(raw) {
   }
 }
 
+// Was the board page cut BEFORE the open set ended?
+//
+// A full page is not evidence of anything on its own. Challenge documents are
+// never deleted, so a venue that once crossed MAX_CHALLENGES fills every page
+// for the rest of its life; `size >= MAX_CHALLENGES` therefore latches true
+// forever and turns an exact count into a permanent «فأكثر». A total printed as
+// a floor is the same fabrication as a floor printed as a total, in reverse.
+//
+// What can actually be proved: the page is the newest MAX_CHALLENGES documents
+// by `at`, so every unread document has `at` below the oldest one we read. A
+// challenge closes at `at + lifetime`, and the longest lifetime in play is the
+// ceiling postChallenge clamps to — raised, if some document on the page says
+// otherwise, to what that document actually shows. So when
+//   oldestReadAt + longestLifetime <= now
+// every unread document has certainly expired, the open set ended inside this
+// page, and the filtered list is a TOTAL.
+//
+// Two things defeat the proof and keep the answer conservatively "cut":
+// a document that never expires (`expiresAt` 0 — isChallengeOpen keeps those
+// open forever, so no horizon exists), and one with no usable `at` to order by.
+function pageCutOpenSet(page, full, now = Date.now()) {
+  if (!full) return false            // the whole collection fit — nothing unread
+  let oldestAt = Infinity
+  let longestLifeMs = CHALLENGE_MAX_DAYS * DAY_MS
+  for (const c of page) {
+    if (!(c.at > 0) || !(c.expiresAt > 0)) return true
+    if (c.at < oldestAt) oldestAt = c.at
+    const life = c.expiresAt - c.at
+    if (life > longestLifeMs) longestLifeMs = life
+  }
+  if (!Number.isFinite(oldestAt)) return true
+  return oldestAt + longestLifeMs > now
+}
+
 // Open challenges, newest first. Expired ones are hidden here rather than
 // deleted — the guest who left one can still see it was beaten.
 //
@@ -437,16 +475,18 @@ export function normalizeChallenge(raw) {
 //     always present even when the venue has far more than one page of them.
 // Neither needs a composite index: one orderBy, one equality, nothing combined.
 //
-// cb({ challenges, mine, truncated, error }) — `truncated:true` means the venue
-// has at least a full page of challenges, so `challenges.length` is a FLOOR and
-// the caller must not present it as a total.
+// cb({ challenges, mine, truncated, error }) — `truncated:true` means the read
+// stopped BEFORE the open set was exhausted, so `challenges.length` is a FLOOR
+// and the caller must not present it as a total. `truncated:false` means the
+// opposite claim, equally load-bearing: every open challenge this venue holds
+// is in the list, so the caller must not hedge a total into a floor either.
 export function watchOpenChallenges(tid, cb, { deviceId = '', gameId = '' } = {}) {
   const empty = { challenges: [], mine: [], truncated: false, error: 'unavailable' }
   if (!firebaseReady || !tid) return deadWatch(cb, empty)
   const me = safeId(deviceId)
 
   let board = []
-  let boardTruncated = false
+  let boardFull = false
   let boardReady = false
   let mine = []
   let error = null
@@ -461,7 +501,12 @@ export function watchOpenChallenges(tid, cb, { deviceId = '', gameId = '' } = {}
         .filter((c) => !me || c.byDeviceId !== me)
         .sort((a, b) => b.at - a.at),
       mine,
-      truncated: boardTruncated,
+      // Recomputed per emit rather than frozen on the snapshot: pageCutOpenSet
+      // compares against the clock, so a page that was genuinely cut can age
+      // out of that doubt. It still only refreshes when a listener fires, so a
+      // long-idle screen can hold a stale `true` — which errs toward the floor,
+      // the safe side.
+      truncated: pageCutOpenSet(board, boardFull, now),
       error,
     })
   }
@@ -470,15 +515,14 @@ export function watchOpenChallenges(tid, cb, { deviceId = '', gameId = '' } = {}
     query(col(tid, 'challenges'), orderBy('at', 'desc'), limit(MAX_CHALLENGES)),
     (snap) => {
       board = snap.docs.map((d) => normalizeChallenge({ id: d.id, ...d.data() })).filter(Boolean)
-      // A full page means "there are at least this many", never "this is all".
-      boardTruncated = snap.size >= MAX_CHALLENGES
+      boardFull = snap.size >= MAX_CHALLENGES
       boardReady = true
       error = null
       emit()
     },
     (err) => {
       board = []
-      boardTruncated = false
+      boardFull = false
       boardReady = true
       error = errText(err)
       emit()
@@ -521,7 +565,7 @@ export async function postChallenge({ tid, gameId, name = '', deviceId, score = 
       score: s,
       message: sanitizeMessage(message),
       at: now,
-      expiresAt: now + Math.max(1, Math.min(14, num(days, CHALLENGE_DEFAULT_DAYS))) * DAY_MS,
+      expiresAt: now + Math.max(1, Math.min(CHALLENGE_MAX_DAYS, num(days, CHALLENGE_DEFAULT_DAYS))) * DAY_MS,
       beatenBy: [],
       active: true,
     })

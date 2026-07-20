@@ -22,13 +22,19 @@
 // leaderboard is not fabricated to fill the space.
 //
 // But an empty list is only a MEASUREMENT when the read behind it saw the whole
-// window. Play reads are newest-first and capped, so a window older than the cap
-// reaches yields zero rows that look exactly like "nobody played". That is why
-// `standings()` takes the caller's read REPORT and returns `complete`, and why
-// `finalize()` REFUSES to freeze a standing whose read is not complete: an
-// announced wrong winner is far worse to a venue's guests than no announcement.
-// Absent a report, a read is treated as unproven — coverage is claimed, never
-// assumed.
+// window. The play read (engine.jsx fetchPlays) PAGES the window until it is
+// exhausted, so on any normal venue coverage is proven and the result stands.
+// It stops short only when the window holds more plays than the hard safety
+// ceiling, or when the read failed outright — and then zero rows look exactly
+// like "nobody played" while measuring nothing. That is why `standings()` takes
+// the caller's read REPORT and returns `complete`, and why `finalize()` REFUSES
+// to freeze a standing whose read is not complete: an announced wrong winner is
+// far worse to a venue's guests than no announcement. Absent a report, a read is
+// treated as unproven — coverage is proven, never assumed.
+//
+// The block is always CLEARABLE: a shorter window holds fewer plays, so the
+// paged read reaches the end of it. A guard a manager can never satisfy is not
+// honesty, it is a dead end.
 //
 // Every returned row carries its own evidence: how many plays it counted, which
 // games those plays were, the exact moment of the best one, and the day span.
@@ -331,12 +337,33 @@ function readCoverage(read) {
   return {
     ok: Boolean(r) && r.ok !== false,
     capped: Boolean(r) && r.capped === true,
+    exhausted: Boolean(r) && r.exhausted === true,
     cap: r ? num(r.cap) : 0,
     scanned: r ? num(r.scanned) : 0,
+    pages: r ? num(r.pages) : 0,
     oldestScannedMs: r ? num(r.oldestScannedMs) : 0,
     covers: Boolean(r) && r.ok !== false && r.covers === true,
     reported: Boolean(r),
   }
+}
+
+// The sentence under a table of rows. It states which of the four situations
+// produced those rows, because "احتُسبت 40 جولة" means something completely
+// different when the read stopped at a ceiling than when it walked the window to
+// its end — and only the second one is a measurement of the period.
+function partialNoteAr(cov, counted, players, wantGame, soloNote) {
+  if (cov.covers) {
+    return `احتُسبت ${counted} جولة لـ ${players} لاعباً داخل الفترة${wantGame ? ' ولهذه اللعبة وحدها' : ''}.${soloNote}`
+  }
+  const head = `ترتيب جزئي: احتُسبت ${counted} جولة لـ ${players} لاعباً من الجولات التي أمكن قراءتها فقط، لا من كل جولات الفترة`
+  if (!cov.reported) {
+    return `${head} — لم تُرفق أي إفادة عن مدى القراءة، فلا دليل على أنها شملت الفترة.${soloNote}`
+  }
+  if (!cov.ok) return `${head} — تعذّرت قراءة سجل الجولات.${soloNote}`
+  if (cov.capped) {
+    return `${head}: قُرئت ${cov.scanned} جولة ثم توقفت القراءة عند سقف الأمان (${cov.cap} جولة). اختر فترة أقصر ليكتمل المسح.${soloNote}`
+  }
+  return `${head} — لم تثبت القراءة أنها بلغت بداية الفترة.${soloNote}`
 }
 
 export function standings({
@@ -400,8 +427,12 @@ export function standings({
     let noteAr
     if (!cov.ok) {
       noteAr = 'تعذّرت قراءة جولات اللعب لهذه الفترة، فلا يمكن القول إنها خالية. هذه ليست نتيجة قياس.'
+    } else if (!cov.reported) {
+      noteAr = 'لم تُرفق إفادة عن مدى قراءة الجولات، فلا دليل على أنها شملت الفترة كاملة. الجدول الفارغ هنا ليس قياساً.'
+    } else if (cov.capped) {
+      noteAr = `قُرئت ${cov.scanned} جولة ثم توقفت القراءة عند سقف الأمان (${cov.cap} جولة) قبل أن تُستوفى الفترة، فجولات الفترة لم تُقرأ كلها. خلوّ الجدول هنا نقصُ قراءة لا نتيجة. اختر فترة أقصر ليكتمل المسح.`
     } else if (!cov.covers) {
-      noteAr = `توقفت قراءة الجولات عند حدّها (${cov.cap} جولة) قبل أن تبلغ بداية الفترة، فجولات الفترة لم تُقرأ كلها. خلوّ الجدول هنا نقصُ قراءة لا نتيجة.`
+      noteAr = 'لم تثبت قراءة الجولات أنها بلغت بداية الفترة، فخلوّ الجدول هنا نقصُ قراءة لا نتيجة.'
     } else {
       noteAr = (wantGame
         ? 'لا توجد جولات مسجّلة لهذه اللعبة داخل فترة البطولة.'
@@ -509,9 +540,7 @@ export function standings({
     // The count is stated as what it is. When the read did not span the window
     // it is a floor over rows that happened to be readable, and the sentence
     // says so instead of implying a census of the period.
-    noteAr: cov.covers
-      ? `احتُسبت ${qualified.length} جولة لـ ${ranked.length} لاعباً داخل الفترة${wantGame ? ' ولهذه اللعبة وحدها' : ''}.${soloNote}`
-      : `ترتيب جزئي: احتُسبت ${qualified.length} جولة لـ ${ranked.length} لاعباً من الجولات التي أمكن قراءتها فقط، لا من كل جولات الفترة.${soloNote}`,
+    noteAr: partialNoteAr(cov, qualified.length, ranked.length, wantGame, soloNote),
   }
 }
 
@@ -548,8 +577,12 @@ function longestStreak(daySet) {
 export async function finalize(tid, tournament, computed) {
   if (!firebaseReady || !tid) throw new Error('unavailable')
   if (!computed || computed.complete !== true) {
+    const cov = computed && computed.coverage ? computed.coverage : null
+    const why = cov && cov.capped
+      ? ` قُرئت ${num(cov.scanned)} جولة ثم توقفت القراءة عند سقف الأمان (${num(cov.cap)} جولة).`
+      : ''
     throw new Error(
-      'القراءة لم تشمل كل جولات فترة البطولة، فالترتيب الحالي قد يكون ناقصاً أو خاطئاً — ولا يصح إعلان فائز على أساسه. ضيّق فترة البطولة ثم أعد المحاولة.',
+      `القراءة لم تشمل كل جولات فترة البطولة، فالترتيب الحالي قد يكون ناقصاً أو خاطئاً — ولا يصح إعلان فائز على أساسه.${why} اجعل فترة البطولة أقصر: الفترة الأقصر تحوي جولات أقل فتكتمل قراءتها، ثم أعد المحاولة.`,
     )
   }
   const t = normalizeTournament(tournament)

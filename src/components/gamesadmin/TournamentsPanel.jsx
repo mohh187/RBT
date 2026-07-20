@@ -9,9 +9,11 @@
 // Four honesty rules are enforced here rather than in CSS:
 //   • no qualifying play  -> «لا نتائج بعد», and no table is drawn at all —
 //     but ONLY when the read behind it provably spanned the tournament window.
-//     The play read is newest-first and capped, so a window older than the cap
-//     reaches comes back empty without measuring anything. That empty slice must
-//     never be printed as «لا جولات مؤهلة»; it is reported as a short read.
+//     The play read pages the window until it is exhausted, so that proof is the
+//     normal case; it fails only when the window holds more plays than the hard
+//     safety ceiling, or when the read itself failed. That short slice must never
+//     be printed as «لا جولات مؤهلة»; it is reported as a short read, together
+//     with the one action that fixes it — a shorter window.
 //   • a prize is only ever the text the venue typed. Nothing is suggested.
 //   • «إنهاء وإعلان الفائزين» freezes exactly the rows on screen. If that is an
 //     empty list, the tournament closes with an empty list and says so.
@@ -28,7 +30,7 @@ import {
   newTournament, normalizeTournament, validateTournament, statusOf, modeInfo,
   toDayInput, fromDayInput, valueLabel, MAX_WINNERS,
 } from '../../lib/tournaments.js'
-import { fetchPlays, fmtInt, dateTime, dayStamp, MAX_PLAYS } from './engine.jsx'
+import { fetchPlays, fmtInt, dateTime, dayStamp } from './engine.jsx'
 
 const num = (v, f = 0) => {
   const n = Number(v)
@@ -249,8 +251,11 @@ function StandingsTable({ ar, mode, rows, frozen = false }) {
 // A tournament with no window has nothing to read, so the empty report is
 // marked COVERED — silence is correct there. A thrown read is the opposite:
 // covers=false, because zero rows then means "unknown", not "none".
+// `cap` is null, not a number: no read was issued here, so quoting a limit
+// would be quoting a bound nothing was measured against. The UI only ever
+// prints a cap for a read that succeeded AND fell short, which this never is.
 const emptyPlaysRead = (ok = true) => ({
-  rows: [], scanned: 0, cap: MAX_PLAYS, capped: false, mode: 'none',
+  rows: [], scanned: 0, pages: 0, cap: null, capped: false, exhausted: ok, mode: 'none',
   oldestScannedMs: null, newestScannedMs: null, covers: ok, ok,
 })
 
@@ -289,10 +294,23 @@ function Detail({
   )
 
   const status = statusOf(t)
-  // NOT `plays.length >= MAX_PLAYS`: the window filter runs after the cap, so a
-  // tournament that ended further back than the cap reaches would zero out the
-  // rows AND the warning at once. `covers` is computed before the filter.
-  const truncated = !!read && !read.covers
+  // TWO different facts, never one flag. The report already separates them and
+  // the screen must too:
+  //   readFailed — the read itself threw; we know NOTHING about this window.
+  //   capShort   — the read succeeded but stopped at its cap before covering
+  //                the window, so what we have is a floor.
+  // Only `capShort` is allowed to speak about a document cap or an oldest-read
+  // date: on a failed read there is no cap story and no oldest row, and telling
+  // the manager one would be inventing an explanation for an unknown state.
+  // NOT `plays.length >= cap`: the window filter runs after the cap, so a
+  // tournament older than the cap reaches would zero out the rows AND the
+  // warning at once. `covers` is computed before the filter.
+  const readFailed = !!read && !read.ok
+  const capShort = !!read && read.ok && !read.covers
+  // Either cause means an empty table reads "not read", not "nobody entered",
+  // and either one blocks announcing.
+  const unread = readFailed || capShort
+  const oldestRead = read && read.oldestScannedMs ? dayStamp(read.oldestScannedMs) : ''
   // What the standing is allowed to claim about itself. Anything but `true` and
   // the rows on screen are a floor over a partial read: shown, labelled, and NOT
   // announceable.
@@ -417,33 +435,50 @@ function Detail({
                       : 'Thin sample — the order can flip on a single play.'}
                   </p>
                 )}
-                {truncated && (
+                {readFailed && (
                   <div className="ga-warn">
                     <Icon name="warning" size={15} />
                     <span>
                       {ar
-                        ? `بلغت القراءة حدّها (${fmtInt(MAX_PLAYS)} جولة) ولم تغطِّ فترة البطولة كاملة${read.oldestScannedMs ? ` — لم تصل إلى ما قبل ${dayStamp(read.oldestScannedMs)}` : ''}. هذا الترتيب محسوب على ما قُرئ وحده وقد ينقصه فائز حقيقي.`
-                        : `Read cap reached (${MAX_PLAYS}) and the tournament window is not fully covered${read.oldestScannedMs ? `; the read reached back only to ${dayStamp(read.oldestScannedMs)}` : ''}. A real contender may be missing.`}
+                        ? 'تعذّرت قراءة سجل الجولات، فلا نعرف كم جولة تخصّ هذه البطولة ولا ماذا ينقص هذا الترتيب. أعد تحميل الصفحة قبل الاعتماد عليه.'
+                        : 'The play log could not be read, so we do not know what this ranking is missing. Reload the page before relying on it.'}
+                    </span>
+                  </div>
+                )}
+                {capShort && (
+                  <div className="ga-warn">
+                    <Icon name="warning" size={15} />
+                    <span>
+                      {ar
+                        ? `قُرئت ${fmtInt(read.scanned)} جولة ثم توقف المسح عند سقف الأمان (${fmtInt(read.cap)} جولة) قبل أن يستوفي فترة البطولة${oldestRead ? ` — لم يتجاوز ${oldestRead}` : ''}. هذا الترتيب محسوب على ما قُرئ وحده وقد ينقصه فائز حقيقي. اجعل فترة البطولة أقصر: الفترة الأقصر تحوي جولات أقل فيكتمل مسحها.`
+                        : `Read ${read.scanned} plays, then stopped at the safety ceiling (${read.cap}) before finishing the tournament window${oldestRead ? `; it reached back only to ${oldestRead}` : ''}. This ranking covers what was read only. Shorten the window so the scan can finish.`}
                     </span>
                   </div>
                 )}
               </>
             ) : (
               <>
+                {/* BOTH causes belong in this title: either way the emptiness
+                    is unmeasured, so «لا نتائج بعد» would be a claim we cannot
+                    back. The sentence underneath is what must differ. */}
                 <p className="ga-empty-t">
-                  {truncated
+                  {unread
                     ? (ar ? 'لم تُقرأ جولات هذه الفترة' : 'This period was not read')
                     : (ar ? 'لا نتائج بعد' : 'No results yet')}
                 </p>
                 <p className="ga-hint">{computed.noteAr}</p>
                 <p className="ga-hint">
-                  {truncated
+                  {readFailed
                     ? (ar
-                      ? `بلغت القراءة حدّها (${fmtInt(MAX_PLAYS)} جولة) قبل أن تصل إلى فترة هذه البطولة${read.oldestScannedMs ? `، وأقدم جولة قرأناها بتاريخ ${dayStamp(read.oldestScannedMs)}` : ''}. الفراغ هنا يعني «لم يُقرأ»، لا «لم يشارك أحد» — لا تُنهِ البطولة على هذه الشاشة.`
-                      : `The read hit its cap (${MAX_PLAYS}) before reaching this tournament's window${read.oldestScannedMs ? `; the oldest play read is dated ${dayStamp(read.oldestScannedMs)}` : ''}. Empty means "not read", not "nobody entered".`)
-                    : (ar
-                      ? 'يظهر الترتيب هنا تلقائياً عند أول جولة تستوفي شروط البطولة. لن يُعرض ترتيب مُختلق لملء الفراغ.'
-                      : 'The table appears on the first qualifying play. No placeholder ranking is drawn.')}
+                      ? 'تعذّرت قراءة سجل الجولات من قاعدة البيانات، فلم يصلنا شيء عن هذه الفترة. الفراغ هنا يعني «لم يُقرأ»، لا «لم يشارك أحد» — أعد تحميل الصفحة، ولا تُنهِ البطولة الآن.'
+                      : 'The play log could not be read at all, so nothing about this window reached us. Empty means "not read", not "nobody entered". Reload before finalizing.')
+                    : capShort
+                      ? (ar
+                        ? `قُرئت ${fmtInt(read.scanned)} جولة ثم توقف المسح عند سقف الأمان (${fmtInt(read.cap)} جولة) قبل أن يستوفي فترة هذه البطولة${oldestRead ? `، وأقدم جولة قرأناها بتاريخ ${oldestRead}` : ''}. الفراغ هنا يعني «لم يُقرأ»، لا «لم يشارك أحد» — اجعل فترة البطولة أقصر ليكتمل المسح، ولا تُنهِها على هذه الشاشة.`
+                        : `Read ${read.scanned} plays, then stopped at the safety ceiling (${read.cap}) before finishing this tournament's window${oldestRead ? `; the oldest play read is dated ${oldestRead}` : ''}. Empty means "not read", not "nobody entered". Shorten the window so the scan can finish.`)
+                      : (ar
+                        ? 'يظهر الترتيب هنا تلقائياً عند أول جولة تستوفي شروط البطولة. لن يُعرض ترتيب مُختلق لملء الفراغ.'
+                        : 'The table appears on the first qualifying play. No placeholder ranking is drawn.')}
                 </p>
               </>
             )
@@ -457,10 +492,17 @@ function Detail({
                 // the prize is handed over, and the truncation that caused it
                 // leaves no trace on the frozen document. A manager may narrow
                 // the window and come back; nobody can un-announce a winner.
+                // The block is the same either way; the REASON and the way out
+                // are not. Telling a manager to narrow the window when the read
+                // simply failed is advice that can never clear the block.
                 <span className="ga-hint">
-                  {ar
-                    ? 'الإعلان موقوف: القراءة لم تشمل فترة البطولة كاملة، وتجميد ترتيب يعرف النظام أنه قد يكون ناقصاً ليس إعلاناً بل خطأ دائم. ضيّق فترة البطولة ثم أعد فتح هذه الصفحة.'
-                    : 'Announcing is blocked: the read did not cover the whole window, and freezing a standing known to be possibly incomplete is a permanent error. Narrow the window and reopen this page.'}
+                  {readFailed
+                    ? (ar
+                      ? 'الإعلان موقوف: تعذّرت قراءة سجل الجولات، وتجميد ترتيب لم يُقرأ من بيانات ليس إعلاناً بل خطأ دائم. أعد تحميل الصفحة، فإن تكرّر الخطأ راجع صلاحيات القراءة.'
+                      : 'Announcing is blocked: the play log could not be read, and freezing a standing built on no data is a permanent error. Reload the page; if it keeps failing, check read permissions.')
+                    : (ar
+                      ? 'الإعلان موقوف: جولات هذه الفترة أكثر من سقف المسح الآمن، فالقراءة لم تشملها كاملة، وتجميد ترتيب يعرف النظام أنه قد يكون ناقصاً ليس إعلاناً بل خطأ دائم. عدّل تاريخ البطولة إلى فترة أقصر — الفترة الأقصر تحوي جولات أقل فيكتمل مسحها ويُفتح الإعلان.'
+                      : 'Announcing is blocked: this window holds more plays than the safety ceiling scans, so the read did not cover it, and freezing a standing known to be possibly incomplete is a permanent error. Edit the tournament to a shorter window — fewer plays fit in it, the scan completes, and announcing unlocks.')}
                 </span>
               ) : !confirming ? (
                 <button type="button" className="ga-btn is-primary" disabled={working} onClick={() => setConfirming(true)}>
@@ -475,14 +517,18 @@ function Detail({
                         : 'The visible ranking will be frozen and the tournament closed.')
                       // Only claim "nobody qualified" when the read actually
                       // covered the window; otherwise the honest sentence is
-                      // that nothing was read.
-                      : truncated
+                      // that nothing was read — and WHY differs.
+                      : readFailed
                         ? (ar
-                          ? 'القراءة لم تغطِّ فترة البطولة، فلا يمكن القول إن أحداً لم يتأهّل. الإغلاق الآن سيسجّل «بلا فائز» على بيانات ناقصة.'
-                          : 'The read did not cover the window, so "nobody qualified" is unknown. Closing now would record no winner on incomplete data.')
-                        : (ar
-                          ? 'لا يوجد أي فائز مؤهّل. الإغلاق سيسجّل «بلا فائز» ولن يخترع أحداً.'
-                          : 'Nobody qualified — it will close with no winner.')}
+                          ? 'تعذّرت قراءة سجل الجولات، فلا يمكن القول إن أحداً لم يتأهّل. الإغلاق الآن سيسجّل «بلا فائز» دون أي بيانات.'
+                          : 'The play log could not be read, so "nobody qualified" is unknown. Closing now would record no winner on no data at all.')
+                        : capShort
+                          ? (ar
+                            ? 'القراءة لم تغطِّ فترة البطولة، فلا يمكن القول إن أحداً لم يتأهّل. الإغلاق الآن سيسجّل «بلا فائز» على بيانات ناقصة.'
+                            : 'The read did not cover the window, so "nobody qualified" is unknown. Closing now would record no winner on incomplete data.')
+                          : (ar
+                            ? 'لا يوجد أي فائز مؤهّل. الإغلاق سيسجّل «بلا فائز» ولن يخترع أحداً.'
+                            : 'Nobody qualified — it will close with no winner.')}
                   </span>
                   <button type="button" className="ga-btn is-primary" disabled={working} onClick={doFinalize}>
                     <Icon name="check" size={14} /> {ar ? 'تأكيد' : 'Confirm'}
