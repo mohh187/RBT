@@ -18,12 +18,13 @@ import { Suspense, lazy, useCallback, useEffect, useMemo, useRef, useState } fro
 import Icon from './Icon.jsx'
 import GamePromo, { GameThumb, gameName, gameHook, gameArt } from './games/GamePromo.jsx'
 import { gamesFor, gameById } from '../lib/games.js'
-import { startPlay, saveProgress, finishPlay, updatePlayerProfile } from '../lib/gameMemory.js'
+import { startPlay, saveProgress, finishPlay } from '../lib/gameMemory.js'
 import { registerCustomer } from '../lib/db.js'
 import { getLocalCustomer, setLocalCustomer } from '../lib/customer.js'
 import { submitScore, watchTopScores, currentMonth, myRank } from '../lib/leaderboard.js'
 import { deviceKey } from '../lib/device.js'
 import { watchRoom, applyMove, heartbeat, leaveRoom, HEARTBEAT_MS } from '../lib/gameRoom.js'
+import { clearSoloIntent } from '../lib/gameBots.js'
 import {
   watchLiveTournament, recordTournamentPlay, recordHappyHourPlay, rememberRoom,
 } from '../lib/socialPlay.js'
@@ -72,6 +73,9 @@ const TXT = {
     empty: 'لم يفعّل هذا المكان أي لعبة بعد.',
     emptyHint: 'اسأل الموظفين — يمكنهم تفعيل الألعاب من لوحة التحكم.',
     boardNote: 'لوحة الصدارة الشهرية تعرض أفضل نتيجة في جولة واحدة.',
+    anyGame: 'هذه البطولة تحتسب كل الألعاب — اختر أي لعبة من القائمة وتُحتسب جولتك فيها.',
+    notHere: 'هذه اللعبة لم تعد مفعّلة في هذا المكان. اختر واحدة من القائمة.',
+    waitHost: 'مقعدك محفوظ. تبدأ الجولة حين يبدأها المضيف.',
     rewardsH: 'جوائز هذا المكان',
     archetype: 'نمطك',
     won: 'ربحت جائزة',
@@ -114,6 +118,9 @@ const TXT = {
     empty: 'This venue has not enabled any game yet.',
     emptyHint: 'Staff can enable games from the dashboard.',
     boardNote: 'The monthly board shows the best single-round score.',
+    anyGame: 'Every game counts in this tournament — pick any game below and your round enters it.',
+    notHere: 'This game is no longer enabled at this venue. Pick one from the list.',
+    waitHost: 'Your seat is saved. The round begins when the host starts it.',
     rewardsH: 'Rewards at this venue',
     archetype: 'Your type',
     won: 'You won a reward',
@@ -286,17 +293,29 @@ export default function GamesCenter({
   const [runScore, setRunScore] = useState(0)
   const [board, setBoard] = useState(null)
   const [cat, setCat] = useState('all')
+  // One line explaining why the hub did NOT open a board when something asked it
+  // to. Two causes, both real and both previously silent: a social card asking
+  // for «any game» (a tournament whose gameId is 'any' — the default), and a
+  // link naming a game this venue has since disabled. Routing used to validate
+  // against the global game registry while rendering from the venue's enabled
+  // list, so either case fell through every branch to the bare shelf and the tap
+  // appeared to do nothing at all.
+  const [hint, setHint] = useState('')
   const [memResume, setMemResume] = useState({})
   const [reveal, setReveal] = useState(null)
 
   // The running tournament is watched here rather than inside the card, because
   // a finished round must be posted to it even when the card is scrolled away.
+  // watchLiveTournament calls back with a WRAPPER ({ tournament, upcoming, all,
+  // error }), not the tournament itself. Unwrap it here: passing the wrapper on
+  // to recordTournamentPlay made its `!tournament?.id` guard reject every single
+  // round, so no standing was ever written and the board stayed empty forever.
   const [tour, setTour] = useState(null)
   const tourRef = useRef(null)
   useEffect(() => { tourRef.current = tour }, [tour])
   useEffect(() => {
     if (!tenantId || !open) return undefined
-    return watchLiveTournament(tenantId, setTour)
+    return watchLiveTournament(tenantId, (live) => setTour(live?.tournament || null))
   }, [tenantId, open])
 
   // The last finished round, handed to the challenge card so it can offer
@@ -350,9 +369,25 @@ export default function GamesCenter({
   // game explicitly, since nothing was picked from the shelves in that flow.
   const enterRoom = useCallback(async (rid, gid) => {
     const id = gid || activeRef.current
+    // Entering a room is the OPPOSITE of a solo round. Clear the machine-seat
+    // hand-off first: a board decides bot mode on its first frame, and on the
+    // invite path that frame happens before the room snapshot arrives — so a
+    // stale solo intent could silently turn a real multiplayer game into a game
+    // against the computer.
+    setSoloBots(0)
+    soloRef.current = 0
+    clearSoloIntent()
     if (gid) { setActiveId(gid); activeRef.current = gid }
     const g = gameById(id)
-    if (!g) return
+    // Not enabled here means nothing will render. Say so, and RELEASE the seat:
+    // the join page already seated this guest, and silently falling through left
+    // them holding a seat against the other players with no board to show for it.
+    if (!g || !enabled.some((x) => x.id === id)) {
+      if (rid && tenantId) leaveRoom({ tid: tenantId, roomId: rid, playerId: deviceKey() })
+      setHint(t.notHere)
+      setView('browse')
+      return
+    }
     try {
       const mod = await g.load()
       reduceRef.current = typeof mod.reduce === 'function' ? mod.reduce : null
@@ -363,7 +398,7 @@ export default function GamesCenter({
     setRoomId(rid)
     setView('play')
     setRunKey((k) => k + 1)
-  }, [tenantId])
+  }, [tenantId, enabled, t])
 
   // Arriving from an invite link: the join page already seated this guest, so
   // go straight to the board instead of making them find the game again.
@@ -513,6 +548,12 @@ export default function GamesCenter({
         kind: g?.kind || 'arcade',
         deviceId,
         player: { name: store.name || '', phone: store.phone || '' },
+        // Marked HERE, on the durable record, not just held in soloRef. The
+        // guest-facing boards below already skip a computer round; without this
+        // mark the ADMIN standings and every per-game figure still counted it as
+        // real play, so a guest farming a fixed heuristic could outrank people.
+        solo: bots > 0,
+        soloBots: bots,
       }) || ''
     } catch (_) { playIdRef.current = '' }
     resumeRef.current = resumeFor(id)
@@ -527,6 +568,23 @@ export default function GamesCenter({
   // A party game never launches straight into a board: it opens the lobby so
   // the guest chooses between playing with the table and inviting a friend.
   const pickGame = useCallback((id) => {
+    // «any game»: the card had no single game to open (a tournament that counts
+    // every game). Falling through called startGame('') — which opened a play
+    // record with an empty gameId and flipped to a view that mounts nothing, so
+    // the tap did nothing at all. Answer it instead: the full shelf, back at the
+    // top, with one line saying every game on it enters.
+    if (!id) {
+      setHint(t.anyGame)
+      setCat('all')
+      setView('browse')
+      if (scrollRef.current) scrollRef.current.scrollTop = 0
+      return
+    }
+    // Validate against the list the RENDER uses, not just the global registry.
+    // A game the venue disabled resolves to nothing at render time, so routing
+    // to it produced a blank screen with no explanation.
+    if (!enabled.some((g) => g.id === id)) { setHint(t.notHere); setView('browse'); return }
+    setHint('')
     if (!store.registered) { setPendingId(id); setErr(''); setView('gate'); return }
     const g = gameById(id)
     if (g?.multiplayer) {
@@ -537,7 +595,7 @@ export default function GamesCenter({
       return
     }
     startGame(id)
-  }, [store.registered, startGame, rememberScroll])
+  }, [store.registered, startGame, rememberScroll, enabled, t])
 
   const submitGate = async (e) => {
     e?.preventDefault?.()
@@ -620,16 +678,11 @@ export default function GamesCenter({
       // round was ever written anywhere.
       const pid = playIdRef.current
       if (pid) {
+        // finishPlay OWNS the player rollup: it merges the profile itself from
+        // the full live record (which also carries the duration and the answers
+        // the knowledge breakdown needs). Merging a second time here counted one
+        // round as two plays and doubled its score in the staff roster.
         finishPlay(pid, { score: s, completed: prog.completed === true, result: prog.result || null })
-          .then(() => updatePlayerProfile(tenantId, deviceId, {
-            gameId: id,
-            gameAr: gameById(id)?.ar || '',
-            score: s,
-            stage: prog.stage || 0,
-            completed: prog.completed === true,
-            result: prog.result || null,
-            endedAt: Date.now(),
-          }))
           .catch(() => { /* the local store already has the run */ })
         playIdRef.current = ''
       }
@@ -787,6 +840,7 @@ export default function GamesCenter({
 
   const pendingGame = pendingId ? enabled.find((g) => g.id === pendingId) : null
   const inGame = view === 'play' && active
+  const roomPending = !!room && room.status === 'lobby'
 
   const renderCard = (g) => {
     const art = gameArt(g, brand)
@@ -852,7 +906,17 @@ export default function GamesCenter({
         ) : null}
       </header>
 
-      {inGame && Comp ? (
+      {/* A room that has not started yet must NOT mount a board. Fixed here once
+          rather than in five games: an invited guest arriving during the lobby
+          got a live-looking board built from an empty room state — Dominoes
+          fabricated a random hand and presented it as theirs, Chess offered
+          resign and draw on a game nobody had begun. Waiting is the truth, and
+          the room subscription flips this the moment the host starts. */}
+      {inGame && roomPending ? (
+        <div className="gh-stage">
+          <div className="gh-loading">{t.waitHost}</div>
+        </div>
+      ) : inGame && Comp ? (
         <div className="gh-stage">
           <Suspense fallback={<div className="gh-loading">{t.loading}</div>}>
             <Comp
@@ -942,6 +1006,9 @@ export default function GamesCenter({
       ) : (
         <div className="gh-body gh-fade" ref={scrollRef}>
           {warn && <p className="gh-warn">{warn}</p>}
+          {hint ? (
+            <p className="gh-hint"><Icon name="award" size={14} />{hint}</p>
+          ) : null}
 
           {store.registered ? (
             <section className="gh-player">

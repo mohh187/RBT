@@ -35,6 +35,7 @@ const MAX_Q = 300                // per-answer question text ceiling
 const MAX_CHOICE = 200
 const MAX_NAME = 40
 const MAX_TAGS = 12
+const MAX_SOLO_BOTS = 8          // seats a party game can hand to the machine
 
 const KINDS = ['arcade', 'quiz', 'puzzle', 'insight']
 
@@ -132,18 +133,32 @@ export async function flushAll() {
 
 // Begin a play. Returns the playId synchronously (games must not await here).
 // '' means "not recorded" — pass it around freely, every other call ignores it.
-export function startPlay({ tid, gameId, gameAr = '', kind = 'arcade', deviceId, player = {} } = {}) {
+//
+// `solo` / `soloBots` mark a round played against the MACHINE seats. It is
+// recorded here, at the source, and never re-derived downstream: beating a fixed
+// heuristic is not the same achievement as beating three people, so every venue
+// figure that claims to measure competitive play has to be able to tell them
+// apart. See `isSoloPlay` below — that predicate is the only reader.
+export function startPlay({
+  tid, gameId, gameAr = '', kind = 'arcade', deviceId, player = {},
+  solo = false, soloBots = 0,
+} = {}) {
   try {
     if (!tid || !gameId || !deviceId) return ''
     const startedAt = nowMs()
     const playId = `${safeId(deviceId)}_${safeId(gameId)}_${startedAt}`
     const phone = player && player.phone ? normalizePhone(player.phone) : ''
+    const bots = intIn(soloBots, 0, MAX_SOLO_BOTS)
     const rec = {
       playId,
       gameId: String(gameId).slice(0, 64),
       gameAr: clean(gameAr, 60),
       kind: KINDS.includes(kind) ? kind : 'arcade',
       deviceId: String(deviceId).slice(0, 64),
+      // Written on EVERY play, true or false, so a missing flag means "recorded
+      // before this existed" and never "we know it was human play".
+      solo: solo === true || bots > 0,
+      soloBots: bots,
       customerPhone: phone || null,
       customerName: clean(player && player.name, MAX_NAME) || null,
       startedAt,
@@ -166,6 +181,29 @@ export function startPlay({ tid, gameId, gameAr = '', kind = 'arcade', deviceId,
     schedule()
     return playId
   } catch (_) { return '' }
+}
+
+// THE single reader of the solo mark. Every screen that ranks or averages play
+// goes through this one function, so the guest-facing boards, the tournament
+// standings and the per-game figures cannot drift apart about what "a round
+// against the computer" is.
+//
+// A row written before the flag existed carries neither field and therefore
+// reads as NOT solo. That is a real limit of the stored data, not a claim, and
+// the admin screens say so beside the figures rather than quietly absorbing it.
+export function isSoloPlay(play) {
+  if (!play || typeof play !== 'object') return false
+  return play.solo === true || num(play.soloBots) > 0
+}
+
+// Split a list of plays into competitive rounds and machine rounds, in one pass.
+// Both halves are returned so a caller can never show one without the other.
+export function splitSoloPlays(plays = []) {
+  const list = Array.isArray(plays) ? plays : []
+  const competitive = []
+  const soloList = []
+  for (const p of list) (isSoloPlay(p) ? soloList : competitive).push(p)
+  return { competitive, solo: soloList, soloCount: soloList.length, total: list.length }
 }
 
 // One answer. Extra field beyond the fixed schema: `cat` (category) is kept when

@@ -63,7 +63,7 @@ export function orderNumber(val) {
   return `#${val}`
 }
 
-// Staff-ID prefix from the venue name/slug, e.g. "Neema Cafe" -> "NEE".
+// Staff-ID prefix from the venue name/slug, e.g. "Rasif Coffee" -> "RAS".
 export function staffIdPrefix(tenant) {
   const src = tenant?.slug || tenant?.nameEn || tenant?.name || 'EMP'
   const letters = (String(src).match(/[a-zA-Z]/g) || []).join('')

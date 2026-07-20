@@ -7,6 +7,7 @@
 import Icon from '../Icon.jsx'
 import {
   fmtInt, fmtPct, durText, dateTime, kindLabel, kindOf, recentPlaysFor, THIN_PLAYS,
+  soloNote, opponentKind, opponentLabel,
 } from './engine.jsx'
 
 const num = (v, f = 0) => {
@@ -27,6 +28,7 @@ function Figure({ label, value, sample, thin }) {
 
 export default function GameSheet({
   ar = true, game, stat, plays = [], enabled, canEdit, onToggle, onClose, periodLabel = '',
+  covered = true, oldestRead = '',
 }) {
   if (!game) return null
   const s = stat || {}
@@ -102,10 +104,28 @@ export default function GameSheet({
           <Icon name="chartBar" size={15} /> {ar ? 'أرقام هذه اللعبة' : 'Measured figures'}
           {periodLabel ? <span className="ga-of ga-num">{periodLabel}</span> : null}
         </div>
+        {/* The read that produced these figures may not have reached the whole
+            window. Said before the numbers, not after them. */}
+        {!covered && (
+          <p className="ga-hint">
+            {ar
+              ? `تنبيه: قراءة الجولات لم تغطِّ هذه الفترة كاملة${oldestRead ? ` — لم تصل إلى ما قبل ${oldestRead}` : ''}. الأرقام أدناه حدّ أدنى، وأي صفر هنا يعني «لم يُقرأ» لا «لم يحدث».`
+              : `Note: the play read did not cover this whole period${oldestRead ? `; it reached back only to ${oldestRead}` : ''}. Figures below are a floor, and a zero means "not read", not "did not happen".`}
+          </p>
+        )}
+        {/* Which rounds these figures are OF, said before them. A round against
+            the machine seats is excluded from every number in this card. */}
+        {s.plays > 0 && s.soloPlays > 0 && (
+          <p className="ga-hint">{soloNote(s.soloPlays, ar)}</p>
+        )}
         {s.plays ? (
           <>
             <div className="ga-figs">
-              <Figure label={ar ? 'جولات' : 'Plays'} value={fmtInt(s.plays)} />
+              <Figure
+                label={ar ? (s.soloPlays ? 'جولات أمام أشخاص' : 'جولات') : 'Plays'}
+                value={fmtInt(s.plays)}
+                sample={s.soloPlays ? `${ar ? 'وبجانبها' : 'plus'} ${fmtInt(s.soloPlays)} ${ar ? 'ضد الكمبيوتر' : 'vs computer'}` : ''}
+              />
               <Figure label={ar ? 'لاعبون مختلفون' : 'Unique players'} value={fmtInt(s.players)} />
               <Figure
                 label={ar ? 'متوسط النقاط' : 'Avg score'}
@@ -134,11 +154,24 @@ export default function GameSheet({
               </p>
             )}
           </>
-        ) : (
+        ) : s.soloPlays > 0 ? (
+          // Played, but never against a person. «لا جولات» here would erase real
+          // activity; a figure computed off the machine rounds would describe the
+          // bot. So the count is stated and no average is offered at all.
           <p className="ga-hint">
             {ar
-              ? 'لا جولات مسجّلة لهذه اللعبة في هذه الفترة. عند أول جولة يظهر هنا عدد الجولات واللاعبين ومتوسط النقاط والمدة ونسبة الإكمال.'
-              : 'No plays recorded in this period.'}
+              ? `كل جولات هذه اللعبة في هذه الفترة كانت ضد الكمبيوتر (${fmtInt(s.soloPlays)} جولة)، ولا جولة واحدة أمام أشخاص. لا متوسط ولا نسبة إكمال تُعرض هنا: الرقم كان سيصف الخصم الآلي لا ضيوف المكان.`
+              : `Every round of this game in this period was against the computer (${fmtInt(s.soloPlays)}), none against people. No average is shown — it would describe the bot, not the guests.`}
+          </p>
+        ) : (
+          <p className="ga-hint">
+            {covered
+              ? (ar
+                ? 'لا جولات مسجّلة لهذه اللعبة في هذه الفترة. عند أول جولة يظهر هنا عدد الجولات واللاعبين ومتوسط النقاط والمدة ونسبة الإكمال.'
+                : 'No plays recorded in this period.')
+              : (ar
+                ? 'لم تُقرأ جولات هذه اللعبة في هذه الفترة، ولا يمكن القول إنها لم تُلعب. ضيّق الفترة أو اخترها أحدث ثم أعد النظر.'
+                : 'This game\'s plays for this period were not read; that is not the same as no plays. Narrow the period and look again.')}
           </p>
         )}
       </div>
@@ -153,6 +186,7 @@ export default function GameSheet({
                 <tr>
                   <th>{ar ? 'متى' : 'When'}</th>
                   <th>{ar ? 'اللاعب' : 'Player'}</th>
+                  <th>{ar ? 'الخصم' : 'Opponent'}</th>
                   <th>{ar ? 'النقاط' : 'Score'}</th>
                   <th>{ar ? 'المدة' : 'Duration'}</th>
                   <th>{ar ? 'أُكملت' : 'Completed'}</th>
@@ -163,6 +197,11 @@ export default function GameSheet({
                   <tr key={p.id || p.playId}>
                     <td className="ga-num">{dateTime(p.startedAt)}</td>
                     <td>{p.customerName || (ar ? 'ضيف غير معروف' : 'Anonymous')}</td>
+                    <td>
+                      <span className={opponentKind(p) === 'people' ? 'ga-of' : 'ga-thin'}>
+                        {opponentLabel(opponentKind(p), ar)}
+                      </span>
+                    </td>
                     <td className="ga-num">{fmtInt(p.score)}</td>
                     <td className="ga-num">{num(p.durationMs) > 0 ? durText(num(p.durationMs) / 1000) : '—'}</td>
                     <td>
@@ -176,7 +215,11 @@ export default function GameSheet({
             </table>
           </div>
         ) : (
-          <p className="ga-hint">{ar ? 'لا جولات في هذه الفترة.' : 'No plays in this period.'}</p>
+          <p className="ga-hint">
+            {covered
+              ? (ar ? 'لا جولات في هذه الفترة.' : 'No plays in this period.')
+              : (ar ? 'لا جولات مقروءة لهذه الفترة — القراءة لم تصل إليها.' : 'No plays read for this period — the read did not reach it.')}
+          </p>
         )}
       </div>
     </section>

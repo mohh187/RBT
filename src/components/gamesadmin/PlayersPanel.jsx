@@ -14,7 +14,9 @@ import Icon from '../Icon.jsx'
 import { playersFrom, playerLabel, maskPhone, shortDevice } from '../play/engine.jsx'
 import { tagLabel, tagRule } from '../../lib/gameMemory.js'
 import { gameById } from '../../lib/games.js'
-import { fmtInt, fmtPct, dateTime, dayStamp, durText } from './engine.jsx'
+import {
+  fmtInt, fmtPct, dateTime, dayStamp, durText, isSoloPlay, opponentKind, opponentLabel,
+} from './engine.jsx'
 
 const num = (v, f = 0) => {
   const n = Number(v)
@@ -35,7 +37,7 @@ function topGames(row, max = 3) {
     .slice(0, max)
 }
 
-function PlayerDetail({ ar, row, onBack }) {
+function PlayerDetail({ ar, row, onBack, soloPlays = 0 }) {
   const games = Object.entries(row.byGame || {})
     .map(([gameId, g]) => ({ gameId, ...g }))
     .sort((a, b) => num(b.plays) - num(a.plays))
@@ -88,6 +90,23 @@ function PlayerDetail({ ar, row, onBack }) {
             <strong className="ga-fig-v ga-num">{fmtPct(row.completionRate)}</strong>
             <span className="ga-fig-s ga-num">{fmtInt(row.completedPlays)} / {fmtInt(row.totalPlays)}</span>
           </div>
+          {/* Only for a player whose figures came from the window's plays — for
+              an out-of-window row the totals come from the lifetime rollup, which
+              carries no solo split, so subtracting a window count from it would
+              produce a number that means nothing. */}
+          {soloPlays > 0 && !row.outsideWindow && (
+            // This player's own totals DO include computer rounds on purpose —
+            // they are rounds he really played. What must not happen is a
+            // manager reading them as competitive play, so the split is shown
+            // next to them rather than explained in a footnote.
+            <div className="ga-fig">
+              <span className="ga-fig-l">{ar ? 'منها ضد الكمبيوتر' : 'Of which vs computer'}</span>
+              <strong className="ga-fig-v ga-num">{fmtInt(soloPlays)}</strong>
+              <span className="ga-fig-s ga-num">
+                {ar ? 'أمام أشخاص' : 'vs people'} {fmtInt(Math.max(0, num(row.totalPlays) - soloPlays))}
+              </span>
+            </div>
+          )}
           <div className="ga-fig">
             <span className="ga-fig-l">{ar ? 'ألعاب جرّبها' : 'Games tried'}</span>
             <strong className="ga-fig-v ga-num">{fmtInt(row.gamesTried)}</strong>
@@ -162,6 +181,7 @@ function PlayerDetail({ ar, row, onBack }) {
                 <tr>
                   <th>{ar ? 'متى' : 'When'}</th>
                   <th>{ar ? 'اللعبة' : 'Game'}</th>
+                  <th>{ar ? 'الخصم' : 'Opponent'}</th>
                   <th>{ar ? 'النقاط' : 'Score'}</th>
                   <th>{ar ? 'المدة' : 'Duration'}</th>
                   <th>{ar ? 'أُكملت' : 'Done'}</th>
@@ -172,6 +192,11 @@ function PlayerDetail({ ar, row, onBack }) {
                   <tr key={p.id || p.playId}>
                     <td className="ga-num">{dateTime(p.startedAt)}</td>
                     <td>{p.gameAr || gameName(p.gameId, ar)}</td>
+                    <td>
+                      <span className={opponentKind(p) === 'people' ? 'ga-of' : 'ga-thin'}>
+                        {opponentLabel(opponentKind(p), ar)}
+                      </span>
+                    </td>
                     <td className="ga-num">{fmtInt(p.score)}</td>
                     <td className="ga-num">{num(p.durationMs) > 0 ? durText(num(p.durationMs) / 1000) : '—'}</td>
                     <td>{p.completed === true ? <span className="ga-ok"><Icon name="ok" size={14} /></span> : <span className="ga-of">{ar ? 'لا' : 'No'}</span>}</td>
@@ -208,6 +233,22 @@ export default function PlayersPanel({
 
   const players = useMemo(() => playersFrom(plays, profiles), [plays, profiles])
 
+  // Counted here rather than inside `playersFrom`, which is shared with the deep
+  // analysis page and is not this fix's to reshape. Same predicate as everywhere
+  // else, so the roster cannot disagree with the catalogue about what solo is.
+  const soloByDevice = useMemo(() => {
+    const m = new Map()
+    for (const p of plays) {
+      if (!p || !p.deviceId || !isSoloPlay(p)) continue
+      m.set(p.deviceId, (m.get(p.deviceId) || 0) + 1)
+    }
+    return m
+  }, [plays])
+  const soloTotal = useMemo(
+    () => [...soloByDevice.values()].reduce((n, v) => n + v, 0),
+    [soloByDevice],
+  )
+
   const filtered = useMemo(() => {
     const needle = q.trim().toLowerCase()
     if (!needle) return players
@@ -219,7 +260,16 @@ export default function PlayersPanel({
   }, [players, q])
 
   const open = openId ? players.find((p) => p.deviceId === openId) : null
-  if (open) return <PlayerDetail ar={ar} row={open} onBack={() => setOpenId('')} />
+  if (open) {
+    return (
+      <PlayerDetail
+        ar={ar}
+        row={open}
+        soloPlays={soloByDevice.get(open.deviceId) || 0}
+        onBack={() => setOpenId('')}
+      />
+    )
+  }
 
   const identified = players.filter((p) => p.customerPhone).length
 
@@ -237,6 +287,16 @@ export default function PlayersPanel({
             : `${identified} of ${players.length} left a phone; only those are reachable.`}
           {periodLabel ? <span className="ga-num"> {' · '}{periodLabel}</span> : null}
         </p>
+        {soloTotal > 0 && (
+          // «جولات» in this table is every round the guest played, computer
+          // rounds included. That is the right total for a roster — but it is NOT
+          // a competitive figure, and it must not be read as one.
+          <p className="ga-hint">
+            {ar
+              ? `عمود «جولات» هنا يشمل الجولات ضد الكمبيوتر — ${fmtInt(soloTotal)} منها في هذه الفترة. للترتيب التنافسي استخدم البطولات، فهي تستبعدها.`
+              : `The plays column here includes computer rounds (${fmtInt(soloTotal)} this period). Tournament standings exclude them.`}
+          </p>
+        )}
         <label className="ga-search">
           <Icon name="search" size={15} />
           <input

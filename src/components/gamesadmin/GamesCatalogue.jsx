@@ -21,7 +21,7 @@ import { GAMES, GAME_TAGS } from '../../lib/games.js'
 import GameSheet from './GameSheet.jsx'
 import {
   GAME_KINDS, kindOf, kindLabel, splitCatalogue, enabledIds,
-  statsByGame, emptyStat, fmtInt, fmtPct, durText, THIN_PLAYS,
+  statsByGame, emptyStat, fmtInt, fmtPct, durText, THIN_PLAYS, soloNote,
 } from './engine.jsx'
 
 // One row of the list.
@@ -33,7 +33,7 @@ import {
 // you get a row that "sticks" mid-drag. The plain view has no drag hook at all.
 function GameRowView({
   game, stat, ar, enabled, canEdit, busy, onToggle, onOpen,
-  nodeRef, style, handleProps,
+  nodeRef, style, handleProps, covered = true,
 }) {
   const s = stat || emptyStat(game.id)
 
@@ -65,15 +65,42 @@ function GameRowView({
           {s.plays
             ? (
               <>
-                <span>{fmtInt(s.plays)} {ar ? 'جولة' : 'plays'}</span>
+                {/* Named «أمام أشخاص» only when there are computer rounds to
+                    distinguish it from, so the common case stays quiet. */}
+                <span>
+                  {covered ? '' : (ar ? 'على الأقل ' : 'at least ')}
+                  {fmtInt(s.plays)} {ar ? (s.soloPlays ? 'جولة أمام أشخاص' : 'جولة') : 'plays'}
+                </span>
                 <span>{fmtInt(s.players)} {ar ? 'لاعب' : 'players'}</span>
                 <span>{ar ? 'متوسط' : 'avg'} {s.avgScore == null ? '—' : fmtInt(s.avgScore)}</span>
                 <span>{durText(s.avgDurationSec)}</span>
                 <span>{fmtPct(s.completionRate)} {ar ? 'إكمال' : 'done'}</span>
+                {s.soloPlays ? (
+                  <span className="ga-of">
+                    {ar ? `+ ${fmtInt(s.soloPlays)} ضد الكمبيوتر` : `+ ${fmtInt(s.soloPlays)} vs computer`}
+                  </span>
+                ) : null}
                 {s.thin && <span className="ga-thin">{ar ? 'عيّنة صغيرة' : 'thin'}</span>}
+                {!covered && <span className="ga-thin">{ar ? 'قراءة ناقصة' : 'partial read'}</span>}
               </>
             )
-            : <span className="ga-of">{ar ? 'لا جولات في هذه الفترة' : 'No plays this period'}</span>}
+            // «لا جولات» is a MEASUREMENT and may only be printed when the read
+            // provably covered the window. Otherwise the truthful statement is
+            // that nothing was read — the opposite decision for a manager
+            // deciding whether to retire this game.
+            : s.soloPlays
+              // NOT "no plays": the game WAS played, just never against a person,
+              // and printing "none" here would erase real activity.
+              ? (
+                <span className="ga-of">
+                  {ar
+                    ? `${fmtInt(s.soloPlays)} جولة ضد الكمبيوتر فقط — لا جولة أمام أشخاص`
+                    : `${fmtInt(s.soloPlays)} computer rounds only — none against people`}
+                </span>
+              )
+              : covered
+                ? <span className="ga-of">{ar ? 'لا جولات في هذه الفترة' : 'No plays this period'}</span>
+                : <span className="ga-thin">{ar ? 'لم تُقرأ هذه الفترة' : 'This period was not read'}</span>}
         </span>
       </button>
 
@@ -113,13 +140,19 @@ function SortableGameRow(props) {
 
 export default function GamesCatalogue({
   ar = true, tenant, plays = [], canEdit = false, busy = false,
-  onSaveGames, periodLabel = '',
+  onSaveGames, periodLabel = '', covered = true, oldestRead = '',
 }) {
   const [kind, setKind] = useState('all')
   const [tag, setTag] = useState('all')
   const [openId, setOpenId] = useState('')
 
   const stats = useMemo(() => statsByGame(plays), [plays])
+  // Stated once at the bottom of the page rather than only per row, so a manager
+  // who never opens a row still learns that the figures above are human play.
+  const soloTotal = useMemo(
+    () => [...stats.values()].reduce((n, s) => n + (s.soloPlays || 0), 0),
+    [stats],
+  )
   const { enabled, disabled, usingDefaults } = useMemo(() => splitCatalogue(tenant), [tenant])
   const onSet = useMemo(() => new Set(enabled.map((g) => g.id)), [enabled])
 
@@ -185,6 +218,8 @@ export default function GamesCatalogue({
         enabled={onSet.has(openGame.id)}
         canEdit={canEdit}
         periodLabel={periodLabel}
+        covered={covered}
+        oldestRead={oldestRead}
         onToggle={(id) => toggle(id)}
         onClose={() => setOpenId('')}
       />
@@ -291,7 +326,7 @@ export default function GamesCatalogue({
           shownEnabled.map((g) => (
             <GameRowView
               key={g.id} game={g} ar={ar} enabled canEdit={canEdit} busy={busy}
-              stat={stats.get(g.id)}
+              stat={stats.get(g.id)} covered={covered}
               onToggle={toggle} onOpen={(x) => setOpenId(x.id)}
             />
           ))
@@ -301,7 +336,7 @@ export default function GamesCatalogue({
               {shownEnabled.map((g) => (
                 <SortableGameRow
                   key={g.id} game={g} ar={ar} enabled canEdit={canEdit} busy={busy}
-                  stat={stats.get(g.id)}
+                  stat={stats.get(g.id)} covered={covered}
                   onToggle={toggle} onOpen={(x) => setOpenId(x.id)}
                 />
               ))}
@@ -326,7 +361,7 @@ export default function GamesCatalogue({
         ) : shownDisabled.map((g) => (
           <GameRowView
             key={g.id} game={g} ar={ar} enabled={false} canEdit={canEdit} busy={busy}
-            stat={stats.get(g.id)}
+            stat={stats.get(g.id)} covered={covered}
             onToggle={toggle} onOpen={(x) => setOpenId(x.id)}
           />
         ))}
@@ -340,10 +375,18 @@ export default function GamesCatalogue({
       </div>
 
       <p className="ga-hint">
-        {ar
-          ? `الأرقام في هذه الصفحة محسوبة من جولات فعلية مسجّلة${periodLabel ? ` خلال ${periodLabel}` : ''}. أي لعبة بأقل من ${fmtInt(THIN_PLAYS)} جولة تُوسم «عيّنة صغيرة» ولا تُبنى عليها قرارات.`
-          : `Every figure is counted from recorded plays. Under ${THIN_PLAYS} plays is labelled thin.`}
+        {covered
+          ? (ar
+            ? `الأرقام في هذه الصفحة محسوبة من جولات فعلية مسجّلة${periodLabel ? ` خلال ${periodLabel}` : ''}. أي لعبة بأقل من ${fmtInt(THIN_PLAYS)} جولة تُوسم «عيّنة صغيرة» ولا تُبنى عليها قرارات.`
+            : `Every figure is counted from recorded plays. Under ${THIN_PLAYS} plays is labelled thin.`)
+          : (ar
+            ? `قراءة الجولات لم تغطِّ ${periodLabel || 'هذه الفترة'} كاملة${oldestRead ? ` — لم تصل إلى ما قبل ${oldestRead}` : ''}، فما تراه هنا حدّ أدنى وليس حصيلة. لا تُخفِ لعبة اعتماداً على هذه الشاشة قبل تضييق الفترة.`
+            : `The play read did not cover ${periodLabel || 'this period'}${oldestRead ? `; it reached back only to ${oldestRead}` : ''}. Figures are a floor, not a total — do not retire a game on this screen until the period is narrowed.`)}
       </p>
+
+      {soloTotal > 0 && (
+        <p className="ga-hint">{soloNote(soloTotal, ar)}</p>
+      )}
     </div>
   )
 }

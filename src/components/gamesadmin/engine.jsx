@@ -11,6 +11,10 @@
 import { collection, getDocs, query, where, orderBy, limit } from 'firebase/firestore'
 import { db, firebaseReady } from '../../lib/firebase.js'
 import { GAMES } from '../../lib/games.js'
+import { isSoloPlay } from '../../lib/gameMemory.js'
+
+// Re-exported so a panel never re-invents "was this against the computer".
+export { isSoloPlay }
 
 // --------------------------------------------------------------------------
 // read bounds
@@ -141,6 +145,18 @@ export function splitCatalogue(tenant) {
 //
 // Averages exclude plays that never ended (durationMs 0): an abandoned tab has
 // no duration, and folding it in as zero would drag every average toward a lie.
+//
+// ROUNDS AGAINST THE COMPUTER ARE NOT COMPETITIVE PLAY. A party game can be
+// played against machine seats, and the machine is a fixed heuristic: its scores,
+// its durations and its completion rate say something about the bot, not about
+// this venue's guests. So every measured figure below — avgScore, best,
+// completion, duration, unique players, and `plays` itself — counts ONLY rounds
+// played against people, and the machine rounds are carried alongside as their
+// own visible number (`soloPlays` / `soloPlayers` / `allPlays`).
+//
+// The two halves are always returned together so a screen physically cannot show
+// one without the other, and `allPlays` exists so "nothing was played" is never
+// printed over a period that only had computer rounds.
 // --------------------------------------------------------------------------
 export function statsByGame(plays = []) {
   const map = new Map()
@@ -149,6 +165,16 @@ export function statsByGame(plays = []) {
     const g = map.get(id) || {
       gameId: id, plays: 0, completed: 0, scoreSum: 0, scoreN: 0,
       best: 0, durSum: 0, durN: 0, devices: new Set(), lastAt: 0,
+      soloPlays: 0, soloDevices: new Set(),
+    }
+    // `lastAt` deliberately spans BOTH: it answers "when was this game last
+    // touched", which a computer round genuinely answers.
+    g.lastAt = Math.max(g.lastAt, num(p.endedAt) || num(p.startedAt))
+    if (isSoloPlay(p)) {
+      g.soloPlays += 1
+      if (p.deviceId) g.soloDevices.add(p.deviceId)
+      map.set(id, g)
+      continue
     }
     g.plays += 1
     if (p.completed === true) g.completed += 1
@@ -158,7 +184,6 @@ export function statsByGame(plays = []) {
     g.best = Math.max(g.best, num(p.score))
     if (num(p.durationMs) > 0) { g.durSum += num(p.durationMs); g.durN += 1 }
     if (p.deviceId) g.devices.add(p.deviceId)
-    g.lastAt = Math.max(g.lastAt, num(p.endedAt) || num(p.startedAt))
     map.set(id, g)
   }
   const out = new Map()
@@ -176,6 +201,9 @@ export function statsByGame(plays = []) {
       avgDurationN: g.durN,
       lastAt: g.lastAt,
       thin: g.plays < THIN_PLAYS,
+      soloPlays: g.soloPlays,
+      soloPlayers: g.soloDevices.size,
+      allPlays: g.plays + g.soloPlays,
     })
   }
   return out
@@ -187,7 +215,32 @@ export const emptyStat = (gameId) => ({
   gameId, plays: 0, players: 0, completed: 0, completionRate: null,
   avgScore: null, avgScoreN: 0, best: 0, avgDurationSec: null, avgDurationN: 0,
   lastAt: 0, thin: true, noData: true,
+  soloPlays: 0, soloPlayers: 0, allPlays: 0,
 })
+
+// Who a single recorded round was played against — THREE states, not two.
+// A row written before the solo flag existed carries no answer, and printing
+// «أشخاص» over it would be inventing evidence to fill a column. It reads
+// «غير مسجّل» instead, which is what the document actually says.
+export function opponentKind(play) {
+  if (!play || typeof play !== 'object') return 'unknown'
+  if (isSoloPlay(play)) return 'computer'
+  if (typeof play.solo === 'boolean' || play.soloBots != null) return 'people'
+  return 'unknown'
+}
+
+export const opponentLabel = (kind, ar = true) => {
+  if (kind === 'computer') return ar ? 'الكمبيوتر' : 'Computer'
+  if (kind === 'people') return ar ? 'أشخاص' : 'People'
+  return ar ? 'غير مسجّل' : 'Not recorded'
+}
+
+// The one sentence that explains a solo count, used verbatim wherever one shows.
+export const soloNote = (n, ar = true) => (
+  ar
+    ? `${fmtInt(n)} من جولات هذه الفترة كانت ضد الكمبيوتر ولا تدخل في الأرقام أعلاه — الخصم آلة بنمط ثابت، فمتوسّطه ونسبة إكماله لا تصف ضيوف هذا المكان.`
+    : `${n} rounds this period were against the computer and are excluded above.`
+)
 
 export function recentPlaysFor(plays = [], gameId, max = 12) {
   return plays
@@ -201,22 +254,71 @@ export function recentPlaysFor(plays = [], gameId, max = 12) {
 // --------------------------------------------------------------------------
 const rowsOf = (snap) => snap.docs.map((d) => ({ id: d.id, ...d.data() }))
 
-export async function fetchPlays(tid, fromMs, toMs, cap = MAX_PLAYS) {
-  if (!firebaseReady || !tid) return []
-  const inWindow = (p) => {
+// A play read is NEWEST-FIRST and capped, which means it truncates at the OLD
+// end. That has a consequence the caller must never be allowed to forget: ask
+// for a window that sits further back than the cap reaches, and the filter
+// returns zero rows — indistinguishable, in a bare array, from "nothing was
+// played". Worse, a cap warning computed off the FILTERED length would also be
+// zero, so the one signal that could correct the reading is silenced by the
+// same truncation it is meant to report.
+//
+// So this returns a REPORT, not an array:
+//   rows            plays inside [fromMs, toMs]
+//   scanned         documents actually read, before the window filter
+//   capped          the read hit its limit, so older documents exist unread
+//   oldestScannedMs the furthest back the read reached (null if unknowable)
+//   covers          TRUE only when every play in the window was provably seen
+//   ok              the read itself succeeded
+// `covers === false` means the figures are a floor, and zero means "not read",
+// never "did not happen". The UI must say so rather than print a clean zero.
+export function playsReadReport(raw, fromMs, toMs, cap, mode, ok = true) {
+  const scanned = raw.length
+  const capped = ok && scanned >= cap
+  let oldestScannedMs = null
+  let newestScannedMs = null
+  for (const p of raw) {
     const t = num(p.startedAt)
-    return t >= fromMs && t <= toMs
+    if (!(t > 0)) continue
+    if (oldestScannedMs == null || t < oldestScannedMs) oldestScannedMs = t
+    if (newestScannedMs == null || t > newestScannedMs) newestScannedMs = t
   }
+  // A sorted read that still reached back past the start of the window saw the
+  // whole window, cap or no cap. An unordered read proves nothing once capped.
+  const reachedBack = mode !== 'unordered'
+    && oldestScannedMs != null && oldestScannedMs <= fromMs
+  return {
+    rows: raw.filter((p) => {
+      const t = num(p.startedAt)
+      return t >= fromMs && t <= toMs
+    }),
+    scanned,
+    cap,
+    capped,
+    mode,
+    oldestScannedMs,
+    newestScannedMs,
+    covers: ok && (!capped || reachedBack),
+    ok,
+  }
+}
+
+export async function fetchPlays(tid, fromMs, toMs, cap = MAX_PLAYS) {
+  if (!firebaseReady || !tid) return playsReadReport([], fromMs, toMs, cap, 'none', false)
   const ref = collection(db, 'tenants', tid, 'gamePlays')
   try {
-    return rowsOf(await getDocs(query(ref, where('startedAt', '>=', fromMs), orderBy('startedAt', 'desc'), limit(cap)))).filter(inWindow)
+    const raw = rowsOf(await getDocs(query(ref, where('startedAt', '>=', fromMs), orderBy('startedAt', 'desc'), limit(cap))))
+    return playsReadReport(raw, fromMs, toMs, cap, 'range')
   } catch (_) { /* no index for the range — try a plain sort */ }
   try {
-    return rowsOf(await getDocs(query(ref, orderBy('startedAt', 'desc'), limit(cap)))).filter(inWindow)
+    const raw = rowsOf(await getDocs(query(ref, orderBy('startedAt', 'desc'), limit(cap))))
+    return playsReadReport(raw, fromMs, toMs, cap, 'ordered')
   } catch (_) { /* no sort allowed — take whatever is readable */ }
   try {
-    return rowsOf(await getDocs(query(ref, limit(cap)))).filter(inWindow)
-  } catch (_) { return [] }
+    const raw = rowsOf(await getDocs(query(ref, limit(cap))))
+    return playsReadReport(raw, fromMs, toMs, cap, 'unordered')
+  } catch (_) {
+    return playsReadReport([], fromMs, toMs, cap, 'failed', false)
+  }
 }
 
 export async function fetchProfiles(tid, cap = MAX_PROFILES) {

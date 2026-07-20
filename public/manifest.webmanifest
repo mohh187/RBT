@@ -1,6 +1,6 @@
 {
-  "name": "MenuLink",
-  "short_name": "MenuLink",
+  "name": "RBT360",
+  "short_name": "RBT360",
   "description": "منيو رقمي وطلب عبر QR ونظام إدارة متكامل للمقاهي والمطاعم",
   "start_url": "/",
   "display": "standalone",

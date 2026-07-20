@@ -149,19 +149,18 @@ export default function MenuView({ tenant, tenantId, items, categories, offers =
   // ON so a fresh venue demos fully, and each closes back to the menu).
   const [fxOpen, setFxOpen] = useState('') // '' | voice | photo | read | world | compare | table | games
   const [storyItem, setStoryItem] = useState(null)
-  // An invited guest lands on the menu carrying the room to open. Read once on
-  // mount and strip the params so a refresh does not re-enter a finished game.
+  // An invited guest lands on the menu carrying the room to open.
+  // This initialiser only READS. It used to also strip the params from the URL,
+  // which is why an invited guest ended up staring at the menu instead of the
+  // board: a useState initialiser must be pure, because React runs it twice
+  // under StrictMode and may throw a render away entirely. When that happened
+  // the URL had already been rewritten, so the second, surviving mount saw no
+  // room at all and the hub never opened. The strip now lives in the effect
+  // below, after the hub has actually been told to open.
   const [joinRoom] = useState(() => {
     try {
       const q = new URLSearchParams(window.location.search)
-      const room = q.get('room') || ''
-      const game = q.get('game') || ''
-      if (room && game) {
-        q.delete('room'); q.delete('game')
-        const rest = q.toString()
-        window.history.replaceState({}, '', window.location.pathname + (rest ? `?${rest}` : ''))
-      }
-      return { room, game }
+      return { room: q.get('room') || '', game: q.get('game') || '' }
     } catch (_) { return { room: '', game: '' } }
   })
   const [savedCustomer, setSavedCustomer] = useState(() => getLocalCustomer())
@@ -407,9 +406,19 @@ export default function MenuView({ tenant, tenantId, items, categories, offers =
   }, [tenantId, preview, savedCustomer?.phone, items, tenant]) // eslint-disable-line react-hooks/exhaustive-deps
 
   // An invite link opens the games hub straight away — the guest came for the
-  // board, not the menu.
+  // board, not the menu. Stripping the params happens HERE, once the hub is
+  // open, so the URL is only rewritten after the handover actually succeeded
+  // (and a refresh still does not re-enter a finished game).
   useEffect(() => {
-    if (joinRoom.room && joinRoom.game) setFxOpen('games')
+    if (!joinRoom.room || !joinRoom.game) return
+    setFxOpen('games')
+    try {
+      const q = new URLSearchParams(window.location.search)
+      if (!q.has('room') && !q.has('game')) return
+      q.delete('room'); q.delete('game')
+      const rest = q.toString()
+      window.history.replaceState({}, '', window.location.pathname + (rest ? `?${rest}` : ''))
+    } catch (_) { /* the hub is already open; a tidy URL is cosmetic */ }
   }, [joinRoom])
 
   // Behaviour tracking: one session per visit, batched writes, no-op when the

@@ -3,7 +3,7 @@
   "private": true,
   "version": "0.1.0",
   "type": "module",
-  "description": "MenuLink — multi-tenant QR ordering & restaurant management platform (menu, admin, cashier/KDS) powered by Firebase",
+  "description": "RBT360 — multi-tenant QR ordering & restaurant management platform (menu, admin, cashier/KDS) powered by Firebase",
   "scripts": {
     "dev": "vite",
     "build": "vite build",

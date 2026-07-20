@@ -17,7 +17,7 @@
 //   full       → same, with the honest reason
 //   started    → same
 // ===========================================================================
-import { useCallback, useEffect, useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useNavigate, useParams, useSearchParams } from 'react-router-dom'
 import Icon from '../components/Icon.jsx'
 import { getTenant, registerCustomer } from '../lib/db.js'
@@ -43,6 +43,7 @@ export default function JoinRoom() {
   const navigate = useNavigate()
 
   const slugHint = sp.get('v') || ''
+  const tableToken = sp.get('t') || ''
   const myId = useMemo(() => deviceKey(), [])
   const saved = useMemo(() => getLocalCustomer() || {}, [])
 
@@ -94,10 +95,20 @@ export default function JoinRoom() {
   // ---- hand off to the venue's menu, which owns the games hub ----
   // The room + game ride in the query string so the hub can reopen this exact
   // board. The lead wires the pickup; this page only points at it.
+  // An unknown slug is a reason to WAIT, not to guess. `menuHref` falls back to
+  // '/', which on the platform host is the marketing landing page — so handing
+  // off before the tenant resolved would drop an invited guest onto marketing
+  // with the room and game silently dropped from the URL. Refusing here leaves
+  // them on the "seat saved" screen, which is honest and has a way forward.
+  // When the invite carried the host's table token, hand off to the TABLE route
+  // rather than the plain menu, so the guest who joined the game at that table
+  // can also order to it. MenuView reads the room/game params either way.
   const handOff = useCallback(() => {
+    if (!slug) return
     const q = new URLSearchParams({ room: roomId, game: room?.gameId || '' })
-    navigate(`${menuHref}?${q.toString()}`, { replace: true })
-  }, [navigate, menuHref, roomId, room?.gameId])
+    const base = tableToken ? `/t/${slug}/${encodeURIComponent(tableToken)}` : `/m/${slug}`
+    navigate(`${base}?${q.toString()}`, { replace: true })
+  }, [navigate, slug, tableToken, roomId, room?.gameId])
 
   // A player already seated (a refresh, a re-opened link) skips the form
   // entirely — their seat was never lost, so asking again would be a lie.
@@ -106,6 +117,18 @@ export default function JoinRoom() {
     const mine = (room.players || []).some((p) => p.id === myId)
     if (mine) setSeated(true)
   }, [room, seated, myId])
+
+  // ...and goes straight to the board. This page exists to get someone INTO a
+  // game; once the seat is confirmed there is nothing left to decide, so making
+  // them tap "enter" would be a speed bump, not a choice. Guarded by a ref so a
+  // room update cannot re-navigate, and skipped for an ended room, which would
+  // hand them a dead board instead of the honest "الجولة انتهت" screen below.
+  const wentRef = useRef(false)
+  useEffect(() => {
+    if (!seated || wentRef.current || !room || room.status === 'ended' || !slug) return
+    wentRef.current = true
+    handOff()
+  }, [seated, room, slug, handOff])
 
   const doJoin = useCallback(async () => {
     const nm = String(name || '').replace(/\s+/g, ' ').trim().slice(0, MAX_NAME)

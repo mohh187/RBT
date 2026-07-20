@@ -19,14 +19,12 @@ const TXT = {
     title: 'تعذّر تحميل هذا الجزء',
     offline: 'يبدو أن الجهاز غير متصل بالإنترنت. تحقّق من الاتصال ثم أعد المحاولة.',
     stale: 'قد يكون التطبيق حُدّث للتو. إعادة التحميل تجلب النسخة الجديدة.',
-    retry: 'إعادة المحاولة',
     reload: 'إعادة تحميل الصفحة',
   },
   en: {
     title: 'This part could not load',
     offline: 'The device appears to be offline. Check the connection and try again.',
     stale: 'The app may have just been updated. Reloading fetches the new version.',
-    retry: 'Try again',
     reload: 'Reload page',
   },
 }
@@ -73,10 +71,14 @@ export default class ChunkBoundary extends Component {
         <span className="chunkfail-ico"><Icon name={offline ? 'wifi' : 'reload'} size={22} /></span>
         <strong className="chunkfail-h">{t.title}</strong>
         <p className="chunkfail-p">{offline ? t.offline : t.stale}</p>
+        {/* Only ONE action, deliberately. A soft "try again" that just clears
+            this state cannot work: React.lazy marks a rejected payload Rejected
+            permanently and re-throws it on every later render, and the browser
+            caches the failed module specifier too. A button that always fails is
+            worse than no button, because it teaches the guest the app is broken
+            rather than that a reload fixes it. Reloading genuinely recovers both
+            causes — a new deploy, and offline via the service worker shell. */}
         <div className="chunkfail-acts">
-          <button type="button" className="chunkfail-btn" onClick={() => this.setState({ err: null })}>
-            {t.retry}
-          </button>
           <button type="button" className="chunkfail-btn primary" onClick={() => window.location.reload()}>
             {t.reload}
           </button>

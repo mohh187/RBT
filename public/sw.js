@@ -1,9 +1,9 @@
-/* MenuLink service worker — notifications (mobile) + offline app shell.
+/* RBT360 service worker — notifications (mobile) + offline app shell.
    Network-first so development/online always gets fresh content; cache is the
    offline fallback. */
 
 // Bump on deploy to drop stale/bad cached assets (activate purges old caches).
-const CACHE = 'menulink-v2'
+const CACHE = 'rbt360-v3'
 const APP_SHELL = ['/', '/index.html', '/favicon.svg', '/manifest.webmanifest']
 
 self.addEventListener('install', (event) => {
@@ -51,7 +51,7 @@ self.addEventListener('fetch', (event) => {
 self.addEventListener('message', (event) => {
   const data = event.data || {}
   if (data.type === 'notify') {
-    self.registration.showNotification(data.title || 'MenuLink', {
+    self.registration.showNotification(data.title || 'RBT360', {
       body: data.body || '',
       tag: data.tag,
       icon: data.icon || '/favicon.svg',
@@ -92,7 +92,7 @@ try {
   messaging.onBackgroundMessage((payload) => {
     const n = payload.notification || {}
     const data = payload.data || {}
-    self.registration.showNotification(n.title || 'MenuLink', {
+    self.registration.showNotification(n.title || 'RBT360', {
       body: n.body || '',
       icon: '/favicon.svg',
       badge: '/favicon.svg',

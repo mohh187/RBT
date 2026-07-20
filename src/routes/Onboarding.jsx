@@ -214,7 +214,7 @@ export default function Onboarding() {
           <div className="onb-panel">
             <div className="field">
               <label>{t('venueName')}</label>
-              <input className="input" value={name} onChange={(e) => setName(e.target.value)} placeholder={ar ? 'مثال: كافيه نيمة' : 'e.g. Neema Café'} autoFocus />
+              <input className="input" value={name} onChange={(e) => setName(e.target.value)} placeholder={ar ? 'مثال: مقهى الرصيف' : 'e.g. Rasif Coffee'} autoFocus />
             </div>
 
             <div className="field">
@@ -228,7 +228,7 @@ export default function Onboarding() {
                     setSlugTouched(true)
                     setSlug(slugify(e.target.value))
                   }}
-                  placeholder="neema-cafe"
+                  placeholder="rasif-coffee"
                 />
               </div>
               <span className="xs faint">{t('slugHint')}</span>

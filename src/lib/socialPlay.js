@@ -20,9 +20,18 @@
 //           `watch*` reports `{ ..., error }` so a component can print a
 //           sentence instead of spinning forever.
 //
-// BOUNDED   Every query carries a limit and uses SINGLE-FIELD equality or a
-//           single range, so none of this needs a composite index to be
-//           deployed. Sorting happens client-side over a capped list.
+// BOUNDED   Every query carries a limit and uses SINGLE-FIELD equality, a
+//           single range, or a single orderBy, so none of this needs a
+//           composite index to be deployed.
+//           A limit without an order is a TRAP, not a saving: Firestore then
+//           returns an arbitrary page (document-id order, and auto-ids are
+//           random), so a venue with more challenges than the cap would show
+//           month-one leftovers while today's guests pin notes nobody ever
+//           sees. Every capped read of a collection that grows without bound
+//           is therefore ordered so the slice is the RIGHT slice, and reports
+//           `truncated` when it hit its cap — because a count taken over a
+//           truncated read is a FLOOR, and a floor printed as a total is a
+//           fabricated measurement.
 //
 // PRIVACY   Guest-visible people data is limited to the first name a player
 //           typed themselves. `publicPeer()` is the ONLY way a person crosses
@@ -59,7 +68,13 @@ import { watchTournaments, statusOf } from './tournaments.js'
 // an unbounded document.
 // ---------------------------------------------------------------------------
 export const MAX_CHALLENGES = 40      // open challenges streamed per venue
-export const MAX_BEATEN = 30          // beatenBy entries kept on one challenge
+// beatenBy entries kept on one challenge. This deliberately EQUALS the ceiling
+// the security rule puts on the array (`beatenBy.size() <= 50`), so the read
+// side never drops a win the document is actually holding — a smaller number
+// here silently truncated the list and could hide the true top score. Once the
+// array reaches this size the rule refuses further beats, so the count becomes
+// a floor; normalizeChallenge flags that as `beatenAtCap` and the UI says so.
+export const MAX_BEATEN = 50
 export const MAX_MATCHES = 40
 export const MAX_ENTRIES = 200        // tournament / happy-hour board rows
 export const MAX_ROOMS_SCAN = 80      // rooms scanned for "who is here now"
@@ -375,6 +390,15 @@ export function challengeBeatenBy(c, deviceId) {
 
 export function normalizeChallenge(raw) {
   if (!raw) return null
+  // Mapped in full BEFORE any slicing, so the count and the top score are taken
+  // over everything the document holds rather than over a rendering window.
+  const beaten = (Array.isArray(raw.beatenBy) ? raw.beatenBy : [])
+    .map((b) => ({
+      name: cleanName(b?.name) || 'ضيف',
+      deviceId: safeId(b?.deviceId),
+      score: clampScore(b?.score),
+      at: num(b?.at, 0),
+    }))
   return {
     id: String(raw.id || ''),
     gameId: String(raw.gameId || '').slice(0, 64),
@@ -387,41 +411,98 @@ export function normalizeChallenge(raw) {
     message: sanitizeMessage(raw.message),
     at: num(raw.at, 0),
     expiresAt: num(raw.expiresAt, 0),
-    beatenBy: (Array.isArray(raw.beatenBy) ? raw.beatenBy : [])
-      .map((b) => ({
-        name: cleanName(b?.name) || 'ضيف',
-        deviceId: safeId(b?.deviceId),
-        score: clampScore(b?.score),
-        at: num(b?.at, 0),
-      }))
-      .slice(0, MAX_BEATEN),
+    // Newest kept, not oldest: arrayUnion appends, so slicing from the front
+    // would pin «كسره فلان» to the FIRST person who ever beat it and would drop
+    // this device's own entry, letting recordChallengeBeat write a duplicate.
+    beatenBy: beaten.length > MAX_BEATEN ? beaten.slice(-MAX_BEATEN) : beaten,
+    // The true number of recorded beats, over the whole array.
+    beatenCount: beaten.length,
+    // Best score over the whole array — never over the rendered window.
+    beatenBest: beaten.reduce((m, b) => (b.score > m ? b.score : m), 0),
+    // At the cap the security rule refuses further beats, so beatenCount stops
+    // rising: from here on it is a floor and must not be printed as a total.
+    beatenAtCap: beaten.length >= MAX_BEATEN,
     active: raw.active !== false,
   }
 }
 
 // Open challenges, newest first. Expired ones are hidden here rather than
 // deleted — the guest who left one can still see it was beaten.
-// cb({ challenges, mine, error })
+//
+// TWO listeners, because one capped read cannot answer both questions honestly:
+//   • the BOARD is the newest MAX_CHALLENGES documents (`orderBy at desc`), so
+//     a busy venue shows tonight's notes rather than an arbitrary page that the
+//     random auto-ids happened to sort first;
+//   • MINE is a separate equality read on byDeviceId, so a guest's own pin is
+//     always present even when the venue has far more than one page of them.
+// Neither needs a composite index: one orderBy, one equality, nothing combined.
+//
+// cb({ challenges, mine, truncated, error }) — `truncated:true` means the venue
+// has at least a full page of challenges, so `challenges.length` is a FLOOR and
+// the caller must not present it as a total.
 export function watchOpenChallenges(tid, cb, { deviceId = '', gameId = '' } = {}) {
-  if (!firebaseReady || !tid) return deadWatch(cb, { challenges: [], mine: [], error: 'unavailable' })
-  return onSnapshot(
-    query(col(tid, 'challenges'), limit(MAX_CHALLENGES)),
-    (snap) => {
-      const now = Date.now()
-      const all = snap.docs.map((d) => normalizeChallenge({ id: d.id, ...d.data() })).filter(Boolean)
-      const open = all
+  const empty = { challenges: [], mine: [], truncated: false, error: 'unavailable' }
+  if (!firebaseReady || !tid) return deadWatch(cb, empty)
+  const me = safeId(deviceId)
+
+  let board = []
+  let boardTruncated = false
+  let boardReady = false
+  let mine = []
+  let error = null
+
+  const emit = () => {
+    if (!boardReady) return
+    const now = Date.now()
+    cb?.({
+      challenges: board
         .filter((c) => isChallengeOpen(c, now))
         .filter((c) => !gameId || c.gameId === gameId)
-        .sort((a, b) => b.at - a.at)
-      const me = safeId(deviceId)
-      cb?.({
-        challenges: open.filter((c) => !me || c.byDeviceId !== me),
-        mine: me ? all.filter((c) => c.byDeviceId === me).sort((a, b) => b.at - a.at) : [],
-        error: null,
-      })
+        .filter((c) => !me || c.byDeviceId !== me)
+        .sort((a, b) => b.at - a.at),
+      mine,
+      truncated: boardTruncated,
+      error,
+    })
+  }
+
+  const stopBoard = onSnapshot(
+    query(col(tid, 'challenges'), orderBy('at', 'desc'), limit(MAX_CHALLENGES)),
+    (snap) => {
+      board = snap.docs.map((d) => normalizeChallenge({ id: d.id, ...d.data() })).filter(Boolean)
+      // A full page means "there are at least this many", never "this is all".
+      boardTruncated = snap.size >= MAX_CHALLENGES
+      boardReady = true
+      error = null
+      emit()
     },
-    (err) => cb?.({ challenges: [], mine: [], error: errText(err) }),
+    (err) => {
+      board = []
+      boardTruncated = false
+      boardReady = true
+      error = errText(err)
+      emit()
+    },
   )
+
+  // No device id means no personal list to read — and no second listener.
+  const stopMine = me
+    ? onSnapshot(
+      query(col(tid, 'challenges'), where('byDeviceId', '==', me), limit(MAX_CHALLENGES)),
+      (snap) => {
+        mine = snap.docs
+          .map((d) => normalizeChallenge({ id: d.id, ...d.data() }))
+          .filter(Boolean)
+          .sort((a, b) => b.at - a.at)
+        emit()
+      },
+      // A failure here empties MY list only; it must not blank the board or
+      // claim the board failed.
+      () => { mine = []; emit() },
+    )
+    : null
+
+  return () => { stopBoard?.(); stopMine?.() }
 }
 
 // Leave a challenge for whoever sits here next.
@@ -543,14 +624,17 @@ export function matchWinner(match) {
 }
 
 // Matches touching THIS table, either side. Firestore cannot OR two fields, so
-// this streams a small capped page of recent matches and filters in JS.
+// this streams a small capped page of RECENT matches and filters in JS.
+// `orderBy updatedAt desc` is what makes "recent" true: unordered, the page was
+// an arbitrary slice of the whole history, so on a busy night the day-old
+// filter below could empty a table's card while its match was live.
 // cb({ matches, incoming, mine, error })
 export function watchTableMatches(tid, tableId, cb) {
   if (!firebaseReady || !tid) return deadWatch(cb, { matches: [], incoming: [], mine: [], error: 'unavailable' })
   const id = safeId(tableId)
   if (!id) return deadWatch(cb, { matches: [], incoming: [], mine: [], error: 'no-table' })
   return onSnapshot(
-    query(col(tid, 'matches'), limit(MAX_MATCHES)),
+    query(col(tid, 'matches'), orderBy('updatedAt', 'desc'), limit(MAX_MATCHES)),
     (snap) => {
       const cutoff = Date.now() - DAY_MS
       const rows = snap.docs

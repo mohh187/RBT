@@ -598,7 +598,7 @@ function ThemeSwap({ lang }) {
         <div className="tsw-screen">
           <div className="tsw-hd">
             <span className="tsw-logo"><Icon name="coffee" size={13} /></span>
-            <strong>{ar ? 'كافيه نيمة' : 'Neema Café'}</strong>
+            <strong>{ar ? 'مقهى الرصيف' : 'Rasif Coffee'}</strong>
             <span className="tsw-name">{ar ? s.ar : s.id}</span>
           </div>
           <div className="tsw-hero"><span>{ar ? 'الأكثر طلباً' : 'Top pick'}</span><strong>{ar ? 'سبانش لاتيه' : 'Spanish Latte'}</strong></div>

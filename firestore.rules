@@ -401,34 +401,83 @@ service cloud.firestore {
       // ---- open challenges left for the next guest. Anyone may post one and
       // anyone may record beating it, so the text is bounded here as well as
       // sanitized client-side: this is user content shown to strangers.
+      // The key allowlist is the important part, not the length checks: without
+      // it a guest can satisfy the three validated fields and attach a megabyte
+      // of junk under any other name, filling the venue's database at the
+      // venue's expense. Bounding the fields we know about is not enough; the
+      // document must be closed to fields we do not.
       match /challenges/{id} {
         allow read: if true;
-        allow create: if request.resource.data.message.size() <= 120
+        allow create: if request.resource.data.keys().hasOnly(
+            ['gameId', 'byName', 'byDeviceId', 'score', 'message', 'at', 'expiresAt', 'beatenBy', 'active'])
+          && request.resource.data.message.size() <= 120
+          && request.resource.data.gameId.size() <= 64
+          && request.resource.data.byDeviceId.size() <= 64
           && request.resource.data.score is number
-          && request.resource.data.byName.size() <= 24;
-        allow update: if request.resource.data.gameId == resource.data.gameId
+          && request.resource.data.byName.size() <= 24
+          && request.resource.data.beatenBy.size() == 0;
+        allow update: if request.resource.data.keys().hasOnly(
+            ['gameId', 'byName', 'byDeviceId', 'score', 'message', 'at', 'expiresAt', 'beatenBy', 'active'])
+          && request.resource.data.gameId == resource.data.gameId
           && request.resource.data.byDeviceId == resource.data.byDeviceId
+          && request.resource.data.score == resource.data.score
+          && request.resource.data.message == resource.data.message
           && request.resource.data.beatenBy.size() <= 50;
         allow delete: if isStaff(tid);
       }
 
       // ---- table-versus-table matches: created and scored by the playing
       // devices, bounded to the two tables they name.
+      // An update used to pin NOTHING, so any guest could rewrite which tables
+      // played and hand themselves the win. Identity is now immutable: the
+      // tables, the game and the start time cannot change after creation.
+      //
+      // Stated plainly: this does NOT stop a determined guest forging the SCORE
+      // of a match they are part of. Diners are anonymous — there is no identity
+      // for a rule to bind a score to — so pretending otherwise would be
+      // security theatre. What it does guarantee is that a match cannot be
+      // reassigned to different tables, and that the collection cannot be used
+      // as free storage.
       match /matches/{id} {
         allow read: if true;
-        allow create, update: if request.resource.data.gameId is string
+        allow create: if request.resource.data.keys().hasOnly(
+            ['gameId', 'tableA', 'tableB', 'roomId', 'scoreA', 'scoreB', 'status',
+             'startedAt', 'updatedAt', 'deviceIds'])
+          && request.resource.data.gameId is string
+          && request.resource.data.gameId.size() <= 64
           && request.resource.data.scoreA is number
-          && request.resource.data.scoreB is number;
+          && request.resource.data.scoreB is number
+          && request.resource.data.deviceIds.size() <= 8;
+        allow update: if request.resource.data.keys().hasOnly(
+            ['gameId', 'tableA', 'tableB', 'roomId', 'scoreA', 'scoreB', 'status',
+             'startedAt', 'updatedAt', 'deviceIds'])
+          && request.resource.data.gameId == resource.data.gameId
+          && request.resource.data.tableA.id == resource.data.tableA.id
+          && request.resource.data.tableB.id == resource.data.tableB.id
+          && request.resource.data.startedAt == resource.data.startedAt
+          && request.resource.data.scoreA is number
+          && request.resource.data.scoreB is number
+          && request.resource.data.deviceIds.size() <= 8;
         allow delete: if isStaff(tid);
       }
 
       // ---- multiplayer rooms: four phones around one table (or an invited
-      // friend) share a live board. Guests are anonymous, so this is open like
-      // waiterCalls but bounded: the room keeps its identity, and the arrays
-      // cannot be used as free storage. Fair play is enforced by the pure
-      // reducer running inside a transaction, not by these rules — a rule
-      // cannot know whose turn it is, and pretending otherwise would be
-      // security theatre.
+      // friend) share a live board. Guests are anonymous, so a room is readable
+      // by anyone AND listable by anyone (the "who did I play with" feature
+      // queries the collection). Treat every field on this document as
+      // PUBLISHED.
+      //
+      // That is not a loose analogy to waiterCalls — waiterCalls is staff-read
+      // only, the exact opposite. It was described that way here once, and a
+      // phone number was stored on each player as a result: any diner could
+      // query this collection and harvest the name and mobile of every guest who
+      // had played that day. NEVER put personal data on a room. The client no
+      // longer writes a phone (see normalizePlayer in gameRoom.js) and a rejoin
+      // scrubs legacy ones.
+      //
+      // Fair play is enforced by the pure reducer running inside a transaction,
+      // not by these rules — a rule cannot know whose turn it is, and pretending
+      // otherwise would be security theatre.
       match /rooms/{roomId} {
         allow read: if true;
         allow create: if request.resource.data.roomId == roomId
@@ -454,9 +503,27 @@ service cloud.firestore {
       }
 
       // ---- player rollups: one per device, the guest's own play history.
+      //
+      // Honest limit, stated rather than papered over: diners are anonymous, so
+      // a rule CANNOT prove that the device writing profile X is device X. Doc-id
+      // pinning stops a stray write landing on the wrong row; it does not stop
+      // someone who has learned another device id from deliberately targeting it.
+      //
+      // So the blast radius is capped instead. A guest write may only touch the
+      // play-rollup keys, and the row is bounded. Staff read this to understand
+      // their guests, and they must not be reading numbers a stranger planted.
       match /playerProfiles/{deviceId} {
         allow read: if isStaff(tid);
-        allow create, update: if request.resource.data.deviceId == deviceId;
+        allow create, update: if request.resource.data.deviceId == deviceId
+          && deviceId.size() <= 64
+          && request.resource.data.keys().hasOnly(
+            ['deviceId', 'customerName', 'customerPhone', 'totalPlays', 'totalScore',
+             'totalDurationMs', 'byGame', 'knowledge', 'archetype', 'traits',
+             'firstAt', 'lastAt', 'lastGameId', 'lastGameAr', 'lastScore', 'updatedAt'])
+          && request.resource.data.byGame.size() <= 60
+          && (!('customerName' in request.resource.data)
+              || request.resource.data.customerName == null
+              || request.resource.data.customerName.size() <= 24);
         allow delete: if isManager(tid);
       }
 

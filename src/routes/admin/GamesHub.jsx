@@ -31,7 +31,7 @@ import LiveRoomsPanel from '../../components/gamesadmin/LiveRoomsPanel.jsx'
 import RewardsPanel from '../../components/gamesadmin/RewardsPanel.jsx'
 import {
   PERIODS, periodRange, fetchPlays, fetchProfiles, fetchScores, fetchClaims,
-  fmtInt, dayStamp, MAX_PLAYS,
+  fmtInt, dayStamp,
 } from '../../components/gamesadmin/engine.jsx'
 
 import '../../styles/gamesadmin.css'
@@ -87,7 +87,10 @@ export default function GamesHub() {
           fetchClaims(tenantId),
         ])
         if (!alive) return
-        setData({ plays, profiles, scores, claims: claims.rows, claimsOk: claims.ok })
+        // `plays` is a READ REPORT, not an array: it carries how far back the
+        // capped read actually reached, which is the only way this page can
+        // tell "nothing was played" apart from "the window was never read".
+        setData({ read: plays, profiles, scores, claims: claims.rows, claimsOk: claims.ok })
       } catch (e) {
         if (alive) setErr(e && e.message ? e.message : String(e))
       }
@@ -133,10 +136,21 @@ export default function GamesHub() {
   }
 
   const activeTab = TABS.find((t) => t.key === tab) || TABS[0]
-  const plays = data ? data.plays : []
+  const read = data ? data.read : null
+  const plays = read ? read.rows : []
   const profiles = data ? data.profiles : []
   const scores = data ? data.scores : []
-  const truncated = plays.length >= MAX_PLAYS
+  // Two DIFFERENT facts, and the page must not collapse them:
+  //   covered  — every play in the window was provably read;
+  //   capped   — the read hit its limit, so history older than it is unread.
+  // A past window beyond the cap's reach yields zero rows AND covered=false;
+  // reporting that as «لا جولات» would retire the venue's best games on an
+  // artefact of the read. The banner below therefore keys off `covered`, which
+  // is computed BEFORE the window filter, not after it.
+  // A failed fetch is also "not covered": the catalogue must not print a clean
+  // zero per game underneath an error banner.
+  const covered = !err && (!read || read.covers)
+  const oldestRead = read && read.oldestScannedMs ? dayStamp(read.oldestScannedMs) : ''
   // Tabs that read nothing from the page-level fetch stay usable even while it
   // is still running, or after it failed.
   const needsData = activeTab.period
@@ -208,13 +222,28 @@ export default function GamesHub() {
         <div className="ga-card"><div className="ga-loading"><Spinner /></div></div>
       )}
 
-      {needsData && data && truncated && (
+      {needsData && read && !read.ok && (
         <div className="ga-warn">
           <Icon name="warning" size={15} />
           <span>
             {ar
-              ? `بلغت القراءة حدّها (${fmtInt(MAX_PLAYS)} جولة). كل رقم هنا محسوب على هذه الجولات وحدها، لا على كامل تاريخ المكان — ضيّق الفترة لصورة دقيقة.`
-              : `Read cap reached (${MAX_PLAYS} plays). Figures cover this slice only.`}
+              ? 'تعذّرت قراءة سجل الجولات، فلا رقم على هذه الصفحة مقروء من بيانات. ما تراه من أصفار هو «لم يُقرأ»، وليس «لم يحدث».'
+              : 'The play log could not be read. Any zero here means "not read", not "did not happen".'}
+          </span>
+        </div>
+      )}
+
+      {needsData && read && read.ok && !covered && (
+        <div className="ga-warn">
+          <Icon name="warning" size={15} />
+          <span>
+            {plays.length === 0
+              ? (ar
+                ? `القراءة بلغت حدّها (${fmtInt(read.cap)} جولة) قبل أن تصل إلى هذه الفترة${oldestRead ? `، وأقدم جولة قرأناها بتاريخ ${oldestRead}` : ''}. الأصفار المعروضة أدناه تعني «لم تُقرأ»، لا «لم تُلعب» — لا تُبنَ عليها قرارات إخفاء ألعاب. اختر فترة أحدث أو أقصر.`
+                : `The read hit its cap (${read.cap} plays) before reaching this period${oldestRead ? `; the oldest play read is dated ${oldestRead}` : ''}. The zeros below mean "not read", not "not played". Pick a more recent or shorter period.`)
+              : (ar
+                ? `القراءة بلغت حدّها (${fmtInt(read.cap)} جولة) ولم تغطِّ هذه الفترة كاملة${oldestRead ? ` — أقدم جولة قرأناها بتاريخ ${oldestRead}` : ''}. كل رقم أدناه حدّ أدنى لا حصيلة نهائية. ضيّق الفترة لصورة كاملة.`
+                : `The read hit its cap (${read.cap} plays) and does not cover the whole period${oldestRead ? `; oldest play read is dated ${oldestRead}` : ''}. Every figure below is a floor, not a total.`)}
           </span>
         </div>
       )}
@@ -223,6 +252,7 @@ export default function GamesHub() {
         <GamesCatalogue
           ar={ar} tenant={tenant} plays={plays} canEdit={canEdit} busy={busy}
           periodLabel={periodLabel} onSaveGames={saveGames}
+          covered={covered} oldestRead={oldestRead}
         />
       )}
 

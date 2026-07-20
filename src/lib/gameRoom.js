@@ -188,11 +188,17 @@ function assertStateSize(state) {
   return state
 }
 
+// NO PHONE NUMBER GOES IN HERE. A room document is world-readable AND
+// world-queryable (guests are anonymous, so there is nobody to authorise), which
+// means anything stored on it is effectively published. A phone used to be kept
+// here, so any diner could query the rooms collection and walk away with the
+// name and mobile number of every guest who had played that day. The venue's CRM
+// already receives the phone through registerCustomer on its own protected path;
+// the room only ever needed a name to show around the table.
 function normalizePlayer(p, seat) {
   return {
     id: String(p?.id || '').slice(0, 64),
     name: cleanName(p?.name) || 'ضيف',
-    phone: cleanPhone(p?.phone),
     seat,
     joinedAt: Number(p?.joinedAt) || Date.now(),
     connected: true,
@@ -334,10 +340,16 @@ export async function joinRoom({ tid, roomId, player } = {}) {
     const idx = players.findIndex((p) => p.id === pid)
     if (idx >= 0) {
       const name = cleanName(player.name)
+      // Rejoin must not reintroduce the phone the create path deliberately omits
+      // (see normalizePlayer). Dropping it from the spread also SCRUBS rooms
+      // written before this fix: the whole players array is rewritten here, so a
+      // legacy phone stops being published the moment anyone reconnects.
+      // (deleteField() cannot be used inside an array element -- omitting the
+      // key is the only way to remove it.)
+      const { phone: _legacyPhone, ...prev } = players[idx]
       players[idx] = {
-        ...players[idx],
+        ...prev,
         ...(name ? { name } : {}),
-        ...(cleanPhone(player.phone) ? { phone: cleanPhone(player.phone) } : {}),
         connected: true,
         lastSeenAt: now,
       }
@@ -680,9 +692,17 @@ export async function endRoom({ tid, roomId, winnerSeat = null } = {}) {
 // page can show the venue's name and brand before the tenant document loads,
 // and can offer a way back to the menu.
 // ===========================================================================
-export function inviteUrl(tid, roomId, slug) {
+// The host's TABLE token rides along too. Without it an invited friend was
+// always handed off to the table-less public menu, so the guest who walked over
+// and joined the game at table 5 could not order to table 5 -- dine-in was not
+// even offered them, and their session was attributed to nobody.
+export function inviteUrl(tid, roomId, slug, tableToken) {
   const base = `${publicBaseUrl()}/join/${encodeURIComponent(tid)}/${encodeURIComponent(roomId)}`
-  return slug ? `${base}?v=${encodeURIComponent(slug)}` : base
+  const q = new URLSearchParams()
+  if (slug) q.set('v', slug)
+  if (tableToken) q.set('t', tableToken)
+  const s = q.toString()
+  return s ? `${base}?${s}` : base
 }
 
 // One read, for a join page that wants to check a room before subscribing.

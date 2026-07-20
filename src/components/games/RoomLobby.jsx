@@ -296,7 +296,9 @@ export default function RoomLobby({
     setRoomId(''); setRoom(null); setMySeat(-1); startedRef.current = false
   }, [tid, roomId, me.id])
 
-  const link = roomId ? inviteUrl(tid, roomId, tenant?.slug) : ''
+  // Carry the host's table into the invite so a friend who joins the game at
+  // table 5 can also order to table 5.
+  const link = roomId ? inviteUrl(tid, roomId, tenant?.slug, table?.qrToken) : ''
 
   const doCopy = useCallback(async () => {
     if (!link) return

@@ -57,8 +57,13 @@ export default function HangingChallenge({
   const state = useWatch(
     (cb) => watchOpenChallenges(tenantId, cb, { deviceId: me.id, gameId }),
     [tenantId, me.id, gameId],
-    { challenges: [], mine: [], error: null },
+    { challenges: [], mine: [], truncated: false, error: null },
   )
+
+  // `truncated` means the venue has at least a full page of challenges, so the
+  // number beside the title counts what we could READ, not what exists. It is
+  // shown as a floor and explained below the list — never as a total.
+  const floor = Boolean(state.truncated)
 
   const [msg, setMsg] = useState('')
   const [posting, setPosting] = useState(false)
@@ -131,7 +136,13 @@ export default function HangingChallenge({
         icon="flame"
         title={pick(lang, 'تحدٍّ معلّق', 'A challenge left here')}
         right={state.challenges.length
-          ? <span className="sp-meta">{fmtNum(state.challenges.length)}</span>
+          ? (
+            <span className="sp-meta">
+              {floor
+                ? pick(lang, `${fmtNum(state.challenges.length)} فأكثر`, `${fmtNum(state.challenges.length)} or more`)
+                : fmtNum(state.challenges.length)}
+            </span>
+          )
           : null}
       />
 
@@ -163,13 +174,23 @@ export default function HangingChallenge({
               </div>
               {/* Guest text. Sanitized twice, rendered as a text node. */}
               {c.message ? <p className="sp-msg">{c.message}</p> : null}
-              {c.beatenBy.length ? (
+              {/* beatenCount and beatenBest are taken over the WHOLE array on
+                  the document, not over the rendered window. At the storage cap
+                  no further beat can be recorded, so the count is a floor and
+                  is worded as one. */}
+              {c.beatenCount ? (
                 <p className="sp-beat">
-                  {pick(
-                    lang,
-                    `كسرها ${fmtNum(c.beatenBy.length)} حتى الآن — أعلاهم ${fmtNum(Math.max(...c.beatenBy.map((b) => b.score)))}.`,
-                    `Beaten ${fmtNum(c.beatenBy.length)} times — best ${fmtNum(Math.max(...c.beatenBy.map((b) => b.score)))}.`,
-                  )}
+                  {c.beatenAtCap
+                    ? pick(
+                      lang,
+                      `كسرها ${fmtNum(c.beatenCount)} فأكثر — أعلى ما سُجّل ${fmtNum(c.beatenBest)}.`,
+                      `Beaten ${fmtNum(c.beatenCount)}+ times — best recorded ${fmtNum(c.beatenBest)}.`,
+                    )
+                    : pick(
+                      lang,
+                      `كسرها ${fmtNum(c.beatenCount)} حتى الآن — أعلاهم ${fmtNum(c.beatenBest)}.`,
+                      `Beaten ${fmtNum(c.beatenCount)} times — best ${fmtNum(c.beatenBest)}.`,
+                    )}
                 </p>
               ) : null}
               <div className="sp-actions">
@@ -192,6 +213,16 @@ export default function HangingChallenge({
             </article>
           ))}
         </div>
+      ) : null}
+
+      {floor ? (
+        <p className="sp-note">
+          {pick(
+            lang,
+            'نعرض أحدث التحديات فقط — هناك المزيد في هذا المكان.',
+            'Showing the most recent challenges only — this venue has more.',
+          )}
+        </p>
       ) : null}
 
       {/* ---- leave one of your own ---- */}
@@ -236,6 +267,8 @@ export default function HangingChallenge({
               </div>
               <div className="sp-bar">
                 <span className="sp-big">{fmtNum(c.score)}</span>
+                {/* The array is chronological and normalizeChallenge keeps its
+                    TAIL, so the last entry is the most recent winner. */}
                 {c.beatenBy.length ? (
                   <span className="sp-beat">
                     {pick(lang, `كسره ${c.beatenBy[c.beatenBy.length - 1].name}`, `beaten by ${c.beatenBy[c.beatenBy.length - 1].name}`)}

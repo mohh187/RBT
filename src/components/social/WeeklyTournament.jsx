@@ -78,6 +78,11 @@ export default function WeeklyTournament({
   const game = t && t.gameId && t.gameId !== 'any' ? gameById(t.gameId) : null
   const info = modeInfo(mode)
 
+  // The contract with the hub: a game id opens THAT game, and an empty id means
+  // «any game counts» — the default for a venue tournament (gameId: 'any'). The
+  // hub answers an empty id by returning the guest to the full game shelf with a
+  // line saying every game on it enters the tournament. It must never be read as
+  // "no game": that turns this button into a dead tap on a blank stage.
   const play = useCallback(() => {
     if (!onPlay || !t) return
     onPlay(t.gameId && t.gameId !== 'any' ? t.gameId : '', { source: 'tournament', tournamentId: t.id })

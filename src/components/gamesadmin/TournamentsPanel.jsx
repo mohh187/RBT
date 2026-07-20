@@ -6,11 +6,18 @@
 // dates have nothing to do with the period picker at the top, and scoring a
 // competition over the wrong window would be worse than showing nothing.
 //
-// Three honesty rules are enforced here rather than in CSS:
-//   • no qualifying play  -> «لا نتائج بعد», and no table is drawn at all.
+// Four honesty rules are enforced here rather than in CSS:
+//   • no qualifying play  -> «لا نتائج بعد», and no table is drawn at all —
+//     but ONLY when the read behind it provably spanned the tournament window.
+//     The play read is newest-first and capped, so a window older than the cap
+//     reaches comes back empty without measuring anything. That empty slice must
+//     never be printed as «لا جولات مؤهلة»; it is reported as a short read.
 //   • a prize is only ever the text the venue typed. Nothing is suggested.
 //   • «إنهاء وإعلان الفائزين» freezes exactly the rows on screen. If that is an
 //     empty list, the tournament closes with an empty list and says so.
+//   • that button is BLOCKED whenever the read did not cover the window. A wrong
+//     announced winner is worse for a venue's guests than no announcement, and
+//     the freeze is permanent unless a manager notices and reopens.
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import Icon from '../Icon.jsx'
 import { Spinner } from '../ui.jsx'
@@ -239,37 +246,60 @@ function StandingsTable({ ar, mode, rows, frozen = false }) {
   )
 }
 
+// A tournament with no window has nothing to read, so the empty report is
+// marked COVERED — silence is correct there. A thrown read is the opposite:
+// covers=false, because zero rows then means "unknown", not "none".
+const emptyPlaysRead = (ok = true) => ({
+  rows: [], scanned: 0, cap: MAX_PLAYS, capped: false, mode: 'none',
+  oldestScannedMs: null, newestScannedMs: null, covers: ok, ok,
+})
+
 // ---------------------------------------------------------------------------
 // one tournament, opened
 // ---------------------------------------------------------------------------
 function Detail({
   ar, tenantId, t, scores, profiles, canEdit, onBack, onEdit, onChanged,
 }) {
-  const [plays, setPlays] = useState(null)
+  // The READ REPORT from fetchPlays, not a bare array: `read.covers` is the
+  // only thing that separates "nobody qualified" from "the capped read never
+  // reached this tournament's window".
+  const [read, setRead] = useState(null)
   const [err, setErr] = useState('')
   const [confirming, setConfirming] = useState(false)
   const [working, setWorking] = useState(false)
 
   useEffect(() => {
-    if (!tenantId || !t.from || !t.to) { setPlays([]); return undefined }
+    if (!tenantId || !t.from || !t.to) { setRead(emptyPlaysRead()); return undefined }
     let alive = true
-    setPlays(null); setErr(''); setConfirming(false)
+    setRead(null); setErr(''); setConfirming(false)
     fetchPlays(tenantId, t.from, t.to)
-      .then((rows) => { if (alive) setPlays(rows) })
-      .catch((e) => { if (alive) { setPlays([]); setErr(String(e?.message || e)) } })
+      .then((r) => { if (alive) setRead(r) })
+      .catch((e) => { if (alive) { setRead(emptyPlaysRead(false)); setErr(String(e?.message || e)) } })
     return () => { alive = false }
   }, [tenantId, t.id, t.from, t.to])
 
+  const plays = read ? read.rows : null
+
+  // The read report goes in WITH the rows. standings() turns it into `complete`,
+  // and finalize() refuses to freeze anything that is not complete — so the gate
+  // survives even if this component is not the only caller one day.
   const computed = useMemo(
-    () => (plays ? standings({ tournament: t, plays, scores, profiles }) : null),
-    [plays, t, scores, profiles],
+    () => (plays ? standings({ tournament: t, plays, scores, profiles, read }) : null),
+    [plays, read, t, scores, profiles],
   )
 
   const status = statusOf(t)
-  const truncated = Array.isArray(plays) && plays.length >= MAX_PLAYS
+  // NOT `plays.length >= MAX_PLAYS`: the window filter runs after the cap, so a
+  // tournament that ended further back than the cap reaches would zero out the
+  // rows AND the warning at once. `covers` is computed before the filter.
+  const truncated = !!read && !read.covers
+  // What the standing is allowed to claim about itself. Anything but `true` and
+  // the rows on screen are a floor over a partial read: shown, labelled, and NOT
+  // announceable.
+  const complete = Boolean(computed && computed.complete)
 
   const doFinalize = async () => {
-    if (!computed || working) return
+    if (!computed || !complete || working) return
     setWorking(true)
     try {
       await finalize(tenantId, t, computed)
@@ -392,20 +422,28 @@ function Detail({
                     <Icon name="warning" size={15} />
                     <span>
                       {ar
-                        ? `بلغت القراءة حدّها (${fmtInt(MAX_PLAYS)} جولة). هذا الترتيب محسوب على هذه الجولات وحدها — ضيّق فترة البطولة لنتيجة قاطعة.`
-                        : `Read cap reached (${MAX_PLAYS}). This ranking covers that slice only.`}
+                        ? `بلغت القراءة حدّها (${fmtInt(MAX_PLAYS)} جولة) ولم تغطِّ فترة البطولة كاملة${read.oldestScannedMs ? ` — لم تصل إلى ما قبل ${dayStamp(read.oldestScannedMs)}` : ''}. هذا الترتيب محسوب على ما قُرئ وحده وقد ينقصه فائز حقيقي.`
+                        : `Read cap reached (${MAX_PLAYS}) and the tournament window is not fully covered${read.oldestScannedMs ? `; the read reached back only to ${dayStamp(read.oldestScannedMs)}` : ''}. A real contender may be missing.`}
                     </span>
                   </div>
                 )}
               </>
             ) : (
               <>
-                <p className="ga-empty-t">{ar ? 'لا نتائج بعد' : 'No results yet'}</p>
+                <p className="ga-empty-t">
+                  {truncated
+                    ? (ar ? 'لم تُقرأ جولات هذه الفترة' : 'This period was not read')
+                    : (ar ? 'لا نتائج بعد' : 'No results yet')}
+                </p>
                 <p className="ga-hint">{computed.noteAr}</p>
                 <p className="ga-hint">
-                  {ar
-                    ? 'يظهر الترتيب هنا تلقائياً عند أول جولة تستوفي شروط البطولة. لن يُعرض ترتيب مُختلق لملء الفراغ.'
-                    : 'The table appears on the first qualifying play. No placeholder ranking is drawn.'}
+                  {truncated
+                    ? (ar
+                      ? `بلغت القراءة حدّها (${fmtInt(MAX_PLAYS)} جولة) قبل أن تصل إلى فترة هذه البطولة${read.oldestScannedMs ? `، وأقدم جولة قرأناها بتاريخ ${dayStamp(read.oldestScannedMs)}` : ''}. الفراغ هنا يعني «لم يُقرأ»، لا «لم يشارك أحد» — لا تُنهِ البطولة على هذه الشاشة.`
+                      : `The read hit its cap (${MAX_PLAYS}) before reaching this tournament's window${read.oldestScannedMs ? `; the oldest play read is dated ${dayStamp(read.oldestScannedMs)}` : ''}. Empty means "not read", not "nobody entered".`)
+                    : (ar
+                      ? 'يظهر الترتيب هنا تلقائياً عند أول جولة تستوفي شروط البطولة. لن يُعرض ترتيب مُختلق لملء الفراغ.'
+                      : 'The table appears on the first qualifying play. No placeholder ranking is drawn.')}
                 </p>
               </>
             )
@@ -413,7 +451,18 @@ function Detail({
 
           {canEdit && plays !== null && computed && (
             <div className="ga-actions">
-              {!confirming ? (
+              {!complete ? (
+                // The action is REMOVED, not merely warned about. A freeze is
+                // permanent from the guest's side: the wrong name is announced,
+                // the prize is handed over, and the truncation that caused it
+                // leaves no trace on the frozen document. A manager may narrow
+                // the window and come back; nobody can un-announce a winner.
+                <span className="ga-hint">
+                  {ar
+                    ? 'الإعلان موقوف: القراءة لم تشمل فترة البطولة كاملة، وتجميد ترتيب يعرف النظام أنه قد يكون ناقصاً ليس إعلاناً بل خطأ دائم. ضيّق فترة البطولة ثم أعد فتح هذه الصفحة.'
+                    : 'Announcing is blocked: the read did not cover the whole window, and freezing a standing known to be possibly incomplete is a permanent error. Narrow the window and reopen this page.'}
+                </span>
+              ) : !confirming ? (
                 <button type="button" className="ga-btn is-primary" disabled={working} onClick={() => setConfirming(true)}>
                   <Icon name="award" size={14} /> {ar ? 'إنهاء وإعلان الفائزين' : 'Finalize & announce'}
                 </button>
@@ -424,9 +473,16 @@ function Detail({
                       ? (ar
                         ? `سيُجمَّد أعلى ${fmtInt(Math.min(computed.rows.length, MAX_WINNERS))} مركز كما هو على الشاشة، وتُغلق البطولة.`
                         : 'The visible ranking will be frozen and the tournament closed.')
-                      : (ar
-                        ? 'لا يوجد أي فائز مؤهّل. الإغلاق سيسجّل «بلا فائز» ولن يخترع أحداً.'
-                        : 'Nobody qualified — it will close with no winner.')}
+                      // Only claim "nobody qualified" when the read actually
+                      // covered the window; otherwise the honest sentence is
+                      // that nothing was read.
+                      : truncated
+                        ? (ar
+                          ? 'القراءة لم تغطِّ فترة البطولة، فلا يمكن القول إن أحداً لم يتأهّل. الإغلاق الآن سيسجّل «بلا فائز» على بيانات ناقصة.'
+                          : 'The read did not cover the window, so "nobody qualified" is unknown. Closing now would record no winner on incomplete data.')
+                        : (ar
+                          ? 'لا يوجد أي فائز مؤهّل. الإغلاق سيسجّل «بلا فائز» ولن يخترع أحداً.'
+                          : 'Nobody qualified — it will close with no winner.')}
                   </span>
                   <button type="button" className="ga-btn is-primary" disabled={working} onClick={doFinalize}>
                     <Icon name="check" size={14} /> {ar ? 'تأكيد' : 'Confirm'}
