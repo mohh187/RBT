@@ -49,6 +49,7 @@ const StaffHub = lazy(() => import('./routes/admin/StaffHub.jsx'))
 const Roles = lazy(() => import('./routes/admin/Roles.jsx'))
 const Policies = lazy(() => import('./routes/admin/Policies.jsx'))
 const Reports = lazy(() => import('./routes/admin/Reports.jsx'))
+const Accounting = lazy(() => import('./routes/admin/Accounting.jsx'))
 const DailyReport = lazy(() => import('./routes/admin/DailyReport.jsx'))
 const Staff = lazy(() => import('./routes/admin/Staff.jsx'))
 const Settings = lazy(() => import('./routes/admin/Settings.jsx'))
@@ -404,6 +405,7 @@ export default function App() {
         <Route path="reservations" element={<RequireCap cap={CAP.MANAGE_EVENTS}><PlanGate feature="reservations"><Reservations /></PlanGate></RequireCap>} />
         <Route path="complaints" element={<RequireCap cap={CAP.VIEW_COMPLAINTS}><Complaints /></RequireCap>} />
         <Route path="reports" element={<RequireCap cap={CAP.VIEW_REPORTS}><PlanGate feature="reports"><Reports /></PlanGate></RequireCap>} />
+        <Route path="accounting" element={<RequireCap cap={CAP.VIEW_REVENUE}><Accounting /></RequireCap>} />
         <Route path="daily" element={<RequireCap cap={CAP.VIEW_REPORTS}><PlanGate feature="reports"><DailyReport /></PlanGate></RequireCap>} />
         <Route path="hr" element={<RequireCap cap={CAP.ATTENDANCE}><PlanGate feature="staff"><StaffHub /></PlanGate></RequireCap>} />
         <Route path="roles" element={<RequireCap cap={CAP.MANAGE_STAFF}><PlanGate feature="staff"><Roles /></PlanGate></RequireCap>} />

@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { lazy, Suspense, useEffect, useState } from 'react'
 import { useAuth } from '../../lib/auth.jsx'
 import { useI18n, pickLang } from '../../lib/i18n.jsx'
 import { useToast } from '../../components/Toast.jsx'
@@ -7,6 +7,7 @@ import { Spinner, Empty } from '../../components/ui.jsx'
 import { watchOffers, saveOffer, deleteOffer, watchCategories, watchItems } from '../../lib/db.js'
 import { Price } from '../../components/Riyal.jsx'
 import Icon from '../../components/Icon.jsx'
+const SmartOfferAdvisor = lazy(() => import('../../components/SmartOfferAdvisor.jsx'))
 
 const DAYS = {
   ar: ['الأحد', 'الإثنين', 'الثلاثاء', 'الأربعاء', 'الخميس', 'الجمعة', 'السبت'],
@@ -35,6 +36,10 @@ export default function Offers() {
   const [items, setItems] = useState([])
   const [open, setOpen] = useState(false)
   const [form, setForm] = useState(null)
+  // Offer advisor: real 30-day sales + material costs, loaded only when opened.
+  const [advisorOpen, setAdvisorOpen] = useState(false)
+  const [advOrders, setAdvOrders] = useState([])
+  const [advMaterials, setAdvMaterials] = useState([])
 
   useEffect(() => {
     if (!tenantId) return
@@ -44,10 +49,47 @@ export default function Offers() {
     return () => { u1(); u2(); u3() }
   }, [tenantId])
 
+  useEffect(() => {
+    if (!advisorOpen || !tenantId || advOrders.length) return
+    let alive = true
+    ;(async () => {
+      try {
+        const { listOrdersSince, listMaterials } = await import('../../lib/db.js')
+        const since = new Date(Date.now() - 30 * 86400000)
+        const [os, ms] = await Promise.all([
+          listOrdersSince ? listOrdersSince(tenantId, since) : Promise.resolve([]),
+          listMaterials ? listMaterials(tenantId) : Promise.resolve([]),
+        ])
+        if (!alive) return
+        setAdvOrders(os || [])
+        setAdvMaterials(ms || [])
+      } catch (_) { /* advisor degrades to rule-free empty state honestly */ }
+    })()
+    return () => { alive = false }
+  }, [advisorOpen, tenantId, advOrders.length])
+
   const set = (k, v) => setForm((f) => ({ ...f, [k]: v }))
   const toggleDay = (d) => setForm((f) => ({ ...f, daysOfWeek: f.daysOfWeek.includes(d) ? f.daysOfWeek.filter((x) => x !== d) : [...f.daysOfWeek, d] }))
   const openNew = () => { setForm(blank()); setOpen(true) }
   const openEdit = (o) => { setForm({ ...blank(), ...o }); setOpen(true) }
+  // Advisor suggestion -> a prefilled (unsaved) offer the manager reviews.
+  const openNewFromDraft = (draft) => {
+    const one = Array.isArray(draft?.itemIds) ? draft.itemIds[0] : draft?.itemId
+    setForm({
+      ...blank(),
+      nameAr: draft?.name || '',
+      type: draft?.type === 'amount' ? 'amount' : 'percent',
+      value: Number(draft?.value) || '',
+      // The offer model targets ONE item (or the whole cart) — the advisor may
+      // propose several, so we seed the first and scope accordingly.
+      scope: one ? 'item' : 'cart',
+      itemId: one || '',
+      startTime: draft?.window?.startTime || '',
+      endTime: draft?.window?.endTime || '',
+      daysOfWeek: Array.isArray(draft?.window?.days) ? draft.window.days : [],
+    })
+    setOpen(true)
+  }
 
   const save = async () => {
     if (!form.nameAr?.trim() && !form.nameEn?.trim()) return
@@ -97,8 +139,24 @@ export default function Offers() {
     <div className="page stack">
       <div className="row-between">
         <h2 className="page-title">{t('offers')}</h2>
-        <button className="btn btn-primary btn-sm" onClick={openNew}>+ {t('addOffer')}</button>
+        <div className="row" style={{ gap: 8 }}>
+          <button className="btn btn-sm btn-outline" onClick={() => setAdvisorOpen(true)} title={lang === 'ar' ? 'اقتراحات عروض مبنية على مبيعاتك الفعلية' : 'Offer ideas from your real sales'}>
+            <Icon name="sparkles" size={14} /> {lang === 'ar' ? 'مستشار العروض' : 'Offer advisor'}
+          </button>
+          <button className="btn btn-primary btn-sm" onClick={openNew}>+ {t('addOffer')}</button>
+        </div>
       </div>
+
+      {advisorOpen && (
+        <Suspense fallback={null}>
+          <SmartOfferAdvisor
+            open onClose={() => setAdvisorOpen(false)}
+            orders={advOrders} items={items} materials={advMaterials} offers={offers}
+            lang={lang} currency={currency}
+            onCreateOffer={(draft) => { setAdvisorOpen(false); openNewFromDraft(draft) }}
+          />
+        </Suspense>
+      )}
 
       {offers.length === 0 ? (
         <Empty icon="offers" title={lang === 'ar' ? 'لا توجد عروض' : 'No offers'} action={<button className="btn btn-primary" onClick={openNew}>+ {t('addOffer')}</button>} />

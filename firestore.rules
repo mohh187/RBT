@@ -339,6 +339,47 @@ service cloud.firestore {
         allow update, delete: if isStaff(tid);
       }
 
+      // ---- shared table sessions («الطلب الجماعي»): every guest at the table
+      // reads and writes the same live basket. Guests are anonymous devices, so
+      // creation/updates are open like waiterCalls — but bounded: the doc must
+      // stay small, keep its table identity, and only staff may close/delete it.
+      match /tableSessions/{id} {
+        allow read: if true;
+        allow create: if true
+          && request.resource.data.status == 'open'
+          && request.resource.data.lines.size() <= 60;
+        allow update: if isStaff(tid)
+          || (request.resource.data.tableId == resource.data.tableId
+              && request.resource.data.lines.size() <= 60
+              && request.resource.data.guests.size() <= 20);
+        allow delete: if isStaff(tid);
+      }
+
+      // ---- waiting-game scores («لوحة صدارة الصيادين»): guests post their own
+      // score, everyone reads the board, managers can prune it.
+      match /gameScores/{id} {
+        allow read: if true;
+        allow create, update: if request.resource.data.score is number
+          && request.resource.data.score >= 0
+          && request.resource.data.score <= 100000;
+        allow delete: if isManager(tid);
+      }
+
+      // ---- accounting: the venue's books. Money data is manager-only (plus a
+      // staffer explicitly granted view_revenue for read access).
+      match /accounts/{id} {
+        allow read: if isSignedIn() && (isManager(tid) || hasCap(tid, 'view_revenue'));
+        allow write: if isManager(tid);
+      }
+      match /journal/{id} {
+        allow read: if isSignedIn() && (isManager(tid) || hasCap(tid, 'view_revenue'));
+        allow write: if isManager(tid);
+      }
+      match /accountingDocs/{id} {
+        allow read: if isSignedIn() && (isManager(tid) || hasCap(tid, 'view_revenue'));
+        allow write: if isManager(tid);
+      }
+
       // ---- cashier sessions (cash drawer): staff open/close their till ----
       match /cashierSessions/{id} {
         allow read: if isStaff(tid);

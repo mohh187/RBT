@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react'
+import { lazy, Suspense, useEffect, useRef, useState } from 'react'
 import { useParams, Link } from 'react-router-dom'
 import { resolveSlug, watchOrder, createReview, createComplaint, notifyArrival, getTenant } from '../../lib/db.js'
 import SocialLinks, { socialHref } from '../../components/SocialLinks.jsx'
@@ -18,6 +18,10 @@ import { startPayment } from '../../lib/payments.js'
 import { createVenueReview } from '../../lib/reviewImport.js'
 import NotificationSettings from '../../components/NotificationSettings.jsx'
 import WaitGame, { getBestScore } from '../../components/WaitGame.jsx'
+import { deviceGuestId } from '../../lib/tableSession.js'
+// heavy/rarely-opened guest overlays
+const Leaderboard = lazy(() => import('../../components/Leaderboard.jsx'))
+const KitchenTwin = lazy(() => import('../../components/KitchenTwin.jsx'))
 
 const STEPS = ['pending', 'accepted', 'preparing', 'ready', 'served']
 const STEP_LABEL = {
@@ -49,6 +53,10 @@ export default function OrderStatus() {
   const [arriving, setArriving] = useState(false)
   const [paying, setPaying] = useState(false)
   const [gameOpen, setGameOpen] = useState(false)
+  const [boardOpen, setBoardOpen] = useState(false)
+  const [twinOpen, setTwinOpen] = useState(false)
+  const [lastScore, setLastScore] = useState(0)
+  const gameDeviceId = deviceGuestId()
   const prevStatus = useRef(null)
 
   const [venue, setVenue] = useState(null) // social links + Google Maps CTA
@@ -261,7 +269,33 @@ export default function OrderStatus() {
             </span>
           </button>
         )}
-        {gameOpen && <WaitGame open onClose={() => setGameOpen(false)} tenantId={tid} brand={venue?.brandColor || '#0e7490'} />}
+        {gameOpen && (
+          <WaitGame
+            open onClose={() => setGameOpen(false)} tenantId={tid} brand={venue?.brandColor || '#0e7490'}
+            onLeaderboard={(score) => { setLastScore(score); setGameOpen(false); setBoardOpen(true) }}
+          />
+        )}
+        {boardOpen && (
+          <Suspense fallback={null}>
+            <Leaderboard open onClose={() => setBoardOpen(false)} tenantId={tid} lang={lang} myScore={lastScore} deviceId={gameDeviceId} />
+          </Suspense>
+        )}
+
+        {/* «توأم المطبخ» — live per-item progress straight from the kitchen screen */}
+        {!cancelled && currentIdx >= STEPS.indexOf('accepted') && currentIdx < STEPS.indexOf('served') && venue?.kitchenTwinEnabled !== false && (
+          <button type="button" className="wg-invite" style={{ background: 'linear-gradient(135deg, var(--brand), var(--brand-dark, #0b5))' }} onClick={() => setTwinOpen(true)}>
+            <span className="wg-invite-ico"><Icon name="kitchen" size={22} /></span>
+            <span className="wg-invite-txt">
+              <b>{lang === 'ar' ? 'تابع تحضير أصنافك لحظة بلحظة' : 'Follow your dishes live'}</b>
+              <span>{lang === 'ar' ? 'كل صنف يُنجز في المطبخ يظهر لك فوراً' : 'Each dish updates as the kitchen finishes it'}</span>
+            </span>
+          </button>
+        )}
+        {twinOpen && (
+          <Suspense fallback={null}>
+            <KitchenTwin open onClose={() => setTwinOpen(false)} tenantId={tid} orderId={orderId} lang={lang} />
+          </Suspense>
+        )}
 
         <div className="card card-pad stack">
           <strong>{t('yourOrder')}</strong>

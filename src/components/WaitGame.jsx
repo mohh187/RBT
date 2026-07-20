@@ -14,7 +14,7 @@ export function getBestScore(tid) {
   try { return Number(localStorage.getItem(bestKey(tid))) || 0 } catch (_) { return 0 }
 }
 
-export default function WaitGame({ open, onClose, tenantId, brand = '#0e7490' }) {
+export default function WaitGame({ open, onClose, tenantId, brand = '#0e7490', onLeaderboard }) {
   const canvasRef = useRef(null)
   const stateRef = useRef(null)
   const [phase, setPhase] = useState('ready') // ready | play | over
@@ -265,6 +265,11 @@ export default function WaitGame({ open, onClose, tenantId, brand = '#0e7490' })
           <button type="button" className="btn btn-primary wg-btn" style={{ background: brand }} onClick={start}>
             <Icon name="play" size={16} /> {phase === 'over' ? 'جولة جديدة' : 'ابدأ الصيد'}
           </button>
+          {onLeaderboard && phase === 'over' && (
+            <button type="button" className="btn btn-outline wg-btn" onClick={() => onLeaderboard(score)}>
+              <Icon name="award" size={16} /> لوحة صدارة الشهر
+            </button>
+          )}
         </div>
       )}
     </div>

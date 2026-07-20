@@ -27,7 +27,7 @@ import { sectionTemplate, templateOptions } from '../../lib/systemTemplates.js'
 
 const blank = () => ({
   nameAr: '', nameEn: '', price: '', calories: '', categoryId: '',
-  descAr: '', descEn: '', kdsWarning: '', imageUrl: '', images: [], imageStyle: '', imageScale: 1, effect: '', hotspots: [], arStandeeUrl: '', model3dUrl: '', model3dUsdzUrl: '', available: true, availableFrom: '', availableTo: '', countsForLoyalty: true, featured: false, promoNotify: 'default', trackStock: false, stock: '',
+  descAr: '', descEn: '', kdsWarning: '', imageUrl: '', images: [], imageStyle: '', imageScale: 1, effect: '', hotspots: [], story: null, arStandeeUrl: '', model3dUrl: '', model3dUsdzUrl: '', available: true, availableFrom: '', availableTo: '', countsForLoyalty: true, featured: false, promoNotify: 'default', trackStock: false, stock: '',
   prepTime: '', serves: '', rating: '', reviewsCount: '',
   ingredients: [], variants: [], modifierGroups: [], sortOrder: 0,
   recipe: [], variantRecipes: {},
@@ -618,6 +618,40 @@ function ItemEditor({ tenantId, cats, currency, value, onClose, onSaved, onDelet
     } finally { setAiDescBusy(false) }
   }
 
+  // «قصة الطبق» writer — a short editorial piece, returned as strict JSON so
+  // the four fields land in the right inputs (defensive parse, no fabrication
+  // of sourcing claims: the model is told to stay generic unless we gave facts).
+  const [dishStoryBusy, setDishStoryBusy] = useState(false)
+  const genDishStory = async () => {
+    if (dishStoryBusy) return
+    const label = form.nameAr || form.nameEn
+    if (!label) { toast.error(lang === 'ar' ? 'اكتب اسم الصنف أولاً' : 'Name the item first'); return }
+    setDishStoryBusy(true)
+    try {
+      const { aiQuick } = await import('../../lib/aiBridge.js')
+      const ing = (form.ingredients || []).map((x) => x.nameAr || x.nameEn).filter(Boolean).join('، ')
+      const out = await aiQuick(
+        `اكتب «قصة طبق» قصيرة لمنيو مطعم عن صنف اسمه "${label}"${ing ? ` ومكوناته: ${ing}` : ''}${form.descAr ? ` ووصفه: ${form.descAr}` : ''}.`
+        + ' أعد JSON فقط بالمفاتيح: title (عنوان جذاب 3-6 كلمات)، body (60-90 كلمة بأسلوب أدبي دافئ)، sourceLine (سطر واحد عن الطزاجة أو التحضير)، chefLine (جملة قصيرة على لسان الشيف).'
+        + ' لا تخترع ادعاءات محددة عن مصدر جغرافي أو جوائز أو شهادات. بلا رموز تعبيرية. JSON فقط بلا أي نص آخر.',
+      )
+      const raw = String(out || '')
+      const m = raw.match(/\{[\s\S]*\}/)
+      const j = m ? JSON.parse(m[0]) : null
+      if (!j || !(j.title || j.body)) throw new Error(lang === 'ar' ? 'رد غير مفهوم — أعد المحاولة' : 'Unparseable response')
+      set('story', {
+        ...(form.story || {}),
+        title: String(j.title || '').trim(),
+        body: String(j.body || '').trim(),
+        sourceLine: String(j.sourceLine || '').trim(),
+        chefLine: String(j.chefLine || '').trim(),
+      })
+      toast.success(lang === 'ar' ? 'كُتبت القصة — راجعها وعدّلها' : 'Story written — review it')
+    } catch (e) {
+      toast.error(e?.message || (lang === 'ar' ? 'تعذرت الكتابة' : 'Failed'))
+    } finally { setDishStoryBusy(false) }
+  }
+
   // per-item detail backdrop (image or video) — size is guarded inside storage.js
   const onBgPick = (kind) => async (e) => {
     const file = e.target.files?.[0]
@@ -682,6 +716,17 @@ function ItemEditor({ tenantId, cats, currency, value, onClose, onSaved, onDelet
             label: (h.label || '').trim(),
             desc: (h.desc || '').trim(),
           })),
+        // «قصة الطبق» — saved only when it actually has content, so the reader
+        // entry point never appears on an empty story.
+        story: (form.story && (form.story.title || form.story.body || '').trim())
+          ? {
+            title: (form.story.title || '').trim(),
+            body: (form.story.body || '').trim(),
+            sourceLine: (form.story.sourceLine || '').trim(),
+            chefLine: (form.story.chefLine || '').trim(),
+            imageUrl: form.story.imageUrl || '',
+          }
+          : null,
         arStandeeUrl: form.arStandeeUrl || '',
         model3dUrl: form.model3dUrl || '',
         model3dUsdzUrl: form.model3dUsdzUrl || '',
@@ -930,6 +975,47 @@ function ItemEditor({ tenantId, cats, currency, value, onClose, onSaved, onDelet
           <HotspotsEditor lang={lang} imageUrl={form.imageUrl} hotspots={form.hotspots || []} onChange={(v) => set('hotspots', v)} />
           <p className="xs faint">{lang === 'ar' ? 'يضغط العميل على النقطة داخل صورة الطبق ليقرأ ما هي — نوع الجبن، الصوص، الإضافة المميزة.' : 'Customers tap a dot inside the dish photo to read what that part of the plate is.'}</p>
         </div>
+
+        {/* «قصة الطبق» — an editorial story the guest can read from the item sheet */}
+        <details className="card card-pad" style={{ marginBottom: 'var(--sp-3)' }}>
+          <summary style={{ cursor: 'pointer', fontWeight: 700, fontSize: 'var(--fs-sm)' }}>
+            <Icon name="notepad" size={13} style={{ verticalAlign: 'middle' }} /> {lang === 'ar' ? 'قصة الطبق (اختياري)' : 'Dish story (optional)'}
+            {form.story?.title ? <span className="badge badge-success" style={{ marginInlineStart: 8 }}><Icon name="check" size={10} /></span> : null}
+          </summary>
+          <div className="stack" style={{ gap: 8, marginTop: 10 }}>
+            <p className="xs faint" style={{ margin: 0 }}>{lang === 'ar' ? 'حكاية قصيرة تُميّز الطبق: من أين يأتي السمك، كيف يُشوى، لمسة الشيف. تظهر للعميل كزر «اقرأ قصة الطبق» داخل تفاصيل الصنف.' : 'A short editorial story shown to guests from the item sheet.'}</p>
+            <div className="field">
+              <label>{lang === 'ar' ? 'العنوان' : 'Title'}</label>
+              <input className="input" value={form.story?.title || ''} placeholder={lang === 'ar' ? 'مثال: من سواحل جازان إلى الصاج' : 'e.g. From the coast to the grill'}
+                onChange={(e) => set('story', { ...(form.story || {}), title: e.target.value })} />
+            </div>
+            <div className="field">
+              <label>{lang === 'ar' ? 'النص' : 'Body'}</label>
+              <textarea className="input" rows={4} value={form.story?.body || ''}
+                onChange={(e) => set('story', { ...(form.story || {}), body: e.target.value })} />
+            </div>
+            <div className="row" style={{ gap: 8, flexWrap: 'wrap' }}>
+              <div className="field grow" style={{ minWidth: 180 }}>
+                <label>{lang === 'ar' ? 'سطر المصدر' : 'Source line'}</label>
+                <input className="input input-sm" value={form.story?.sourceLine || ''} placeholder={lang === 'ar' ? 'سمك طازج يومياً' : 'Fresh daily'}
+                  onChange={(e) => set('story', { ...(form.story || {}), sourceLine: e.target.value })} />
+              </div>
+              <div className="field grow" style={{ minWidth: 180 }}>
+                <label>{lang === 'ar' ? 'من الشيف' : 'From the chef'}</label>
+                <input className="input input-sm" value={form.story?.chefLine || ''}
+                  onChange={(e) => set('story', { ...(form.story || {}), chefLine: e.target.value })} />
+              </div>
+            </div>
+            <div className="row" style={{ gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
+              <button type="button" className="btn btn-sm btn-outline" disabled={dishStoryBusy || !(form.nameAr || form.nameEn)} onClick={genDishStory}>
+                <Icon name="sparkles" size={13} /> {dishStoryBusy ? (lang === 'ar' ? 'يكتب…' : 'Writing…') : (lang === 'ar' ? 'اكتب القصة بالذكاء' : 'AI write')}
+              </button>
+              {form.story?.title && (
+                <button type="button" className="btn-link xs" style={{ color: 'var(--danger)' }} onClick={() => set('story', null)}>{lang === 'ar' ? 'حذف القصة' : 'Clear story'}</button>
+              )}
+            </div>
+          </div>
+        </details>
 
         {/* Custom styling options for individual items (name & price position, colors, effects) */}
         <div className="card card-pad stack" style={{ gap: 10, background: 'var(--surface-2)', border: '1px solid var(--border)', marginBottom: 'var(--sp-3)' }}>

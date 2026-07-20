@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from 'react'
+import { lazy, Suspense, useEffect, useMemo, useRef, useState } from 'react'
 import { createPortal } from 'react-dom'
 import { Link, useNavigate } from 'react-router-dom'
 import { useI18n, pickLang } from '../lib/i18n.jsx'
@@ -19,6 +19,17 @@ import { tierDiscountAmount, TIER_META, resolveMembershipPolicy } from '../lib/m
 import { evaluateOffers, activeAutoOffers, offerForItem, discountedPrice } from '../lib/offers.js'
 import { alertParty } from '../lib/notify.js'
 import ItemFx from './ItemFx.jsx'
+// Interactive guest experience — each lazily loaded so a diner who never opens
+// them pays no bytes (speech, vision, WebGL and Firestore-session code).
+const VoiceWaiter = lazy(() => import('./VoiceWaiter.jsx'))
+const PhotoOrder = lazy(() => import('./PhotoOrder.jsx'))
+const VoiceMenuReader = lazy(() => import('./VoiceMenuReader.jsx'))
+const Menu3DWorld = lazy(() => import('./Menu3DWorld.jsx'))
+const CompareItems = lazy(() => import('./CompareItems.jsx'))
+const SharedCart = lazy(() => import('./SharedCart.jsx'))
+const DishStoryReader = lazy(() => import('./DishStory.jsx'))
+// tiny sync helpers (no heavy deps) so the item sheet can decide instantly
+import { hasStory, StoryBadge } from './DishStory.jsx'
 import { getLocalCustomer, setLocalCustomer, isRegisterDismissed, dismissRegister, fetchIp, getMyOrders, addMyOrder, getMemberToken, setMemberToken } from '../lib/customer.js'
 import { resolveSkin } from '../lib/skins.js'
 import { distanceMeters, getPosition } from '../lib/geo.js'
@@ -126,6 +137,10 @@ export default function MenuView({ tenant, tenantId, items, categories, offers =
   const [openRect, setOpenRect] = useState(null)
   const [cart, setCart] = useState([])
   const [cartOpen, setCartOpen] = useState(false)
+  // Interactive-experience overlays (venue-togglable in Settings; each defaults
+  // ON so a fresh venue demos fully, and each closes back to the menu).
+  const [fxOpen, setFxOpen] = useState('') // '' | voice | photo | read | world | compare | table
+  const [storyItem, setStoryItem] = useState(null)
   const [savedCustomer, setSavedCustomer] = useState(() => getLocalCustomer())
   const [regOpen, setRegOpen] = useState(false)
   const [regDismissed, setRegDismissed] = useState(() => isRegisterDismissed(tenantId))
@@ -332,6 +347,46 @@ export default function MenuView({ tenant, tenantId, items, categories, offers =
 
   const cartCount = cart.reduce((s, l) => s + l.qty, 0)
   const subtotal = cart.reduce((s, l) => s + l.unitPrice * l.qty, 0)
+
+  // Table order: merge the shared session lines into THIS device's cart rather
+  // than creating an order straight from session data. Prices are re-derived
+  // from the live menu (session lines are written by unauthenticated phones and
+  // must never be trusted for money), then the normal cart/checkout flow runs —
+  // so payment, loyalty, VAT and stock all behave exactly as usual.
+  const placeTableOrder = (lines) => {
+    let merged = 0
+    for (const l of lines || []) {
+      const item = (items || []).find((i) => i.id === l.itemId)
+      if (!item || item.available === false) continue
+      const variant = l.variant?.key ? (item.variants || []).find((v) => v.key === l.variant.key) || null : null
+      const mods = (l.mods || []).map((m) => {
+        const grp = (item.modifierGroups || []).flatMap((g) => g.options || [])
+        const real = grp.find((o) => o.nameAr === m.nameAr && o.nameEn === m.nameEn)
+        return real ? { nameAr: real.nameAr, nameEn: real.nameEn, price: Number(real.price) || 0, recipe: real.recipe || [] } : null
+      }).filter(Boolean)
+      addLine(item, variant, mods, Math.max(1, Math.min(50, Number(l.qty) || 1)))
+      merged += 1
+    }
+    if (!merged) { toast.error(lang === 'ar' ? 'لم تعد الأصناف متاحة' : 'Those items are no longer available'); return false }
+    setFxOpen('')
+    setCartOpen(true)
+    toast.success(lang === 'ar' ? 'نُقلت أصناف الطاولة إلى سلتك — أكمل الطلب' : 'Table items moved to your cart')
+    return true
+  }
+
+  // Which interactive chips to surface: venue toggle (default on) AND a real
+  // reason to exist — never advertise an experience that would open empty.
+  const expChips = useMemo(() => {
+    const on = (k) => tenant?.[k] !== false
+    const out = []
+    if (orderingEnabled && on('voiceWaiterEnabled')) out.push({ id: 'voice', icon: 'mic', label: lang === 'ar' ? 'اطلب بصوتك' : 'Voice order' })
+    if (on('photoOrderEnabled')) out.push({ id: 'photo', icon: 'camera', label: lang === 'ar' ? 'اطلب بالصورة' : 'Photo order' })
+    if (on('menu3dEnabled') && visibleItems.some((i) => i.model3dUrl || i.arStandeeUrl)) out.push({ id: 'world', icon: 'shapes', label: lang === 'ar' ? 'عالم ثلاثي الأبعاد' : '3D world' })
+    if (on('compareEnabled') && visibleItems.length > 1) out.push({ id: 'compare', icon: 'scale', label: lang === 'ar' ? 'قارن الأصناف' : 'Compare' })
+    if (orderingEnabled && on('sharedCartEnabled') && table?.id) out.push({ id: 'table', icon: 'customers', label: lang === 'ar' ? 'طلب الطاولة معاً' : 'Table order' })
+    if (on('voiceMenuEnabled')) out.push({ id: 'read', icon: 'sound', label: lang === 'ar' ? 'اقرأ المنيو صوتياً' : 'Read aloud' })
+    return out
+  }, [tenant, orderingEnabled, visibleItems, table, lang])
 
   const addLine = (item, variant, mods, qty) => {
     // browse mode: adding still works — the cart is the guest's "show the waiter"
@@ -558,6 +613,21 @@ export default function MenuView({ tenant, tenantId, items, categories, offers =
                 <button className={viewMode === 'gallery' ? 'on' : ''} onClick={() => setViewMode('gallery')} aria-label={t('galleryView')}><Icon name="grid" size={18} /></button>
               </div>
             )}
+          </div>
+        </div>
+      )}
+
+      {/* «التجربة التفاعلية» — voice / photo / 3D world / compare / table order.
+          Each chip appears only when the venue enabled it AND it has something
+          to show (e.g. the 3D world needs at least one item with a model). */}
+      {!preview && expChips.length > 0 && (
+        <div className="container" style={{ marginTop: 'var(--sp-2)' }}>
+          <div className="exp-bar scroll-x">
+            {expChips.map((c) => (
+              <button key={c.id} type="button" className="exp-chip" onClick={() => setFxOpen(c.id)}>
+                <Icon name={c.icon} size={15} /> <span>{c.label}</span>
+              </button>
+            ))}
           </div>
         </div>
       )}
@@ -882,8 +952,64 @@ export default function MenuView({ tenant, tenantId, items, categories, offers =
           onAdd={(variant, mods, qty) => { addLine(viewItem, variant, mods, qty); setViewItem(null); setOpenRect(null) }}
         />
       ) : (
-        <ItemSheet item={viewItem} tenant={tenant} currency={currency} tenantId={tenantId} detail={itemDetail} siblings={visibleItems} onNavigate={setViewItem} onClose={() => setViewItem(null)} onAdd={(variant, mods, qty) => { addLine(viewItem, variant, mods, qty); setViewItem(null) }} />
+        <ItemSheet item={viewItem} tenant={tenant} currency={currency} tenantId={tenantId} detail={itemDetail} siblings={visibleItems} onNavigate={setViewItem} onClose={() => setViewItem(null)} onOpenStory={(it) => setStoryItem(it)} onAdd={(variant, mods, qty) => { addLine(viewItem, variant, mods, qty); setViewItem(null) }} />
       ))}
+
+      {/* interactive-experience overlays (lazy; one at a time) */}
+      {fxOpen && (
+        <Suspense fallback={null}>
+          {fxOpen === 'voice' && (
+            <VoiceWaiter
+              open items={visibleItems} lang={lang} currency={currency}
+              onClose={() => setFxOpen('')}
+              onAdd={(item, variant, mods, qty) => addLine(item, variant, mods || [], qty || 1)}
+              onOpenItem={(it) => { setFxOpen(''); setViewItem(it) }}
+            />
+          )}
+          {fxOpen === 'photo' && (
+            <PhotoOrder
+              open items={visibleItems} tenant={tenant} lang={lang} currency={currency}
+              onClose={() => setFxOpen('')}
+              onPick={(it) => { setFxOpen(''); setViewItem(it) }}
+            />
+          )}
+          {fxOpen === 'read' && (
+            <VoiceMenuReader
+              open cats={sortedCats} itemsByCat={itemsByCat} lang={lang} currency={currency}
+              onClose={() => setFxOpen('')}
+              onOpenItem={(it) => { setFxOpen(''); setViewItem(it) }}
+              onAdd={(item) => addLine(item, (item.variants || [])[0] || null, [], 1)}
+            />
+          )}
+          {fxOpen === 'world' && (
+            <Menu3DWorld
+              open items={visibleItems} cats={sortedCats} lang={lang} currency={currency}
+              onClose={() => setFxOpen('')}
+              onOpenItem={(it) => { setFxOpen(''); setViewItem(it) }}
+            />
+          )}
+          {fxOpen === 'compare' && (
+            <CompareItems
+              open items={visibleItems} lang={lang} currency={currency}
+              onClose={() => setFxOpen('')}
+              onOpenItem={(it) => { setFxOpen(''); setViewItem(it) }}
+            />
+          )}
+          {fxOpen === 'table' && table?.id && (
+            <SharedCart
+              open tenantId={tenantId} table={table} currency={currency} lang={lang}
+              onClose={() => setFxOpen('')}
+              onPlaceOrder={placeTableOrder}
+            />
+          )}
+        </Suspense>
+      )}
+
+      {storyItem && (
+        <Suspense fallback={null}>
+          <DishStoryReader open item={storyItem} tenant={tenant} lang={lang} onClose={() => setStoryItem(null)} />
+        </Suspense>
+      )}
 
       {cartOpen && (
         <CartSheet
@@ -1205,7 +1331,7 @@ function RegisterSheet({ tenantId, tenantName, onClose, onSaved }) {
   )
 }
 
-export function ItemSheet({ item, tenant, currency, tenantId, onClose, onAdd, detail = 'sheet', siblings = [], onNavigate }) {
+export function ItemSheet({ item, tenant, currency, tenantId, onClose, onAdd, detail = 'sheet', siblings = [], onNavigate, onOpenStory }) {
   const { t, lang } = useI18n()
   const toast = useToast()
   const portalRoot = usePortalRoot()
@@ -1365,6 +1491,7 @@ export function ItemSheet({ item, tenant, currency, tenantId, onClose, onAdd, de
               {item.serves ? <span className="time-chip"><Icon name="customers" size={14} /> {item.serves}</span> : null}
               {item.calories ? <span className="time-chip"><Icon name="flame" size={14} /> {item.calories}</span> : null}
             </div>
+            {onOpenStory && hasStory(item) && <StoryBadge lang={lang} onClick={() => onOpenStory(item)} />}
           </div>
 
           <div className="dish-tabs">

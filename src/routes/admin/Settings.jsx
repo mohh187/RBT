@@ -1024,6 +1024,35 @@ export default function Settings() {
             </div>
           </div>
 
+          {/* Interactive guest experience — the flagship features, each switchable
+              per venue so a demo can be tuned to the client in seconds. */}
+          <div className="card card-pad stack" style={{ gap: 10 }}>
+            <div className="row" style={{ gap: 6, alignItems: 'center' }}>
+              <Icon name="sparkles" size={18} style={{ color: 'var(--brand)' }} />
+              <strong>{ar ? 'التجربة التفاعلية للعميل' : 'Interactive guest experience'}</strong>
+            </div>
+            <p className="xs faint" style={{ margin: 0 }}>{ar ? 'مزايا تفاعلية داخل المنيو وصفحة الطلب — فعّل ما يناسب منشأتك.' : 'Interactive features inside the menu and order page.'}</p>
+            {[
+              ['voiceWaiterEnabled', ar ? 'النادل الصوتي (اطلب بصوتك)' : 'Voice waiter', ar ? 'يتحدث العميل فيُضاف الصنف لسلته' : 'Speak to order'],
+              ['photoOrderEnabled', ar ? 'اطلب بالصورة' : 'Order by photo', ar ? 'يصوّر طبقاً فيجد الذكاء أقرب صنف في منيوك' : 'Photo to nearest menu item'],
+              ['voiceMenuEnabled', ar ? 'المنيو الصوتي (إتاحة للمكفوفين)' : 'Accessible voice menu', ar ? 'يقرأ المنيو صوتياً ويتنقل بالأوامر' : 'Reads the menu aloud'],
+              ['menu3dEnabled', ar ? 'عالم المنيو ثلاثي الأبعاد' : '3D menu world', ar ? 'معرض يتنقل فيه العميل بين المجسمات' : 'Walk between 3D dishes'],
+              ['compareEnabled', ar ? 'مقارنة الأصناف' : 'Compare items', ar ? 'يقارن العميل صنفين أو ثلاثة جنباً لجنب' : 'Side-by-side comparison'],
+              ['sharedCartEnabled', ar ? 'الطلب الجماعي وتقسيم الفاتورة' : 'Shared table order', ar ? 'كل من على الطاولة يضيف من جواله لسلة واحدة' : 'One live basket per table'],
+              ['kitchenTwinEnabled', ar ? 'توأم المطبخ (متابعة حية للأصناف)' : 'Kitchen twin', ar ? 'يرى العميل أصنافه تُنجز واحداً واحداً' : 'Live per-item progress'],
+              ['leaderboardEnabled', ar ? 'لوحة صدارة اللعبة' : 'Game leaderboard', ar ? 'ترتيب شهري لأفضل اللاعبين' : 'Monthly top players'],
+            ].map(([key, label, hint]) => (
+              <div key={key} className="row-between wrap" style={{ gap: 10, paddingBlock: 4, borderTop: '1px solid var(--border)' }}>
+                <div>
+                  <div className="small bold">{label}</div>
+                  <div className="xs faint">{hint}</div>
+                </div>
+                <input type="checkbox" checked={tenant?.[key] !== false} style={{ width: 22, height: 22 }}
+                  onChange={async (e) => { try { await saveNow({ [key]: e.target.checked }); updateTenantLocal({ [key]: e.target.checked }); toast.success(t('saved')) } catch (_) { toast.error(t('error')) } }} />
+              </div>
+            ))}
+          </div>
+
           {/* Kitchen (KDS) operational tuning: late threshold + category→station names */}
           <div className="card card-pad stack" style={{ gap: 12 }}>
             <div className="row" style={{ gap: 6, alignItems: 'center' }}>

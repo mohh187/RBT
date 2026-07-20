@@ -60,6 +60,7 @@ const moreGroups = [
   { title: { ar: 'التقارير والتحليلات', en: 'Reports & analytics' }, items: [
     { to: '/admin/reports', icon: 'reports', label: { ar: 'التقارير', en: 'Reports' }, cap: CAP.VIEW_REPORTS, feature: 'reports' },
     { to: '/admin/daily', icon: 'chartBar', label: { ar: 'تقرير اليوم', en: 'Daily report' }, cap: CAP.VIEW_REPORTS, feature: 'reports' },
+    { to: '/admin/accounting', icon: 'wallet', label: { ar: 'المحاسبة', en: 'Accounting' }, cap: CAP.VIEW_REVENUE },
   ] },
   { title: { ar: 'النظام والمساعدة', en: 'System & help' }, items: [
     { to: '/admin/assistant', icon: 'sparkles', label: { ar: 'المساعد الذكي', en: 'AI assistant' }, cap: CAP.USE_ASSISTANT },
