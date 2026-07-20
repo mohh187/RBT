@@ -293,16 +293,6 @@ export default function GamesCenter({
     return p ? p.seat : null
   }, [room])
 
-  // Arriving from an invite link: the join page already seated this guest, so
-  // go straight to the board instead of making them find the game again.
-  const joinedRef = useRef(false)
-  useEffect(() => {
-    if (!open || joinedRef.current) return
-    if (!joinRoomId || !joinGameId || !gameById(joinGameId)) return
-    joinedRef.current = true
-    enterRoom(joinRoomId, joinGameId)
-  }, [open, joinRoomId, joinGameId, enterRoom])
-
   // Live room subscription + presence while a room is open.
   useEffect(() => {
     if (!tenantId || !roomId) { setRoom(null); return undefined }
@@ -343,6 +333,19 @@ export default function GamesCenter({
     setView('play')
     setRunKey((k) => k + 1)
   }, [])
+
+  // Arriving from an invite link: the join page already seated this guest, so
+  // go straight to the board instead of making them find the game again.
+  // Declared AFTER enterRoom on purpose — a const is in its temporal dead zone
+  // until its initialiser runs, and referencing it above crashed the menu.
+  const joinedRef = useRef(false)
+  useEffect(() => {
+    if (!open || joinedRef.current) return
+    if (!joinRoomId || !joinGameId || !gameById(joinGameId)) return
+    joinedRef.current = true
+    enterRoom(joinRoomId, joinGameId)
+  }, [open, joinRoomId, joinGameId, enterRoom])
+
   const progressRef = useRef({ stage: 0, completed: false })
   const resumeRef = useRef(null)
   const revealedRef = useRef(new Set())
