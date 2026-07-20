@@ -11,6 +11,7 @@ import { CAP, CAP_LABELS, roleDefaultCaps, effectiveCaps, roleName } from './per
 import { PLATFORM_APEX, DOMAIN_CNAME_TARGET } from './domains.js'
 import { SKINS, FONT_OPTIONS, SHAPE_OPTIONS, LAYOUT_OPTIONS } from './skins.js'
 import { SYSTEM_THEMES, THEMEABLE_SECTIONS } from './systemThemes.js'
+import { lex } from './venueTypes.js'
 
 // Real registries — validation + tool descriptions are generated from these so
 // the model can never be misled by stale hardcoded id lists again.
@@ -834,34 +835,99 @@ export const ACTIONS = [
   { name: 'set_venue_location', risk: 'confirm', description: 'Set the venue GPS coordinates — used by the staff-attendance geofence and by delivery distance/zone fees.', parameters: obj({ lat: num('latitude, -90 to 90'), lng: num('longitude, -180 to 180') }, ['lat', 'lng']),
     run: async (a, { tid }) => { const lat = Number(a.lat); const lng = Number(a.lng); if (!Number.isFinite(lat) || lat < -90 || lat > 90 || !Number.isFinite(lng) || lng < -180 || lng > 180) return { error: 'إحداثيات غير صحيحة — lat بين -90 و 90، وlng بين -180 و 180' }; await db.updateTenant(tid, { geo: { lat, lng } }); return { ok: true, message: `تم حفظ موقع المنشأة (${lat}, ${lng}) — يُستخدم في التحقق الجغرافي للحضور وحساب مسافة التوصيل` } } },
 
-  { name: 'system_overview', risk: 'safe', description: 'One-call Arabic orientation digest of the whole system: the 5 main sections, the «المزيد» groups, global search, help center, and the first 5 things a new venue should do. Call for «كيف أستخدم النظام؟» or any general-orientation question, then answer from it.', parameters: obj({}),
-    run: async () => ({ overview: [
-      'الأقسام الخمسة الرئيسية (الشريط السفلي / الجانبي):',
-      '1. الرئيسية /admin — لوحة اليوم: المبيعات، الطلبات النشطة، التنبيهات.',
-      '2. الطلبات /admin/orders — استقبال الطلبات ومتابعة حالتها حتى التسليم.',
-      '3. المنيو /admin/menu — التصنيفات والأصناف والأسعار والصور والوصفات.',
-      '4. العمليات /admin/operations — الطاولات ورموز QR والتشغيل اليومي.',
-      '5. الفريق /admin/hr — الموظفون والأدوار والحضور والرواتب.',
-      '',
-      'زر «المزيد» يجمع الباقي في مجموعات:',
-      '- التسويق والعملاء: العملاء، الإعلانات والحملات، العروض والخصومات، استوديو التقييمات، استوديو المنشورات، سجل الرسائل والتحليلات، المكتبة، الاستوري، البروفايل والأخبار.',
-      '- التشغيل اليومي: الكاشير، شاشة المطبخ، مسح التذاكر، المخزون والموردون، الشكاوى.',
-      '- الفعاليات والحجوزات: الفعاليات والتذاكر، حجوزات الطاولات.',
-      '- التقارير والتحليلات: التقارير، تقرير اليوم.',
-      '- النظام والمساعدة: المساعد الذكي، شاشات العرض، الإعدادات، الفوترة والاشتراك، مركز المساعدة، الدعم، بوابتي.',
-      '',
-      'قدرات ذكاء بارزة: توليد صور بهوية منشأتك في (المكتبة، استوديو المنشورات، الاستوري، الأخبار، الفعاليات، محرر الصنف)، إزالة الخلفية، الواقع المعزز AR للأصناف، ومهندس الصلاحيات بالمحادثة.',
-      '',
-      'اختصارات تسهّل كل شيء: بحث شامل بضغطة Ctrl+K يفتح أي شاشة أو صنفاً أو عميلاً بالاسم، ومركز المساعدة في /admin/help فيه شروحات لكل ميزة، والمساعد الذكي ينفّذ معظم المهام بأمر واحد بدل التنقّل.',
-      '',
-      'أول 5 خطوات لمنشأة جديدة:',
-      '1. أنشئ التصنيفات وأضف الأصناف بأسعارها وصورها من «المنيو».',
-      '2. اضبط الهوية (الاسم، الألوان، الشعار) وحدّد الموقع الجغرافي من «الإعدادات».',
-      '3. أضف الطاولات واطبع رموز QR من «العمليات» ليطلب الضيوف بأنفسهم.',
-      '4. أضف موظفيك وحدّد أدوارهم وصلاحياتهم من «الفريق».',
-      '5. فعّل الولاء أو العضويات وأنشئ أول عرض، ثم جرّب طلباً تجريبياً من رابط المنيو.',
-    ].join('\n') }) },
+  { name: 'system_overview', risk: 'safe', description: 'One-call Arabic orientation digest of the whole system: the 5 main sections, the «المزيد» groups, global search, help center, and the first 5 things a new venue should do. The digest is written in THIS venue\'s own vocabulary. Call for «كيف أستخدم النظام؟» or any general-orientation question, then answer from it.', parameters: obj({}),
+    // The digest speaks the venue's own nouns via lex(): a perfumery reads
+    // «المنتجات/الكتالوج», a cafe reads «المشروبات/المنيو». With no venue type
+    // set, lex falls back to the neutral wording this text always used.
+    run: async (a, { tenant } = {}) => {
+      const t = tenant || null
+      const ITEM = lex(t, 'item')
+      const ITEMS = lex(t, 'items')
+      const MENU = lex(t, 'menu')
+      const CATS = lex(t, 'categories')
+      const GUESTS = lex(t, 'guests')
+      return { overview: [
+        'الأقسام الخمسة الرئيسية (الشريط السفلي / الجانبي):',
+        '1. الرئيسية /admin — لوحة اليوم: المبيعات، الطلبات النشطة، التنبيهات.',
+        '2. الطلبات /admin/orders — استقبال الطلبات ومتابعة حالتها حتى التسليم.',
+        `3. ${MENU} /admin/menu — ${CATS} و${ITEMS} والأسعار والصور والوصفات.`,
+        '4. العمليات /admin/operations — الطاولات ورموز QR والتشغيل اليومي.',
+        '5. الفريق /admin/hr — الموظفون والأدوار والحضور والرواتب.',
+        '',
+        'زر «المزيد» يجمع الباقي في مجموعات:',
+        '- التسويق والعملاء: العملاء، الإعلانات والحملات، العروض والخصومات، استوديو التقييمات، استوديو المنشورات، سجل الرسائل والتحليلات، المكتبة، الاستوري، البروفايل والأخبار.',
+        '- التشغيل اليومي: الكاشير، شاشة المطبخ، مسح التذاكر، المخزون والموردون، الشكاوى.',
+        '- الفعاليات والحجوزات: الفعاليات والتذاكر، حجوزات الطاولات.',
+        '- التقارير والتحليلات: التقارير، تقرير اليوم.',
+        '- النظام والمساعدة: المساعد الذكي، شاشات العرض، الإعدادات، الفوترة والاشتراك، مركز المساعدة، الدعم، بوابتي.',
+        '',
+        `قدرات ذكاء بارزة: توليد صور بهوية منشأتك في (المكتبة، استوديو المنشورات، الاستوري، الأخبار، الفعاليات، محرر ${ITEM})، إزالة الخلفية، الواقع المعزز AR لـ${ITEMS}، ومهندس الصلاحيات بالمحادثة.`,
+        '',
+        `اختصارات تسهّل كل شيء: بحث شامل بضغطة Ctrl+K يفتح أي شاشة أو ${ITEM} أو عميلاً بالاسم، ومركز المساعدة في /admin/help فيه شروحات لكل ميزة، والمساعد الذكي ينفّذ معظم المهام بأمر واحد بدل التنقّل.`,
+        '',
+        'أول 5 خطوات لمنشأة جديدة:',
+        `1. أنشئ ${CATS} وأضف ${ITEMS} بأسعارها وصورها من «${MENU}».`,
+        '2. اضبط الهوية (الاسم، الألوان، الشعار) وحدّد الموقع الجغرافي من «الإعدادات».',
+        `3. أضف الطاولات واطبع رموز QR من «العمليات» ليطلب ${GUESTS} بأنفسهم.`,
+        '4. أضف موظفيك وحدّد أدوارهم وصلاحياتهم من «الفريق».',
+        `5. فعّل الولاء أو العضويات وأنشئ أول عرض، ثم جرّب طلباً تجريبياً من رابط ${MENU}.`,
+      ].join('\n') }
+    } },
 ]
 
 export const ACTIONS_BY_NAME = Object.fromEntries(ACTIONS.map((a) => [a.name, a]))
 export const TOOL_DECLARATIONS = ACTIONS.map((a) => ({ name: a.name, description: a.description, parameters: a.parameters }))
+
+// ---------------------------------------------------------------------------
+// VENUE VOCABULARY LAYER
+//
+// Same tools, same parameters, same risk — only the DESCRIPTIONS are retold in
+// the venue's own nouns so the model reasons (and replies) in the words this
+// business actually uses. Two passes:
+//   1. Arabic nouns inside a description are swapped outright (same length,
+//      zero token cost): «الأصناف» -> «المنتجات», «المنيو» -> «الكتالوج» …
+//   2. the FIRST English venue-noun in a description gets a one-word Arabic
+//      gloss, e.g. `item (عطر)`. Capped at one gloss per tool to bound prompt
+//      growth.
+// A venue with no `type` set gets TOOL_DECLARATIONS back untouched — identical
+// to today's behaviour, byte for byte.
+// ---------------------------------------------------------------------------
+const definite = (w) => (/^ال/.test(w) ? w : `ال${w}`)
+
+export function toolDeclarationsFor(tenant) {
+  if (!tenant?.type) return TOOL_DECLARATIONS
+  const item = lex(tenant, 'item')
+  const items = lex(tenant, 'items')
+  const menu = lex(tenant, 'menu')
+  const category = lex(tenant, 'category')
+  const categories = lex(tenant, 'categories')
+  if (!item || !items || !menu) return TOOL_DECLARATIONS
+
+  // pass 1 — Arabic swaps, done in ONE left-to-right scan with the longest
+  // alternatives first. This is what stops «صنف» from being replaced inside
+  // «تصنيف»: the longer word is matched and consumed before the shorter one is
+  // ever tried. Identity pairs stay in the map so they still consume their text.
+  const AR = {
+    'التصنيفات': categories, 'تصنيفات': categories, 'التصنيف': definite(category), 'تصنيف': category,
+    'الأصناف': items, 'أصناف': items, 'الصنف': definite(item), 'صنف': item,
+    'قائمة الطعام': menu, 'المنيو': menu,
+  }
+  const arKeys = Object.keys(AR).filter((k) => AR[k]).sort((a, b) => b.length - a.length)
+  const arRe = arKeys.length ? new RegExp(arKeys.join('|'), 'g') : null
+
+  // pass 2 — one English gloss per description, most specific phrase first
+  const EN = [
+    [/\bmenu items\b/i, items], [/\bmenu item\b/i, item],
+    [/\bcategories\b/i, categories], [/\bcategory\b/i, category],
+    [/\bitems\b/i, items], [/\bitem\b/i, item], [/\bmenu\b/i, menu],
+  ]
+
+  return TOOL_DECLARATIONS.map((d) => {
+    let text = d.description || ''
+    if (arRe) text = text.replace(arRe, (m) => AR[m] || m)
+    for (const [re, ar] of EN) {
+      if (re.test(text)) { text = text.replace(re, (m) => `${m} (${ar})`); break }
+    }
+    return text === d.description ? d : { ...d, description: text }
+  })
+}

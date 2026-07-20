@@ -1,6 +1,7 @@
 import { useState, useEffect, useMemo, useRef, lazy, Suspense } from 'react'
 import { useAuth } from '../../lib/auth.jsx'
 import { CAP } from '../../lib/permissions.js'
+import { VENUE_TYPES, venueType, lex, LEX_KEYS, LEX_LABELS } from '../../lib/venueTypes.js'
 
 // Map-based range picking (leaflet) — lazy so the heavy map bundle loads only on demand.
 const MapRangePicker = lazy(() => import('../../components/MapRangePicker.jsx'))
@@ -830,6 +831,8 @@ export default function Settings() {
 
           <div className="set-anchor" id="sec-identity" />
           <h3 className="set-sec">{ar ? 'الهوية والروابط' : 'Identity & links'}</h3>
+
+          <VenueTypeCard ar={ar} tenant={tenant} saveNow={saveNow} updateTenantLocal={updateTenantLocal} toast={toast} t={t} />
 
           {/* Profile Card */}
           <div className="card card-pad stack" style={{ gap: 'var(--sp-3)' }}>
@@ -3271,6 +3274,107 @@ function GamePicker({ ar, tenant, saveNow, updateTenantLocal, toast, t }) {
           </label>
         ))}
       </div>
+    </div>
+  )
+}
+
+// «نوع النشاط ومفرداته» — the venue type reshapes the system's vocabulary and
+// tells every AI surface what this business actually is. Changing it is safe
+// at any time; per-word overrides let an unusual business fine-tune wording
+// without waiting for us to ship a new type.
+function VenueTypeCard({ ar, tenant, saveNow, updateTenantLocal, toast, t }) {
+  const [openLex, setOpenLex] = useState(false)
+  const [busy, setBusy] = useState(false)
+  const [label, setLabel] = useState(tenant?.typeLabel || '')
+  const current = venueType(tenant)
+
+  const pick = async (id) => {
+    if (busy) return
+    setBusy(true)
+    try {
+      await saveNow({ type: id })
+      updateTenantLocal({ type: id })
+      toast.success(t('saved'))
+    } catch (_) { toast.error(t('error')) } finally { setBusy(false) }
+  }
+
+  const saveLabel = async () => {
+    try {
+      await saveNow({ typeLabel: label.trim() })
+      updateTenantLocal({ typeLabel: label.trim() })
+      toast.success(t('saved'))
+    } catch (_) { toast.error(t('error')) }
+  }
+
+  const setWord = async (key, value) => {
+    const next = { ...(tenant?.lexOverrides || {}) }
+    if (value.trim()) next[key] = value.trim()
+    else delete next[key]
+    try {
+      await saveNow({ lexOverrides: next })
+      updateTenantLocal({ lexOverrides: next })
+    } catch (_) { toast.error(t('error')) }
+  }
+
+  return (
+    <div className="card card-pad stack" style={{ gap: 12 }}>
+      <div className="row" style={{ gap: 6, alignItems: 'center' }}>
+        <Icon name="store" size={18} style={{ color: 'var(--brand)' }} />
+        <strong>{ar ? 'نوع النشاط ومفرداته' : 'Business type & wording'}</strong>
+      </div>
+      <p className="xs faint" style={{ margin: 0 }}>
+        {ar
+          ? 'يحدّد هذا الخيار مفردات النظام كلها (مشروب / طبق / منتج…) ويجعل الذكاء الاصطناعي يفهم طبيعة نشاطك في كل ما يكتبه ويصمّمه ويقترحه.'
+          : 'Drives the system vocabulary and tells the AI what this business is.'}
+      </p>
+
+      <div className="row wrap" style={{ gap: 6 }}>
+        {VENUE_TYPES.map((ty) => (
+          <button key={ty.id} type="button" disabled={busy}
+            className={`chip ${tenant?.type === ty.id ? 'active' : ''}`}
+            onClick={() => pick(ty.id)}>
+            <Icon name={ty.icon} size={13} style={{ verticalAlign: 'middle', marginInlineEnd: 4 }} />{ty.ar}
+          </button>
+        ))}
+      </div>
+
+      {tenant?.type === 'other' && (
+        <div className="row" style={{ gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
+          <input className="input input-sm grow" style={{ minWidth: 200 }} value={label}
+            placeholder={ar ? 'اكتب اسم نشاطك بالضبط' : 'Name your business type'}
+            onChange={(e) => setLabel(e.target.value)} onBlur={saveLabel} />
+        </div>
+      )}
+
+      <div className="card card-pad" style={{ background: 'var(--surface-2)', border: 'none' }}>
+        <p className="xs" style={{ margin: 0, lineHeight: 1.8 }}>
+          {ar ? 'حالياً يخاطب النظام عملاءك بـ: ' : 'Currently: '}
+          <b>{lex(tenant, 'item')}</b>{' · '}<b>{lex(tenant, 'items')}</b>{' · '}<b>{lex(tenant, 'menu')}</b>{' · '}<b>{lex(tenant, 'place')}</b>
+        </p>
+      </div>
+
+      <button type="button" className="btn btn-sm btn-outline" style={{ alignSelf: 'flex-start' }} onClick={() => setOpenLex((v) => !v)}>
+        <Icon name="penLine" size={13} /> {ar ? 'تخصيص المفردات يدوياً' : 'Custom wording'}
+      </button>
+
+      {openLex && (
+        <div className="stack" style={{ gap: 8 }}>
+          <p className="xs faint" style={{ margin: 0 }}>
+            {ar ? 'اترك الحقل فارغاً ليستخدم النظام الكلمة الافتراضية لنشاطك.' : 'Leave empty to use the type default.'}
+          </p>
+          {LEX_KEYS.map((k) => (
+            <div key={k} className="row" style={{ gap: 8, alignItems: 'center' }}>
+              <span className="xs faint" style={{ minWidth: 120 }}>{LEX_LABELS[k] || k}</span>
+              <input
+                className="input input-sm grow"
+                defaultValue={(tenant?.lexOverrides || {})[k] || ''}
+                placeholder={lex(tenant, k)}
+                onBlur={(e) => setWord(k, e.target.value)}
+              />
+            </div>
+          ))}
+        </div>
+      )}
     </div>
   )
 }

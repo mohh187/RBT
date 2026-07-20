@@ -355,6 +355,34 @@ service cloud.firestore {
         allow delete: if isStaff(tid);
       }
 
+      // ---- game plays: the full record of what a guest played and answered.
+      // The diner's own device writes it (anonymous); only staff read it. Same
+      // bounding philosophy as sessions — capped arrays, immutable identity.
+      match /gamePlays/{playId} {
+        allow read: if isStaff(tid);
+        allow create: if request.resource.data.playId == playId
+          && request.resource.data.answers.size() <= 120;
+        allow update: if request.resource.data.playId == resource.data.playId
+          && request.resource.data.deviceId == resource.data.deviceId
+          && request.resource.data.answers.size() <= 120;
+        allow delete: if isManager(tid);
+      }
+
+      // ---- player rollups: one per device, the guest's own play history.
+      match /playerProfiles/{deviceId} {
+        allow read: if isStaff(tid);
+        allow create, update: if request.resource.data.deviceId == deviceId;
+        allow delete: if isManager(tid);
+      }
+
+      // ---- AI generation log: staff-only end to end (prompts can contain the
+      // venue's private marketing thinking, so guests never read this).
+      match /aiGenerations/{id} {
+        allow read: if isStaff(tid);
+        allow create: if isStaff(tid);
+        allow update, delete: if isManager(tid);
+      }
+
       // ---- behaviour sessions: one doc per guest visit, written by the diner's
       // own device (anonymous) and read only by staff. Bounded so a hostile
       // client cannot use it as free storage: the events/search arrays are

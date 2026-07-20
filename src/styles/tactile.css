@@ -1,0 +1,101 @@
+/* ==== tactile menu interactions ====
+   Every interactive surface in the guest menu answers a touch immediately:
+   a fast press-in, a soft ripple-free scale, and a settle. Transform/opacity
+   only (GPU-cheap), and fully disabled under prefers-reduced-motion. */
+
+[data-menu-layout] button,
+[data-menu-layout] .btn,
+[data-menu-layout] .chip,
+[data-menu-layout] .list-row,
+[data-menu-layout] .food-card,
+[data-menu-layout] .item-tile,
+[data-menu-layout] .exp-chip,
+[data-menu-layout] .m-promo,
+[data-menu-layout] .store-card,
+[data-menu-layout] .cl-row,
+[data-menu-layout] .showcase-card {
+  -webkit-tap-highlight-color: transparent;
+  transition: transform .14s cubic-bezier(.25, 1, .5, 1), box-shadow .2s ease, filter .2s ease;
+}
+
+[data-menu-layout] button:active,
+[data-menu-layout] .btn:active,
+[data-menu-layout] .chip:active,
+[data-menu-layout] .list-row:active,
+[data-menu-layout] .exp-chip:active {
+  transform: scale(.955);
+}
+
+/* Cards press with a gentler scale so large surfaces do not feel rubbery. */
+[data-menu-layout] .food-card:active,
+[data-menu-layout] .item-tile:active,
+[data-menu-layout] .store-card:active,
+[data-menu-layout] .cl-row:active,
+[data-menu-layout] .showcase-card:active,
+[data-menu-layout] .m-promo:active {
+  transform: scale(.985);
+  filter: brightness(.97);
+}
+
+/* Primary actions lift slightly on hover for pointer devices only. */
+@media (hover: hover) and (pointer: fine) {
+  [data-menu-layout] .btn-primary:hover,
+  [data-menu-layout] .exp-chip:hover { transform: translateY(-1px); }
+}
+
+/* ---- the games entry: unmissable, alive, but never noisy ---- */
+.exp-chip.is-games {
+  position: relative;
+  color: var(--on-brand, #fff);
+  background: linear-gradient(135deg, var(--brand), color-mix(in srgb, var(--brand) 55%, #7c3aed));
+  border-color: transparent;
+  font-weight: 800;
+  box-shadow: 0 6px 18px color-mix(in srgb, var(--brand) 35%, transparent);
+}
+.exp-chip.is-games::after {
+  content: '';
+  position: absolute;
+  inset: -3px;
+  border-radius: inherit;
+  border: 2px solid color-mix(in srgb, var(--brand) 60%, transparent);
+  animation: gamesPulse 2.4s ease-out infinite;
+  pointer-events: none;
+}
+@keyframes gamesPulse {
+  0%   { transform: scale(1);    opacity: .75; }
+  70%  { transform: scale(1.28); opacity: 0; }
+  100% { transform: scale(1.28); opacity: 0; }
+}
+/* A soft sheen sweeping across the chip — reads as "playful", not as an ad. */
+.exp-chip.is-games::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  background: linear-gradient(110deg, transparent 30%, rgba(255, 255, 255, .35) 50%, transparent 70%);
+  transform: translateX(-120%);
+  animation: gamesSheen 4.5s ease-in-out infinite;
+  pointer-events: none;
+}
+@keyframes gamesSheen {
+  0%, 55% { transform: translateX(-120%); }
+  75%     { transform: translateX(120%); }
+  100%    { transform: translateX(120%); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  [data-menu-layout] button,
+  [data-menu-layout] .btn,
+  [data-menu-layout] .chip,
+  [data-menu-layout] .list-row,
+  [data-menu-layout] .food-card,
+  [data-menu-layout] .item-tile,
+  [data-menu-layout] .exp-chip { transition: none; }
+  [data-menu-layout] button:active,
+  [data-menu-layout] .btn:active,
+  [data-menu-layout] .chip:active,
+  [data-menu-layout] .exp-chip:active { transform: none; }
+  .exp-chip.is-games::after,
+  .exp-chip.is-games::before { animation: none; }
+  .exp-chip.is-games::before { opacity: 0; }
+}

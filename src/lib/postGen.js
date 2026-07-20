@@ -6,17 +6,32 @@
 import { httpsCallable } from 'firebase/functions'
 import { functions, firebaseReady } from './firebase.js'
 import { aiQuick } from './aiBridge.js'
+import { venueType, venueAiContext, lex } from './venueTypes.js'
+import { brandVisualDirective } from './brandInsight.js'
 
 export const IMAGE_MODEL = 'gemini-2.5-flash-image'
 
+// The English noun the image model should picture. Falls back to the old
+// neutral wording whenever the venue type is unknown, so nothing regresses.
+export function venueEnglishLabel(tenant) {
+  const vt = venueType(tenant)
+  if (tenant?.type && vt?.en) return vt.en
+  return 'hospitality venue'
+}
+
 // BRAND AWARENESS: every generator can receive the tenant and weave the venue's
-// real identity (colors, theme family, type, name) into the prompt — so output
-// matches the venue's look instead of a generic aesthetic.
-export function brandContext(tenant) {
+// real identity (TYPE, colors, theme family, name) into the prompt — so output
+// matches what this business actually sells instead of a generic cafe aesthetic.
+// A perfumery must never be handed a latte-art scene, hence the explicit
+// subject lock + the venue brief from venueTypes.
+//
+// `insight` (optional) is a profile from brandInsight.analyzeBrand() — when the
+// caller has one, its measured directive (palette, positioning) is appended.
+export function brandContext(tenant, insight = null) {
   if (!tenant) return ''
   const bits = []
   if (tenant.name) bits.push(`venue "${tenant.name}"`)
-  if (tenant.type) bits.push(tenant.type === 'restaurant' ? 'restaurant' : tenant.type === 'cafe' ? 'specialty cafe' : 'hospitality venue')
+  bits.push(venueEnglishLabel(tenant))
   const brand = tenant.skin?.overrides?.brand || tenant.themeColor
   const accent = tenant.skin?.overrides?.accent || tenant.themeAccent
   if (brand) bits.push(`brand primary color ${brand}${accent ? ` with accent ${accent}` : ''} — use this palette as the dominant color mood`)
@@ -25,19 +40,42 @@ export function brandContext(tenant) {
     const MOOD = { noir: 'dark luxurious night aesthetic', luxe: 'gold luxury aesthetic', classic: 'clean classic aesthetic', paper: 'warm print-editorial aesthetic', wood: 'warm heritage wood aesthetic', nova: 'bold modern aesthetic', midnight: 'deep night-blue aesthetic', golden: 'golden warm aesthetic' }
     bits.push(MOOD[skin] || `visual theme "${skin}"`)
   }
-  return bits.length ? `Venue identity: ${bits.join(', ')}.` : ''
+  const lines = bits.length ? [`Venue identity: ${bits.join(', ')}.`] : []
+  // The venue brief (Arabic) tells the model what this business sells; the lock
+  // stops it drifting into props from another trade.
+  if (tenant.type) {
+    const brief = venueAiContext(tenant)
+    if (brief) lines.push(`Venue brief (Arabic, authoritative): ${brief}`)
+    lines.push(`SUBJECT LOCK: this venue sells ${venueEnglishLabel(tenant)} products. Do NOT introduce food, drink, props or scenery that this venue does not sell.`)
+  }
+  const directive = insight ? brandVisualDirective(insight) : ''
+  if (directive) lines.push(directive)
+  return lines.join(' ')
+}
+
+// Preset styles filtered to the venue type. Every preset carries `tags`; a
+// preset tagged 'all' fits any venue. With no type set this returns the full
+// list, i.e. today's behaviour. NOTE: not yet wired into PostStudio.jsx (a .jsx
+// file outside this agent's ownership) — the UI still reads PRESET_STYLES.
+export function presetStylesFor(tenant) {
+  const vt = venueType(tenant)
+  const tags = (tenant?.type && vt?.tags) || []
+  if (!tags.length) return PRESET_STYLES
+  return PRESET_STYLES.filter((p) => !p.tags || p.tags.includes('all') || p.tags.some((t) => tags.includes(t)))
 }
 
 // Strong English image-prompts (the model composes better in English); labels Arabic.
+// `tags` gate which venue types a preset suits (see presetStylesFor). 'all' fits
+// every venue; the tag vocabulary matches the venue-type tags in venueTypes.js.
 export const PRESET_STYLES = [
-  { id: 'studio', ar: 'لقطة استوديو فاخرة', prompt: 'luxury studio product shot, dramatic single spotlight on a seamless dark backdrop, subtle glossy reflections under the product, high-end advertising photography, rich contrast' },
-  { id: 'marble', ar: 'خلفية رخامية', prompt: 'elegant white marble tabletop, soft side daylight, minimal tasteful props, airy negative space, premium cafe editorial aesthetic' },
-  { id: 'warm', ar: 'إضاءة دافئة', prompt: 'warm golden-hour lighting, cozy cafe ambience, soft bokeh background of shelves and plants, gentle steam, inviting amber tones' },
-  { id: 'minimal', ar: 'بساطة حديثة', prompt: 'modern minimalist composition, solid muted pastel background, one crisp hard shadow, product perfectly centered, bold negative space, magazine editorial style' },
-  { id: 'ramadan', ar: 'رمضاني', prompt: 'Ramadan festive scene, glowing crescent and traditional lanterns softly blurred in the background, warm amber candlelight, ornamental Arabic patterns, celebratory premium mood' },
-  { id: 'festive', ar: 'احتفالي', prompt: 'celebration theme, soft golden confetti and sparkling bokeh lights in the background, vibrant festive colors, joyful party mood, premium event photography' },
-  { id: 'specialty', ar: 'قهوة سبيشلتي', prompt: 'specialty coffee bar scene, rustic wooden counter, barista tools and a chrome espresso machine softly blurred behind, artisanal third-wave coffee vibe, natural window light' },
-  { id: 'pastel', ar: 'حلويات باستيل', prompt: 'pastel patisserie styling, creamy pink and mint tones, delicate dessert props, soft diffused light, dreamy sweet-shop aesthetic' },
+  { id: 'studio', ar: 'لقطة استوديو فاخرة', tags: ['all'], prompt: 'luxury studio product shot, dramatic single spotlight on a seamless dark backdrop, subtle glossy reflections under the product, high-end advertising photography, rich contrast' },
+  { id: 'marble', ar: 'خلفية رخامية', tags: ['all'], prompt: 'elegant white marble tabletop, soft side daylight, minimal tasteful props, airy negative space, premium cafe editorial aesthetic' },
+  { id: 'warm', ar: 'إضاءة دافئة', tags: ['cafe', 'restaurant', 'sweets', 'lounge'], prompt: 'warm golden-hour lighting, cozy cafe ambience, soft bokeh background of shelves and plants, gentle steam, inviting amber tones' },
+  { id: 'minimal', ar: 'بساطة حديثة', tags: ['all'], prompt: 'modern minimalist composition, solid muted pastel background, one crisp hard shadow, product perfectly centered, bold negative space, magazine editorial style' },
+  { id: 'ramadan', ar: 'رمضاني', tags: ['all'], prompt: 'Ramadan festive scene, glowing crescent and traditional lanterns softly blurred in the background, warm amber candlelight, ornamental Arabic patterns, celebratory premium mood' },
+  { id: 'festive', ar: 'احتفالي', tags: ['all'], prompt: 'celebration theme, soft golden confetti and sparkling bokeh lights in the background, vibrant festive colors, joyful party mood, premium event photography' },
+  { id: 'specialty', ar: 'قهوة سبيشلتي', tags: ['cafe'], prompt: 'specialty coffee bar scene, rustic wooden counter, barista tools and a chrome espresso machine softly blurred behind, artisanal third-wave coffee vibe, natural window light' },
+  { id: 'pastel', ar: 'حلويات باستيل', tags: ['sweets', 'cafe'], prompt: 'pastel patisserie styling, creamy pink and mint tones, delicate dessert props, soft diffused light, dreamy sweet-shop aesthetic' },
 ]
 
 // Runtime hygiene for generated captions (brand rule: no emojis, Latin digits only).
@@ -119,7 +157,7 @@ function b64ToBlob(b64, mime = 'image/png') {
 // proceeds as a free scene from the description instead of failing (the old
 // hard-throw stranded users behind the missing bucket CORS config).
 // Returns an image Blob. Throws a clear Arabic message only on MODEL failure.
-export async function generatePostImage({ itemImageUrls = [], refFiles = [], stylePrompt = '', venueName = '', tenant = null, imitate = false } = {}) {
+export async function generatePostImage({ itemImageUrls = [], refFiles = [], stylePrompt = '', venueName = '', tenant = null, imitate = false, insight = null } = {}) {
   if (!firebaseReady) throw new Error('الذكاء غير مهيأ — أكمل إعداد Firebase أولاً.')
   const refs = []
   for (const f of (refFiles || []).filter(Boolean).slice(0, 3)) {
@@ -129,12 +167,12 @@ export async function generatePostImage({ itemImageUrls = [], refFiles = [], sty
     try { refs.push(await urlToInlineData(u)) } catch (_) { /* CORS/broken — skip, free-gen below */ }
   }
   const prompt = [
-    `Professional advertising photograph for the cafe/restaurant "${venueName || tenant?.name || 'a specialty cafe'}".`,
-    brandContext(tenant),
+    `Professional advertising photograph for the ${venueEnglishLabel(tenant)} "${venueName || tenant?.name || 'this venue'}".`,
+    brandContext(tenant, insight),
     refs.length
       ? (imitate
         ? 'IMITATE the attached reference design EXACTLY — same layout, composition, lighting, style and mood — applying ONLY the changes requested below. This is a faithful recreation, not an inspiration.'
-        : 'The attached photo(s) show the EXACT real product (and possibly the venue logo) being advertised. Recreate the SAME product faithfully — same food/drink, same container and cup, same colors, garnish and proportions. If a logo image is attached, place it subtly and accurately. Do NOT invent or substitute a different product.')
+        : 'The attached photo(s) show the EXACT real product (and possibly the venue logo) being advertised. Recreate the SAME product faithfully — same object, same container/packaging, same colors, details and proportions. If a logo image is attached, place it subtly and accurately. Do NOT invent or substitute a different product.')
       : 'Compose the scene entirely from this description (no reference photo was provided).',
     `${imitate ? 'Requested changes' : 'Composition and background'}: ${stylePrompt || 'premium marketing studio shot'}.`,
     'Appetizing, sharp focus on the product, social-media ready, square 1:1 aspect ratio.',
@@ -155,13 +193,13 @@ export async function generatePostImage({ itemImageUrls = [], refFiles = [], sty
 
 // Attached-chat-images variant: refs are already base64 inlineData parts
 // ({mimeType, data}) — used by the assistant's edit_attached_images tool.
-export async function generateFromInlineRefs({ inlineRefs = [], stylePrompt = '', venueName = '', tenant = null, imitate = false } = {}) {
+export async function generateFromInlineRefs({ inlineRefs = [], stylePrompt = '', venueName = '', tenant = null, imitate = false, insight = null } = {}) {
   if (!firebaseReady) throw new Error('الذكاء غير مهيأ — أكمل إعداد Firebase أولاً.')
   const refs = (inlineRefs || []).filter((r) => r && r.data).slice(0, 4)
   if (!refs.length) throw new Error('لا صور مرفقة — أرفق صورة أو أكثر مع رسالتك أولاً.')
   const prompt = [
-    `Professional advertising photograph for the cafe/restaurant "${venueName || tenant?.name || 'a specialty cafe'}".`,
-    brandContext(tenant),
+    `Professional advertising photograph for the ${venueEnglishLabel(tenant)} "${venueName || tenant?.name || 'this venue'}".`,
+    brandContext(tenant, insight),
     imitate
       ? 'IMITATE the attached reference design EXACTLY — same layout, composition, lighting, typography placement, style and mood — applying ONLY the changes requested below. A faithful recreation, not an inspiration.'
       : 'The attached image(s) are the exact references (product photos and possibly a logo). Follow the user request below faithfully, keeping the real product true to its reference. If a logo is attached, integrate it subtly and accurately.',
@@ -179,10 +217,21 @@ export async function generateFromInlineRefs({ inlineRefs = [], stylePrompt = ''
 }
 
 // Catchy Arabic caption + hashtags (emoji-free, Latin digits — brand consistency).
-export async function generateCaption({ itemName = '', venueName = '', tone = '', offer = '' } = {}) {
+// `tenant` (optional) makes the copy speak the venue's own vocabulary and trade;
+// omitted → the previous neutral hospitality wording, unchanged.
+// `insight` (optional) is a brandInsight profile used as measured style guidance.
+export async function generateCaption({ itemName = '', venueName = '', tone = '', offer = '', tenant = null, insight = null } = {}) {
+  const typed = !!tenant?.type
+  const vt = typed ? venueType(tenant) : null
+  const itemWord = typed ? lex(tenant, 'item') : 'الصنف'
   const prompt = [
-    'أنت كاتب محتوى تسويقي سعودي محترف لمنشآت الضيافة.',
-    `اكتب نص منشور تسويقي عربي قصير وجذاب (سطران إلى ثلاثة) عن "${itemName || 'أحد أصنافنا المميزة'}" من "${venueName || 'منشأتنا'}".`,
+    typed
+      ? `أنت كاتب محتوى تسويقي سعودي محترف، تكتب لـ${vt?.ar || 'منشأة'}.`
+      : 'أنت كاتب محتوى تسويقي سعودي محترف لمنشآت الضيافة.',
+    typed ? `سياق المنشأة: ${venueAiContext(tenant)}` : '',
+    insight?.paragraph ? `موجّه أسلوبي مبني على بياناتها الفعلية (لا تخترع ما هو موسوم كغير معروف): ${insight.paragraph}` : '',
+    `اكتب نص منشور تسويقي عربي قصير وجذاب (سطران إلى ثلاثة) عن ${itemWord} "${itemName || 'أحد منتجاتنا المميزة'}" من "${venueName || tenant?.name || 'منشأتنا'}".`,
+    typed ? `استخدم كلمة «${itemWord}» لا كلمة عامة أخرى، ولا تذكر أي منتج لا تبيعه هذه المنشأة.` : '',
     tone ? `الأسلوب المطلوب: ${tone}.` : 'الأسلوب: راقٍ بلمسة سعودية خفيفة، بلا مبالغة.',
     offer ? `أدرج هذا العرض ضمن النص: ${offer}.` : '',
     'ثم أضف في سطر أخير 3 إلى 5 هاشتاقات عربية مناسبة.',

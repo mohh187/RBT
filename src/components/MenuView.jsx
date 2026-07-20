@@ -20,6 +20,7 @@ import { evaluateOffers, activeAutoOffers, offerForItem, discountedPrice } from 
 import { alertParty } from '../lib/notify.js'
 import { initTracking, identify, trackItemView, trackItemClose, trackCartAdd, trackSearch, trackCheckout, trackOrdered, trackGame } from '../lib/track.js'
 import ItemFx from './ItemFx.jsx'
+import '../styles/tactile.css'
 // Interactive guest experience — each lazily loaded so a diner who never opens
 // them pays no bytes (speech, vision, WebGL and Firestore-session code).
 const VoiceWaiter = lazy(() => import('./VoiceWaiter.jsx'))
@@ -412,16 +413,15 @@ export default function MenuView({ tenant, tenantId, items, categories, offers =
   const expChips = useMemo(() => {
     const on = (k) => tenant?.[k] !== false
     const out = []
+    // Games lead the bar: they are the reason a browsing guest stays, and for
+    // browse-only venues they are the main interactive surface.
+    if (on('gamesEnabled')) out.push({ id: 'games', icon: 'play', label: lang === 'ar' ? 'الألعاب والتحديات' : 'Games' })
     if (orderingEnabled && on('voiceWaiterEnabled')) out.push({ id: 'voice', icon: 'mic', label: lang === 'ar' ? 'اطلب بصوتك' : 'Voice order' })
     if (on('photoOrderEnabled')) out.push({ id: 'photo', icon: 'camera', label: lang === 'ar' ? 'اطلب بالصورة' : 'Photo order' })
     if (on('menu3dEnabled') && visibleItems.some((i) => i.model3dUrl || i.arStandeeUrl)) out.push({ id: 'world', icon: 'shapes', label: lang === 'ar' ? 'عالم ثلاثي الأبعاد' : '3D world' })
     if (on('compareEnabled') && visibleItems.length > 1) out.push({ id: 'compare', icon: 'scale', label: lang === 'ar' ? 'قارن الأصناف' : 'Compare' })
     if (orderingEnabled && on('sharedCartEnabled') && table?.id) out.push({ id: 'table', icon: 'customers', label: lang === 'ar' ? 'طلب الطاولة معاً' : 'Table order' })
     if (on('voiceMenuEnabled')) out.push({ id: 'read', icon: 'sound', label: lang === 'ar' ? 'اقرأ المنيو صوتياً' : 'Read aloud' })
-    // Games are deliberately NOT tied to ordering — browse-only venues (display
-    // menus, lounges, perfumeries) get the full games centre, and the required
-    // name+phone unlock feeds their CRM.
-    if (on('gamesEnabled')) out.push({ id: 'games', icon: 'play', label: lang === 'ar' ? 'الألعاب' : 'Games' })
     return out
   }, [tenant, orderingEnabled, visibleItems, table, lang])
 
@@ -662,7 +662,7 @@ export default function MenuView({ tenant, tenantId, items, categories, offers =
         <div className="container" style={{ marginTop: 'var(--sp-2)' }}>
           <div className="exp-bar scroll-x">
             {expChips.map((c) => (
-              <button key={c.id} type="button" className="exp-chip" onClick={() => setFxOpen(c.id)}>
+              <button key={c.id} type="button" className={`exp-chip${c.id === 'games' ? ' is-games' : ''}`} onClick={() => setFxOpen(c.id)}>
                 <Icon name={c.icon} size={15} /> <span>{c.label}</span>
               </button>
             ))}

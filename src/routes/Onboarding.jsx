@@ -11,12 +11,8 @@ import { THEMES, applyTheme } from '../lib/themes.js'
 import { recordLegalConsent, REQUIRED_CONSENT, CONSENT_VERSION } from '../lib/legal.js'
 
 import Icon from '../components/Icon.jsx'
+import { VENUE_TYPES } from '../lib/venueTypes.js'
 
-const TYPES = [
-  { key: 'cafe', icon: 'coffee' },
-  { key: 'restaurant', icon: 'menu' },
-  { key: 'other', icon: 'store' },
-]
 const CURRENCIES = ['SAR', 'AED', 'KWD', 'QAR', 'BHD', 'OMR', 'EGP', 'USD']
 
 const STEPS = [
@@ -48,6 +44,7 @@ export default function Onboarding() {
   const [slug, setSlug] = useState(draft.slug || '')
   const [slugTouched, setSlugTouched] = useState(!!draft.slugTouched)
   const [type, setType] = useState(draft.type || 'cafe')
+  const [typeLabel, setTypeLabel] = useState(draft.typeLabel || '')
   const [currency, setCurrency] = useState(draft.currency || 'SAR')
   const [preset, setPreset] = useState(draft.preset || 'maroon')
   const [color, setColor] = useState(draft.color || '#7c2d2d')
@@ -95,8 +92,8 @@ export default function Onboarding() {
 
   // Persist the draft on every change (cleared on successful creation).
   useEffect(() => {
-    try { sessionStorage.setItem('rbt_onb_draft', JSON.stringify({ name, slug, slugTouched, type, currency, preset, color, accent })) } catch (_) { /* ignore */ }
-  }, [name, slug, slugTouched, type, currency, preset, color, accent])
+    try { sessionStorage.setItem('rbt_onb_draft', JSON.stringify({ name, slug, slugTouched, type, typeLabel, currency, preset, color, accent })) } catch (_) { /* ignore */ }
+  }, [name, slug, slugTouched, type, typeLabel, currency, preset, color, accent])
 
   if (loading || recovering) return <FullSpinner />
   if (!user) return <Navigate to="/login" replace />
@@ -121,6 +118,7 @@ export default function Onboarding() {
       const res = await createTenant(user.uid, {
         name: name.trim(),
         type,
+        typeLabel: type === 'other' ? typeLabel.trim() : '',
         slug: slug.trim(),
         currency,
         themeColor: color,
@@ -236,21 +234,33 @@ export default function Onboarding() {
               <span className="xs faint">{t('slugHint')}</span>
             </div>
 
+            {/* Venue type drives the whole system's vocabulary and the AI's
+                understanding of the business — so it is chosen up front, from
+                the full catalogue, with a free-text path for anything new. */}
             <div className="field">
               <label>{t('venueType')}</label>
-              <div className="row" style={{ gap: 'var(--sp-2)' }}>
-                {TYPES.map((ty) => (
+              <div className="row wrap" style={{ gap: 6 }}>
+                {VENUE_TYPES.map((ty) => (
                   <button
                     type="button"
-                    key={ty.key}
-                    onClick={() => setType(ty.key)}
-                    className={`chip ${type === ty.key ? 'active' : ''}`}
-                    style={{ flex: 1, justifyContent: 'center' }}
+                    key={ty.id}
+                    onClick={() => setType(ty.id)}
+                    className={`chip ${type === ty.id ? 'active' : ''}`}
                   >
-                    <Icon name={ty.icon} size={15} style={{ verticalAlign: 'middle', marginInlineEnd: 4 }} /> {t(ty.key)}
+                    <Icon name={ty.icon} size={14} style={{ verticalAlign: 'middle', marginInlineEnd: 4 }} /> {ty.ar}
                   </button>
                 ))}
               </div>
+              {type === 'other' && (
+                <input
+                  className="input"
+                  style={{ marginTop: 8 }}
+                  placeholder="اكتب نوع نشاطك (مثال: محمصة بن، محل شوكولاتة)"
+                  value={typeLabel}
+                  onChange={(e) => setTypeLabel(e.target.value)}
+                />
+              )}
+              <span className="xs faint">يضبط النظام مفرداته على نشاطك — «مشروب» أو «طبق» أو «منتج» — ويستخدمها الذكاء في كل ما يكتبه ويصممه لك.</span>
             </div>
 
             <div className="field">

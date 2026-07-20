@@ -3,9 +3,11 @@
 import { httpsCallable } from 'firebase/functions'
 import { functions, firebaseReady, db } from './firebase.js'
 import { collection, query, getDocs, where } from 'firebase/firestore'
-import { ACTIONS_BY_NAME, TOOL_DECLARATIONS } from './actions.js'
+import { ACTIONS_BY_NAME, TOOL_DECLARATIONS, toolDeclarationsFor } from './actions.js'
 import { buildContext } from './aiContext.js'
-import { logAi, getAiUsage, bumpAiUsage } from './db.js'
+import { logAi, getAiUsage, bumpAiUsage, listItems, listCategories } from './db.js'
+import { venueType, venueAiContext, lex } from './venueTypes.js'
+import { analyzeBrand } from './brandInsight.js'
 
 const MODEL = import.meta.env.VITE_GEMINI_MODEL || 'gemini-2.5-flash'
 
@@ -40,7 +42,43 @@ export async function aiQuick(prompt, { model = 'gemini-2.5-flash', withSearch =
   }
 }
 
-function systemPrompt(ctx, cfg = {}) {
+// VENUE IDENTITY BLOCK — who this business actually is, in its own words.
+// Everything here is derived (venueTypes) or measured (brandInsight); nothing is
+// invented. With no `tenant.type` set it returns [] and the prompt reads exactly
+// as it did before the venue-type system existed.
+function venueIdentityLines(tenant, insight) {
+  if (!tenant?.type) return []
+  const vt = venueType(tenant)
+  const brief = venueAiContext(tenant)
+  const L = {
+    item: lex(tenant, 'item'), items: lex(tenant, 'items'), menu: lex(tenant, 'menu'),
+    category: lex(tenant, 'category'), categories: lex(tenant, 'categories'),
+    order: lex(tenant, 'order'), cart: lex(tenant, 'cart'),
+    guest: lex(tenant, 'guest'), guests: lex(tenant, 'guests'), place: lex(tenant, 'place'),
+  }
+  const lines = [
+    `VENUE TYPE (authoritative — this overrides any default cafe/restaurant assumption): ${vt?.ar || ''}${vt?.en ? ` / ${vt.en}` : ''}.`,
+  ]
+  if (brief) lines.push(`VENUE BRIEF: ${brief}`)
+  lines.push(
+    'VOCABULARY (hard): speak this venue\'s own words in EVERY Arabic reply, heading, table and message you write. ' +
+    `Say «${L.item}» / «${L.items}» (never a foreign noun from another trade), «${L.menu}» for the catalogue, ` +
+    `«${L.category}» / «${L.categories}» for grouping, «${L.order}» for a purchase, «${L.cart}» for the basket, ` +
+    `«${L.guest}» / «${L.guests}» for the customer, and «${L.place}» for the premises. ` +
+    'Tool names and JSON field names stay in English exactly as declared — only the prose you write to the user changes.'
+  )
+  if (vt?.aiPersona) lines.push(`VENUE PERSONA: ${vt.aiPersona}`)
+  lines.push(
+    `RELEVANCE (hard): only ever suggest products, ingredients, marketing angles and imagery that a ${vt?.ar || 'منشأة'} genuinely sells. ` +
+    'Never propose an item, technique or prop from a different kind of business.'
+  )
+  if (insight?.paragraph) {
+    lines.push(`BRAND PROFILE — measured from this venue's OWN records (colours, item names/descriptions, prices, photo coverage). Treat it as style guidance, and treat anything it marks as unknown as genuinely unknown — do NOT fill the gap with a guess: ${insight.paragraph}`)
+  }
+  return lines
+}
+
+function systemPrompt(ctx, cfg = {}, tenant = null, insight = null) {
   let personaPrompt = ''
   if (cfg.persona === 'formal') {
     personaPrompt = 'تحدث بأسلوب رسمي، مهني، ومحترف للغاية، واستخدم المصطلحات العملية والمهنية بوقار.'
@@ -59,8 +97,12 @@ function systemPrompt(ctx, cfg = {}) {
     modePrompt = 'صلاحياتك تنحصر فقط في الدعم الفني وخدمة العملاء وحل المشكلات الفنية وتلقي الملاحظات والشكاوى للمنشأة.'
   }
 
+  const vt = tenant?.type ? venueType(tenant) : null
+  const venueLabel = vt?.en || 'café/restaurant'
+
   return [
-    `You are the AI General Manager of the café/restaurant "${ctx.venue || ''}". Act with the full authority of the owner — decisive, precise, careful, and rational. You are one of the strongest managers/analysts in this field.`,
+    `You are the AI General Manager of the ${venueLabel} "${ctx.venue || ''}". Act with the full authority of the owner — decisive, precise, careful, and rational. You are one of the strongest managers/analysts in this field.`,
+    ...venueIdentityLines(tenant, insight),
     'SCOPE & PRIVACY (hard): You serve THIS venue ONLY. Every tool is locked to this venue; you have NO access to any other establishment and cannot fetch, reference, or infer another business\'s data. Be this venue\'s strongest, most loyal operator.',
     'Your tools let you do essentially anything a manager can do by hand: full MENU (items, prices, availability, categories, recipes, duplicate, reorder, product images, per-item promo tags, design/branding, live preview), OFFERS, full INVENTORY (materials, receive/count/waste/produce, suppliers, purchase orders), ORDERS & cashier (advance/pay/refund/comp/edit lines/move table/create), TABLES & RESERVATIONS, CUSTOMERS & LOYALTY (flag/rate/membership/points/birthday/opt-out), STAFF (team, roles, announcements, leave, attendance), SETTINGS, EXPENSES, and deep analytics/forecasts. If the user can do it in the app, you have a tool for it.',
     'EXECUTIVE MARKETING & MODES you also fully control: create_campaign / message_customer (WhatsApp campaigns — targeted, scheduled, recurring, coupon-tracked), set_auto_promos (auto alerts on offers/featured/new items to members or everyone), set_winback ("we miss you"), set_followup (post-visit thanks + Google review), set_loyalty_mode (discounts vs perks + order thresholds), set_featured_config, set_member_card_design, set_menu_mode (full ordering vs display-only browse), set_waiter_call, set_cart_total_style, set_banner_fade, set_item_promo_tag, set_customer_optout, reorder_items. USE these decisively when the owner asks for marketing, loyalty, menu-mode or presentation changes — you are expected to execute large, precise, multi-step reconfigurations end-to-end.',
