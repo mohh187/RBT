@@ -54,6 +54,7 @@ const Behavior = lazy(() => import('./routes/admin/Behavior.jsx'))
 const GuestPlay = lazy(() => import('./routes/admin/GuestPlay.jsx'))
 const GenHistory = lazy(() => import('./routes/admin/GenHistory.jsx'))
 const AdsStudio = lazy(() => import('./routes/admin/AdsStudio.jsx'))
+const JoinRoom = lazy(() => import('./routes/JoinRoom.jsx'))
 const Growth = lazy(() => import('./routes/admin/Growth.jsx'))
 const DailyReport = lazy(() => import('./routes/admin/DailyReport.jsx'))
 const Staff = lazy(() => import('./routes/admin/Staff.jsx'))
@@ -526,6 +527,10 @@ export default function App() {
         <Route path="domains" element={<PlatformDomains />} />
         <Route path="landing" element={<PlatformLanding />} />
       </Route>
+
+      {/* An invited guest lands here from a shared room link, registers, and is
+          handed to the menu with ?room=&game= so the board opens immediately. */}
+      <Route path="/join/:tid/:roomId" element={<JoinRoom />} />
 
       {/* public platform status page + legal documents */}
       <Route path="/status" element={<StatusPage />} />

@@ -20,6 +20,7 @@ import { evaluateOffers, activeAutoOffers, offerForItem, discountedPrice } from 
 import { alertParty } from '../lib/notify.js'
 import { initTracking, identify, trackItemView, trackItemClose, trackCartAdd, trackSearch, trackCheckout, trackOrdered, trackGame } from '../lib/track.js'
 import ItemFx from './ItemFx.jsx'
+import GamesIcon from './GamesIcon.jsx'
 import '../styles/tactile.css'
 import '../styles/scrollfix.css'
 import { initScrollAffordance } from '../lib/scrollAffordance.js'
@@ -34,6 +35,7 @@ const SharedCart = lazy(() => import('./SharedCart.jsx'))
 const DishStoryReader = lazy(() => import('./DishStory.jsx'))
 const GamesCenter = lazy(() => import('./GamesCenter.jsx'))
 const AdPopup = lazy(() => import('./AdPopup.jsx'))
+const VenueMemory = lazy(() => import('./VenueMemory.jsx'))
 // tiny sync helpers (no heavy deps) so the item sheet can decide instantly
 import { hasStory, StoryBadge } from './DishStory.jsx'
 import { getLocalCustomer, setLocalCustomer, isRegisterDismissed, dismissRegister, fetchIp, getMyOrders, addMyOrder, getMemberToken, setMemberToken } from '../lib/customer.js'
@@ -145,8 +147,23 @@ export default function MenuView({ tenant, tenantId, items, categories, offers =
   const [cartOpen, setCartOpen] = useState(false)
   // Interactive-experience overlays (venue-togglable in Settings; each defaults
   // ON so a fresh venue demos fully, and each closes back to the menu).
-  const [fxOpen, setFxOpen] = useState('') // '' | voice | photo | read | world | compare | table
+  const [fxOpen, setFxOpen] = useState('') // '' | voice | photo | read | world | compare | table | games
   const [storyItem, setStoryItem] = useState(null)
+  // An invited guest lands on the menu carrying the room to open. Read once on
+  // mount and strip the params so a refresh does not re-enter a finished game.
+  const [joinRoom] = useState(() => {
+    try {
+      const q = new URLSearchParams(window.location.search)
+      const room = q.get('room') || ''
+      const game = q.get('game') || ''
+      if (room && game) {
+        q.delete('room'); q.delete('game')
+        const rest = q.toString()
+        window.history.replaceState({}, '', window.location.pathname + (rest ? `?${rest}` : ''))
+      }
+      return { room, game }
+    } catch (_) { return { room: '', game: '' } }
+  })
   const [savedCustomer, setSavedCustomer] = useState(() => getLocalCustomer())
   const [regOpen, setRegOpen] = useState(false)
   const [regDismissed, setRegDismissed] = useState(() => isRegisterDismissed(tenantId))
@@ -356,6 +373,44 @@ export default function MenuView({ tenant, tenantId, items, categories, offers =
 
   // Category rails and chip strips in the menu get the same overflow reveal.
   useEffect(() => initScrollAffordance(document.body), [])
+
+  // «ذاكرة المكان»: computed only for a guest we actually know (a saved phone
+  // or remembered orders), on demand, and never for the admin preview. The
+  // engine returns an empty list when it has nothing true to say.
+  const [memoryLines, setMemoryLines] = useState([])
+  useEffect(() => {
+    if (preview || !tenantId) return undefined
+    const phone = savedCustomer?.phone || ''
+    const mine = getMyOrders(tenantId) || []
+    if (!phone && mine.length < 2) return undefined // a stranger gets no "welcome back"
+    let alive = true
+    ;(async () => {
+      try {
+        const [{ recallFor }, { listOrdersSince }] = await Promise.all([
+          import('../lib/venueMemory.js'),
+          import('../lib/db.js'),
+        ])
+        const since = new Date(Date.now() - 365 * 86400000)
+        const orders = await listOrdersSince(tenantId, since)
+        if (!alive) return
+        const lines = recallFor({
+          orders: orders || [],
+          items,
+          tenant,
+          customer: { phone, name: savedCustomer?.name || '' },
+          now: Date.now(),
+        })
+        setMemoryLines(Array.isArray(lines) ? lines.slice(0, 3) : [])
+      } catch (_) { /* recognition is a bonus, never a blocker */ }
+    })()
+    return () => { alive = false }
+  }, [tenantId, preview, savedCustomer?.phone, items, tenant]) // eslint-disable-line react-hooks/exhaustive-deps
+
+  // An invite link opens the games hub straight away — the guest came for the
+  // board, not the menu.
+  useEffect(() => {
+    if (joinRoom.room && joinRoom.game) setFxOpen('games')
+  }, [joinRoom])
 
   // Behaviour tracking: one session per visit, batched writes, no-op when the
   // venue turned analytics off or when this is an admin preview.
@@ -669,7 +724,13 @@ export default function MenuView({ tenant, tenantId, items, categories, offers =
           <div className="exp-bar scroll-x">
             {expChips.map((c) => (
               <button key={c.id} type="button" className={`exp-chip${c.id === 'games' ? ' is-games' : ''}`} onClick={() => setFxOpen(c.id)}>
-                <Icon name={c.icon} size={15} /> <span>{c.label}</span>
+                {/* The games entry gets its own mark — cards, a die and a
+                    domino — because a generic play triangle said "video", not
+                    "sit down and play with us". */}
+                {c.id === 'games'
+                  ? <GamesIcon size={17} animated />
+                  : <Icon name={c.icon} size={15} />}
+                <span>{c.label}</span>
               </button>
             ))}
           </div>
@@ -737,6 +798,30 @@ export default function MenuView({ tenant, tenantId, items, categories, offers =
               </div>
             ))}
           </div>
+        </div>
+      )}
+
+      {/* «ذاكرة المكان» — a returning guest is recognised the way a good waiter
+          would: only things that are true and specific, and silence otherwise. */}
+      {!preview && memoryLines.length > 0 && (
+        <div className="container" style={{ marginTop: 'var(--sp-3)' }}>
+          <Suspense fallback={null}>
+            <VenueMemory
+              lines={memoryLines}
+              venueName={tenant?.name || ''}
+              lang={lang}
+              storageKey={tenantId}
+              onAction={(line) => {
+                if (line?.kind === 'lookedNotOrdered' && line.itemId) {
+                  const it = (items || []).find((i) => i.id === line.itemId)
+                  if (it) setViewItem(it)
+                } else if (line?.kind === 'usual' && line.itemId) {
+                  const it = (items || []).find((i) => i.id === line.itemId)
+                  if (it) setViewItem(it)
+                }
+              }}
+            />
+          </Suspense>
         </div>
       )}
 
@@ -1063,6 +1148,8 @@ export default function MenuView({ tenant, tenantId, items, categories, offers =
           {fxOpen === 'games' && (
             <GamesCenter
               open tenantId={tenantId} tenant={tenant} items={visibleItems} lang={lang}
+              table={table}
+              joinRoomId={joinRoom.room} joinGameId={joinRoom.game}
               onClose={() => setFxOpen('')}
               onIdentify={(who) => { try { setSavedCustomer(who); identify?.(who) } catch (_) { /* tracking is best-effort */ } }}
               onGamePlay={(gameId, score) => { try { trackGame(gameId, score) } catch (_) { /* best-effort */ } }}

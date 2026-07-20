@@ -23,6 +23,8 @@ import { registerCustomer } from '../lib/db.js'
 import { getLocalCustomer, setLocalCustomer } from '../lib/customer.js'
 import { submitScore, watchTopScores, currentMonth, myRank } from '../lib/leaderboard.js'
 import { deviceKey } from '../lib/device.js'
+import { watchRoom, applyMove, heartbeat, leaveRoom, HEARTBEAT_MS } from '../lib/gameRoom.js'
+const RoomLobby = lazy(() => import('./games/RoomLobby.jsx'))
 import {
   rewardsFor, rewardsNote, evaluateReward, claimReward, readClaims,
   claimText, conditionText, perGuestText, HOW_TO_CLAIM,
@@ -123,7 +125,8 @@ const TXT = {
 // then things that leave them knowing something, then pure reflex play. The
 // first shelf renders as a hero, so this order also decides what dominates.
 const CATS = [
-  { id: 'insight', ar: 'اكتشف شخصيتك', en: 'Discover yourself', icon: 'user', hero: true, tag: 'الأكثر إدهاشاً' },
+  { id: 'party', ar: 'ألعاب جماعية', en: 'Play together', icon: 'customers', hero: true, tag: 'العبوا معاً على الطاولة' },
+  { id: 'insight', ar: 'اكتشف شخصيتك', en: 'Discover yourself', icon: 'user', tag: 'الأكثر إدهاشاً' },
   { id: 'trivia', ar: 'معرفة وثقافة', en: 'Knowledge', icon: 'notepad', tag: 'تخرج وقد عرفت' },
   { id: 'puzzle', ar: 'ذكاء وألغاز', en: 'Brains & puzzles', icon: 'shapes', tag: 'مراحل متصاعدة' },
   { id: 'arcade', ar: 'تسلية وسرعة', en: 'Arcade & speed', icon: 'zap', tag: 'جولة سريعة' },
@@ -254,7 +257,13 @@ function readArchetype(p) {
   return ''
 }
 
-export default function GamesCenter({ open, onClose, tenantId, tenant, items = [], lang = 'ar', onIdentify, onGamePlay }) {
+export default function GamesCenter({
+  open, onClose, tenantId, tenant, items = [], lang = 'ar', table = null,
+  onIdentify, onGamePlay,
+  // Set when the guest arrived from an invite link (/join → menu?room=&game=).
+  // The hub then skips promo and browse and drops straight onto that board.
+  joinRoomId = '', joinGameId = '',
+}) {
   const t = TXT[lang] || TXT.ar
   const brand = useMemo(() => safeBrand(tenant), [tenant])
   const deviceId = useMemo(() => deviceKey(), [])
@@ -274,6 +283,66 @@ export default function GamesCenter({ open, onClose, tenantId, tenant, items = [
   const runScoreRef = useRef(0)
   const activeRef = useRef(null)
   const playIdRef = useRef('') // the open durable play record for this round
+
+  // ---- multiplayer room state ----
+  const [roomId, setRoomId] = useState('')
+  const [room, setRoom] = useState(null)
+  const reduceRef = useRef(null)   // the active game's pure reducer
+  const mySeat = useMemo(() => {
+    const p = (room?.players || []).find((x) => x.id === deviceKey())
+    return p ? p.seat : null
+  }, [room])
+
+  // Arriving from an invite link: the join page already seated this guest, so
+  // go straight to the board instead of making them find the game again.
+  const joinedRef = useRef(false)
+  useEffect(() => {
+    if (!open || joinedRef.current) return
+    if (!joinRoomId || !joinGameId || !gameById(joinGameId)) return
+    joinedRef.current = true
+    enterRoom(joinRoomId, joinGameId)
+  }, [open, joinRoomId, joinGameId, enterRoom])
+
+  // Live room subscription + presence while a room is open.
+  useEffect(() => {
+    if (!tenantId || !roomId) { setRoom(null); return undefined }
+    let alive = true
+    const stop = watchRoom(tenantId, roomId, (r) => { if (alive) setRoom(r) })
+    const beat = setInterval(() => { heartbeat({ tid: tenantId, roomId, playerId: deviceKey() }) }, HEARTBEAT_MS)
+    return () => { alive = false; if (typeof stop === 'function') stop(); clearInterval(beat) }
+  }, [tenantId, roomId])
+
+  // Every move goes through the room transaction with the game's own reducer,
+  // so two phones tapping at once can never both apply.
+  const submitMove = useCallback((move) => {
+    if (!tenantId || !roomId || mySeat == null || !reduceRef.current) return Promise.resolve()
+    return applyMove({
+      tid: tenantId,
+      roomId,
+      seat: mySeat,
+      move,
+      reduce: reduceRef.current,
+      // Anti-stall skips are submitted by a player other than the turn holder.
+      allowOutOfTurn: move?.type === 'forceSkip' || move?.type === 'skipTurn',
+    }).catch(() => { /* rejected move: the snapshot already shows the truth */ })
+  }, [tenantId, roomId, mySeat])
+
+  // The lobby hands back a started room; load the game module so its reducer is
+  // available before the board renders. `gid` lets the invite path pass the
+  // game explicitly, since nothing was picked from the shelves in that flow.
+  const enterRoom = useCallback(async (rid, gid) => {
+    const id = gid || activeRef.current
+    if (gid) { setActiveId(gid); activeRef.current = gid }
+    const g = gameById(id)
+    if (!g) return
+    try {
+      const mod = await g.load()
+      reduceRef.current = typeof mod.reduce === 'function' ? mod.reduce : null
+    } catch (_) { reduceRef.current = null }
+    setRoomId(rid)
+    setView('play')
+    setRunKey((k) => k + 1)
+  }, [])
   const progressRef = useRef({ stage: 0, completed: false })
   const resumeRef = useRef(null)
   const revealedRef = useRef(new Set())
@@ -410,10 +479,20 @@ export default function GamesCenter({ open, onClose, tenantId, tenant, items = [
     setView('play')
   }, [resumeFor, rememberScroll, tenantId, deviceId, store.name, store.phone])
 
+  // A party game never launches straight into a board: it opens the lobby so
+  // the guest chooses between playing with the table and inviting a friend.
   const pickGame = useCallback((id) => {
     if (!store.registered) { setPendingId(id); setErr(''); setView('gate'); return }
+    const g = gameById(id)
+    if (g?.multiplayer) {
+      rememberScroll()
+      setActiveId(id)
+      activeRef.current = id
+      setView('lobby')
+      return
+    }
     startGame(id)
-  }, [store.registered, startGame])
+  }, [store.registered, startGame, rememberScroll])
 
   const submitGate = async (e) => {
     e?.preventDefault?.()
@@ -588,13 +667,19 @@ export default function GamesCenter({ open, onClose, tenantId, tenant, items = [
 
   const exitGame = useCallback(() => {
     commitRun()
+    // Tell the table this player stepped away. The seat is KEPT (gameRoom never
+    // auto-removes anyone) so returning to the same room resumes the seat.
+    if (tenantId && roomId) leaveRoom({ tid: tenantId, roomId, playerId: deviceKey() })
+    setRoomId('')
+    setRoom(null)
+    reduceRef.current = null
     setActiveId(null)
     activeRef.current = null
     setRunScore(0)
     runScoreRef.current = 0
     setView('browse')
     restoreScroll()
-  }, [commitRun, restoreScroll])
+  }, [commitRun, restoreScroll, tenantId, roomId])
 
   const closeHub = useCallback(() => {
     const earned = commitRun()
@@ -715,6 +800,25 @@ export default function GamesCenter({ open, onClose, tenantId, tenant, items = [
               playerName={store.name}
               tenant={tenant}
               tenantId={tenantId}
+              room={room}
+              mySeat={mySeat}
+              isHost={room ? room.hostId === deviceId : false}
+              onMove={submitMove}
+            />
+          </Suspense>
+        </div>
+      ) : view === 'lobby' && active ? (
+        <div className="gh-stage">
+          <Suspense fallback={<div className="gh-loading">{t.loading}</div>}>
+            <RoomLobby
+              tid={tenantId}
+              tenant={tenant}
+              game={active}
+              table={table}
+              player={{ id: deviceId, name: store.name, phone: store.phone }}
+              lang={lang}
+              onStart={enterRoom}
+              onExit={() => { setActiveId(null); activeRef.current = null; setView('browse'); restoreScroll() }}
             />
           </Suspense>
         </div>

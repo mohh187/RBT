@@ -1,0 +1,647 @@
+/* ===========================================================================
+   «الشطرنج» + «الدومينو» — the two realtime board games.
+
+   Owned by src/components/games/Chess.jsx and src/components/games/Dominoes.jsx.
+   Deliberately isolated from index.css (hard repo rule) and prefixed `bgm-`.
+
+   House rules honoured here:
+     · no visible scrollbars anywhere — every scroller hides its bar and uses
+       an edge fade as the affordance instead
+     · only transform / opacity animate; the file goes still under
+       prefers-reduced-motion
+     · Arabic-first, RTL-safe: the layout is built from logical properties, and
+       the two boards are direction-neutral (dir="ltr" is forced on the chess
+       grid and the domino snake because both are spatial, not textual)
+   =========================================================================== */
+
+.bgm-root {
+  --bgm-brand: #0e7490;
+  --bgm-ink: #f2f7fa;
+  --bgm-dim: rgba(242, 247, 250, 0.62);
+  --bgm-faint: rgba(242, 247, 250, 0.38);
+  --bgm-line: rgba(255, 255, 255, 0.11);
+  --bgm-surface: rgba(255, 255, 255, 0.055);
+  --bgm-surface-2: rgba(255, 255, 255, 0.1);
+  --bgm-ease: cubic-bezier(0.22, 1, 0.36, 1);
+  --bgm-spring: cubic-bezier(0.34, 1.42, 0.5, 1);
+  --bgm-ok: #34d399;
+  --bgm-warn: #fbbf24;
+  --bgm-bad: #f87171;
+
+  position: relative;
+  width: 100%;
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 8px;
+  box-sizing: border-box;
+  overflow: hidden;
+  color: var(--bgm-ink);
+  font-family: inherit;
+  -webkit-tap-highlight-color: transparent;
+  user-select: none;
+  -webkit-user-select: none;
+}
+
+.bgm-root *,
+.bgm-root *::before,
+.bgm-root *::after { box-sizing: border-box; }
+
+/* ---------- shared primitives ---------- */
+.bgm-press {
+  transition: transform 180ms var(--bgm-ease), background-color 180ms var(--bgm-ease),
+    opacity 180ms var(--bgm-ease), border-color 180ms var(--bgm-ease);
+  will-change: transform;
+}
+.bgm-press:active:not(:disabled) { transform: scale(0.96); }
+
+.bgm-btn {
+  appearance: none;
+  border: 1px solid var(--bgm-line);
+  background: var(--bgm-surface);
+  color: var(--bgm-ink);
+  border-radius: 12px;
+  padding: 8px 12px;
+  font-size: 12.5px;
+  font-weight: 700;
+  font-family: inherit;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  cursor: pointer;
+  line-height: 1;
+  min-height: 36px;
+  white-space: nowrap;
+}
+.bgm-btn:disabled { opacity: 0.34; cursor: default; }
+.bgm-btn[data-tone='brand'] {
+  background: color-mix(in srgb, var(--bgm-brand) 78%, #000 10%);
+  border-color: color-mix(in srgb, var(--bgm-brand) 92%, #fff 8%);
+}
+.bgm-btn[data-tone='bad'] {
+  background: rgba(248, 113, 113, 0.16);
+  border-color: rgba(248, 113, 113, 0.4);
+  color: #fecaca;
+}
+
+/* Every scroller in this file: no bar, ever. */
+.bgm-scroll {
+  overflow: auto;
+  scrollbar-width: none;
+  -ms-overflow-style: none;
+}
+.bgm-scroll::-webkit-scrollbar { width: 0; height: 0; }
+
+.bgm-strip {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  overflow-x: auto;
+  overflow-y: hidden;
+  scrollbar-width: none;
+  -ms-overflow-style: none;
+  padding-block: 6px;
+  margin-block: -6px;
+}
+.bgm-strip::-webkit-scrollbar { width: 0; height: 0; }
+
+/* ---------- player chips (both games) ---------- */
+.bgm-seat {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+  padding: 6px 10px;
+  border-radius: 12px;
+  border: 1px solid var(--bgm-line);
+  background: var(--bgm-surface);
+  transition: border-color 220ms var(--bgm-ease), background-color 220ms var(--bgm-ease);
+}
+.bgm-seat[data-active='1'] {
+  border-color: color-mix(in srgb, var(--bgm-brand) 70%, #fff 12%);
+  background: color-mix(in srgb, var(--bgm-brand) 22%, transparent);
+}
+.bgm-seat[data-me='1'] { box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.14); }
+.bgm-seat-name {
+  font-size: 12.5px;
+  font-weight: 800;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  max-width: 12ch;
+}
+.bgm-seat-sub {
+  font-size: 10.5px;
+  color: var(--bgm-dim);
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+}
+.bgm-dot {
+  width: 9px;
+  height: 9px;
+  border-radius: 50%;
+  flex: 0 0 auto;
+  border: 1px solid rgba(0, 0, 0, 0.5);
+}
+.bgm-dot[data-off='1'] { opacity: 0.3; }
+
+.bgm-turnpill {
+  font-size: 10px;
+  font-weight: 800;
+  padding: 2px 7px;
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--bgm-brand) 40%, transparent);
+  border: 1px solid var(--bgm-line);
+}
+
+.bgm-banner {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  padding: 7px 12px;
+  border-radius: 12px;
+  font-size: 12.5px;
+  font-weight: 800;
+  text-align: center;
+  border: 1px solid var(--bgm-line);
+  background: var(--bgm-surface);
+}
+.bgm-banner[data-tone='warn'] {
+  background: rgba(251, 191, 36, 0.14);
+  border-color: rgba(251, 191, 36, 0.36);
+  color: #fde68a;
+}
+.bgm-banner[data-tone='ok'] {
+  background: rgba(52, 211, 153, 0.14);
+  border-color: rgba(52, 211, 153, 0.36);
+  color: #a7f3d0;
+}
+.bgm-banner[data-tone='bad'] {
+  background: rgba(248, 113, 113, 0.14);
+  border-color: rgba(248, 113, 113, 0.36);
+  color: #fecaca;
+}
+
+/* ===========================================================================
+   CHESS
+   =========================================================================== */
+.bgm-chess-stage {
+  flex: 1 1 auto;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+}
+
+/* The board is a hard square that never exceeds the space it is given. */
+.bgm-boardwrap {
+  position: relative;
+  flex: 0 1 auto;
+  min-height: 0;
+  aspect-ratio: 1 / 1;
+  width: min(100%, 62vh);
+  max-height: 100%;
+  margin-inline: auto;
+}
+
+.bgm-board {
+  direction: ltr;
+  position: absolute;
+  inset: 0;
+  display: grid;
+  grid-template-columns: repeat(8, 1fr);
+  grid-template-rows: repeat(8, 1fr);
+  border-radius: 10px;
+  overflow: hidden;
+  border: 1px solid rgba(0, 0, 0, 0.5);
+  box-shadow: 0 10px 34px rgba(0, 0, 0, 0.45);
+  touch-action: manipulation;
+}
+
+.bgm-sq {
+  position: relative;
+  appearance: none;
+  border: 0;
+  padding: 0;
+  margin: 0;
+  cursor: pointer;
+  display: block;
+  background: #b6c2cc;
+  transition: background-color 160ms linear;
+}
+.bgm-sq[data-shade='dark'] { background: #5b7182; }
+.bgm-sq:disabled { cursor: default; }
+
+.bgm-sq[data-last='1']::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background: rgba(250, 204, 21, 0.34);
+  pointer-events: none;
+}
+.bgm-sq[data-sel='1']::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background: rgba(56, 189, 248, 0.44);
+  pointer-events: none;
+}
+.bgm-sq[data-check='1']::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background: radial-gradient(circle at 50% 50%, rgba(248, 113, 113, 0.92) 0%, rgba(248, 113, 113, 0.1) 72%);
+  pointer-events: none;
+}
+
+/* legal-target dots: a dot on an empty square, a ring on a capture */
+.bgm-hint {
+  position: absolute;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  pointer-events: none;
+}
+.bgm-hint::after {
+  content: '';
+  width: 30%;
+  height: 30%;
+  border-radius: 50%;
+  background: rgba(15, 23, 32, 0.4);
+}
+.bgm-hint[data-cap='1']::after {
+  width: 86%;
+  height: 86%;
+  background: transparent;
+  border: clamp(2px, 0.9vmin, 5px) solid rgba(15, 23, 32, 0.42);
+}
+
+.bgm-piece {
+  position: absolute;
+  inset: 6%;
+  width: 88%;
+  height: 88%;
+  pointer-events: none;
+  filter: drop-shadow(0 1px 2px rgba(0, 0, 0, 0.42));
+}
+
+.bgm-coord {
+  position: absolute;
+  font-size: clamp(7px, 1.5vmin, 10px);
+  font-weight: 800;
+  line-height: 1;
+  opacity: 0.62;
+  pointer-events: none;
+  color: #0e1720;
+}
+.bgm-sq[data-shade='dark'] .bgm-coord { color: #e8eef3; }
+.bgm-coord[data-kind='file'] { inset-block-end: 2px; inset-inline-end: 3px; }
+.bgm-coord[data-kind='rank'] { inset-block-start: 2px; inset-inline-start: 3px; }
+
+/* the column beside (or under) the board: status, move list, controls */
+.bgm-rail {
+  width: 100%;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 7px;
+}
+
+/* captured trays */
+.bgm-tray {
+  display: flex;
+  align-items: center;
+  gap: 1px;
+  min-height: 20px;
+  flex-wrap: wrap;
+  max-width: 44vw;
+}
+.bgm-tray svg { width: 18px; height: 18px; display: block; }
+.bgm-adv {
+  font-size: 11px;
+  font-weight: 800;
+  color: var(--bgm-ok);
+  font-variant-numeric: tabular-nums;
+  margin-inline-start: 3px;
+}
+
+/* move list */
+.bgm-moves {
+  display: flex;
+  gap: 5px;
+  align-items: center;
+  min-height: 30px;
+  width: 100%;
+}
+.bgm-move {
+  font-size: 11.5px;
+  font-weight: 700;
+  padding: 4px 8px;
+  border-radius: 8px;
+  background: var(--bgm-surface);
+  border: 1px solid var(--bgm-line);
+  white-space: nowrap;
+  direction: ltr;
+  font-variant-numeric: tabular-nums;
+}
+.bgm-move[data-live='1'] {
+  background: color-mix(in srgb, var(--bgm-brand) 34%, transparent);
+  border-color: color-mix(in srgb, var(--bgm-brand) 62%, #fff 10%);
+}
+.bgm-moveno { color: var(--bgm-faint); font-weight: 800; }
+
+/* promotion sheet */
+.bgm-modal {
+  position: absolute;
+  inset: 0;
+  z-index: 12;
+  display: grid;
+  place-items: center;
+  padding: 16px;
+  background: rgba(6, 10, 14, 0.72);
+  backdrop-filter: blur(6px);
+  -webkit-backdrop-filter: blur(6px);
+  animation: bgm-fade 200ms var(--bgm-ease);
+}
+.bgm-card {
+  width: min(360px, 100%);
+  border-radius: 18px;
+  border: 1px solid var(--bgm-line);
+  background: linear-gradient(180deg, #16222c 0%, #0d151c 100%);
+  padding: 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  text-align: center;
+  box-shadow: 0 20px 60px rgba(0, 0, 0, 0.6);
+  animation: bgm-pop 260ms var(--bgm-spring);
+}
+.bgm-card h3 { margin: 0; font-size: 15px; font-weight: 900; }
+.bgm-card p { margin: 0; font-size: 12.5px; line-height: 1.7; color: var(--bgm-dim); }
+
+.bgm-promo-row { display: flex; gap: 8px; justify-content: center; }
+.bgm-promo-btn {
+  appearance: none;
+  border: 1px solid var(--bgm-line);
+  background: var(--bgm-surface-2);
+  border-radius: 14px;
+  padding: 8px;
+  width: 62px;
+  height: 62px;
+  cursor: pointer;
+  display: grid;
+  place-items: center;
+}
+.bgm-promo-btn svg { width: 100%; height: 100%; }
+
+@keyframes bgm-fade { from { opacity: 0; } to { opacity: 1; } }
+@keyframes bgm-pop { from { opacity: 0; transform: scale(0.94) translateY(8px); } to { opacity: 1; transform: none; } }
+
+/* ===========================================================================
+   DOMINOES
+   =========================================================================== */
+.bgm-dom-stage {
+  flex: 1 1 auto;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.bgm-snake {
+  position: relative;
+  flex: 1 1 auto;
+  min-height: 120px;
+  border-radius: 16px;
+  border: 1px solid var(--bgm-line);
+  background:
+    radial-gradient(120% 80% at 50% 0%, rgba(255, 255, 255, 0.06) 0%, transparent 60%),
+    linear-gradient(180deg, #123027 0%, #0c211b 100%);
+  overflow: hidden;
+  display: grid;
+  place-items: center;
+  padding: 8px;
+}
+.bgm-snake svg { width: 100%; height: 100%; display: block; touch-action: none; }
+
+.bgm-snake-empty {
+  font-size: 12.5px;
+  font-weight: 700;
+  color: var(--bgm-faint);
+  text-align: center;
+  padding: 18px;
+  line-height: 1.8;
+}
+
+/* the two open ends */
+.bgm-ends {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  justify-content: center;
+}
+.bgm-end {
+  appearance: none;
+  font-family: inherit;
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  padding: 6px 12px;
+  border-radius: 999px;
+  border: 1px dashed var(--bgm-line);
+  background: var(--bgm-surface);
+  color: var(--bgm-dim);
+  font-size: 11.5px;
+  font-weight: 800;
+  cursor: default;
+  min-height: 34px;
+}
+.bgm-end[data-live='1'] {
+  cursor: pointer;
+  border-style: solid;
+  color: var(--bgm-ink);
+  border-color: color-mix(in srgb, var(--bgm-ok) 62%, transparent);
+  background: color-mix(in srgb, var(--bgm-ok) 20%, transparent);
+  animation: bgm-pulse 1.7s ease-in-out infinite;
+}
+.bgm-end-pip {
+  display: inline-grid;
+  place-items: center;
+  width: 24px;
+  height: 24px;
+  border-radius: 7px;
+  background: #f3efe4;
+  color: #16202a;
+  font-weight: 900;
+  font-size: 12.5px;
+  font-variant-numeric: tabular-nums;
+}
+
+@keyframes bgm-pulse {
+  0%, 100% { transform: scale(1); }
+  50% { transform: scale(1.045); }
+}
+
+/* hand */
+.bgm-hand {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  overflow-x: auto;
+  overflow-y: hidden;
+  scrollbar-width: none;
+  -ms-overflow-style: none;
+  padding-block: 8px;
+  margin-block: -8px;
+  min-height: 92px;
+}
+.bgm-hand::-webkit-scrollbar { width: 0; height: 0; }
+
+.bgm-tile {
+  appearance: none;
+  border: 0;
+  padding: 0;
+  margin: 0;
+  background: transparent;
+  flex: 0 0 auto;
+  cursor: pointer;
+  border-radius: 9px;
+  transition: transform 180ms var(--bgm-spring), opacity 180ms var(--bgm-ease),
+    filter 180ms var(--bgm-ease);
+  touch-action: manipulation;
+}
+.bgm-tile svg { display: block; width: 44px; height: 84px; }
+.bgm-tile[data-playable='0'] { opacity: 0.36; filter: grayscale(0.7); cursor: default; }
+.bgm-tile[data-playable='1'] { filter: drop-shadow(0 0 0 rgba(52, 211, 153, 0)); }
+.bgm-tile[data-playable='1']:not([data-sel='1']) { animation: none; }
+.bgm-tile[data-sel='1'] {
+  transform: translateY(-9px) scale(1.04);
+  filter: drop-shadow(0 6px 14px rgba(56, 189, 248, 0.5));
+}
+.bgm-tile:active:not(:disabled) { transform: translateY(-4px) scale(0.98); }
+.bgm-tile[data-sel='1']:active { transform: translateY(-9px) scale(1.02); }
+
+.bgm-boneyard {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 8px 12px;
+  border-radius: 12px;
+  border: 1px solid var(--bgm-line);
+  background: var(--bgm-surface);
+  color: var(--bgm-ink);
+  font-size: 12px;
+  font-weight: 800;
+  font-family: inherit;
+  cursor: pointer;
+  min-height: 40px;
+  font-variant-numeric: tabular-nums;
+}
+.bgm-boneyard:disabled { opacity: 0.34; cursor: default; }
+
+.bgm-scorerow {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  overflow-x: auto;
+  overflow-y: hidden;
+  scrollbar-width: none;
+  -ms-overflow-style: none;
+  padding-block: 6px;
+  margin-block: -6px;
+}
+.bgm-scorerow::-webkit-scrollbar { width: 0; height: 0; }
+
+.bgm-score {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 2px;
+  padding: 5px 11px;
+  border-radius: 11px;
+  border: 1px solid var(--bgm-line);
+  background: var(--bgm-surface);
+  flex: 0 0 auto;
+}
+.bgm-score[data-active='1'] {
+  border-color: color-mix(in srgb, var(--bgm-brand) 70%, #fff 12%);
+  background: color-mix(in srgb, var(--bgm-brand) 22%, transparent);
+}
+.bgm-score b { font-size: 14px; font-weight: 900; font-variant-numeric: tabular-nums; }
+.bgm-score span {
+  font-size: 10px;
+  color: var(--bgm-dim);
+  font-weight: 700;
+  max-width: 9ch;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.bgm-score i {
+  font-style: normal;
+  font-size: 9.5px;
+  color: var(--bgm-faint);
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+}
+
+/* hot-seat privacy veil (single-device play only) */
+.bgm-veil {
+  position: absolute;
+  inset: 0;
+  z-index: 10;
+  display: grid;
+  place-items: center;
+  background: rgba(6, 10, 14, 0.92);
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
+  border-radius: 14px;
+  cursor: pointer;
+  animation: bgm-fade 200ms var(--bgm-ease);
+}
+
+.bgm-rules {
+  font-size: 12px;
+  line-height: 1.9;
+  color: var(--bgm-dim);
+  white-space: pre-line;
+  text-align: start;
+  max-height: 42vh;
+}
+
+/* ---------- responsive: give the chess board a side rail on wide screens ---------- */
+@media (min-width: 860px) and (orientation: landscape) {
+  .bgm-chess-stage { flex-direction: row; align-items: stretch; }
+  .bgm-boardwrap { width: auto; height: 100%; flex: 0 1 auto; }
+  .bgm-rail {
+    flex: 1 1 240px;
+    min-width: 0;
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+  }
+  .bgm-moves {
+    flex-direction: column;
+    align-items: stretch;
+    overflow-y: auto;
+    overflow-x: hidden;
+    flex: 1 1 auto;
+    min-height: 0;
+    scrollbar-width: none;
+  }
+  .bgm-moves::-webkit-scrollbar { width: 0; height: 0; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .bgm-root *,
+  .bgm-root *::before,
+  .bgm-root *::after {
+    animation-duration: 0.001ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.001ms !important;
+  }
+}

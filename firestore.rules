@@ -366,6 +366,24 @@ service cloud.firestore {
           || request.resource.data.diff(resource.data).affectedKeys().hasOnly(['stats']);
       }
 
+      // ---- multiplayer rooms: four phones around one table (or an invited
+      // friend) share a live board. Guests are anonymous, so this is open like
+      // waiterCalls but bounded: the room keeps its identity, and the arrays
+      // cannot be used as free storage. Fair play is enforced by the pure
+      // reducer running inside a transaction, not by these rules — a rule
+      // cannot know whose turn it is, and pretending otherwise would be
+      // security theatre.
+      match /rooms/{roomId} {
+        allow read: if true;
+        allow create: if request.resource.data.roomId == roomId
+          && request.resource.data.players.size() <= 4;
+        allow update: if request.resource.data.roomId == resource.data.roomId
+          && request.resource.data.gameId == resource.data.gameId
+          && request.resource.data.players.size() <= 4
+          && request.resource.data.moves.size() <= 200;
+        allow delete: if isStaff(tid);
+      }
+
       // ---- game plays: the full record of what a guest played and answered.
       // The diner's own device writes it (anonymous); only staff read it. Same
       // bounding philosophy as sessions — capped arrays, immutable identity.

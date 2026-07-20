@@ -1,0 +1,402 @@
+/* ===========================================================================
+   «الليدو» — Ludo. Owned by src/components/games/Ludo.jsx, prefixed `lud-`.
+   Deliberately isolated from index.css (never edit that file).
+
+   Rules kept: only transform/opacity animate; every scroll container hides its
+   scrollbar; the whole file goes still under prefers-reduced-motion.
+   =========================================================================== */
+
+.lud-root {
+  --lud-brand: #0e7490;
+  --lud-ink: #f4f7fa;
+  --lud-dim: rgba(244, 247, 250, 0.62);
+  --lud-line: rgba(255, 255, 255, 0.11);
+  --lud-surface: rgba(255, 255, 255, 0.06);
+  --lud-ease: cubic-bezier(0.22, 1, 0.36, 1);
+  --lud-spring: cubic-bezier(0.34, 1.4, 0.5, 1);
+
+  position: relative;
+  width: 100%;
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 8px;
+  overflow: hidden;
+  box-sizing: border-box;
+  color: var(--lud-ink);
+  background: radial-gradient(120% 60% at 50% -10%, rgba(255, 255, 255, 0.08) 0%, transparent 60%);
+  -webkit-tap-highlight-color: transparent;
+  font-family: inherit;
+}
+.lud-root *,
+.lud-root *::before,
+.lud-root *::after { box-sizing: border-box; }
+
+.lud-center { align-items: center; justify-content: center; }
+
+/* ---------- players strip ---------- */
+.lud-players {
+  flex: 0 0 auto;
+  display: flex;
+  gap: 6px;
+  align-items: stretch;
+}
+.lud-p {
+  flex: 1 1 0;
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 8px;
+  border-radius: 12px;
+  background: var(--lud-surface);
+  border: 1px solid var(--lud-line);
+  transition: transform 240ms var(--lud-ease), opacity 240ms var(--lud-ease), border-color 240ms var(--lud-ease);
+  opacity: 0.62;
+}
+.lud-p.is-turn {
+  opacity: 1;
+  border-color: var(--pc);
+  transform: translate3d(0, -2px, 0);
+  box-shadow: 0 0 0 1px var(--pc) inset;
+}
+.lud-p.is-me .lud-pname { text-decoration: underline; text-underline-offset: 3px; }
+.lud-pavatar {
+  flex: 0 0 auto;
+  width: 20px;
+  height: 20px;
+  border-radius: 50%;
+  background: var(--pc);
+  border: 1.5px solid var(--pd);
+  display: grid;
+  place-items: center;
+}
+.lud-pavatar > span {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: rgba(255, 255, 255, 0.92);
+}
+.lud-pname {
+  flex: 1 1 auto;
+  min-width: 0;
+  font-size: 0.72rem;
+  font-weight: 700;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.lud-pmeta {
+  flex: 0 0 auto;
+  font-size: 0.66rem;
+  font-variant-numeric: tabular-nums;
+  color: var(--lud-dim);
+}
+
+/* ---------- board ---------- */
+.lud-stage {
+  flex: 1 1 auto;
+  min-height: 0;
+  display: grid;
+  place-items: center;
+}
+.lud-boardbox {
+  height: 100%;
+  aspect-ratio: 1 / 1;
+  max-width: 100%;
+  max-height: 100%;
+  display: block;
+}
+.lud-board {
+  width: 100%;
+  height: 100%;
+  display: block;
+  touch-action: none;
+  border-radius: 12px;
+  overflow: visible;
+  filter: drop-shadow(0 10px 26px rgba(0, 0, 0, 0.4));
+}
+
+.lud-tok {
+  transition: transform 300ms var(--lud-spring);
+  will-change: transform;
+}
+.lud-tok.is-live { cursor: pointer; }
+
+@keyframes lud-ping {
+  0% { opacity: 0.85; transform: scale(0.9); }
+  70% { opacity: 0; transform: scale(1.32); }
+  100% { opacity: 0; transform: scale(1.32); }
+}
+.lud-ping {
+  transform-origin: 0 0;
+  animation: lud-ping 1400ms var(--lud-ease) infinite;
+}
+
+@keyframes lud-target {
+  0%, 100% { opacity: 0.35; }
+  50% { opacity: 0.95; }
+}
+.lud-target { animation: lud-target 1200ms ease-in-out infinite; }
+
+/* ---------- bottom bar ---------- */
+.lud-bar {
+  flex: 0 0 auto;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 8px;
+  border-radius: 14px;
+  background: var(--lud-surface);
+  border: 1px solid var(--lud-line);
+}
+.lud-turn {
+  flex: 1 1 auto;
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-wrap: wrap;
+}
+.lud-dot {
+  flex: 0 0 auto;
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  box-shadow: 0 0 0 2px rgba(255, 255, 255, 0.18);
+}
+.lud-turn-t {
+  font-size: 0.78rem;
+  font-weight: 800;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 100%;
+}
+.lud-note {
+  flex: 1 1 100%;
+  font-size: 0.68rem;
+  color: var(--lud-dim);
+  line-height: 1.3;
+}
+.lud-actions {
+  flex: 0 0 auto;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.lud-rollbtn {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  padding: 6px 12px 6px 8px;
+  border-radius: 999px;
+  border: 1px solid var(--lud-line);
+  background: rgba(255, 255, 255, 0.08);
+  color: inherit;
+  font: inherit;
+  font-size: 0.75rem;
+  font-weight: 800;
+  cursor: pointer;
+  transition: transform 200ms var(--lud-ease), background-color 200ms var(--lud-ease), opacity 200ms var(--lud-ease);
+}
+.lud-rollbtn.is-on {
+  background: var(--lud-brand);
+  border-color: transparent;
+  box-shadow: 0 6px 18px rgba(0, 0, 0, 0.32);
+}
+.lud-rollbtn:active:not(:disabled) { transform: scale(0.96); }
+.lud-rollbtn:disabled { opacity: 0.5; cursor: default; }
+
+.lud-die {
+  width: 30px;
+  height: 30px;
+  flex: 0 0 auto;
+  display: block;
+}
+@keyframes lud-shake {
+  0% { transform: rotate(0deg) scale(1); }
+  25% { transform: rotate(-18deg) scale(1.1); }
+  50% { transform: rotate(14deg) scale(1.06); }
+  75% { transform: rotate(-8deg) scale(1.03); }
+  100% { transform: rotate(0deg) scale(1); }
+}
+.lud-die.is-roll { animation: lud-shake 440ms var(--lud-ease); }
+
+.lud-ghost {
+  padding: 6px 10px;
+  border-radius: 999px;
+  border: 1px solid var(--lud-line);
+  background: transparent;
+  color: var(--lud-dim);
+  font: inherit;
+  font-size: 0.7rem;
+  font-weight: 700;
+  cursor: pointer;
+  white-space: nowrap;
+  transition: transform 200ms var(--lud-ease), color 200ms var(--lud-ease);
+}
+.lud-ghost:active { transform: scale(0.96); }
+
+/* ---------- panels (lobby / local setup / rules) ---------- */
+.lud-panel {
+  width: min(420px, 100%);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 10px;
+  padding: 20px 18px;
+  border-radius: 20px;
+  background: var(--lud-surface);
+  border: 1px solid var(--lud-line);
+  text-align: center;
+}
+.lud-panel-t { font-size: 1.1rem; font-weight: 900; }
+.lud-panel-p { margin: 0; font-size: 0.78rem; line-height: 1.6; color: var(--lud-dim); }
+
+.lud-mini-board {
+  width: 74px;
+  height: 74px;
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 5px;
+  padding: 5px;
+  border-radius: 14px;
+  background: rgba(255, 255, 255, 0.9);
+  box-shadow: 0 8px 22px rgba(0, 0, 0, 0.32);
+}
+.lud-mini-board > span { border-radius: 6px; display: block; }
+
+.lud-seg {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-wrap: wrap;
+  justify-content: center;
+}
+.lud-segb {
+  min-width: 44px;
+  padding: 7px 12px;
+  border-radius: 999px;
+  border: 1px solid var(--lud-line);
+  background: rgba(255, 255, 255, 0.05);
+  color: var(--lud-dim);
+  font: inherit;
+  font-size: 0.74rem;
+  font-weight: 800;
+  font-variant-numeric: tabular-nums;
+  cursor: pointer;
+  transition: transform 200ms var(--lud-ease), background-color 200ms var(--lud-ease), color 200ms var(--lud-ease);
+}
+.lud-segb.is-on {
+  background: var(--lud-brand);
+  border-color: transparent;
+  color: #fff;
+}
+.lud-segb:active { transform: scale(0.96); }
+.lud-seg-l { font-size: 0.72rem; color: var(--lud-dim); }
+
+.lud-cta {
+  margin-top: 4px;
+  padding: 11px 26px;
+  border-radius: 999px;
+  border: none;
+  background: var(--lud-brand);
+  color: #fff;
+  font: inherit;
+  font-size: 0.86rem;
+  font-weight: 900;
+  cursor: pointer;
+  box-shadow: 0 8px 22px rgba(0, 0, 0, 0.3);
+  transition: transform 200ms var(--lud-ease);
+}
+.lud-cta:active { transform: scale(0.96); }
+.lud-cta-sm { margin-top: 0; padding: 7px 16px; font-size: 0.74rem; }
+
+.lud-link {
+  border: none;
+  background: none;
+  color: var(--lud-dim);
+  font: inherit;
+  font-size: 0.72rem;
+  font-weight: 700;
+  text-decoration: underline;
+  text-underline-offset: 3px;
+  cursor: pointer;
+}
+
+.lud-roster { display: flex; flex-wrap: wrap; gap: 6px; justify-content: center; }
+.lud-rchip {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 5px 10px;
+  border-radius: 999px;
+  border: 1px solid var(--lud-line);
+  font-size: 0.72rem;
+  font-weight: 700;
+}
+
+/* ---------- rules sheet ---------- */
+.lud-sheet {
+  position: absolute;
+  inset: 0;
+  z-index: 5;
+  display: grid;
+  place-items: center;
+  padding: 14px;
+  background: rgba(6, 10, 14, 0.68);
+  backdrop-filter: blur(10px);
+  -webkit-backdrop-filter: blur(10px);
+}
+.lud-sheet-in {
+  width: min(460px, 100%);
+  max-height: 100%;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: 16px;
+  border-radius: 18px;
+  background: #121a22;
+  border: 1px solid var(--lud-line);
+  box-shadow: 0 20px 60px rgba(0, 0, 0, 0.5);
+}
+.lud-sheet-t { font-size: 0.95rem; font-weight: 900; flex: 0 0 auto; }
+.lud-sheet-body {
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow-y: auto;
+  /* hard repo rule: no visible scrollbars, ever */
+  scrollbar-width: none;
+  -ms-overflow-style: none;
+  overscroll-behavior: contain;
+}
+.lud-sheet-body::-webkit-scrollbar { width: 0; height: 0; display: none; }
+.lud-sheet-body p {
+  margin: 0 0 9px;
+  font-size: 0.76rem;
+  line-height: 1.7;
+  color: rgba(244, 247, 250, 0.84);
+}
+.lud-sheet-body p:last-child { margin-bottom: 0; }
+
+/* ---------- narrow screens ---------- */
+@media (max-width: 380px) {
+  .lud-pname { font-size: 0.66rem; }
+  .lud-pmeta { display: none; }
+  .lud-rollbtn span { display: none; }
+  .lud-rollbtn { padding: 5px; }
+}
+
+/* ---------- motion off ---------- */
+@media (prefers-reduced-motion: reduce) {
+  .lud-root *,
+  .lud-root *::before,
+  .lud-root *::after {
+    animation-duration: 0.001ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.001ms !important;
+  }
+}
