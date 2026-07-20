@@ -752,3 +752,117 @@
   .gh-press:active { transform: none; }
   .gh-promo-tile { animation: none; }
 }
+
+/* ================= HUB ELEVATION =================
+   Three goals: give the leading shelf real presence, make the whole surface
+   feel considered rather than assembled, and guarantee that NOTHING is ever
+   clipped — names, hooks, points and ranks all grow instead of truncating. */
+
+/* ---- 1. nothing is hidden, whatever the length ---- */
+.gh-card-nm,
+.gh-card-hook,
+.gh-player-id strong,
+.gh-bests li span,
+.gh-sect-t {
+  overflow: visible;
+  text-overflow: clip;
+  white-space: normal;
+  overflow-wrap: anywhere;
+  word-break: normal;
+}
+.gh-card-nm { line-height: 1.35; }
+.gh-card-hook { line-height: 1.6; }
+/* Numbers may grow to any magnitude without shrinking their label or wrapping
+   mid-figure — a five-digit score must read as one unit. */
+.gh-player-top b,
+.gh-sect-n,
+.gh-card-foot b,
+.gh-chip {
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+.gh-bests li { align-items: flex-start; gap: 10px; }
+
+/* ---- 2. the leading shelf, given presence ---- */
+.gh-sect { margin-block-end: 26px; }
+.gh-sect-h {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+  margin-block-end: 12px;
+}
+.gh-sect-t { font-size: 15px; font-weight: 800; letter-spacing: -0.2px; }
+.gh-sect-tag {
+  font-style: normal;
+  font-size: 11px;
+  font-weight: 700;
+  color: var(--gh-brand, #7dd3fc);
+  background: color-mix(in srgb, var(--gh-brand, #38bdf8) 16%, transparent);
+  border-radius: 999px;
+  padding: 3px 10px;
+  white-space: nowrap;
+}
+.gh-sect-n { margin-inline-start: auto; opacity: .6; font-size: 12px; }
+
+.gh-sect-hero { position: relative; margin-block-end: 30px; }
+.gh-sect-hero .gh-sect-t { font-size: 19px; letter-spacing: -0.4px; }
+/* A soft aura behind the hero shelf so it reads as the headline of the page
+   without a heavy container fighting the cards. */
+.gh-sect-hero::before {
+  content: '';
+  position: absolute;
+  inset: -14px -12px -10px;
+  border-radius: 28px;
+  background:
+    radial-gradient(120% 90% at 15% 0%, color-mix(in srgb, var(--gh-brand, #38bdf8) 22%, transparent), transparent 62%),
+    linear-gradient(180deg, rgba(255, 255, 255, 0.05), transparent 70%);
+  pointer-events: none;
+  z-index: 0;
+}
+.gh-sect-hero > * { position: relative; z-index: 1; }
+
+/* Hero cards are larger and get a taller art area — this is the shelf a guest
+   should notice first. */
+.gh-grid-hero { grid-template-columns: repeat(auto-fill, minmax(200px, 1fr)); gap: 14px; }
+@media (min-width: 620px) {
+  .gh-grid-hero { grid-template-columns: repeat(auto-fill, minmax(250px, 1fr)); }
+}
+.gh-grid-hero .gh-card-art { aspect-ratio: 4 / 3; }
+.gh-grid-hero .gh-card-nm { font-size: 16px; }
+
+/* ---- 3. cards that feel physical ---- */
+.gh-card {
+  transition: transform .22s cubic-bezier(.22, 1, .36, 1), box-shadow .22s ease;
+  will-change: transform;
+}
+@media (hover: hover) and (pointer: fine) {
+  .gh-card:hover {
+    transform: translateY(-3px);
+    box-shadow:
+      inset 0 0 0 1px color-mix(in srgb, var(--gh-brand, #38bdf8) 40%, transparent),
+      inset 0 1px 0 rgba(255, 255, 255, 0.10),
+      0 22px 40px -22px rgba(0, 0, 0, 0.95);
+  }
+}
+.gh-card:active { transform: scale(.975); }
+/* The art keeps its own rounding while the card presses, so the corner never
+   detaches from the tile during the animation. */
+.gh-card-art { transition: transform .3s cubic-bezier(.22, 1, .36, 1); }
+@media (hover: hover) and (pointer: fine) {
+  .gh-card:hover .gh-card-art { transform: scale(1.03); }
+}
+
+/* Cards must stay equal height with the footer pinned, whatever the hook says. */
+.gh-card-body { display: flex; flex-direction: column; gap: 5px; flex: 1 1 auto; }
+.gh-card-foot { margin-block-start: auto; }
+
+/* ---- 4. breathing room + a calmer rhythm ---- */
+.gh-body { padding-block-end: 28px; }
+.gh-player { margin-block-end: 22px; }
+
+@media (prefers-reduced-motion: reduce) {
+  .gh-card, .gh-card-art { transition: none; }
+  .gh-card:hover, .gh-card:active { transform: none; }
+  .gh-card:hover .gh-card-art { transform: none; }
+}

@@ -117,11 +117,15 @@ const TXT = {
 // ---------------------------------------------------------------------------
 // categories
 // ---------------------------------------------------------------------------
+// Order is the editorial decision of this screen. What a waiting guest has
+// never seen anywhere else comes first — a read of their own personality —
+// then things that leave them knowing something, then pure reflex play. The
+// first shelf renders as a hero, so this order also decides what dominates.
 const CATS = [
-  { id: 'arcade', ar: 'تسلية وسرعة', en: 'Arcade & speed', icon: 'zap' },
-  { id: 'puzzle', ar: 'ذكاء وألغاز', en: 'Brains & puzzles', icon: 'shapes' },
-  { id: 'trivia', ar: 'معرفة وثقافة', en: 'Knowledge', icon: 'notepad' },
-  { id: 'insight', ar: 'اكتشف شخصيتك', en: 'Discover yourself', icon: 'user' },
+  { id: 'insight', ar: 'اكتشف شخصيتك', en: 'Discover yourself', icon: 'user', hero: true, tag: 'الأكثر إدهاشاً' },
+  { id: 'trivia', ar: 'معرفة وثقافة', en: 'Knowledge', icon: 'notepad', tag: 'تخرج وقد عرفت' },
+  { id: 'puzzle', ar: 'ذكاء وألغاز', en: 'Brains & puzzles', icon: 'shapes', tag: 'مراحل متصاعدة' },
+  { id: 'arcade', ar: 'تسلية وسرعة', en: 'Arcade & speed', icon: 'zap', tag: 'جولة سريعة' },
 ]
 const CAT_IDS = CATS.map((c) => c.id)
 
@@ -361,7 +365,27 @@ export default function GamesCenter({ open, onClose, tenantId, tenant, items = [
   const rank = board && !board.error ? myRank(board.scores, deviceId) : null
 
   // ---- runs ----
+  // Leaving the shelves must not lose the guest's place: a hub with four
+  // shelves scrolls, and returning to the top after every round would make
+  // browsing feel punishing. The offset is captured on the way out and
+  // reapplied after the browse view has painted.
+  const scrollRef = useRef(null)
+  const savedScroll = useRef(0)
+  const rememberScroll = useCallback(() => {
+    savedScroll.current = scrollRef.current ? scrollRef.current.scrollTop : 0
+  }, [])
+  const restoreScroll = useCallback(() => {
+    const y = savedScroll.current
+    if (!y) return
+    requestAnimationFrame(() => {
+      requestAnimationFrame(() => {
+        if (scrollRef.current) scrollRef.current.scrollTop = y
+      })
+    })
+  }, [])
+
   const startGame = useCallback((id) => {
+    rememberScroll()
     resumeRef.current = resumeFor(id)
     progressRef.current = { stage: 0, completed: false }
     setRunScore(0)
@@ -369,7 +393,7 @@ export default function GamesCenter({ open, onClose, tenantId, tenant, items = [
     setActiveId(id)
     setRunKey((k) => k + 1)
     setView('play')
-  }, [resumeFor])
+  }, [resumeFor, rememberScroll])
 
   const pickGame = useCallback((id) => {
     if (!store.registered) { setPendingId(id); setErr(''); setView('gate'); return }
@@ -529,7 +553,8 @@ export default function GamesCenter({ open, onClose, tenantId, tenant, items = [
     setRunScore(0)
     runScoreRef.current = 0
     setView('browse')
-  }, [commitRun])
+    restoreScroll()
+  }, [commitRun, restoreScroll])
 
   const closeHub = useCallback(() => {
     const earned = commitRun()
@@ -702,7 +727,7 @@ export default function GamesCenter({ open, onClose, tenantId, tenant, items = [
           </button>
         </form>
       ) : (
-        <div className="gh-body gh-fade">
+        <div className="gh-body gh-fade" ref={scrollRef}>
           {warn && <p className="gh-warn">{warn}</p>}
 
           {store.registered ? (
@@ -775,16 +800,23 @@ export default function GamesCenter({ open, onClose, tenantId, tenant, items = [
                 </div>
               ) : null}
 
-              {shown.map((c) => (
-                <section key={c.id} className="gh-sect">
-                  <h3 className="gh-sect-h">
-                    <Icon name={c.icon} size={14} />
-                    {lang === 'en' ? c.en : c.ar}
-                    <span className="gh-sect-n">{fmt(c.games.length)}</span>
-                  </h3>
-                  <div className="gh-grid">{c.games.map(renderCard)}</div>
-                </section>
-              ))}
+              {shown.map((c, si) => {
+                // The leading shelf (when the guest has not filtered) gets the
+                // hero treatment: bigger art, a reason to care, and room for
+                // its cards to breathe.
+                const hero = si === 0 && cat === 'all' && c.hero
+                return (
+                  <section key={c.id} className={`gh-sect${hero ? ' gh-sect-hero' : ''}`}>
+                    <h3 className="gh-sect-h">
+                      <Icon name={c.icon} size={hero ? 16 : 14} />
+                      <span className="gh-sect-t">{lang === 'en' ? c.en : c.ar}</span>
+                      {c.tag && lang !== 'en' ? <em className="gh-sect-tag">{c.tag}</em> : null}
+                      <span className="gh-sect-n">{fmt(c.games.length)}</span>
+                    </h3>
+                    <div className={`gh-grid${hero ? ' gh-grid-hero' : ''}`}>{c.games.map(renderCard)}</div>
+                  </section>
+                )
+              })}
 
               {allRewards.length ? (
                 <section className="gh-rewards">
