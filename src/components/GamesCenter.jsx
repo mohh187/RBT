@@ -17,7 +17,8 @@ import '../styles/gameshub.css'
 import { Suspense, lazy, useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import Icon from './Icon.jsx'
 import GamePromo, { GameThumb, gameName, gameHook, gameArt } from './games/GamePromo.jsx'
-import { gamesFor } from '../lib/games.js'
+import { gamesFor, gameById } from '../lib/games.js'
+import { startPlay, saveProgress, finishPlay, updatePlayerProfile } from '../lib/gameMemory.js'
 import { registerCustomer } from '../lib/db.js'
 import { getLocalCustomer, setLocalCustomer } from '../lib/customer.js'
 import { submitScore, watchTopScores, currentMonth, myRank } from '../lib/leaderboard.js'
@@ -272,6 +273,7 @@ export default function GamesCenter({ open, onClose, tenantId, tenant, items = [
 
   const runScoreRef = useRef(0)
   const activeRef = useRef(null)
+  const playIdRef = useRef('') // the open durable play record for this round
   const progressRef = useRef({ stage: 0, completed: false })
   const resumeRef = useRef(null)
   const revealedRef = useRef(new Set())
@@ -386,6 +388,19 @@ export default function GamesCenter({ open, onClose, tenantId, tenant, items = [
 
   const startGame = useCallback((id) => {
     rememberScroll()
+    // Open a durable play record for this round. It is fire-and-forget: if the
+    // write fails the guest still plays, and the local store still counts it.
+    try {
+      const g = gameById(id)
+      playIdRef.current = startPlay({
+        tid: tenantId,
+        gameId: id,
+        gameAr: g?.ar || '',
+        kind: g?.kind || 'arcade',
+        deviceId,
+        player: { name: store.name || '', phone: store.phone || '' },
+      }) || ''
+    } catch (_) { playIdRef.current = '' }
     resumeRef.current = resumeFor(id)
     progressRef.current = { stage: 0, completed: false }
     setRunScore(0)
@@ -393,7 +408,7 @@ export default function GamesCenter({ open, onClose, tenantId, tenant, items = [
     setActiveId(id)
     setRunKey((k) => k + 1)
     setView('play')
-  }, [resumeFor, rememberScroll])
+  }, [resumeFor, rememberScroll, tenantId, deviceId, store.name, store.phone])
 
   const pickGame = useCallback((id) => {
     if (!store.registered) { setPendingId(id); setErr(''); setView('gate'); return }
@@ -457,6 +472,25 @@ export default function GamesCenter({ open, onClose, tenantId, tenant, items = [
       }
       // Report the finished run to behaviour analytics (which game, what score).
       onGamePlay?.(id, s)
+      // ...and to the durable play record, so «نشاط الألعاب» and the player's
+      // own history actually contain something. This was the missing link:
+      // the hub previously guessed at a memory API that did not exist, so no
+      // round was ever written anywhere.
+      const pid = playIdRef.current
+      if (pid) {
+        finishPlay(pid, { score: s, completed: prog.completed === true, result: prog.result || null })
+          .then(() => updatePlayerProfile(tenantId, deviceId, {
+            gameId: id,
+            gameAr: gameById(id)?.ar || '',
+            score: s,
+            stage: prog.stage || 0,
+            completed: prog.completed === true,
+            result: prog.result || null,
+            endedAt: Date.now(),
+          }))
+          .catch(() => { /* the local store already has the run */ })
+        playIdRef.current = ''
+      }
     }
 
     const earned = evaluateReward(
@@ -487,7 +521,13 @@ export default function GamesCenter({ open, onClose, tenantId, tenant, items = [
     if (!id || !state || typeof state !== 'object') return
     const done = state.done === true || state.completed === true || state.finished === true
     const stage = Math.max(0, Math.floor(Number(state.stage ?? state.level ?? 0)) || 0)
-    progressRef.current = { stage, completed: done }
+    // `result` is what an insight game reveals (archetype/traits) — carried
+    // through to the durable record so a profile survives the device.
+    progressRef.current = { stage, completed: done, result: state.result || state.profile || null }
+    // Mirror the stage into the cloud record; batched inside gameMemory.
+    if (playIdRef.current) {
+      try { saveProgress(playIdRef.current, done ? null : state, stage) } catch (_) { /* local copy stands */ }
+    }
 
     let payload = null
     if (!done) {
