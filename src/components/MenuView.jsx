@@ -21,6 +21,8 @@ import { alertParty } from '../lib/notify.js'
 import { initTracking, identify, trackItemView, trackItemClose, trackCartAdd, trackSearch, trackCheckout, trackOrdered, trackGame } from '../lib/track.js'
 import ItemFx from './ItemFx.jsx'
 import '../styles/tactile.css'
+import '../styles/scrollfix.css'
+import { initScrollAffordance } from '../lib/scrollAffordance.js'
 // Interactive guest experience — each lazily loaded so a diner who never opens
 // them pays no bytes (speech, vision, WebGL and Firestore-session code).
 const VoiceWaiter = lazy(() => import('./VoiceWaiter.jsx'))
@@ -350,6 +352,9 @@ export default function MenuView({ tenant, tenantId, items, categories, offers =
 
   const cartCount = cart.reduce((s, l) => s + l.qty, 0)
   const subtotal = cart.reduce((s, l) => s + l.unitPrice * l.qty, 0)
+
+  // Category rails and chip strips in the menu get the same overflow reveal.
+  useEffect(() => initScrollAffordance(document.body), [])
 
   // Behaviour tracking: one session per visit, batched writes, no-op when the
   // venue turned analytics off or when this is an admin preview.

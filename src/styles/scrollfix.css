@@ -1,0 +1,93 @@
+/* ==== SYSTEMIC SCROLL + CLIPPING FIX ====
+   Two defects that appeared everywhere in the platform, fixed at the root
+   rather than page by page:
+
+   1. HIDDEN CONTENT. The product hides scrollbars by design, so a strip that
+      overflowed (tab chips, kanban lanes, category rails) simply looked
+      truncated — users read it as a broken layout. scrollAffordance.js marks
+      every horizontal scroller with data-ovf, and the fades below make the
+      overflow visible without bringing scrollbars back.
+
+   2. CLIPPED CONTROLS. `overflow-x: auto` also clips vertically, so an active
+      chip's ring, a card's shadow and the press-scale were all sliced off at
+      the top and bottom — the reason buttons looked "cut, not whole". Every
+      scroller now carries vertical breathing room that costs no layout space. */
+
+/* ---- 1. vertical breathing room so nothing is sliced ---- */
+[class*='scroll-x'],
+.ord-lanes,
+.acc-tabs,
+.acc-scroll-x,
+.set-chips,
+.ps-chips,
+.exp-bar,
+.dish-tabs,
+[data-ovf] {
+  padding-block: 7px;
+  margin-block: -7px;
+}
+
+/* Kanban-style lanes hold tall cards; they need side room too so the first and
+   last lane are never shaved by the fade or the container edge. */
+.ord-lanes {
+  padding-inline: 2px;
+  margin-inline: -2px;
+}
+
+/* ---- 2. edge fades that reveal there is more ---- */
+[data-ovf] {
+  /* the mask is the affordance; it never intercepts pointer events */
+  --ovf-fade: 34px;
+}
+[data-ovf='end'] {
+  -webkit-mask-image: linear-gradient(to left, transparent 0, #000 var(--ovf-fade));
+  mask-image: linear-gradient(to left, transparent 0, #000 var(--ovf-fade));
+}
+[data-ovf='start'] {
+  -webkit-mask-image: linear-gradient(to right, transparent 0, #000 var(--ovf-fade));
+  mask-image: linear-gradient(to right, transparent 0, #000 var(--ovf-fade));
+}
+[data-ovf='both'] {
+  -webkit-mask-image: linear-gradient(to right, transparent 0, #000 var(--ovf-fade), #000 calc(100% - var(--ovf-fade)), transparent 100%);
+  mask-image: linear-gradient(to right, transparent 0, #000 var(--ovf-fade), #000 calc(100% - var(--ovf-fade)), transparent 100%);
+}
+/* LTR reads the same because the mask is written in physical direction and the
+   attribute already accounts for which side actually has content. */
+[dir='ltr'] [data-ovf='end'] {
+  -webkit-mask-image: linear-gradient(to right, transparent 0, #000 var(--ovf-fade));
+  mask-image: linear-gradient(to right, transparent 0, #000 var(--ovf-fade));
+}
+[dir='ltr'] [data-ovf='start'] {
+  -webkit-mask-image: linear-gradient(to left, transparent 0, #000 var(--ovf-fade));
+  mask-image: linear-gradient(to left, transparent 0, #000 var(--ovf-fade));
+}
+
+/* A scroller that is fully visible must carry no mask at all, otherwise the
+   final chip would sit under a permanent fade. */
+[data-ovf='none'] {
+  -webkit-mask-image: none;
+  mask-image: none;
+}
+
+/* ---- 3. smooth, snappy strip scrolling ---- */
+[data-ovf] {
+  scroll-behavior: smooth;
+  overscroll-behavior-x: contain;
+}
+@media (prefers-reduced-motion: reduce) {
+  [data-ovf] { scroll-behavior: auto; }
+}
+
+/* ---- 4. the page itself must never scroll sideways ----
+   A single overflowing child used to drag the whole admin page horizontally,
+   which is what made the layout feel "not full". Strips scroll; the page does not. */
+.admin-main,
+.page {
+  max-width: 100%;
+  overflow-x: clip;
+}
+/* Grid and flex children collapse below their content unless told they may. */
+.admin-main > *,
+.page > * {
+  min-width: 0;
+}

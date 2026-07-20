@@ -20,6 +20,8 @@ import Tour from './Tour.jsx'
 import { TOURS } from '../lib/tours.js'
 import GlobalSearch from './GlobalSearch.jsx'
 import PageGuide from './PageGuide.jsx'
+import { initScrollAffordance } from '../lib/scrollAffordance.js'
+import '../styles/scrollfix.css'
 import { getDocs, collection, doc, updateDoc } from 'firebase/firestore'
 import { db } from '../lib/firebase.js'
 
@@ -233,6 +235,9 @@ export default function AdminLayout() {
     await logout()
     navigate('/login')
   }
+
+  // Reveal horizontal overflow everywhere in the admin (see scrollAffordance).
+  useEffect(() => initScrollAffordance(document.body), [])
 
   // In-app navigation bridge for the AI assistant's open_page tool (actions.js
   // dispatches 'rbt:navigate' — SPA navigation instead of a full reload).
