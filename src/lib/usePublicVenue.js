@@ -1,11 +1,15 @@
 import { useEffect, useState } from 'react'
 import { resolveSlug, getTenant, watchItems, watchCategories, watchOffers } from './db.js'
 import { applySkin, resolveSkin, applyTypography } from './skins.js'
+import { applyChrome, clearChrome } from './systemThemes.js'
 import { applyVenueManifest, restorePlatformManifest } from './pwa.js'
 
 function applyBrand(tenant) {
   applySkin(resolveSkin(tenant, 'menu'), { applyMode: true })
   applyTypography(tenant)
+  // top bar + bottom nav colour (tenant.chromeTheme); cleared on the way out so
+  // one venue's chrome never follows the visitor to the next screen
+  applyChrome(tenant)
 }
 
 // Loads a venue (tenant) + its live menu/offers by public slug. No auth required.
@@ -45,6 +49,17 @@ export function usePublicVenue(slug) {
     }
     return { loading: true, notFound: false, tenant: null, items: [], categories: [], offers: [] }
   })
+
+  // Chrome (bar colour) gets its OWN effect rather than riding on applyBrand
+  // alone: a staff shell clears the attribute when it unmounts, and that cleanup
+  // runs AFTER this tree renders — so a venue restored from cache would flash
+  // its bars back to the default. An effect re-asserts it after that cleanup,
+  // and hands it back when the visitor leaves the menu.
+  const chrome = state.tenant?.chromeTheme
+  useEffect(() => {
+    applyChrome({ chromeTheme: chrome })
+    return () => clearChrome()
+  }, [chrome])
 
   useEffect(() => {
     let unsubs = []
@@ -134,6 +149,7 @@ export function usePublicVenue(slug) {
       cancelled = true
       clearTimeout(watchdog)
       restorePlatformManifest() // don't leave the platform install identity as this venue
+      clearChrome()
       unsubs.forEach((u) => u && u())
     }
   }, [slug])

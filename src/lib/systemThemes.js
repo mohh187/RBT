@@ -191,6 +191,87 @@ export function clearUiFx(node) {
   BTN_VARS.forEach((k) => node.style.removeProperty(k))
 }
 
+// ------------------------------------------------------------ app chrome ----
+// The FURNITURE palette: the top app bar (.app-bar) and the bottom navs
+// (.m-bottomnav for the diner menu, .bottom-nav for the staff system). The
+// presets themselves live in index.css under [data-chrome='<id>'] — every
+// chrome rule there reads ONLY the --chrome-* tokens, so setting the single
+// attribute below on <body> restyles both bars wholesale.
+//
+// The `swatch` values are the ONLY colours restated here, and only so the
+// picker can paint a truthful mock bar BEFORE the venue commits. They are
+// copied verbatim from index.css; if a preset's palette moves there, move it
+// here too. 'auto' deliberately carries var() references instead of literals,
+// because auto means "follow whatever the surrounding theme resolved to".
+export const CHROME_THEMES = [
+  {
+    id: 'auto',
+    ar: 'تلقائي (يتبع الثيم)', en: 'Auto (follows theme)',
+    hintAr: 'يأخذ لونه من ثيم المنشأة ومن وضع الفاتح/الداكن — لا لون ثابت.',
+    hintEn: 'Takes its colour from the venue theme and the light/dark mode.',
+    swatch: { bg: 'var(--surface)', text: 'var(--text)', muted: 'var(--text-muted)', active: 'var(--brand)', border: 'var(--border)' },
+  },
+  {
+    id: 'terracotta',
+    ar: 'طوبي', en: 'Terracotta',
+    hintAr: 'طوب دافئ بنصوص كريمية ولمسة عسلية على العنصر النشط.',
+    hintEn: 'Warm brick with cream text and a honey active tab.',
+    swatch: { bg: '#7c3a22', text: '#fdf1e8', muted: '#f0c7ab', active: '#ffd9a0', border: '#98543a' },
+  },
+  {
+    id: 'ink',
+    ar: 'حبري', en: 'Ink',
+    hintAr: 'أسود شبه صافٍ بنصوص فضية ونشاط ذهبي — أنيق وهادئ.',
+    hintEn: 'Near-black with silver text and a gold active tab.',
+    swatch: { bg: '#101014', text: '#f6f6f7', muted: '#b4b4bd', active: '#ffcf7a', border: '#2b2b33' },
+  },
+  {
+    id: 'navy',
+    ar: 'كحلي', en: 'Navy',
+    hintAr: 'أزرق ليلي عميق بنصوص ثلجية ونشاط سماوي.',
+    hintEn: 'Deep night blue with icy text and a sky active tab.',
+    swatch: { bg: '#10243f', text: '#eef3fb', muted: '#a9c2e0', active: '#8ec5ff', border: '#26405f' },
+  },
+  {
+    id: 'forest',
+    ar: 'أخضر غابي', en: 'Forest',
+    hintAr: 'أخضر داكن هادئ بنصوص فاتحة ونشاط نعناعي.',
+    hintEn: 'Calm dark green with light text and a mint active tab.',
+    swatch: { bg: '#11291f', text: '#eef6f0', muted: '#a5c8b3', active: '#86d9ad', border: '#26483a' },
+  },
+  {
+    id: 'sand',
+    ar: 'رملي فاتح', en: 'Sand',
+    hintAr: 'رمادي رملي فاتح بنصوص داكنة ونشاط طوبي — الأنسب للمنيو الفاتح.',
+    hintEn: 'Light sand grey with dark text and a brick active tab.',
+    swatch: { bg: '#f4f2ef', text: '#1b1a18', muted: '#5b574f', active: '#8a4321', border: '#ddd8d1' },
+  },
+]
+export const CHROME_IDS = CHROME_THEMES.map((c) => c.id)
+export const chromeThemeById = (id) => CHROME_THEMES.find((c) => c.id === id) || CHROME_THEMES[0]
+
+// The attribute value a tenant asks for, or null when it wants the auto look.
+// Unknown ids (a hand-edited document, an older preset) fall back to auto
+// rather than stamping an attribute no stylesheet answers.
+export function chromeAttr(tenant) {
+  const id = tenant?.chromeTheme
+  return id && id !== 'auto' && CHROME_IDS.includes(id) ? id : null
+}
+
+// Stamp / clear the chrome attribute on a carrier node (body by default).
+// Safe to call repeatedly and safe with a null tenant.
+export function applyChrome(tenant, node) {
+  const el = node || (typeof document === 'undefined' ? null : document.body)
+  if (!el) return
+  const attr = chromeAttr(tenant)
+  if (attr) el.setAttribute('data-chrome', attr)
+  else el.removeAttribute('data-chrome')
+}
+export function clearChrome(node) {
+  const el = node || (typeof document === 'undefined' ? null : document.body)
+  if (el) el.removeAttribute('data-chrome')
+}
+
 // Mirror the shell's theme onto <body> while the shell is mounted, so PORTALED
 // overlays (sheets, toasts — rendered outside the shell) inherit it too.
 // Inner shells with their own attribute still win locally (descendant scope).
@@ -198,7 +279,7 @@ export function useSystemThemeBody(tenant, section) {
   const id = sectionSystemTheme(tenant, section)
   // deps fingerprint: EVERYTHING this effect reads must be here, or changes
   // (e.g. switching the system background kind) silently stop applying live
-  const fx = JSON.stringify([tenant?.glassFx || null, tenant?.glassFxBy || null, tenant?.customTheme || null, tenant?.appBg?.kind || null, tenant?.selColor || null, tenant?.btnFx || null, tenant?.systemFont || null, tenant?.themeSchedule || null])
+  const fx = JSON.stringify([tenant?.glassFx || null, tenant?.glassFxBy || null, tenant?.customTheme || null, tenant?.appBg?.kind || null, tenant?.selColor || null, tenant?.btnFx || null, tenant?.systemFont || null, tenant?.themeSchedule || null, tenant?.chromeTheme || null])
   // schedule needs the clock: a minute tick re-renders the consumer so the
   // day/night switch happens live without a reload
   const [, setTick] = useState(0)
@@ -237,6 +318,8 @@ export function useSystemThemeBody(tenant, section) {
     const bgKind = tenant?.appBg?.kind
     if (bgKind && bgKind !== 'mesh') document.body.setAttribute('data-appbg', bgKind)
     else document.body.removeAttribute('data-appbg')
+    // app chrome (top bar + bottom nav) — one attribute, both bars
+    applyChrome(tenant)
     // controllable selection color + venue button style (gradient/glow)
     applyUiFx(document.body, tenant)
     // SYSTEM font (plan idea #3): the whole back-office re-types from one pick.
@@ -257,6 +340,7 @@ export function useSystemThemeBody(tenant, section) {
       document.body.removeAttribute('data-custheme')
       document.body.removeAttribute('data-glass-ripple')
       document.body.removeAttribute('data-appbg')
+      clearChrome()
       ;['--glass-alpha', '--glass-blur', '--glass-sat', '--font-body', '--font-display'].forEach((k) => document.body.style.removeProperty(k))
       CUSTOM_TOKEN_KEYS.forEach((k) => document.body.style.removeProperty(`--cust-${k}`))
       clearUiFx(document.body)

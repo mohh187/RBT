@@ -1,0 +1,238 @@
+/* Appearance-editor chrome — the small, self-contained visuals that let a venue
+   SEE a look before it commits to it:
+
+     .chrome-*   a mock phone bar pair (top app bar + bottom nav) painted with a
+                 chrome preset's real tokens, used by the Settings picker,
+     .dpx-*      a dark stage the item editor renders the real DishProps layer
+                 onto, over the item's own photo.
+
+   Imported from routes/admin/Settings.jsx and routes/admin/Items.jsx. Nothing
+   here leaks: every rule is under one of the two prefixes above.
+
+   HARD RULES observed: no emoji, Latin digits only, and no visible scrollbars
+   (the one scrollable strip below hides its bar in every engine). */
+
+/* ===================================================== chrome mock bars === */
+
+.chrome-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(132px, 1fr));
+  gap: 10px;
+}
+
+.chrome-card {
+  display: block;
+  width: 100%;
+  padding: 6px;
+  border: 2px solid var(--border);
+  border-radius: var(--r-md, 12px);
+  background: var(--surface);
+  cursor: pointer;
+  text-align: start;
+  transition: border-color .15s ease, transform .12s ease;
+}
+.chrome-card:hover { border-color: var(--border-strong, var(--border)); }
+.chrome-card:active { transform: scale(.985); }
+.chrome-card[data-on='true'] {
+  border-color: var(--brand);
+  box-shadow: 0 0 0 3px var(--ring, transparent);
+}
+
+/* the phone: a top bar, a slab of page, a bottom nav — all three painted from
+   the preset's own tokens so the swatch is the real thing, not an impression */
+.chrome-mock {
+  display: block;
+  border-radius: 9px;
+  overflow: hidden;
+  background: var(--surface-2, #f2f2f2);
+  border: 1px solid var(--cm-border, var(--border));
+}
+.chrome-mock-bar,
+.chrome-mock-nav {
+  display: flex;
+  align-items: center;
+  background: var(--cm-bg, var(--surface));
+  padding: 0 6px;
+}
+.chrome-mock-bar {
+  height: 26px;
+  gap: 5px;
+  justify-content: space-between;
+  border-bottom: 1px solid var(--cm-border, var(--border));
+}
+.chrome-mock-nav {
+  height: 24px;
+  gap: 4px;
+  justify-content: space-around;
+  border-top: 1px solid var(--cm-border, var(--border));
+}
+.chrome-mock-name {
+  font-size: 9px;
+  font-weight: 700;
+  color: var(--cm-text, var(--text));
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+/* the two icon buttons that flank the venue name */
+.chrome-mock-dot {
+  width: 11px;
+  height: 11px;
+  border-radius: 4px;
+  flex: none;
+  background: var(--cm-icon, var(--text-muted));
+  opacity: .75;
+}
+.chrome-mock-tab {
+  font-size: 8px;
+  line-height: 1;
+  color: var(--cm-muted, var(--text-muted));
+  white-space: nowrap;
+}
+.chrome-mock-tab[data-on='true'] {
+  color: var(--cm-active, var(--brand));
+  font-weight: 700;
+}
+/* the page between the bars — just enough of it to read the bars as furniture */
+.chrome-mock-page {
+  height: 30px;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: 6px;
+}
+.chrome-mock-page i {
+  display: block;
+  height: 5px;
+  border-radius: 3px;
+  background: var(--text-muted);
+  opacity: .22;
+}
+.chrome-mock-page i:last-child { width: 58%; }
+
+.chrome-name {
+  display: block;
+  margin-top: 5px;
+  font-size: var(--fs-xs, 11px);
+  font-weight: 700;
+  text-align: center;
+  color: var(--text);
+}
+
+/* ================================================== dish surface + props === */
+
+/* The editorial theme parks the dish on near-black; the preview has to use the
+   same canvas or the surface materials read wrong (they are built to EMERGE
+   out of darkness rather than sit on a card). */
+.dpx-stage {
+  position: relative;
+  isolation: isolate;
+  width: 100%;
+  height: 210px;
+  border-radius: var(--r-md, 12px);
+  overflow: hidden;
+  display: flex;
+  align-items: flex-end;
+  justify-content: center;
+  background: radial-gradient(120% 88% at 50% 10%, #1b1b21 0%, #0d0d10 62%, #08080a 100%);
+}
+/* z-index 2 parks the photo between the two DishProps layers (behind = 0,
+   front = 3), which is exactly how the real editorial card stacks it. */
+.dpx-stage img {
+  position: relative;
+  z-index: 2;
+  display: block;
+  width: auto;
+  max-width: 76%;
+  max-height: 86%;
+  object-fit: contain;
+  object-position: bottom center;
+}
+.dpx-noimg {
+  position: relative;
+  z-index: 2;
+  margin-bottom: 26%;
+  color: rgba(255, 255, 255, .5);
+  font-size: var(--fs-xs, 11px);
+  text-align: center;
+  padding: 0 12px;
+}
+
+/* prop catalogue: one group per category, chips wrap so nothing ever scrolls */
+.dpx-groups {
+  display: grid;
+  gap: 8px;
+}
+.dpx-group {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 5px;
+  align-items: center;
+}
+.dpx-group-label {
+  flex: none;
+  min-width: 62px;
+  font-size: var(--fs-xs, 11px);
+  font-weight: 700;
+  color: var(--text-muted);
+}
+
+/* surface swatches: a strip of little material cards. It CAN overflow on a
+   narrow phone, so it scrolls — with the bar removed in every engine. */
+.dpx-surfaces {
+  display: flex;
+  gap: 6px;
+  overflow-x: auto;
+  padding-bottom: 2px;
+  scrollbar-width: none;
+  -ms-overflow-style: none;
+}
+.dpx-surfaces::-webkit-scrollbar { width: 0; height: 0; }
+
+.dpx-surface {
+  flex: none;
+  width: 68px;
+  padding: 0;
+  border: 2px solid var(--border);
+  border-radius: 10px;
+  background: var(--surface);
+  cursor: pointer;
+  overflow: hidden;
+  transition: border-color .15s ease;
+}
+.dpx-surface:hover { border-color: var(--border-strong, var(--border)); }
+.dpx-surface[data-on='true'] { border-color: var(--brand); }
+/* a 34px slice of the material, mixed from the same colours dishprops.css uses
+   for each grain so the chip is recognisably that surface */
+.dpx-chip {
+  display: block;
+  height: 34px;
+  background: linear-gradient(180deg, #101014 0%, #17171c 100%);
+}
+.dpx-chip[data-s='darkMarble'] { background: linear-gradient(180deg, #26262c 0%, #17171b 55%, #101014 100%); }
+.dpx-chip[data-s='warmWood'] { background: linear-gradient(180deg, #6b452a 0%, #4a2f1c 60%, #2e1d11 100%); }
+.dpx-chip[data-s='brushedSteel'] { background: linear-gradient(180deg, #7b8087 0%, #4e5359 55%, #2c2f34 100%); }
+.dpx-chip[data-s='slate'] { background: linear-gradient(180deg, #3a4046 0%, #23272b 60%, #14171a 100%); }
+.dpx-chip[data-s='linen'] { background: linear-gradient(180deg, #d9cfbe 0%, #b6a992 60%, #8a7f6c 100%); }
+.dpx-chip[data-s='shelf'] { background: linear-gradient(180deg, #5b4636 0%, #3a2b20 52%, #191410 100%); }
+/* 'none' and 'auto' are choices, not materials — say so visually */
+.dpx-chip[data-s='none'] {
+  background:
+    linear-gradient(135deg, transparent 46%, var(--border-strong, #999) 46%, var(--border-strong, #999) 54%, transparent 54%),
+    var(--surface-2, #eee);
+}
+.dpx-chip[data-s='auto'] {
+  background: linear-gradient(135deg, #6b452a 0%, #23272b 50%, #b6a992 100%);
+  opacity: .8;
+}
+.dpx-surface-name {
+  display: block;
+  padding: 3px 2px 4px;
+  font-size: 10px;
+  font-weight: 600;
+  text-align: center;
+  color: var(--text);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}

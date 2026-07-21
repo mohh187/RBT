@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react'
 import { useParams } from 'react-router-dom'
 import { resolveSlug, getTenant, watchItems, watchCategories, watchOffers } from '../../lib/db.js'
 import { applySkin, resolveSkin, applyTypography } from '../../lib/skins.js'
+import { applyChrome } from '../../lib/systemThemes.js'
 import { FullSpinner } from '../../components/ui.jsx'
 import DinerBar from '../../components/DinerBar.jsx'
 import MenuView from '../../components/MenuView.jsx'
@@ -41,7 +42,9 @@ export default function PreviewMenu() {
   }, [])
 
   const draft = tenant ? { ...tenant, ...override } : null
-  useEffect(() => { if (draft) { applySkin(resolveSkin(draft, 'menu'), { applyMode: true }); applyTypography(draft) } }, [override, tenant]) // eslint-disable-line react-hooks/exhaustive-deps
+  // applyChrome writes to THIS frame's body, so the mock bars in the studio and
+  // the real bars in here stay one and the same choice.
+  useEffect(() => { if (draft) { applySkin(resolveSkin(draft, 'menu'), { applyMode: true }); applyTypography(draft); applyChrome(draft) } }, [override, tenant]) // eslint-disable-line react-hooks/exhaustive-deps
 
   if (!draft) return <FullSpinner />
   return (

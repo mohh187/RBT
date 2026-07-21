@@ -25,6 +25,12 @@ import DishHotspots from '../../components/DishHotspots.jsx'
 import { ITEM_EFFECTS } from '../../lib/itemEffects.js'
 import { lex, venueType } from '../../lib/venueTypes.js'
 import { sectionTemplate, templateOptions } from '../../lib/systemTemplates.js'
+// Surface + garnish: the catalogue is data-only (no React, no CSS), the drawing
+// component is the very one the live menu uses — so the editor preview is the
+// real thing rather than an approximation of it.
+import { SURFACES, PROPS, PROP_CATEGORIES } from '../../lib/dishProps.js'
+import DishProps from '../../components/menuThemes/DishProps.jsx'
+import '../../styles/appearance.css'
 
 const blank = () => ({
   nameAr: '', nameEn: '', price: '', calories: '', categoryId: '',
@@ -34,7 +40,40 @@ const blank = () => ({
   recipe: [], variantRecipes: {},
   namePriceLayout: '', nameColor: '', priceColor: '', namePriceStyle: '',
   bgUrl: '', bgKind: '', bgOpacity: 0.5, bgPos: 'center', bgScale: 1,
+  // dish styling layer (lib/dishProps.js): '' surface = the layer is off, which
+  // is the default for every new item — it renders only when asked for
+  surface: '', props: null,
 })
+
+// The garnish half of the item document, read back into the flat shape the
+// editor's controls need. This MIRRORS readConfig() in lib/dishProps.js: the
+// same document can arrive as 'none', an id array, or an object, and the editor
+// must understand every form it might already be stored in.
+function readGarnish(raw) {
+  if (raw === 'none' || raw === false || raw === '') return { on: false, ids: [], density: 'normal' }
+  if (Array.isArray(raw)) return { on: true, ids: raw.filter((x) => typeof x === 'string'), density: 'normal' }
+  if (raw && typeof raw === 'object') {
+    if (raw.off === true) return { on: false, ids: [], density: 'normal' }
+    return { on: true, ids: Array.isArray(raw.ids) ? raw.ids.filter((x) => typeof x === 'string') : [], density: raw.density || 'normal' }
+  }
+  // absent -> the layer picks its own garnish from the dish name
+  return { on: true, ids: [], density: 'normal' }
+}
+
+// Surface choices, in picker order. 'auto' is deliberately NOT a catalogue id:
+// resolveDishProps() falls back to the automatic material for an unknown one,
+// which is exactly the behaviour "let the system choose" needs — and it keeps
+// the field truthy, which is what switches the whole layer on.
+const SURFACE_CHOICES = [
+  { id: 'auto', labelAr: 'تلقائي حسب الصنف', labelEn: 'Auto for this dish' },
+  { id: 'none', labelAr: 'بدون سطح', labelEn: 'No surface' },
+  ...SURFACES,
+]
+const DENSITY_CHOICES = [
+  ['low', 'خفيفة', 'Light'],
+  ['normal', 'متوسطة', 'Normal'],
+  ['rich', 'غنية', 'Rich'],
+]
 
 export default function Items() {
   const { t, lang } = useI18n()
@@ -439,6 +478,7 @@ function EditorTabs({ lang }) {
   const tabs = [
     ['ie-basics', lang === 'ar' ? 'الأساسي' : 'Basics'],
     ['ie-images', lang === 'ar' ? 'الصور والمؤثرات' : 'Images & FX'],
+    ['ie-dish', lang === 'ar' ? 'السطح والزينة' : 'Surface & garnish'],
     ['ie-pricing', lang === 'ar' ? 'المقاسات والإضافات' : 'Sizes & mods'],
     ['ie-ar', lang === 'ar' ? '3D وAR' : '3D & AR'],
     ['ie-recipe', lang === 'ar' ? 'الوصفة والمخزون' : 'Recipe'],
@@ -682,6 +722,44 @@ function ItemEditor({ tenantId, cats, currency, value, onClose, onSaved, onDelet
   const setIng = (i, k, v) => set('ingredients', form.ingredients.map((x, idx) => (idx === i ? { ...x, [k]: v } : x)))
   const delIng = (i) => set('ingredients', form.ingredients.filter((_, idx) => idx !== i))
 
+  // ---- dish surface + garnish ------------------------------------------------
+  // `surface` is the master switch: while it is empty the whole layer is off and
+  // the dish renders exactly as it does today. Every updater re-reads the
+  // garnish out of the CURRENT form inside the setter, so two quick taps can
+  // never write a stale id list.
+  const dpOn = !!form.surface
+  const dpG = readGarnish(form.props)
+  const dpEnable = (on) => setForm((f) => (on
+    ? { ...f, surface: f.surface || 'auto', props: f.props == null ? { ids: [], density: 'normal' } : f.props }
+    : { ...f, surface: '', props: null }))
+  const dpSetSurface = (id) => setForm((f) => ({ ...f, surface: id }))
+  const dpSetGarnish = (on) => setForm((f) => {
+    const g = readGarnish(f.props)
+    return { ...f, props: on ? { ids: g.ids, density: g.density } : 'none' }
+  })
+  const dpToggleProp = (id) => setForm((f) => {
+    const g = readGarnish(f.props)
+    const ids = g.ids.includes(id) ? g.ids.filter((x) => x !== id) : [...g.ids, id].slice(0, 8)
+    return { ...f, props: { ids, density: g.density } }
+  })
+  const dpSetDensity = (d) => setForm((f) => {
+    const g = readGarnish(f.props)
+    return { ...f, props: { ids: g.ids, density: d } }
+  })
+  // Exactly what will be written to the document — so the preview below and the
+  // saved item can never drift apart.
+  const dpPropsValue = dpOn
+    ? (dpG.on ? { ids: dpG.ids.filter((id) => PROPS.some((p) => p.id === id)).slice(0, 8), density: dpG.density } : 'none')
+    : null
+  const dpCatName = cats.find((c) => c.id === form.categoryId) ? pickLang(cats.find((c) => c.id === form.categoryId), 'name', lang) : ''
+  const dpPreviewItem = {
+    id: form.id || 'preview',
+    nameAr: form.nameAr, nameEn: form.nameEn,
+    ingredients: form.ingredients || [],
+    surface: form.surface || '',
+    props: dpPropsValue,
+  }
+
   const save = async () => {
     if (!form.nameAr.trim() && !form.nameEn.trim()) {
       toast.error(lang === 'ar' ? 'أدخل اسم الصنف' : 'Enter item name')
@@ -769,6 +847,10 @@ function ItemEditor({ tenantId, cats, currency, value, onClose, onSaved, onDelet
         bgOpacity: Math.min(1, Math.max(0.1, Number(form.bgOpacity ?? 0.5))),
         bgPos: form.bgPos || 'center',
         bgScale: Math.min(3, Math.max(1, Number(form.bgScale) || 1)),
+        // dish styling layer, in the exact shape lib/dishProps.js reads back.
+        // Never `undefined` on either key — Firestore rejects that outright.
+        surface: form.surface || '',
+        props: dpPropsValue,
       }
       await saveItem(tenantId, form.id, payload)
       onSaved()
@@ -1130,6 +1212,87 @@ function ItemEditor({ tenantId, cats, currency, value, onClose, onSaved, onDelet
                     <span className="xs bold num" style={{ textShadow: '0 1px 10px rgba(0,0,0,0.35)' }}>{form.price || '00'} {currency}</span>
                   </div>
                 </div>
+              </div>
+            </div>
+          )}
+        </div>
+
+        <EditorSection id="ie-dish" title={lang === 'ar' ? 'السطح والزينة حول الطبق' : 'Dish surface & garnish'} />
+        <div className="card card-pad stack" style={{ gap: 10, background: 'var(--surface-2)', border: '1px solid var(--border)', marginBottom: 'var(--sp-3)' }}>
+          <label className="row-between" style={{ cursor: 'pointer', gap: 10, alignItems: 'flex-start' }}>
+            <span className="stack" style={{ gap: 2 }}>
+              <strong className="xs"><Icon name="sparkles" size={13} style={{ verticalAlign: 'middle' }} /> {lang === 'ar' ? 'ضع الطبق على سطح وزيّنه' : 'Stand this dish on a surface'}</strong>
+              <span className="xs faint">{lang === 'ar' ? 'يظهر في ثيم «المجلة الداكنة»: سطح تحت صورة الطبق وزينة متناثرة حولها. مغلق في كل الأصناف حتى تفعّله هنا.' : 'Shows in the Dark Editorial theme: a material under the cutout plus a scatter of garnish. Off on every item until switched on here.'}</span>
+            </span>
+            <input type="checkbox" checked={dpOn} onChange={(e) => dpEnable(e.target.checked)} style={{ width: 22, height: 22, flex: 'none' }} />
+          </label>
+
+          {dpOn && (
+            <div className="stack" style={{ gap: 10 }}>
+              <div className="field" style={{ marginBottom: 0 }}>
+                <label>{lang === 'ar' ? 'السطح تحت الطبق' : 'Surface under the dish'}</label>
+                <div className="dpx-surfaces">
+                  {SURFACE_CHOICES.map((s) => (
+                    <button key={s.id} type="button" className="dpx-surface" data-on={form.surface === s.id ? 'true' : 'false'}
+                      aria-pressed={form.surface === s.id} onClick={() => dpSetSurface(s.id)}>
+                      <span className="dpx-chip" data-s={s.id} />
+                      <span className="dpx-surface-name">{lang === 'ar' ? s.labelAr : s.labelEn}</span>
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              <label className="row-between" style={{ cursor: 'pointer' }}>
+                <span className="xs bold">{lang === 'ar' ? 'زينة متناثرة حول الطبق' : 'Garnish scattered around the dish'}</span>
+                <input type="checkbox" checked={dpG.on} onChange={(e) => dpSetGarnish(e.target.checked)} style={{ width: 22, height: 22, flex: 'none' }} />
+              </label>
+
+              {dpG.on && (
+                <div className="stack" style={{ gap: 8 }}>
+                  <div className="field" style={{ marginBottom: 0 }}>
+                    <label>{lang === 'ar' ? 'كثافة الزينة' : 'Garnish density'}</label>
+                    <div className="row" style={{ gap: 6, flexWrap: 'wrap' }}>
+                      {DENSITY_CHOICES.map(([id, la, le]) => (
+                        <button key={id} type="button" className={`chip ${dpG.density === id ? 'active' : ''}`} onClick={() => dpSetDensity(id)}>{lang === 'ar' ? la : le}</button>
+                      ))}
+                    </div>
+                  </div>
+                  <div className="field" style={{ marginBottom: 0 }}>
+                    <label>
+                      {lang === 'ar' ? 'عناصر الزينة' : 'Garnish elements'}{' '}
+                      <span className="faint xs num">({dpG.ids.length}/8)</span>
+                    </label>
+                    <p className="xs faint" style={{ margin: '0 0 6px' }}>{lang === 'ar' ? 'اترك الاختيار فارغاً ليختار النظام ما يناسب اسم الصنف تلقائياً، أو حدّد ما تريده بنفسك.' : 'Leave the choice empty and the system picks from the dish name, or select your own.'}</p>
+                    <div className="dpx-groups">
+                      {PROP_CATEGORIES.map((c) => {
+                        const list = PROPS.filter((p) => p.category === c.id)
+                        if (!list.length) return null
+                        return (
+                          <div key={c.id} className="dpx-group">
+                            <span className="dpx-group-label">{lang === 'ar' ? c.labelAr : c.labelEn}</span>
+                            {list.map((p) => (
+                              <button key={p.id} type="button" className={`chip ${dpG.ids.includes(p.id) ? 'active' : ''}`}
+                                aria-pressed={dpG.ids.includes(p.id)} onClick={() => dpToggleProp(p.id)}>
+                                {lang === 'ar' ? p.labelAr : p.labelEn}
+                              </button>
+                            ))}
+                          </div>
+                        )
+                      })}
+                    </div>
+                  </div>
+                </div>
+              )}
+
+              <div className="field" style={{ marginBottom: 0 }}>
+                <label>{lang === 'ar' ? 'معاينة حية — كما سيراها العميل' : 'Live preview — what the guest sees'}</label>
+                <div className="dpx-stage">
+                  <DishProps item={dpPreviewItem} active variant="stage" catName={dpCatName} />
+                  {form.imageUrl
+                    ? <img src={form.imageUrl} alt="" />
+                    : <span className="dpx-noimg">{lang === 'ar' ? 'ارفع صورة الصنف لترى المعاينة كاملة — الأفضل صورة بخلفية شفافة' : 'Upload the item photo for the full preview (a transparent cutout works best)'}</span>}
+                </div>
+                <p className="xs faint">{lang === 'ar' ? 'الزينة زخرفية فقط: لا تُعرض كمكوّنات ولا تُطبع في الطلب.' : 'Garnish is decoration only: never presented as an ingredient, never printed on the order.'}</p>
               </div>
             </div>
           )}

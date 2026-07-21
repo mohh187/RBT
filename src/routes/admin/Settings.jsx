@@ -25,13 +25,14 @@ import { THEMES, applyTheme } from '../../lib/themes.js'
 import { SKINS, getSkin, fontLabel, FONT_OPTIONS, SHAPE_OPTIONS, LAYOUT_OPTIONS, HEADER_STYLES, BOTTOMNAV_STYLES, MOTION_OPTIONS, MOTION_SPEEDS, MOTION_REPEATS, TAP_OPTIONS } from '../../lib/skins.js'
 import { UpgradeNotice } from '../../components/PlanGate.jsx'
 import { SECTION_TEMPLATES, sectionTemplate } from '../../lib/systemTemplates.js'
-import { SYSTEM_THEMES, THEMEABLE_SECTIONS, sectionSystemTheme, systemThemeAttr } from '../../lib/systemThemes.js'
+import { SYSTEM_THEMES, THEMEABLE_SECTIONS, sectionSystemTheme, systemThemeAttr, CHROME_THEMES } from '../../lib/systemThemes.js'
 import SocialLinks from '../../components/SocialLinks.jsx'
 import StaffPreview from '../../components/StaffPreview.jsx'
 import TemplateGallery from '../../components/TemplateGallery.jsx'
 import ContrastHint from '../../components/ContrastHint.jsx'
 import HelpTip from '../../components/HelpTip.jsx'
 import '../../styles/settings-nav.css'
+import '../../styles/appearance.css'
 
 const LAYOUT_LABELS = { list: 'قائمة', minimal: 'مدمج', cards: 'بطاقات', grid: 'شبكة', gallery: 'معرض', bento: 'فسيفساء', sidebar: 'جانبي', catalog: 'كتالوج', plates: 'صحون', storefront: 'تطبيق متجر', coffeelist: 'قائمة مقهى', alternating: 'متعاكس تبادلي (مشاوي)', coffeepan: 'كروت كوفي بان المتميزة', spotlight: 'واجهة العرض (منتج بملء الشاشة)' }
 const LAYOUT_LABELS_EN = { list: 'List', minimal: 'Minimal', cards: 'Cards', grid: 'Grid', gallery: 'Gallery', bento: 'Bento', sidebar: 'Sidebar', catalog: 'Catalog', plates: 'Platter', storefront: 'Storefront', coffeelist: 'Cafe List', alternating: 'Alternating Rows', coffeepan: 'Coffeepan Premium Cards', spotlight: 'Spotlight (full-screen product)' }
@@ -145,6 +146,7 @@ const SEARCH_INDEX = [
   { keys: ['اجمالي السلة', 'إجمالي السلة', 'السلة', 'اجمالي', 'إجمالي', 'cart'], tab: 'studio', aSec: 'elements', ar: 'إجمالي السلة', en: 'Cart total' },
   { keys: ['اخفاء', 'إخفاء', 'الاستوري', 'استوري', 'الحجوزات', 'الفعاليات', 'العروض', 'hide', 'stories', 'reservations'], tab: 'studio', aSec: 'elements', ar: 'إظهار وإخفاء عناصر المنيو', en: 'Show / hide menu elements' },
   { keys: ['الخط', 'خط', 'الحواف', 'الهيدر', 'الحركة', 'font', 'header', 'motion'], tab: 'studio', aSec: 'elements', ar: 'الخط والحواف والهيدر والحركة', en: 'Font, shape, header & motion' },
+  { keys: ['لون الشريط', 'الاشرطة', 'الأشرطة', 'طوبي', 'كحلي', 'حبري', 'chrome', 'app bar', 'bar colour', 'bar color'], tab: 'studio', aSec: 'elements', at: 'set-chrome', ar: 'لون الشريط العلوي وشريط التنقّل', en: 'App bar & bottom nav colour' },
   { keys: ['الالوان', 'الألوان', 'لون', 'الهوية', 'color', 'brand'], tab: 'studio', aSec: 'colors', ar: 'ألوان الهوية', en: 'Brand colours' },
   { keys: ['حجم النص', 'النصوص', 'typography'], tab: 'studio', aSec: 'colors', ar: 'أحجام وألوان النصوص', en: 'Text sizes & colours' },
   { keys: ['البانر', 'بانر', 'banner'], tab: 'studio', aSec: 'media', ar: 'البانر العلوي', en: 'Top banner' },
@@ -566,6 +568,9 @@ export default function Settings() {
   const skinOverrides = { brand: color, accent, font: ovFont, shape: ovShape, menuLayout: ovLayout, motionSpeed: ovMotionSpeed, motionRepeat: ovMotionRepeat, tap: ovTap, detailLayout: ovDetailLayout, itemImageStyle: ovItemImageStyle, spotImageSize: ovSpotSize, ...(ovHeader ? { header: ovHeader } : {}), ...(ovBottomNav ? { bottomNav: ovBottomNav } : {}), ...(ovMotion ? { motion: ovMotion } : {}), ...(ovHidden.length ? { hidden: ovHidden } : {}) }
   const previewOverride = {
     name: name.trim(), descAr: descAr.trim(), logoUrl, coverUrl, currency, curbsideEnabled,
+    // instant-saved (not a draft), but streamed too so the preview frame repaints
+    // its bars the moment a chrome preset is picked instead of on the next reload
+    chromeTheme: tenant?.chromeTheme || 'auto',
     skin: { skinId, overrides: skinOverrides }, themePreset: preset, themeColor: color, themeAccent: accent,
     bannerUrl, bannerVideoUrl, bannerFadeDir, bannerOpacity: Number(bannerOpacity), bannerPosition, bannerScale: Number(bannerScale), bannerGradient: Number(bannerGradient), bannerStyle,
     immersiveBgUrl, immersiveBgVideoUrl, immersiveBgOpacity: Number(immersiveBgOpacity), immersiveBgPosition, immersiveBgScale: Number(immersiveBgScale), immersiveFull,
@@ -2117,7 +2122,53 @@ export default function Settings() {
                       </select>
                     </div>
                   </div>
-                  
+
+                  {/* APP CHROME — one colour identity for the top bar AND the bottom
+                      nav, on the customer menu and the staff system alike. Each
+                      option paints its own real bar (colour + text) so the choice
+                      is made by eye, not by name. Saved instantly on the tenant. */}
+                  <div id="set-chrome" className="stack" style={{ gap: 8, borderTop: '1px solid var(--border)', paddingTop: 10 }}>
+                    <strong className="small"><Icon name="penLine" size={14} style={{ verticalAlign: 'middle' }} /> {ar ? 'لون الشريط العلوي وشريط التنقّل' : 'App bar & bottom nav colour'}</strong>
+                    <p className="xs faint" style={{ margin: 0 }}>{ar ? 'يلوّن الشريط العلوي وشريط التنقّل السفلي في منيو العملاء وفي شاشات النظام. المعاينة أدناه بألوان الشريط الحقيقية.' : 'Colours the top bar and the bottom navigation on the customer menu and the staff screens. Each preview below uses the real bar colours.'}</p>
+                    <div className="chrome-grid">
+                      {CHROME_THEMES.map((c) => {
+                        const on = (tenant?.chromeTheme || 'auto') === c.id
+                        return (
+                          <button
+                            key={c.id}
+                            type="button"
+                            className="chrome-card"
+                            data-on={on ? 'true' : 'false'}
+                            title={ar ? c.hintAr : c.hintEn}
+                            aria-pressed={on}
+                            onClick={async () => {
+                              try { await saveNow({ chromeTheme: c.id }); updateTenantLocal({ chromeTheme: c.id }); toast.success(t('saved')) } catch (_) { toast.error(t('error')) }
+                            }}
+                          >
+                            <span
+                              className="chrome-mock"
+                              style={{ '--cm-bg': c.swatch.bg, '--cm-text': c.swatch.text, '--cm-muted': c.swatch.muted, '--cm-active': c.swatch.active, '--cm-border': c.swatch.border, '--cm-icon': c.swatch.muted }}
+                            >
+                              <span className="chrome-mock-bar">
+                                <span className="chrome-mock-dot" />
+                                <span className="chrome-mock-name">{(name || tenant?.name || (ar ? 'اسم المنشأة' : 'Venue')).slice(0, 14)}</span>
+                                <span className="chrome-mock-dot" />
+                              </span>
+                              <span className="chrome-mock-page"><i /><i /></span>
+                              <span className="chrome-mock-nav">
+                                <span className="chrome-mock-tab" data-on="true">{ar ? 'المنيو' : 'Menu'}</span>
+                                <span className="chrome-mock-tab">{ar ? 'السلة' : 'Cart'}</span>
+                                <span className="chrome-mock-tab">{ar ? 'حسابي' : 'Me'}</span>
+                              </span>
+                            </span>
+                            <span className="chrome-name">{ar ? c.ar : c.en}</span>
+                          </button>
+                        )
+                      })}
+                    </div>
+                    <span className="xs faint">{(() => { const c = CHROME_THEMES.find((x) => x.id === (tenant?.chromeTheme || 'auto')) || CHROME_THEMES[0]; return ar ? c.hintAr : c.hintEn })()}</span>
+                  </div>
+
                   {/* Motion effects */}
                   <div className="field" style={{ borderTop: '1px solid var(--border)', paddingTop: 10 }}>
                     <label>{ar ? 'تأثير حركة ظهور العناصر (Animations)' : 'Item Entrance Animation'}</label>
