@@ -360,11 +360,20 @@ export default function MenuView({ tenant, tenantId, items, categories, offers =
     return () => io.disconnect()
   }, [menuLayout, motion, motionSpeed, motionRepeat, activeCat, viewMode, search, visibleItems, items])
 
-  // When a search starts, pull the search bar (and the results right below it) to
-  // the top so matches are visible immediately — no scrolling to find them.
+  // When a search starts, bring the search bar into view — but ONLY if it is
+  // actually off-screen. Scrolling the whole page every keystroke-that-starts-a-
+  // search lurched the viewport even when the bar was already visible, which
+  // reads as a web page jumping under you rather than an app. Scroll only to
+  // recover a bar that has scrolled above the fold.
   const searching = search.trim().length > 0
   useEffect(() => {
-    if (searching) document.getElementById('m-search')?.scrollIntoView({ behavior: 'smooth', block: 'start' })
+    if (!searching) return
+    const el = document.getElementById('m-search')
+    if (!el) return
+    const top = el.getBoundingClientRect().top
+    // Already in view (within the sticky header zone)? Leave the viewport alone.
+    if (top >= 0 && top < 140) return
+    el.scrollIntoView({ behavior: 'smooth', block: 'start' })
   }, [searching])
 
   const cartCount = cart.reduce((s, l) => s + l.qty, 0)
@@ -481,6 +490,13 @@ export default function MenuView({ tenant, tenantId, items, categories, offers =
   // Which interactive chips to surface: venue toggle (default on) AND a real
   // reason to exist — never advertise an experience that would open empty.
   const expChips = useMemo(() => {
+    // Until the tenant document resolves, we do NOT know which experiences are
+    // on. Guessing "all on" (which `tenant?.[k] !== false` does when tenant is
+    // null) paints four chips, then REMOVES the disabled ones the instant the
+    // real tenant arrives — the exact "bar moves up and down" the owner saw.
+    // An unresolved tenant means an empty bar (the row height is reserved in
+    // CSS), and the real chips fill in horizontally with no vertical shift.
+    if (!tenant) return []
     const on = (k) => tenant?.[k] !== false
     const out = []
     // Games lead the bar: they are the reason a browsing guest stays, and for
@@ -488,12 +504,15 @@ export default function MenuView({ tenant, tenantId, items, categories, offers =
     if (on('gamesEnabled')) out.push({ id: 'games', icon: 'play', label: lang === 'ar' ? 'الألعاب والتحديات' : 'Games' })
     if (orderingEnabled && on('voiceWaiterEnabled')) out.push({ id: 'voice', icon: 'mic', label: lang === 'ar' ? 'اطلب بصوتك' : 'Voice order' })
     if (on('photoOrderEnabled')) out.push({ id: 'photo', icon: 'camera', label: lang === 'ar' ? 'اطلب بالصورة' : 'Photo order' })
-    if (on('menu3dEnabled') && visibleItems.some((i) => i.model3dUrl || i.arStandeeUrl)) out.push({ id: 'world', icon: 'shapes', label: lang === 'ar' ? 'عالم ثلاثي الأبعاد' : '3D world' })
-    if (on('compareEnabled') && visibleItems.length > 1) out.push({ id: 'compare', icon: 'scale', label: lang === 'ar' ? 'قارن الأصناف' : 'Compare' })
+    // Gate the world/compare chips on the FULL active menu, never the
+    // search/category-filtered `visibleItems` — otherwise the chip set changes
+    // as the guest searches or switches tabs, and the bar reflows mid-browse.
+    if (on('menu3dEnabled') && allActive.some((i) => i.model3dUrl || i.arStandeeUrl)) out.push({ id: 'world', icon: 'shapes', label: lang === 'ar' ? 'عالم ثلاثي الأبعاد' : '3D world' })
+    if (on('compareEnabled') && allActive.length > 1) out.push({ id: 'compare', icon: 'scale', label: lang === 'ar' ? 'قارن الأصناف' : 'Compare' })
     if (orderingEnabled && on('sharedCartEnabled') && table?.id) out.push({ id: 'table', icon: 'customers', label: lang === 'ar' ? 'طلب الطاولة معاً' : 'Table order' })
     if (on('voiceMenuEnabled')) out.push({ id: 'read', icon: 'sound', label: lang === 'ar' ? 'اقرأ المنيو صوتياً' : 'Read aloud' })
     return out
-  }, [tenant, orderingEnabled, visibleItems, table, lang])
+  }, [tenant, orderingEnabled, allActive, table, lang])
 
   const addLine = (item, variant, mods, qty) => {
     // browse mode: adding still works — the cart is the guest's "show the waiter"
@@ -728,7 +747,12 @@ export default function MenuView({ tenant, tenantId, items, categories, offers =
       {/* «التجربة التفاعلية» — voice / photo / 3D world / compare / table order.
           Each chip appears only when the venue enabled it AND it has something
           to show (e.g. the 3D world needs at least one item with a model). */}
-      {!preview && expChips.length > 0 && (
+      {/* Render the bar while the tenant is still loading (an empty row whose
+          height is reserved in CSS) and once it has chips — but NOT once we know
+          the venue enabled no experiences. So the row's vertical footprint is
+          fixed from first paint through load: chips fill in horizontally, never
+          pushing the menu up or down. */}
+      {!preview && (!tenant || expChips.length > 0) && (
         <div className="container" style={{ marginTop: 'var(--sp-2)' }}>
           <div className="exp-bar scroll-x">
             {expChips.map((c) => (
@@ -736,9 +760,12 @@ export default function MenuView({ tenant, tenantId, items, categories, offers =
                 {/* The games entry gets its own mark — cards, a die and a
                     domino — because a generic play triangle said "video", not
                     "sit down and play with us". */}
+                {/* Same icon box for every chip so the row is one consistent
+                    control set; the games chip stands out by its gradient and
+                    pulse, not by being a different size. */}
                 {c.id === 'games'
-                  ? <GamesIcon size={17} animated />
-                  : <Icon name={c.icon} size={15} />}
+                  ? <GamesIcon size={16} animated />
+                  : <Icon name={c.icon} size={16} />}
                 <span>{c.label}</span>
               </button>
             ))}

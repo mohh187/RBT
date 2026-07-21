@@ -12,7 +12,10 @@
   --surface-2: #f5f5f6;
   --text: #0a0a0b;
   --text-muted: #5c5c66;
-  --text-faint: #9a9aa5;
+  /* #9a9aa5 was 2.78:1 on white — below the 4.5:1 readable minimum, so every
+     .faint hint (timestamps, "(optional)", was-prices) was a barely-visible
+     gray. #6e6e78 is ~5:1 and still clearly lighter than --text-muted. */
+  --text-faint: #6e6e78;
   --border: #e7e7ea;
   --border-strong: #d6d6db;
 
@@ -1771,7 +1774,9 @@ body[data-custheme] .setup-shell {
   /* stronger than the flat themes: these sit on TRANSLUCENT surfaces over busy
      photo/video backdrops, so muted/faint need extra weight to stay readable */
   --text-muted: #454b56;
-  --text-faint: #646b78;
+  /* nudged darker (#646b78 read as faded on the translucent glass sheet the
+     owner uses) so faint text clears 4.5:1 even over a busy backdrop. */
+  --text-faint: #575e6b;
   --border: rgba(255, 255, 255, 0.65);
   --border-strong: rgba(110, 120, 140, 0.35);
   --r-sm: 12px; --r-md: 18px; --r-lg: 26px; --r-xl: 34px;
@@ -2274,6 +2279,10 @@ body[data-glass-ripple='3'] [data-systheme='glass'] :is(.card, .pos-tile, .kds-t
 .sheet-body {
   padding: var(--sp-4);
   overflow-y: auto;
+  /* Stop a fling inside the sheet from chaining out and scrolling the page
+     behind it once the sheet hits its top/bottom — the give-away that a "modal"
+     is really just a tall div on a web page. */
+  overscroll-behavior: contain;
 }
 /* fixed-height variant: the sheet stays the same size regardless of which
    tab/content is shown, so switching tabs never resizes it. */
@@ -2366,7 +2375,10 @@ body[data-glass-ripple='3'] [data-systheme='glass'] :is(.card, .pos-tile, .kds-t
   margin-bottom: var(--sp-3);
   display: flex;
   justify-content: center;
-  color: var(--text-faint);
+  /* --text-muted, not --text-faint: an empty-state icon (empty cart, no
+     results) is the one thing on an otherwise blank panel and must be clearly
+     visible, not a ghost. Systemic — fixes every empty state at once. */
+  color: var(--text-muted);
 }
 
 /* ===== Menu item card (public) ===== */
@@ -3409,7 +3421,7 @@ body[data-theme='dark'] .pos-fullscreen[data-systheme='glass'] { background: var
 
 .m-search { display: flex; align-items: center; gap: 10px; background: var(--surface); border: 1px solid var(--border); border-radius: var(--r-pill); padding: 12px 16px; box-shadow: var(--sh-1); }
 .m-search input { flex: 1; border: none; background: none; outline: none; color: var(--text); font: inherit; font-size: 16px; }
-.m-search input::placeholder { color: var(--text-faint); }
+.m-search input::placeholder { color: var(--text-muted); }
 
 .m-promos { display: flex; gap: var(--sp-3); overflow-x: auto; scrollbar-width: none; padding-bottom: 4px; }
 .m-promos::-webkit-scrollbar { display: none; }
@@ -3870,29 +3882,31 @@ body[data-theme='dark'] .pos-fullscreen[data-systheme='glass'] { background: var
 
 /* ===== Tap / press interactions (data-tap) — instant feedback when touching any card ===== */
 [data-tap]:not([data-tap='none']) :is(.food-card, .showcase-card, .store-card, .special-card, .store-hero-item, .list-row, .cl-row) { transition: transform .16s ease, box-shadow .16s ease, filter .16s ease; -webkit-tap-highlight-color: transparent; }
-[data-tap='press'] :is(.food-card, .showcase-card, .store-card, .special-card, .store-hero-item, .list-row, .cl-row):is(:hover, :active) { transform: scale(.95); }
-[data-tap='pop'] :is(.food-card, .showcase-card, .store-card, .special-card, .store-hero-item, .list-row, .cl-row):is(:hover, :active) { transform: scale(1.05); }
-[data-tap='lift'] :is(.food-card, .showcase-card, .store-card, .special-card, .store-hero-item, .list-row, .cl-row):is(:hover, :active) { transform: translateY(-6px); box-shadow: 0 22px 42px rgba(0, 0, 0, .22); }
-[data-tap='sink'] :is(.food-card, .showcase-card, .store-card, .special-card, .store-hero-item, .list-row, .cl-row):is(:hover, :active) { transform: translateY(3px) scale(.98); box-shadow: 0 4px 10px rgba(0, 0, 0, .18); }
-[data-tap='tilt'] :is(.food-card, .showcase-card, .store-card, .special-card, .store-hero-item, .list-row, .cl-row):is(:hover, :active) { transform: rotate(-2.5deg) scale(.99); }
-[data-tap='rotate'] :is(.food-card, .showcase-card, .store-card, .special-card, .store-hero-item, .list-row, .cl-row):is(:hover, :active) { transform: rotate(4deg); }
-[data-tap='zoom'] :is(.food-card, .showcase-card, .store-card, .special-card, .store-hero-item, .list-row, .cl-row):is(:hover, :active) { transform: scale(1.1); }
-[data-tap='squeeze'] :is(.food-card, .showcase-card, .store-card, .special-card, .store-hero-item, .list-row, .cl-row):is(:hover, :active) { transform: scaleX(.92) scaleY(1.04); }
-[data-tap='jelly'] :is(.food-card, .showcase-card, .store-card, .special-card, .store-hero-item, .list-row, .cl-row):is(:hover, :active) { transform: scale(1.06, .94); }
-[data-tap='glow'] :is(.food-card, .showcase-card, .store-card, .special-card, .store-hero-item, .list-row, .cl-row):is(:hover, :active) { box-shadow: 0 0 0 3px color-mix(in srgb, var(--brand) 45%, transparent), 0 12px 26px color-mix(in srgb, var(--brand) 40%, transparent); }
-[data-tap='ring'] :is(.food-card, .showcase-card, .store-card, .special-card, .store-hero-item, .list-row, .cl-row):is(:hover, :active) { box-shadow: 0 0 0 3px var(--brand); }
-[data-tap='brighten'] :is(.food-card, .showcase-card, .store-card, .special-card, .store-hero-item, .list-row, .cl-row):is(:hover, :active) { filter: brightness(1.12); }
-[data-tap='dim'] :is(.food-card, .showcase-card, .store-card, .special-card, .store-hero-item, .list-row, .cl-row):is(:hover, :active) { filter: brightness(.85); }
-[data-tap='push'] :is(.food-card, .showcase-card, .store-card, .special-card, .store-hero-item, .list-row, .cl-row):is(:hover, :active) { transform: translateY(2px) scale(.97); box-shadow: inset 0 3px 10px rgba(0, 0, 0, .18); }
-[data-tap='skew'] :is(.food-card, .showcase-card, .store-card, .special-card, .store-hero-item, .list-row, .cl-row):is(:hover, :active) { transform: skewX(-5deg); }
-[data-tap='spin'] :is(.food-card, .showcase-card, .store-card, .special-card, .store-hero-item, .list-row, .cl-row):is(:hover, :active) { transform: rotate(8deg) scale(.96); }
-[data-tap='depth'] :is(.food-card, .showcase-card, .store-card, .special-card, .store-hero-item, .list-row, .cl-row):is(:hover, :active) { transform: perspective(500px) translateZ(-12px) rotateX(6deg); }
-[data-tap='shrink'] :is(.food-card, .showcase-card, .store-card, .special-card, .store-hero-item, .list-row, .cl-row):is(:hover, :active) { transform: scale(.88); opacity: .9; }
-[data-tap='raise'] :is(.food-card, .showcase-card, .store-card, .special-card, .store-hero-item, .list-row, .cl-row):is(:hover, :active) { transform: translateY(-3px) scale(1.02); box-shadow: 0 16px 30px rgba(0, 0, 0, .2); }
+[data-tap='press'] :is(.food-card, .showcase-card, .store-card, .special-card, .store-hero-item, .list-row, .cl-row):active { transform: scale(.95); }
+[data-tap='pop'] :is(.food-card, .showcase-card, .store-card, .special-card, .store-hero-item, .list-row, .cl-row):active { transform: scale(1.05); }
+[data-tap='lift'] :is(.food-card, .showcase-card, .store-card, .special-card, .store-hero-item, .list-row, .cl-row):active { transform: translateY(-6px); box-shadow: 0 22px 42px rgba(0, 0, 0, .22); }
+[data-tap='sink'] :is(.food-card, .showcase-card, .store-card, .special-card, .store-hero-item, .list-row, .cl-row):active { transform: translateY(3px) scale(.98); box-shadow: 0 4px 10px rgba(0, 0, 0, .18); }
+[data-tap='tilt'] :is(.food-card, .showcase-card, .store-card, .special-card, .store-hero-item, .list-row, .cl-row):active { transform: rotate(-2.5deg) scale(.99); }
+[data-tap='rotate'] :is(.food-card, .showcase-card, .store-card, .special-card, .store-hero-item, .list-row, .cl-row):active { transform: rotate(4deg); }
+[data-tap='zoom'] :is(.food-card, .showcase-card, .store-card, .special-card, .store-hero-item, .list-row, .cl-row):active { transform: scale(1.1); }
+[data-tap='squeeze'] :is(.food-card, .showcase-card, .store-card, .special-card, .store-hero-item, .list-row, .cl-row):active { transform: scaleX(.92) scaleY(1.04); }
+[data-tap='jelly'] :is(.food-card, .showcase-card, .store-card, .special-card, .store-hero-item, .list-row, .cl-row):active { transform: scale(1.06, .94); }
+[data-tap='glow'] :is(.food-card, .showcase-card, .store-card, .special-card, .store-hero-item, .list-row, .cl-row):active { box-shadow: 0 0 0 3px color-mix(in srgb, var(--brand) 45%, transparent), 0 12px 26px color-mix(in srgb, var(--brand) 40%, transparent); }
+[data-tap='ring'] :is(.food-card, .showcase-card, .store-card, .special-card, .store-hero-item, .list-row, .cl-row):active { box-shadow: 0 0 0 3px var(--brand); }
+[data-tap='brighten'] :is(.food-card, .showcase-card, .store-card, .special-card, .store-hero-item, .list-row, .cl-row):active { filter: brightness(1.12); }
+[data-tap='dim'] :is(.food-card, .showcase-card, .store-card, .special-card, .store-hero-item, .list-row, .cl-row):active { filter: brightness(.85); }
+[data-tap='push'] :is(.food-card, .showcase-card, .store-card, .special-card, .store-hero-item, .list-row, .cl-row):active { transform: translateY(2px) scale(.97); box-shadow: inset 0 3px 10px rgba(0, 0, 0, .18); }
+[data-tap='skew'] :is(.food-card, .showcase-card, .store-card, .special-card, .store-hero-item, .list-row, .cl-row):active { transform: skewX(-5deg); }
+[data-tap='spin'] :is(.food-card, .showcase-card, .store-card, .special-card, .store-hero-item, .list-row, .cl-row):active { transform: rotate(8deg) scale(.96); }
+[data-tap='depth'] :is(.food-card, .showcase-card, .store-card, .special-card, .store-hero-item, .list-row, .cl-row):active { transform: perspective(500px) translateZ(-12px) rotateX(6deg); }
+[data-tap='shrink'] :is(.food-card, .showcase-card, .store-card, .special-card, .store-hero-item, .list-row, .cl-row):active { transform: scale(.88); opacity: .9; }
+[data-tap='raise'] :is(.food-card, .showcase-card, .store-card, .special-card, .store-hero-item, .list-row, .cl-row):active { transform: translateY(-3px) scale(1.02); box-shadow: 0 16px 30px rgba(0, 0, 0, .2); }
 
 /* list/gallery toggle */
 .view-toggle { display: inline-flex; background: var(--surface-2); border: 1px solid var(--border-strong); border-radius: var(--r-pill); padding: 3px; flex: none; }
-.view-toggle button { width: 38px; height: 32px; display: grid; place-items: center; border-radius: var(--r-pill); color: var(--text-muted); }
+/* height matches the search box beside it (~44px) so the two controls in the
+   search row read as one set, not mismatched web widgets. */
+.view-toggle button { width: 38px; height: 36px; display: grid; place-items: center; border-radius: var(--r-pill); color: var(--text-muted); }
 .view-toggle button.on { background: var(--surface); color: var(--brand); box-shadow: var(--sh-1); }
 
 /* floating notifications bell on the menu */
@@ -8680,7 +8694,11 @@ body:has(.sd2-root) .toast-wrap { z-index: 840; }
 /* ==== /accounting v1 ==== */
 
 /* ==== experience-bar v1 ==== */
-.exp-bar { display: flex; gap: 8px; padding-bottom: 2px; }
+/* min-height reserves exactly one chip row so the bar keeps a constant vertical
+   footprint whether it is empty (tenant still loading), holds two chips or
+   seven: chip-count changes only scroll horizontally and never shift the menu
+   below. align-items centres the chips within that reserved row. */
+.exp-bar { display: flex; align-items: center; gap: 8px; min-height: 38px; }
 .exp-chip {
   flex: none; display: inline-flex; align-items: center; gap: 6px;
   padding: 8px 14px; border-radius: 999px; cursor: pointer;
@@ -8688,7 +8706,12 @@ body:has(.sd2-root) .toast-wrap { z-index: 840; }
   color: var(--brand); font-size: 13px; font-weight: 700;
   transition: transform .15s ease, box-shadow .2s ease;
 }
-.exp-chip:hover { transform: translateY(-1px); box-shadow: 0 6px 18px rgba(0,0,0,.12); }
+/* Hover-lift ONLY for real pointers. On a touch screen :hover latches after a
+   tap and left the chip stuck lifted — a web-page tell. :active (below) gives
+   the press feedback that releases the instant the finger lifts. */
+@media (hover: hover) {
+  .exp-chip:hover { transform: translateY(-1px); box-shadow: 0 6px 18px rgba(0,0,0,.12); }
+}
 .exp-chip:active { transform: scale(.97); }
 @media (prefers-reduced-motion: reduce) { .exp-chip { transition: none; } }
 

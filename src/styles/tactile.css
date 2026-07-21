@@ -72,6 +72,11 @@
   position: absolute;
   inset: 0;
   border-radius: inherit;
+  /* Clip the sweeping sheen to the rounded pill. Without this it slides out past
+     the chip's edges as a bright rectangle. clip-path (not overflow:hidden,
+     which would also clip the ::after pulse ring that is MEANT to expand
+     outside the pill). */
+  clip-path: inset(0 round 999px);
   background: linear-gradient(110deg, transparent 30%, rgba(255, 255, 255, .35) 50%, transparent 70%);
   transform: translateX(-120%);
   animation: gamesSheen 4.5s ease-in-out infinite;
