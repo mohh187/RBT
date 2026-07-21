@@ -540,7 +540,11 @@ function plasterOverlays(w, base, mortar) {
  * tint, then the finish, then the surface itself. Everything the contract calls
  * mood — blend, filter, blur, opacity — comes straight from wallStyle().
  */
-function wallPaint(w) {
+// Exported so the SETTINGS preview paints its tiles with this exact generator.
+// A second copy in the admin screen would drift from the menu the first time
+// either changed, and the owner would be tuning a wall he is not actually
+// getting. Pure function of resolveWall()'s output; its helpers stay local.
+export function wallPaint(w) {
   if (!w) return null
   const base = toRgb(w.color, [138, 74, 44])
   const mortarRaw = toRgb(w.mortarColor, [185, 168, 147])

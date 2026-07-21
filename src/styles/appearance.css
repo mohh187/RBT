@@ -124,6 +124,140 @@
   color: var(--text);
 }
 
+/* ======================================================= the MENU WALL === */
+/* The editor for the brick backdrop the editorial menu sets its dishes against
+   (lib/dishComposition.js -> tenant.menuWall). Two shapes only:
+
+     .mwall-card / .mwall-face   one picker tile — a REAL patch of that bond or
+                                 that finish, painted by the theme's own tile
+                                 generator in the venue's own colours,
+     .mwall-stage                the large live preview, with one of the venue's
+                                 own dishes laid over the wall so readability is
+                                 judged and not guessed.
+
+   THE TILES MUST WRAP. An earlier picker put its options in a single
+   non-wrapping strip; a desktop mouse cannot scroll one of those, so half the
+   choices were simply unreachable. This is a grid that reflows, never a rail.
+
+   Both shapes paint on #100c0a — the editorial theme's own canvas colour
+   (--edt-bg in index.css). That is not decoration: the venue's blend mode needs
+   the SAME backdrop here as in the menu or the preview would lie, which is why
+   the stage also isolates so the blend cannot reach past it into the admin. */
+
+.mwall-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(104px, 1fr));
+  gap: 8px;
+}
+
+.mwall-card {
+  display: block;
+  width: 100%;
+  padding: 5px;
+  border: 2px solid var(--border);
+  border-radius: var(--r-md, 12px);
+  background: var(--surface);
+  cursor: pointer;
+  text-align: center;
+  transition: border-color .15s ease, transform .12s ease;
+}
+.mwall-card:hover { border-color: var(--border-strong, var(--border)); }
+.mwall-card:active { transform: scale(.985); }
+.mwall-card[data-on='true'] {
+  border-color: var(--brand);
+  box-shadow: 0 0 0 3px var(--ring, transparent);
+}
+
+.mwall-face {
+  display: grid;
+  place-items: center;
+  aspect-ratio: 4 / 3;
+  border-radius: 8px;
+  background-color: #100c0a;
+  background-position: center;
+  overflow: hidden;
+  color: var(--text-muted);
+}
+/* the two tiles that have no wall to draw: «بدون جدار», and «صورتي» before a
+   photograph exists. A dashed edge says "nothing here yet" without a word. */
+.mwall-face[data-empty='true'] {
+  background-color: var(--surface-2);
+  border: 1px dashed var(--border-strong, var(--border));
+}
+
+.mwall-name {
+  display: block;
+  margin-top: 4px;
+  font-size: var(--fs-xs, 11px);
+  font-weight: 700;
+  color: var(--text);
+}
+
+/* ---- the live preview ---- */
+.mwall-stage {
+  position: relative;
+  display: grid;
+  place-items: center;
+  height: clamp(190px, 38vw, 280px);
+  border-radius: var(--r-md, 12px);
+  border: 1px solid var(--border);
+  background-color: #100c0a;
+  overflow: hidden;
+  /* the venue's blend mode acts on the canvas colour above and stops there */
+  isolation: isolate;
+}
+.mwall-paint {
+  position: absolute;
+  inset: 0;
+  z-index: 0;
+  pointer-events: none;
+}
+/* blur() has nothing beyond the element to sample, so a blurred wall softens at
+   its own edges. The menu's stage grows the box for exactly this reason
+   (styles/menuwall.css); the preview does the same so the two agree. */
+.mwall-paint[data-blur='true'] { inset: -70px; }
+
+.mwall-dish {
+  position: relative;
+  z-index: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 6px;
+  padding: 10px 14px;
+  max-width: 82%;
+  text-align: center;
+}
+.mwall-dish-img {
+  display: block;
+  max-height: clamp(80px, 17vw, 130px);
+  max-width: 100%;
+  object-fit: contain;
+  filter: drop-shadow(0 14px 22px rgba(0, 0, 0, .55));
+}
+/* no photo on file yet: a plain plate, so the preview still has something with
+   an edge and a shadow to judge the wall's contrast against */
+.mwall-dish-plate {
+  display: block;
+  width: clamp(70px, 15vw, 110px);
+  aspect-ratio: 1;
+  border-radius: 50%;
+  background: radial-gradient(circle at 38% 32%, #f7f2e9, #cdc3b4 62%, #9c9184);
+  box-shadow: 0 14px 22px rgba(0, 0, 0, .55);
+}
+.mwall-dish-name {
+  font-size: var(--fs-md, 15px);
+  font-weight: 800;
+  color: #f7f2e9;
+  text-shadow: 0 1px 10px rgba(0, 0, 0, .7);
+}
+.mwall-dish-price {
+  font-size: var(--fs-sm, 13px);
+  font-weight: 800;
+  color: #f5b942;
+  text-shadow: 0 1px 10px rgba(0, 0, 0, .7);
+}
+
 /* ================================================== dish surface + props === */
 
 /* The editorial theme parks the dish on near-black; the preview has to use the
