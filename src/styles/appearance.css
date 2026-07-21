@@ -6,10 +6,13 @@
      .dpx-*      a dark stage the item editor renders the real DishProps layer
                  onto, over the item's own photo,
      .dcx-*      the dish-composer stage: the same idea for lib/dishComposition,
-                 plus the entrance-animation keyframes the preview replays.
+                 plus the entrance-animation keyframes the preview replays,
+     .dlx-*      the LAYER editor: a real placement canvas the venue drags its
+                 own transparent cut-outs around on, plus the element library,
+                 the layer list, and the idle-motion keyframes.
 
    Imported from routes/admin/Settings.jsx and routes/admin/Items.jsx. Nothing
-   here leaks: every rule is under one of the three prefixes above.
+   here leaks: every rule is under one of the four prefixes above.
 
    HARD RULES observed: no emoji, Latin digits only, and no visible scrollbars
    (the one scrollable strip below hides its bar in every engine). */
@@ -263,6 +266,13 @@
   border-radius: var(--r-md, 12px);
   border: 1px solid var(--border);
   background: radial-gradient(120% 88% at 50% 10%, #1b1b21 0%, #0d0d10 62%, #08080a 100%);
+  /* MANDATORY for placed elements: layerStyle() sizes every one of them in
+     `cqmin`, which only resolves against a container that is queryable on BOTH
+     axes. Without `size` here a garnish would silently fall back to the viewport
+     and render three times too large — the exact failure the contract's own
+     comment warns about. The stage has a fixed width and height, so size
+     containment costs nothing. */
+  container-type: size;
 }
 /* two shapes, because the owner composes the photo separately for the browsing
    list and for the item's own screen */
@@ -441,3 +451,277 @@
 .dcx-slider-top b { font-weight: 600; color: var(--text); }
 .dcx-slider-top span { color: var(--text-muted); direction: ltr; }
 .dcx-slider input[type='range'] { width: 100%; }
+
+/* ================================================== the layer editor === */
+
+/* The venue's own transparent cut-outs, arranged by hand on the dish. Every
+   pixel below the grab-boxes is painted by lib/dishComposition.js's own
+   resolveComposition() + bgStyle() + imgStyle() + layerStyle(), so this canvas
+   IS the menu rather than an impression of it. Only the chrome — the grab-box,
+   its two grips, the list and the library — belongs to the editor. */
+
+.dlx-canvas {
+  position: relative;
+  isolation: isolate;
+  overflow: hidden;
+  margin-inline: auto;
+  width: 100%;
+  max-width: 340px;
+  border-radius: var(--r-md, 12px);
+  border: 1px solid var(--border);
+  background: radial-gradient(120% 88% at 50% 10%, #1b1b21 0%, #0d0d10 62%, #08080a 100%);
+  /* layerStyle() sizes every placed element in `cqmin`. That unit only resolves
+     against a container queryable on BOTH axes — with `inline-size` it silently
+     falls back to the viewport and the garnish renders enormous. The canvas has
+     a width and an aspect-ratio, so its height is definite and size containment
+     costs nothing. */
+  container-type: size;
+  touch-action: pan-y;
+}
+/* the two shapes the owner composes for: a browsing row, and the item's own
+   screen. Same proportions the composer stage uses, so a placement judged here
+   is the placement he judged there. */
+.dlx-canvas[data-variant='list'] { aspect-ratio: 208 / 176; }
+.dlx-canvas[data-variant='stage'] { aspect-ratio: 300 / 292; }
+
+.dlx-bg { position: absolute; inset: 0; z-index: 0; }
+.dlx-bg video { width: 100%; height: 100%; object-fit: cover; display: block; }
+
+/* DELIBERATELY NO z-index on the dish or the elements: a placed element's
+   mix-blend-mode has to reach what is painted underneath it, and a z-index here
+   would wrap each one in its own stacking group with nothing to blend WITH.
+   Being positioned and later in the DOM already paints them in order. */
+.dlx-shot {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+.dlx-shot img {
+  display: block;
+  width: auto;
+  max-width: 74%;
+  max-height: 78%;
+  object-fit: contain;
+}
+
+.dlx-empty {
+  position: relative;
+  display: block;
+  padding: 42% 14px 0;
+  color: rgba(255, 255, 255, .5);
+  font-size: var(--fs-xs, 11px);
+  text-align: center;
+}
+
+/* one placed element. The wrapper takes layerStyle() verbatim; the middle span
+   carries idle motion and the image carries the entrance, because both drive
+   translate/rotate/scale and one element can only hold one set. */
+.dlx-art { display: block; }
+.dlx-motion { display: block; }
+.dlx-art img {
+  display: block;
+  width: 100%;
+  height: auto;
+  user-select: none;
+  -webkit-user-drag: none;
+}
+
+/* ---- idle motion ----------------------------------------------------------
+   Written with the INDIVIDUAL translate / rotate / scale properties, never the
+   `transform` shorthand: layerStyle() already owns `transform` (that is where
+   the centring, the rotation and the flip live), and a keyframe that touched it
+   would throw away the placement the owner just dialled in. */
+.dlx-motion[data-motion='float'] { animation: dlxFloat 4.2s ease-in-out infinite; }
+.dlx-motion[data-motion='sway'] { animation: dlxSway 5.4s ease-in-out infinite; }
+.dlx-motion[data-motion='spin'] { animation: dlxSpin 26s linear infinite; }
+.dlx-motion[data-motion='pulse'] { animation: dlxPulse 3.6s ease-in-out infinite; }
+
+@keyframes dlxFloat { 0%, 100% { translate: 0 -1.6%; } 50% { translate: 0 1.6%; } }
+@keyframes dlxSway { 0%, 100% { rotate: -2.5deg; } 50% { rotate: 2.5deg; } }
+@keyframes dlxSpin { from { rotate: 0deg; } to { rotate: 360deg; } }
+@keyframes dlxPulse { 0%, 100% { scale: 1; } 50% { scale: 1.045; } }
+
+/* ---- entrance (preview) ---------------------------------------------------
+   Reuses the composer keyframes above so an element and the dish arrive with
+   the same timing. `none` must be excluded explicitly: it matches [data-anim],
+   and an opacity-0 start with no animation to undo it would make the element
+   vanish entirely. */
+.dlx-art img[data-anim] { opacity: 0; }
+.dlx-art img[data-anim='none'] { opacity: 1; animation: none; }
+.dlx-art img[data-anim='sweep'] { --dcx-sweep: -16%; }
+[dir='rtl'] .dlx-art img[data-anim='sweep'] { --dcx-sweep: 16%; }
+.dlx-art img[data-anim='rise'] { animation: dcxDishRise .6s cubic-bezier(0.25, 1, 0.5, 1) both; }
+.dlx-art img[data-anim='fade'] { animation: dcxDishFade .5s ease both; }
+.dlx-art img[data-anim='zoom'] { animation: dcxDishZoom .55s cubic-bezier(0.25, 1, 0.5, 1) both; }
+.dlx-art img[data-anim='drop'] { animation: dcxDishDrop .72s cubic-bezier(0.2, 0.82, 0.28, 1) both; }
+.dlx-art img[data-anim='tilt'] { animation: dcxDishTilt .62s cubic-bezier(0.2, 0.82, 0.28, 1) both; }
+.dlx-art img[data-anim='sweep'] { animation: dcxDishSweep .66s cubic-bezier(0.25, 1, 0.5, 1) both; }
+
+@media (prefers-reduced-motion: reduce) {
+  .dlx-art img[data-anim] { opacity: 1; animation: none; }
+  .dlx-motion[data-motion] { animation: none; }
+}
+
+/* ---- the grab-boxes -------------------------------------------------------
+   A transparent box sitting exactly over each element: same centre, same width,
+   same rotation, and the element's real aspect ratio (learned from the picture
+   the canvas already loaded). It is NOT flipped even when the element is —
+   mirroring the frame would swap the resize grip to the wrong corner.
+
+   The layer art itself keeps layerStyle()'s `pointer-events: none`, so the thing
+   the guest will see is never the thing being dragged. */
+.dlx-hits {
+  position: absolute;
+  inset: 0;
+  z-index: 6;
+  pointer-events: none;
+}
+
+.dlx-hit {
+  position: absolute;
+  /* a two-percent-wide element is legal and would be a two-pixel target, so the
+     box never shrinks below a fingertip. It stays centred either way, because
+     the centring translate does not care how big the box is. */
+  min-width: 30px;
+  min-height: 30px;
+  border-radius: 4px;
+  pointer-events: auto;
+  cursor: grab;
+  /* the editor lives in a sheet that scrolls: without this, a finger drag would
+     scroll the sheet instead of moving the element */
+  touch-action: none;
+  outline: none;
+  transition: box-shadow .12s ease;
+}
+.dlx-hit:hover { box-shadow: inset 0 0 0 1px rgba(255, 255, 255, .55); }
+.dlx-hit:focus-visible { box-shadow: inset 0 0 0 2px var(--brand), 0 0 0 2px rgba(0, 0, 0, .4); }
+.dlx-hit[data-sel='true'] {
+  cursor: move;
+  box-shadow: inset 0 0 0 1.5px var(--brand), 0 0 0 1px rgba(0, 0, 0, .5);
+}
+
+.dlx-grip {
+  position: absolute;
+  display: grid;
+  place-items: center;
+  width: 24px;
+  height: 24px;
+  border-radius: 50%;
+  background: var(--brand);
+  color: #fff;
+  box-shadow: 0 1px 4px rgba(0, 0, 0, .5);
+  cursor: pointer;
+  touch-action: none;
+}
+/* physical `left` on purpose: this grip only has to sit centred over the box,
+   and a logical offset plus a centring translate do not agree under RTL */
+.dlx-grip-rot { top: -12px; left: 50%; transform: translateX(-50%); }
+/* logical, so the resize grip lands on the corner an Arabic reader reaches for */
+.dlx-grip-size { bottom: -12px; inset-inline-end: -12px; }
+
+/* ---- the element library ------------------------------------------------- */
+.dlx-lib {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(72px, 1fr));
+  gap: 8px;
+}
+.dlx-libitem { position: relative; }
+.dlx-libpick {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  width: 100%;
+  padding: 4px;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  background: var(--surface);
+  cursor: pointer;
+  text-align: center;
+}
+.dlx-libpick:hover { border-color: var(--brand); }
+.dlx-libpick img,
+.dlx-thumb img {
+  display: block;
+  width: 100%;
+  height: 46px;
+  object-fit: contain;
+  /* a chequerboard, because a white cut-out on a white card is an invisible
+     element and the owner would think the upload had failed */
+  background-color: #f3f3f5;
+  background-image:
+    linear-gradient(45deg, #d9d9df 25%, transparent 25%, transparent 75%, #d9d9df 75%),
+    linear-gradient(45deg, #d9d9df 25%, transparent 25%, transparent 75%, #d9d9df 75%);
+  background-size: 12px 12px;
+  background-position: 0 0, 6px 6px;
+  border-radius: 7px;
+}
+.dlx-libname {
+  font-size: 10px;
+  color: var(--text-muted);
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+.dlx-libdel {
+  position: absolute;
+  top: -6px;
+  inset-inline-end: -6px;
+  display: grid;
+  place-items: center;
+  width: 22px;
+  height: 22px;
+  padding: 0;
+  border: none;
+  border-radius: 50%;
+  background: var(--danger);
+  color: #fff;
+  cursor: pointer;
+}
+
+/* ---- the layer list ------------------------------------------------------- */
+.dlx-list { display: flex; flex-direction: column; gap: 6px; }
+.dlx-row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 5px;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  background: var(--surface);
+}
+.dlx-row[data-sel='true'] { border-color: var(--brand); }
+.dlx-row[data-off='true'] .dlx-thumb,
+.dlx-row[data-off='true'] .dlx-rowtext { opacity: .45; }
+
+.dlx-pick {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex: 1 1 auto;
+  min-width: 0;
+  padding: 0;
+  border: none;
+  background: none;
+  cursor: pointer;
+  text-align: start;
+}
+.dlx-thumb { display: block; width: 40px; height: 40px; flex: none; }
+.dlx-thumb img { height: 40px; }
+.dlx-rowtext {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  min-width: 0;
+}
+.dlx-rowtext b {
+  font-size: var(--fs-xs, 11px);
+  color: var(--text);
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+.dlx-rowbtns { display: flex; align-items: center; gap: 1px; flex: none; }
+.dlx-rowbtns .icon-btn { width: 28px; height: 28px; }
+.dlx-rowbtns .icon-btn:disabled { opacity: .3; cursor: default; }

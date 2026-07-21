@@ -915,6 +915,7 @@ export default function MenuView({ tenant, tenantId, items, categories, offers =
       ) : menuLayout === 'editorial' ? (
         /* editorial («المجلة الداكنة») — dark magazine: one dish per screen, vertical snap, FLIP item stage */
         <EditorialLayout
+          tenant={tenant}
           cats={sortedCats} itemsByCat={itemsByCat} visibleItems={visibleItems}
           filtered={!!search.trim() || activeCat !== 'all'}
           activeCat={activeCat} onPickCat={setActiveCat}
@@ -1115,7 +1116,7 @@ export default function MenuView({ tenant, tenantId, items, categories, offers =
       {viewItem && (itemDetail === 'editorial' ? (
         /* editorial detail: FLIP photo-expand full-screen stage (ordering included) */
         <EditorialItemStage
-          item={viewItem} currency={currency} originRect={openRect}
+          item={viewItem} tenant={tenant} currency={currency} originRect={openRect}
           allItems={allActive} offers={offers}
           onQuickAdd={(s) => addLine(s, (s.variants && s.variants[0]) || null, [], 1)}
           onClose={() => { setViewItem(null); setOpenRect(null) }}

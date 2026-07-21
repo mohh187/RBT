@@ -1,0 +1,175 @@
+/* ============================================================================
+   MENU WALL + PLACED LAYERS — the editorial theme's room and its compositions.
+   Imported by components/menuThemes/EditorialLayout.jsx.
+
+   Only NEW class names live here, never an override of a rule in index.css, so
+   the order the two stylesheets happen to land in the bundle can never decide
+   what the menu looks like. The handful of real overrides (switching the old
+   hard-coded tile off, and holding the text's contrast up over a wall the venue
+   chose) stay in the .edt-* block of index.css where they belong.
+
+   WHAT IS DRAWN WHERE
+   The wall's paint — bond, colour, mortar, joint width, finish, tint, blend,
+   filter, blur, opacity — is built in JS from resolveWall(tenant) and arrives
+   as an inline style. This file only positions the surface and gives the placed
+   layers their geometry and their motion.
+
+   MOTION RULES (both blocks obey them)
+   - transform / translate / rotate / scale / opacity only: nothing here can
+     trigger layout, so a dish carrying a dozen layers still scrolls at speed.
+   - idle motion is written with the INDIVIDUAL translate/rotate/scale
+     properties, which COMPOSE with the inline transform the composition
+     contract produces, where a transform keyframe would overwrite the venue's
+     placement the moment it ran.
+   - everything stops under prefers-reduced-motion, and stops at the SETTLED
+     state, never at the invisible one.
+   ========================================================================== */
+
+/* ---------------------------------------------------------------- the wall --
+   One element, painted entirely by background layers. It sits at z-index -1
+   inside an isolated .edt-wrap / .edt-stg, which means:
+     1. it paints above the theme's canvas COLOUR and below every scrap of
+        content, so nothing it does can ever land on top of a word,
+     2. the venue's blend mode has that canvas colour to act on. Without the
+        isolation the blend would reach past the menu into whatever the app
+        happened to paint underneath, and the same wall would look different on
+        two different screens.
+   It is not a scrolling background either: it covers the whole wrap, so the
+   room stays continuous from the first dish to the last. */
+.edt-wall {
+  position: absolute;
+  inset: 0;
+  z-index: -1;
+  pointer-events: none;
+  user-select: none;
+}
+/* The stage's plaster fade. It used to be part of .edt-stg's own background,
+   which a wall child would paint straight over — so it becomes its own element,
+   directly after the wall and at the same depth. */
+.edt-wall-fade {
+  position: absolute;
+  inset: 0;
+  z-index: -1;
+  pointer-events: none;
+  background: linear-gradient(180deg, transparent 0%, var(--edt-bg, #100c0a) 36%);
+}
+/* A blurred wall softens at its own edges, because blur() has nothing beyond the
+   element to sample, and `overflow` does not clip an element's own filter output
+   — so the only two honest options are to let the softening fall somewhere it
+   cannot be seen, or to grow the box.
+   In the MENU the box is left alone: it is the full scroll height of the wrap,
+   so its top edge sits behind the opaque category bar and its bottom under the
+   last dish's plaster. Growing it there would instead smear the blur OUT of the
+   menu and over whatever the app painted above it.
+   The STAGE is a fixed, viewport-sized overlay, so it can grow in every
+   direction and the viewport itself does the clipping. */
+.edt-stg .edt-wall[data-blur] { inset: -80px; }
+
+/* ------------------------------------------------------------ placed layers --
+   The venue's own transparent cut-out photographs, arranged around the dish.
+   See EditorialLayout.jsx for why this is three elements deep — in short, the
+   size container, the blend and the placement cannot be the same element
+   without either breaking `cqmin` sizing or turning a slow spin into an orbit.
+
+   pointer-events are off on every level: a layer may sit right on top of the
+   dish and must never be the thing a diner's thumb hits. */
+.edt-lyr {
+  position: absolute;
+  inset: 0;
+  /* SIZE CONTAINMENT NEEDS A DEFINITE HEIGHT, and this is the whole reason the
+     container is an absolutely positioned overlay rather than a wrapper in the
+     flow. `container-type: size` zeroes an element's INTRINSIC size, so putting
+     it on an auto-height in-flow box (.edt-comp, which is as tall as the dish
+     photo) would collapse that box to nothing and every layer would resolve to
+     `0cqmin` — the feature would look simply broken.
+     An absolutely positioned box with both offsets set never sizes from its
+     content: its used height is solved from top/bottom against the containing
+     block, which is the photo box in the list and the hero band in the stage,
+     both already laid out by their own content. width/height: 100% is belt and
+     braces on top of that, so the height is definite by declaration and not
+     only by the constraint equation. The same pattern is what styles/dishprops.
+     css already uses for the surface layer in this very box. */
+  width: 100%;
+  height: 100%;
+  pointer-events: none;
+  user-select: none;
+  overflow: hidden;
+  /* the size container layerStyle()'s `cqmin` widths resolve against: a layer
+     keeps its visual weight on a panoramic plate and on a tall glass alike */
+  container-type: size;
+}
+.edt-lyr-p {
+  /* everything else here comes from layerStyle(): position, inset-inline-start,
+     top, width in cqmin, the centring transform, opacity, filter, blend delay */
+  display: block;
+  pointer-events: none;
+}
+.edt-lyr-img {
+  display: block;
+  width: 100%;
+  height: auto;
+  pointer-events: none;
+}
+
+/* ---- how a layer ARRIVES ----
+   On .edt-lyr, never on the placed element: the entrance needs a free
+   `transform`, and the placed element's transform is the venue's arrangement.
+   The two multiply instead of fighting, and the layer's own opacity survives
+   because the entrance fades a DIFFERENT element. */
+.edt-lyr[data-anim] { opacity: 0; }
+.edt-lyr[data-anim='sweep'] { --edt-lyr-sweep: -14%; }
+[dir='rtl'] .edt-lyr[data-anim='sweep'] { --edt-lyr-sweep: 14%; }
+.edt-sec.in .edt-lyr[data-anim='rise'],
+.edt-stg-hero .edt-lyr[data-anim='rise'] { animation: edtLyrRise .58s cubic-bezier(0.25, 1, 0.5, 1) both; }
+.edt-sec.in .edt-lyr[data-anim='fade'],
+.edt-stg-hero .edt-lyr[data-anim='fade'] { animation: edtLyrFade .5s ease both; }
+.edt-sec.in .edt-lyr[data-anim='zoom'],
+.edt-stg-hero .edt-lyr[data-anim='zoom'] { animation: edtLyrZoom .55s cubic-bezier(0.25, 1, 0.5, 1) both; }
+.edt-sec.in .edt-lyr[data-anim='drop'],
+.edt-stg-hero .edt-lyr[data-anim='drop'] { animation: edtLyrDrop .7s cubic-bezier(0.2, 0.82, 0.28, 1) both; }
+.edt-sec.in .edt-lyr[data-anim='tilt'],
+.edt-stg-hero .edt-lyr[data-anim='tilt'] { animation: edtLyrTilt .62s cubic-bezier(0.2, 0.82, 0.28, 1) both; }
+.edt-sec.in .edt-lyr[data-anim='sweep'],
+.edt-stg-hero .edt-lyr[data-anim='sweep'] { animation: edtLyrSweep .66s cubic-bezier(0.25, 1, 0.5, 1) both; }
+@keyframes edtLyrRise { from { opacity: 0; transform: translateY(9%); } to { opacity: 1; transform: none; } }
+@keyframes edtLyrFade { from { opacity: 0; } to { opacity: 1; } }
+@keyframes edtLyrZoom { from { opacity: 0; transform: scale(0.84); } to { opacity: 1; transform: none; } }
+@keyframes edtLyrDrop {
+  0% { opacity: 0; transform: translateY(-16%); }
+  64% { opacity: 1; transform: translateY(3%); }
+  100% { opacity: 1; transform: none; }
+}
+@keyframes edtLyrTilt { from { opacity: 0; transform: translateY(6%) rotate(-6deg); } to { opacity: 1; transform: none; } }
+@keyframes edtLyrSweep { from { opacity: 0; transform: translateX(var(--edt-lyr-sweep, -14%)); } to { opacity: 1; transform: none; } }
+
+/* ---- how a layer LIVES ----
+   Deliberately tiny and slow. A prop that keeps visibly moving reads as a web
+   banner rather than as a photograph on a table, so the largest of these is a
+   four-per-cent breath over five and a half seconds. Only the image itself
+   moves, so a spin turns on the spot instead of swinging around its anchor. */
+.edt-lyr-img[data-motion='float'] { animation: edtLyrFloat 5.6s ease-in-out infinite; }
+.edt-lyr-img[data-motion='sway'] { animation: edtLyrSway 6.4s ease-in-out infinite; }
+.edt-lyr-img[data-motion='spin'] { animation: edtLyrSpin 26s linear infinite; }
+.edt-lyr-img[data-motion='pulse'] { animation: edtLyrPulse 4.4s ease-in-out infinite; }
+@keyframes edtLyrFloat { 0%, 100% { translate: 0 0; } 50% { translate: 0 -4%; } }
+@keyframes edtLyrSway { 0%, 100% { rotate: -2.2deg; } 50% { rotate: 2.2deg; } }
+@keyframes edtLyrSpin { from { rotate: 0deg; } to { rotate: 360deg; } }
+@keyframes edtLyrPulse { 0%, 100% { scale: 1; } 50% { scale: 1.045; } }
+
+@media (prefers-reduced-motion: reduce) {
+  /* settled, visible and still — the start state of an entrance must never be
+     what a reduced-motion diner is left looking at */
+  .edt-lyr[data-anim],
+  .edt-sec.in .edt-lyr[data-anim],
+  .edt-stg-hero .edt-lyr[data-anim] {
+    animation: none;
+    opacity: 1;
+    transform: none;
+  }
+  .edt-lyr-img[data-motion] {
+    animation: none;
+    translate: none;
+    rotate: none;
+    scale: none;
+  }
+}

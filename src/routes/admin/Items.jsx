@@ -11,7 +11,8 @@ import { useI18n, pickLang } from '../../lib/i18n.jsx'
 import { useToast } from '../../components/Toast.jsx'
 import Sheet from '../../components/Sheet.jsx'
 import { Spinner, Empty } from '../../components/ui.jsx'
-import { watchItems, watchCategories, saveItem, deleteItem, setItemAvailability, watchMaterials, duplicateItem, publishUrlAsStory } from '../../lib/db.js'
+import { arrayRemove, arrayUnion } from 'firebase/firestore'
+import { watchItems, watchCategories, saveItem, deleteItem, setItemAvailability, watchMaterials, duplicateItem, publishUrlAsStory, updateTenant } from '../../lib/db.js'
 import { uploadImage, uploadFile } from '../../lib/storage.js'
 import ContrastHint from '../../components/ContrastHint.jsx'
 import ImageCropper from '../../components/ImageCropper.jsx'
@@ -33,7 +34,10 @@ import DishProps from '../../components/menuThemes/DishProps.jsx'
 // effect over it and how it arrives. The composer below builds every control
 // from these catalogues and previews with the renderer's own style functions,
 // so a control and the pixel it produces cannot drift.
-import { BLEND_MODES, FILTERS, ANIMS, FX, RANGE, resolveComposition, bgStyle, imgStyle } from '../../lib/dishComposition.js'
+import {
+  BLEND_MODES, FILTERS, ANIMS, FX, RANGE, resolveComposition, bgStyle, imgStyle,
+  LAYER_DEPTHS, LAYER_MOTIONS, LAYER_RANGE, normalizeLayer, layerStyle,
+} from '../../lib/dishComposition.js'
 import '../../styles/appearance.css'
 
 // NOTE: none of the composition fields live here. An item nobody has composed
@@ -169,6 +173,137 @@ function composePayload(form, original) {
   Object.keys(COMPOSE_DEFAULTS).forEach((k) => {
     if (next[k] !== COMPOSE_DEFAULTS[k] || orig[k] !== undefined) out[k] = next[k]
   })
+  return out
+}
+
+// ------------------------------------------------------- placed elements ----
+//
+// REAL PHOTOGRAPHS, PLACED BY HAND. The first attempt at decorating a dish drew
+// garnish as inline SVG and materials as CSS gradients; the venue rejected it as
+// cartoonish, and it was right — a vector petal reads as a sticker no matter how
+// carefully it is drawn. So the owner uploads his OWN transparent cut-outs and
+// arranges them here, and `item.layers` (lib/dishComposition.js) is the contract
+// both this editor and the menu renderer speak.
+//
+// The editor's row differs from the renderer's in exactly three deliberate ways:
+//   * `filter` holds the preset ID. normalizeLayer() turns an ID into a CSS
+//     string on the way OUT; feeding that string back in would match no preset
+//     and silently reset the choice to "none", so the editor never round-trips
+//     through it.
+//   * `name` is a human label for the layer list. normalizeLayer() drops it, so
+//     it can never reach a pixel.
+//   * `hidden` is a temporary switch-off. A hidden element must NOT stay in
+//     `layers` — resolveLayers() would still draw it — so it is parked in
+//     `item.layersOff` with the index it held, and spliced back on load.
+//     `layersOff` is inert to the renderer: nothing reads it but this file.
+
+const LAYER_MAX = 24        // resolveLayers() slices at this — offering more would lie
+const LIBRARY_MAX = 120     // the tenant doc is one document; an unbounded array is a time bomb
+
+// Clamp + snap to the contract's own bounds and step, so a value that reaches
+// the document is always a value the renderer will honour unchanged.
+function lyNum(v, key) {
+  const R = LAYER_RANGE[key]
+  const n = Number(v)
+  if (!Number.isFinite(n)) return R.dflt
+  const stepped = Math.round(n / R.step) * R.step
+  return Number(Math.min(R.max, Math.max(R.min, stepped)).toFixed(3))
+}
+
+let layerSeq = 0
+const nextId = (p) => `${p}${Date.now().toString(36)}${(layerSeq++).toString(36)}`
+
+// A brand-new element lands centred and in front of the dish: the owner just
+// added it to SEE it, and "behind, at the bottom" would look like nothing
+// happened. Every field is written explicitly, so nothing depends on a default.
+const makeLayer = (url, name) => ({
+  id: nextId('ly'),
+  url: String(url || ''),
+  name: String(name || '').slice(0, 40),
+  x: 50, y: 55, w: LAYER_RANGE.w.dflt, rot: 0,
+  depth: 'front', opacity: 1, blend: 'normal', filter: '', blur: 0,
+  motion: '', anim: '', delay: 0, flip: false, hidden: false,
+})
+
+// One stored row -> the editor's shape. Mirrors normalizeLayer()'s own coercions
+// (including its `depth` default of 'behind') so what the editor shows is what
+// the renderer already draws.
+function readLayer(raw, fallbackId) {
+  if (!raw || typeof raw !== 'object') return null
+  const url = String(raw.url || '')
+  if (!url) return null
+  return {
+    id: String(raw.id || fallbackId || nextId('ly')).slice(0, 80),
+    url,
+    name: String(raw.name || '').slice(0, 40),
+    x: lyNum(raw.x, 'x'), y: lyNum(raw.y, 'y'), w: lyNum(raw.w, 'w'), rot: lyNum(raw.rot, 'rot'),
+    depth: raw.depth === 'front' ? 'front' : 'behind',
+    opacity: lyNum(raw.opacity, 'opacity'),
+    blend: compId(raw.blend, BLEND_MODES, 'normal'),
+    filter: compId(raw.filter, FILTERS, ''),
+    blur: lyNum(raw.blur, 'blur'),
+    motion: compId(raw.motion, LAYER_MOTIONS, ''),
+    anim: compId(raw.anim, ANIMS, ''),
+    delay: lyNum(raw.delay, 'delay'),
+    flip: !!raw.flip,
+    hidden: false,
+  }
+}
+
+// The item's full arrangement: the drawn ones, with the switched-off ones put
+// back at the index they were parked from, so paint order survives a hide.
+function readLayers(item) {
+  const it = item || {}
+  const out = (Array.isArray(it.layers) ? it.layers : [])
+    .map((r, i) => readLayer(r, `ly-on-${i}`))
+    .filter(Boolean)
+  const off = (Array.isArray(it.layersOff) ? it.layersOff : [])
+    .map((r, i) => {
+      const l = readLayer(r, `ly-off-${i}`)
+      return l ? { layer: { ...l, hidden: true }, at: Number(r.at) } : null
+    })
+    .filter(Boolean)
+    .sort((a, b) => (Number.isFinite(a.at) ? a.at : 1e9) - (Number.isFinite(b.at) ? b.at : 1e9))
+  off.forEach((o) => {
+    const at = Number.isFinite(o.at) ? Math.max(0, Math.min(out.length, o.at)) : out.length
+    out.splice(at, 0, o.layer)
+  })
+  return out.slice(0, LAYER_MAX)
+}
+
+// The editor's shape -> one stored row. `hidden` never reaches the document.
+const writeLayer = (l) => ({
+  id: String(l.id || nextId('ly')).slice(0, 80),
+  url: String(l.url || ''),
+  name: String(l.name || '').slice(0, 40),
+  x: lyNum(l.x, 'x'), y: lyNum(l.y, 'y'), w: lyNum(l.w, 'w'), rot: lyNum(l.rot, 'rot'),
+  depth: l.depth === 'front' ? 'front' : 'behind',
+  opacity: lyNum(l.opacity, 'opacity'),
+  blend: compId(l.blend, BLEND_MODES, 'normal'),
+  filter: compId(l.filter, FILTERS, ''),
+  blur: lyNum(l.blur, 'blur'),
+  motion: compId(l.motion, LAYER_MOTIONS, ''),
+  anim: compId(l.anim, ANIMS, ''),
+  delay: lyNum(l.delay, 'delay'),
+  flip: !!l.flip,
+})
+
+/**
+ * What the layer editor contributes to the item's save payload.
+ *
+ * Same discipline as composePayload(): a dish nobody decorated gains no keys at
+ * all, but a dish whose last element was just deleted must be written as an
+ * empty array — otherwise the delete would not stick.
+ */
+function layersPayload(layers, original) {
+  const orig = original || {}
+  const all = (Array.isArray(layers) ? layers : []).filter((l) => l && l.url).slice(0, LAYER_MAX)
+  const on = all.filter((l) => !l.hidden).map(writeLayer)
+  const off = []
+  all.forEach((l, i) => { if (l.hidden) off.push({ ...writeLayer(l), at: i }) })
+  const out = {}
+  if (on.length || orig.layers !== undefined) out.layers = on
+  if (off.length || orig.layersOff !== undefined) out.layersOff = off
   return out
 }
 
@@ -576,6 +711,7 @@ function EditorTabs({ lang }) {
     ['ie-basics', lang === 'ar' ? 'الأساسي' : 'Basics'],
     ['ie-images', lang === 'ar' ? 'الصور' : 'Images'],
     ['ie-compose', lang === 'ar' ? 'تركيب الصنف' : 'Composition'],
+    ['ie-layers', lang === 'ar' ? 'عناصر مركّبة' : 'Placed elements'],
     ['ie-dish', lang === 'ar' ? 'السطح والزينة' : 'Surface & garnish'],
     ['ie-pricing', lang === 'ar' ? 'المقاسات والإضافات' : 'Sizes & mods'],
     ['ie-ar', lang === 'ar' ? '3D وAR' : '3D & AR'],
@@ -613,6 +749,12 @@ function ItemEditor({ tenantId, cats, currency, value, onClose, onSaved, onDelet
   const [uploading, setUploading] = useState(false)
   const [cropState, setCropState] = useState(null)
   const [materials, setMaterials] = useState([])
+  // The placed cut-outs live OUTSIDE `form` on purpose: `form` carries the raw
+  // document shape (a layer's `filter` there is a CSS string once it has been
+  // through the renderer), while the editor needs the preset ID and a per-layer
+  // `hidden` flag. Keeping them apart is what stops the two shapes mixing.
+  const [layers, setLayers] = useState(() => readLayers(value || {}))
+  const [selLayer, setSelLayer] = useState('')
   const isNew = !form.id
   const set = (k, v) => setForm((f) => ({ ...f, [k]: v }))
   // The document as it arrived. composePayload() needs it to tell "the owner
@@ -950,6 +1092,11 @@ function ItemEditor({ tenantId, cats, currency, value, onClose, onSaved, onDelet
         // the same bounds resolveComposition() clamps to, and emitted only for
         // the fields this item actually uses (see composePayload).
         ...composePayload(form, origRef.current),
+        // «عناصر مركّبة» — the owner's own transparent cut-outs, placed on the
+        // canvas above. Written in the exact shape resolveLayers() reads back,
+        // with the switched-off ones parked in `layersOff` so they stop drawing
+        // without being lost.
+        ...layersPayload(layers, origRef.current),
         // dish styling layer, in the exact shape lib/dishProps.js reads back.
         // Never `undefined` on either key — Firestore rejects that outright.
         surface: form.surface || '',
@@ -1232,9 +1379,18 @@ function ItemEditor({ tenantId, cats, currency, value, onClose, onSaved, onDelet
         <EditorSection id="ie-compose" title={lang === 'ar' ? 'تركيب الصنف' : 'Dish composition'} />
         <CompositionEditor
           form={form} setForm={setForm} lang={lang} currency={currency} uploading={uploading}
+          layers={layers}
           onPickBgImage={(e) => onPick(e, 'bg')}
           onEditBgImage={() => setCropState({ src: form.bgUrl, target: 'bg' })}
           onPickBgVideo={onBgPick('video')}
+        />
+
+        <EditorSection id="ie-layers" title={lang === 'ar' ? 'عناصر مركّبة على الصنف' : 'Placed elements'} />
+        <LayersEditor
+          lang={lang} tenantId={tenantId} tenant={tnt} form={form}
+          canLibrary={can(CAP.MANAGE_APPEARANCE) || can(CAP.MANAGE_SETTINGS)}
+          layers={layers} setLayers={setLayers}
+          selected={selLayer} setSelected={setSelLayer}
         />
 
         <EditorSection id="ie-dish" title={lang === 'ar' ? 'السطح والزينة حول الطبق' : 'Dish surface & garnish'} />
@@ -1598,7 +1754,7 @@ function CxGroup({ icon, title, hint, resetLabel, onReset, children }) {
   )
 }
 
-function CompositionEditor({ form, setForm, lang, currency, uploading, onPickBgImage, onEditBgImage, onPickBgVideo }) {
+function CompositionEditor({ form, setForm, lang, currency, uploading, layers, onPickBgImage, onEditBgImage, onPickBgVideo }) {
   const ar = lang === 'ar'
   const patch = (o) => setForm((f) => ({ ...f, ...o }))
   const set = (k, v) => patch({ [k]: v })
@@ -1607,7 +1763,14 @@ function CompositionEditor({ form, setForm, lang, currency, uploading, onPickBgI
   // ringed to match, so it is never ambiguous which one a slider is moving.
   const [variant, setVariant] = useState('list')
   const [replay, setReplay] = useState(0)
-  const comp = resolveComposition(form, { variant })
+  // The placed elements ride along so THIS preview shows the whole dish rather
+  // than a photo with its decoration missing. Hidden ones are stripped first —
+  // resolveLayers() has no notion of "switched off", and it must not.
+  const compItem = useMemo(
+    () => ({ ...form, layers: (layers || []).filter((l) => !l.hidden).map(writeLayer) }),
+    [form, layers],
+  )
+  const comp = resolveComposition(compItem, { variant })
 
   // Replay the entrance whenever the choice or the previewed variant changes —
   // an animation you cannot see is an animation you cannot judge.
@@ -1683,6 +1846,8 @@ function CompositionEditor({ form, setForm, lang, currency, uploading, onPickBgI
             <span className="dcx-bg" style={bgStyle(comp.bg)} />
           ) : null}
 
+          {comp.layers.behind.map((l) => <LayerArt key={`b${l.id}`} layer={l} replay={replay} />)}
+
           {form.imageUrl ? (
             <span className="dcx-shot">
               <img key={replay} src={form.imageUrl} alt="" data-anim={animPreview || undefined} style={imgStyle(comp.img, comp.shadow) || undefined} />
@@ -1690,6 +1855,8 @@ function CompositionEditor({ form, setForm, lang, currency, uploading, onPickBgI
           ) : (
             <span className="dcx-empty">{ar ? 'ارفع صورة الصنف لترى التركيب — الأفضل صورة بخلفية شفافة' : 'Upload the item photo to compose it (a transparent cutout works best)'}</span>
           )}
+
+          {comp.layers.front.map((l) => <LayerArt key={`f${l.id}`} layer={l} replay={replay} />)}
 
           <ItemFx kind={comp.fx} />
 
@@ -1865,6 +2032,581 @@ function CompositionEditor({ form, setForm, lang, currency, uploading, onPickBgI
         </button>
       </CxGroup>
     </div>
+  )
+}
+
+// =============================================== the layer (element) editor ==
+//
+// A composition tool, not a form. The owner uploads his own transparent
+// photographs and ARRANGES them on the dish: drag to place, corner handle to
+// size, top handle to rotate, then depth, blend, filter, motion and entrance per
+// element. Everything he sees is drawn by lib/dishComposition.js's own
+// resolveComposition() + layerStyle(), so the canvas is the menu, not a sketch
+// of it.
+
+const lyPctLabel = (v) => `${Number(v)}%`
+const lyMsLabel = (v) => `${Math.round(Number(v))} ms`
+
+/**
+ * One placed element, drawn the way the menu draws it.
+ *
+ * The three-level nesting is load-bearing, not tidiness. layerStyle() writes the
+ * element's own `opacity` inline, and every entrance keyframe ends on
+ * `opacity: 1` with a `both` fill — put the entrance on the same element and a
+ * deliberately half-transparent prop snaps to fully opaque the instant it
+ * lands. Idle motion and the entrance are split for the same reason: both drive
+ * translate/rotate/scale, and one element can only hold one set.
+ */
+function LayerArt({ layer, replay, onReady }) {
+  return (
+    <span className="dlx-art" style={layerStyle(layer) || undefined}>
+      <span className="dlx-motion" data-motion={layer.motion || undefined}>
+        <img
+          key={replay} src={layer.url} alt="" draggable={false}
+          data-anim={layer.anim && layer.anim !== 'none' ? layer.anim : undefined}
+          style={layer.delay ? { animationDelay: `${layer.delay}ms` } : undefined}
+          onLoad={onReady}
+        />
+      </span>
+    </span>
+  )
+}
+
+function LayersEditor({ lang, tenantId, tenant, form, canLibrary, layers, setLayers, selected, setSelected }) {
+  const ar = lang === 'ar'
+  const toast = useToast()
+  const [variant, setVariant] = useState('stage')
+  const [replay, setReplay] = useState(0)
+  const [busy, setBusy] = useState(false)
+  const [manageLib, setManageLib] = useState(false)
+  // Natural aspect per element URL, learned from the picture the canvas already
+  // drew. It is what lets the invisible grab-box sit EXACTLY over the element
+  // instead of over a guessed square.
+  const [ratios, setRatios] = useState({})
+  const canvasRef = useRef(null)
+  const dragRef = useRef(null)
+  const rafRef = useRef(0)
+  const pendRef = useRef(null)
+
+  const library = Array.isArray(tenant?.elementLibrary) ? tenant.elementLibrary.filter((e) => e && e.url) : []
+  const sel = layers.find((l) => l.id === selected) || null
+
+  const patch = (id, o) => setLayers((ls) => ls.map((l) => (l.id === id ? { ...l, ...o } : l)))
+
+  // A drag fires pointermove far faster than the screen refreshes (a 240 Hz
+  // stylus is four updates per frame), and every one of them would re-render the
+  // whole item editor. Moves are folded into one update per frame instead, which
+  // is the most the eye can use anyway.
+  const flushDrag = () => {
+    rafRef.current = 0
+    const p = pendRef.current
+    pendRef.current = null
+    if (p) patch(p.id, p.o)
+  }
+  const queuePatch = (id, o) => {
+    const prev = pendRef.current && pendRef.current.id === id ? pendRef.current.o : null
+    pendRef.current = { id, o: { ...prev, ...o } }
+    if (!rafRef.current) rafRef.current = window.requestAnimationFrame(flushDrag)
+  }
+  useEffect(() => () => { if (rafRef.current) window.cancelAnimationFrame(rafRef.current) }, [])
+
+  // Same preview item the composition editor builds: hidden elements are
+  // stripped before resolveLayers() ever sees them, because the contract has no
+  // notion of "switched off" and must not grow one.
+  const previewItem = useMemo(
+    () => ({ ...form, layers: (layers || []).filter((l) => !l.hidden).map(writeLayer) }),
+    [form, layers],
+  )
+  const comp = resolveComposition(previewItem, { variant })
+
+  // Replay the entrances whenever the arrangement's animation choices change —
+  // an animation you cannot see is an animation you cannot judge.
+  const animKey = layers.map((l) => `${l.anim}:${l.delay}`).join('|')
+  useEffect(() => { setReplay((r) => r + 1) }, [animKey, variant])
+
+  const noteRatio = (url) => (e) => {
+    const im = e.currentTarget
+    if (!im || !im.naturalWidth || !im.naturalHeight) return
+    const r = im.naturalWidth / im.naturalHeight
+    setRatios((prev) => (prev[url] ? prev : { ...prev, [url]: r }))
+  }
+
+  // ---- layer operations -----------------------------------------------------
+  const addLayer = (url, name) => {
+    if (!url) return
+    if (layers.length >= LAYER_MAX) {
+      toast.error(ar ? `الحد ${LAYER_MAX} عنصراً لكل صنف` : `Limit is ${LAYER_MAX} elements per item`)
+      return
+    }
+    const l = makeLayer(url, name)
+    setLayers((ls) => (ls.length >= LAYER_MAX ? ls : [...ls, l]))
+    setSelected(l.id)
+  }
+  const dupLayer = (id) => {
+    const src = layers.find((l) => l.id === id)
+    if (!src || layers.length >= LAYER_MAX) return
+    const copy = { ...src, id: nextId('ly'), x: lyNum(src.x + 6, 'x'), y: lyNum(src.y + 6, 'y') }
+    setLayers((ls) => {
+      const i = ls.findIndex((l) => l.id === id)
+      const out = ls.slice()
+      out.splice(i < 0 ? ls.length : i + 1, 0, copy)
+      return out
+    })
+    setSelected(copy.id)
+  }
+  const delLayer = (id) => {
+    setLayers((ls) => ls.filter((l) => l.id !== id))
+    setSelected((s) => (s === id ? '' : s))
+  }
+  const moveLayer = (id, dir) => setLayers((ls) => {
+    const i = ls.findIndex((l) => l.id === id)
+    const j = i + dir
+    if (i < 0 || j < 0 || j >= ls.length) return ls
+    const out = ls.slice()
+    const [row] = out.splice(i, 1)
+    out.splice(j, 0, row)
+    return out
+  })
+
+  // ---- the element library (venue-wide, reusable across every dish) ---------
+  // arrayUnion APPENDS: two people adding elements from two dishes at the same
+  // moment both keep theirs. Writing the whole array back would silently lose
+  // whichever one landed first.
+  const saveToLibrary = async (entries) => {
+    const fresh = entries.filter((en) => !library.some((x) => x.url === en.url))
+    if (!fresh.length) return
+    if (library.length + fresh.length > LIBRARY_MAX) {
+      toast.error(ar ? `مكتبة العناصر ممتلئة (${LIBRARY_MAX})` : `The element library is full (${LIBRARY_MAX})`)
+      return
+    }
+    try {
+      await updateTenant(tenantId, { elementLibrary: arrayUnion(...fresh) })
+    } catch (_) {
+      toast.error(ar
+        ? 'رُفع العنصر ويعمل على هذا الصنف، لكن إضافته لمكتبة المنشأة تحتاج صلاحية «المظهر»'
+        : 'Uploaded and usable on this item, but adding it to the venue library needs the appearance permission')
+    }
+  }
+  const removeFromLibrary = async (entry) => {
+    try {
+      await updateTenant(tenantId, { elementLibrary: arrayRemove(entry) })
+      toast.success(ar ? 'حُذف من المكتبة — الأصناف التي تستخدمه لا تتأثر' : 'Removed from the library; items already using it are untouched')
+    } catch (_) {
+      toast.error(ar ? 'تعذّر الحذف من المكتبة' : 'Could not remove it from the library')
+    }
+  }
+
+  const onPickElements = async (e) => {
+    const files = Array.from(e.target.files || []).slice(0, 8)
+    e.target.value = ''
+    if (!files.length) return
+    setBusy(true)
+    const made = []
+    try {
+      for (let i = 0; i < files.length; i += 1) {
+        const file = files[i]
+        // Uploaded AS-IS, deliberately NOT through the item cropper: a cut-out's
+        // entire value is its alpha channel, and re-encoding it onto a canvas is
+        // exactly how a transparent PNG acquires a white box.
+        const url = await uploadImage(tenantId, file, 'elements')
+        made.push({ id: nextId('el'), url, name: String(file.name || '').replace(/\.[a-z0-9]+$/i, '').slice(0, 40) })
+      }
+    } catch (err) {
+      toast.error(err?.message || (ar ? 'تعذّر رفع العنصر' : 'Upload failed'))
+    }
+    if (made.length) {
+      const room = Math.max(0, LAYER_MAX - layers.length)
+      const fresh = made.slice(0, room).map((m) => makeLayer(m.url, m.name))
+      if (fresh.length) {
+        setLayers((ls) => [...ls, ...fresh].slice(0, LAYER_MAX))
+        setSelected(fresh[fresh.length - 1].id)
+      }
+      await saveToLibrary(made)
+    }
+    setBusy(false)
+  }
+
+  // ---- dragging -------------------------------------------------------------
+  // Pointer events, so one code path serves mouse, pen and finger. The canvas is
+  // measured on every gesture start rather than cached: the editor lives inside
+  // a sheet that scrolls, and a stale rect places the element somewhere else.
+  const geom = () => {
+    const el = canvasRef.current
+    if (!el) return null
+    const rect = el.getBoundingClientRect()
+    if (!rect.width || !rect.height) return null
+    const rtl = window.getComputedStyle(el).direction === 'rtl'
+    return { rect, rtl }
+  }
+  // The element's CENTRE in screen pixels. layerStyle() anchors every element by
+  // its centre (translate(-50%,-50%)), so size and rotation both measure from
+  // here — and `x` runs from the INLINE-START edge, which is the right one in
+  // Arabic. Getting this backwards is what made an earlier placement tool move
+  // things the wrong way on the venue's own RTL menu.
+  const centreOf = (l, g) => ({
+    ox: g.rtl ? g.rect.right - (l.x / 100) * g.rect.width : g.rect.left + (l.x / 100) * g.rect.width,
+    oy: g.rect.top + (l.y / 100) * g.rect.height,
+  })
+
+  const beginDrag = (mode, l) => (e) => {
+    if (e.pointerType === 'mouse' && e.button !== 0) return
+    const g = geom()
+    if (!g) return
+    e.preventDefault()
+    e.stopPropagation()
+    setSelected(l.id)
+    const c = centreOf(l, g)
+    dragRef.current = {
+      mode, id: l.id, g,
+      px: e.clientX, py: e.clientY,
+      x0: l.x, y0: l.y, w0: l.w, rot0: l.rot,
+      ox: c.ox, oy: c.oy,
+      d0: Math.hypot(e.clientX - c.ox, e.clientY - c.oy),
+      a0: (Math.atan2(e.clientY - c.oy, e.clientX - c.ox) * 180) / Math.PI,
+    }
+    try { e.currentTarget.setPointerCapture(e.pointerId) } catch (_) { /* capture is a convenience; the gesture still tracks while the pointer stays on the grip */ }
+  }
+
+  const onDragMove = (e) => {
+    const d = dragRef.current
+    if (!d) return
+    e.preventDefault()
+    if (d.mode === 'move') {
+      const mx = e.clientX - d.px
+      const my = e.clientY - d.py
+      // RTL: moving the pointer right walks the element back towards `x = 0`,
+      // because `x` is measured from the start (right) edge.
+      const dx = ((d.g.rtl ? -mx : mx) / d.g.rect.width) * 100
+      const dy = (my / d.g.rect.height) * 100
+      queuePatch(d.id, { x: lyNum(d.x0 + dx, 'x'), y: lyNum(d.y0 + dy, 'y') })
+      return
+    }
+    if (d.mode === 'size') {
+      // Distance from the centre, so the grip works at any rotation and on any
+      // aspect ratio without needing to know which corner it started from.
+      const dist = Math.hypot(e.clientX - d.ox, e.clientY - d.oy)
+      queuePatch(d.id, { w: lyNum(d.d0 > 6 ? d.w0 * (dist / d.d0) : d.w0, 'w') })
+      return
+    }
+    const a = (Math.atan2(e.clientY - d.oy, e.clientX - d.ox) * 180) / Math.PI
+    const raw = d.rot0 + (a - d.a0)
+    queuePatch(d.id, { rot: lyNum((((raw + 180) % 360) + 360) % 360 - 180, 'rot') })
+  }
+
+  const endDrag = (e) => {
+    if (!dragRef.current) return
+    dragRef.current = null
+    // The last frame of a gesture must not be dropped: without this, letting go
+    // mid-flick leaves the element a few pixels behind where the finger stopped.
+    if (rafRef.current) { window.cancelAnimationFrame(rafRef.current); flushDrag() }
+    try {
+      if (e.currentTarget.hasPointerCapture && e.currentTarget.hasPointerCapture(e.pointerId)) {
+        e.currentTarget.releasePointerCapture(e.pointerId)
+      }
+    } catch (_) { /* the gesture is already over; releasing is best-effort */ }
+  }
+
+  const onHitKey = (l) => (e) => {
+    const R = LAYER_RANGE
+    const g = geom()
+    const rtl = g ? g.rtl : true
+    const mul = e.shiftKey ? 10 : 1
+    let o = null
+    if (e.key === 'ArrowUp') o = { y: lyNum(l.y - R.y.step * mul, 'y') }
+    else if (e.key === 'ArrowDown') o = { y: lyNum(l.y + R.y.step * mul, 'y') }
+    else if (e.key === 'ArrowLeft') o = { x: lyNum(l.x + (rtl ? R.x.step : -R.x.step) * mul, 'x') }
+    else if (e.key === 'ArrowRight') o = { x: lyNum(l.x + (rtl ? -R.x.step : R.x.step) * mul, 'x') }
+    else if (e.key === 'Delete' || e.key === 'Backspace') { e.preventDefault(); delLayer(l.id); return }
+    if (!o) return
+    e.preventDefault()
+    patch(l.id, o)
+  }
+
+  // Grab-boxes are ordered behind-then-front so a grip never hides under an
+  // element the guest sees underneath it, and the SELECTED one is always drawn
+  // last. That is the guarantee that no element can become unreachable: whatever
+  // is selected is on top, and the list below can select anything.
+  const hits = useMemo(() => {
+    const vis = layers.filter((l) => !l.hidden)
+    const ordered = [...vis.filter((l) => l.depth === 'behind'), ...vis.filter((l) => l.depth === 'front')]
+    return [...ordered.filter((l) => l.id !== selected), ...ordered.filter((l) => l.id === selected)]
+  }, [layers, selected])
+
+  const depthLabel = (id) => {
+    const d = LAYER_DEPTHS.find((x) => x.id === id) || LAYER_DEPTHS[0]
+    return ar ? d.ar : d.en
+  }
+
+  return (
+    <div className="stack" style={{ gap: 10, marginBottom: 'var(--sp-3)' }}>
+      <p className="xs faint" style={{ margin: 0 }}>
+        {ar
+          ? 'ارفع صورك أنت — عناصر مقصوصة بخلفية شفافة (PNG) — ثم ضعها بإصبعك فوق الطبق: اسحب لتحريكها، امسك المقبض السفلي لتكبيرها والعلوي لتدويرها. لكل عنصر عمق (خلف الطبق أو أمامه)، شفافية، مزج، فلتر، حركة سكون وحركة ظهور. لا رسومات ولا أشكال مصنوعة هنا: ما ترفعه هو ما يظهر.'
+          : 'Upload your own transparent cut-outs and place them on the dish: drag to move, the lower grip resizes, the upper one rotates. Each element has depth, opacity, blend, filter, idle motion and an entrance.'}
+      </p>
+
+      <section className="dcx-group">
+        <div className="row-between" style={{ alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
+          <strong className="xs"><Icon name="folder" size={13} style={{ verticalAlign: 'middle' }} /> {ar ? 'مكتبة عناصر المنشأة' : 'Venue element library'}</strong>
+          <div className="row" style={{ gap: 6, flex: 'none' }}>
+            <label className={`btn btn-sm btn-outline ${busy ? 'disabled' : ''}`} style={{ cursor: busy ? 'default' : 'pointer' }}>
+              <Icon name="upload" size={13} /> {busy ? (ar ? 'يرفع…' : 'Uploading…') : (ar ? 'رفع عنصر' : 'Upload')}
+              <input hidden type="file" accept="image/png,image/webp,image/*" multiple disabled={busy} onChange={onPickElements} />
+            </label>
+            {canLibrary && library.length > 0 && (
+              <button type="button" className="btn btn-xs btn-ghost" style={{ flex: 'none' }} onClick={() => setManageLib((m) => !m)}>
+                {manageLib ? (ar ? 'إنهاء' : 'Done') : (ar ? 'تنظيم' : 'Manage')}
+              </button>
+            )}
+          </div>
+        </div>
+        <p className="xs faint" style={{ margin: 0 }}>
+          {ar
+            ? 'كل ما ترفعه هنا يُحفظ لمنشأتك ويصلح لكل الأصناف — ترفع ورقة النعناع مرة واحدة وتستخدمها في عشرة أطباق. الرفع يضيف ولا يستبدل شيئاً.'
+            : 'Everything uploaded here is saved for the whole venue and reusable on any dish. Uploading appends; it never replaces anything.'}
+        </p>
+        {library.length > 0 ? (
+          <div className="dlx-lib">
+            {library.map((el) => (
+              <div key={el.id || el.url} className="dlx-libitem">
+                <button type="button" className="dlx-libpick" title={el.name || ''} onClick={() => addLayer(el.url, el.name)}>
+                  <img src={el.url} alt="" loading="lazy" />
+                  <span className="dlx-libname">{el.name || (ar ? 'عنصر' : 'Element')}</span>
+                </button>
+                {manageLib && canLibrary && (
+                  <button type="button" className="dlx-libdel" aria-label={ar ? 'حذف من المكتبة' : 'Remove from library'} onClick={() => removeFromLibrary(el)}>
+                    <Icon name="close" size={12} />
+                  </button>
+                )}
+              </div>
+            ))}
+          </div>
+        ) : (
+          <p className="xs faint" style={{ margin: 0 }}>
+            {ar
+              ? 'المكتبة فارغة. ارفع صوراً مقصوصة بخلفية شفافة (PNG) — ورقة نعناع، حبة ليمون، ملعقة، بخار حقيقي مقصوص من صورة.'
+              : 'The library is empty. Upload transparent PNG cut-outs: a mint leaf, a lime, a spoon, real steam cut from a photo.'}
+          </p>
+        )}
+      </section>
+
+      <section className="dcx-group">
+        <div className="row-between" style={{ alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
+          <strong className="xs"><Icon name="layers" size={13} style={{ verticalAlign: 'middle' }} /> {ar ? 'لوح التركيب' : 'Placement canvas'}</strong>
+          <div className="row" style={{ gap: 6, flex: 'none' }}>
+            <button type="button" className={`chip ${variant === 'list' ? 'active' : ''}`} onClick={() => setVariant('list')}>{ar ? 'القائمة' : 'Menu list'}</button>
+            <button type="button" className={`chip ${variant === 'stage' ? 'active' : ''}`} onClick={() => setVariant('stage')}>{ar ? 'الصنف المفتوح' : 'Opened item'}</button>
+            <button type="button" className="btn btn-xs btn-outline" onClick={() => setReplay((r) => r + 1)}>
+              <Icon name="reload" size={12} /> {ar ? 'إعادة الحركة' : 'Replay'}
+            </button>
+          </div>
+        </div>
+
+        <div
+          ref={canvasRef} className="dlx-canvas" data-variant={variant}
+          onPointerDown={() => setSelected('')}
+        >
+          {comp.bg && comp.bg.kind === 'video' ? (
+            <span className="dlx-bg" style={{ opacity: comp.bg.opacity, ...(comp.bg.blend !== 'normal' ? { mixBlendMode: comp.bg.blend } : null), ...(comp.bg.filter ? { filter: comp.bg.filter } : null) }}>
+              <video key={comp.bg.url} src={comp.bg.url} autoPlay muted loop playsInline style={{ objectPosition: comp.bg.pos }} />
+            </span>
+          ) : comp.bg ? (
+            <span className="dlx-bg" style={bgStyle(comp.bg) || undefined} />
+          ) : null}
+
+          {comp.layers.behind.map((l) => <LayerArt key={`b${l.id}`} layer={l} replay={replay} onReady={noteRatio(l.url)} />)}
+
+          {form.imageUrl ? (
+            <span className="dlx-shot">
+              <img src={form.imageUrl} alt="" draggable={false} style={imgStyle(comp.img, comp.shadow) || undefined} />
+            </span>
+          ) : (
+            <span className="dlx-empty">{ar ? 'ارفع صورة الصنف أولاً — العناصر تُركّب حولها' : 'Add the item photo first — elements are arranged around it'}</span>
+          )}
+
+          {comp.layers.front.map((l) => <LayerArt key={`f${l.id}`} layer={l} replay={replay} onReady={noteRatio(l.url)} />)}
+
+          <div className="dlx-hits">
+            {hits.map((l) => (
+              <div
+                key={l.id}
+                className="dlx-hit" role="button" tabIndex={0}
+                data-sel={l.id === selected ? 'true' : 'false'}
+                aria-label={`${l.name || (ar ? 'عنصر' : 'Element')} — ${depthLabel(l.depth)}`}
+                style={{
+                  insetInlineStart: `${l.x}%`,
+                  top: `${l.y}%`,
+                  width: `${l.w}cqmin`,
+                  aspectRatio: String(ratios[l.url] || 1),
+                  transform: `translate(-50%, -50%) rotate(${l.rot}deg)`,
+                }}
+                onPointerDown={beginDrag('move', l)}
+                onPointerMove={onDragMove}
+                onPointerUp={endDrag}
+                onPointerCancel={endDrag}
+                onKeyDown={onHitKey(l)}
+              >
+                {l.id === selected && (
+                  <span
+                    className="dlx-grip dlx-grip-rot" aria-hidden="true"
+                    onPointerDown={beginDrag('rot', l)} onPointerMove={onDragMove}
+                    onPointerUp={endDrag} onPointerCancel={endDrag}
+                  >
+                    <Icon name="reload" size={11} />
+                  </span>
+                )}
+                {l.id === selected && (
+                  <span
+                    className="dlx-grip dlx-grip-size" aria-hidden="true"
+                    onPointerDown={beginDrag('size', l)} onPointerMove={onDragMove}
+                    onPointerUp={endDrag} onPointerCancel={endDrag}
+                  >
+                    <Icon name="arrowUpDown" size={11} style={{ transform: 'rotate(45deg)' }} />
+                  </span>
+                )}
+              </div>
+            ))}
+          </div>
+        </div>
+
+        <p className="xs faint" style={{ margin: 0 }}>
+          {ar
+            ? 'اسحب العنصر بإصبعك أو بالفأرة. المقبض السفلي يكبّر ويصغّر، والعلوي يدوّر. بعد اختيار عنصر تستطيع تحريكه بأسهم لوحة المفاتيح أيضاً (Shift للخطوة الكبيرة). المواضع تُحفظ نسبةً من حافة البداية، فتنعكس أفقياً إذا فتح الضيف المنيو بالإنجليزية.'
+            : 'Drag with finger or mouse; the lower grip resizes and the upper one rotates. Arrow keys nudge the selected element (Shift for a big step). Positions are stored from the inline-start edge, so they mirror if the guest reads the menu in English.'}
+        </p>
+      </section>
+
+      <section className="dcx-group">
+        <div className="row-between" style={{ alignItems: 'center', gap: 8 }}>
+          <strong className="xs">
+            <Icon name="list" size={13} style={{ verticalAlign: 'middle' }} /> {ar ? 'العناصر' : 'Elements'}{' '}
+            <span className="faint num">({layers.length}/{LAYER_MAX})</span>
+          </strong>
+        </div>
+        {layers.length === 0 ? (
+          <p className="xs faint" style={{ margin: 0 }}>
+            {ar ? 'لا عناصر على هذا الصنف بعد — ارفع صورة أو اختر من المكتبة أعلاه.' : 'No elements on this item yet — upload one or pick from the library above.'}
+          </p>
+        ) : (
+          <div className="dlx-list">
+            {layers.map((l, i) => (
+              <div key={l.id} className="dlx-row" data-sel={l.id === selected ? 'true' : 'false'} data-off={l.hidden ? 'true' : 'false'}>
+                <button type="button" className="dlx-pick" onClick={() => setSelected(l.id === selected ? '' : l.id)}>
+                  <span className="dlx-thumb"><img src={l.url} alt="" loading="lazy" /></span>
+                  <span className="dlx-rowtext">
+                    <b>{l.name || (ar ? 'عنصر' : 'Element')}</b>
+                    <span className="xs faint num">
+                      {depthLabel(l.depth)} · {l.w}% · {l.rot}°{l.hidden ? (ar ? ' · مخفي' : ' · hidden') : ''}
+                    </span>
+                  </span>
+                </button>
+                <span className="dlx-rowbtns">
+                  <button type="button" className="icon-btn" disabled={i === 0} aria-label={ar ? 'إلى الخلف' : 'Send back'} onClick={() => moveLayer(l.id, -1)}>
+                    <Icon name="arrowUp" size={14} />
+                  </button>
+                  <button type="button" className="icon-btn" disabled={i === layers.length - 1} aria-label={ar ? 'إلى الأمام' : 'Bring forward'} onClick={() => moveLayer(l.id, 1)}>
+                    <Icon name="arrowUp" size={14} style={{ transform: 'rotate(180deg)' }} />
+                  </button>
+                  <button type="button" className="icon-btn" aria-label={l.hidden ? (ar ? 'إظهار' : 'Show') : (ar ? 'إخفاء' : 'Hide')} onClick={() => patch(l.id, { hidden: !l.hidden })}>
+                    <Icon name={l.hidden ? 'eyeOff' : 'eye'} size={14} />
+                  </button>
+                  <button type="button" className="icon-btn" aria-label={ar ? 'تكرار' : 'Duplicate'} onClick={() => dupLayer(l.id)}>
+                    <Icon name="copy" size={14} />
+                  </button>
+                  <button type="button" className="icon-btn" aria-label={ar ? 'حذف' : 'Delete'} style={{ color: 'var(--danger)' }} onClick={() => delLayer(l.id)}>
+                    <Icon name="delete" size={14} />
+                  </button>
+                </span>
+              </div>
+            ))}
+          </div>
+        )}
+        {layers.length > 0 && (
+          <p className="xs faint" style={{ margin: 0 }}>
+            {ar
+              ? 'الترتيب هنا هو ترتيب الرسم داخل كل عمق: الأعلى يُرسم أولاً فيظهر تحت ما بعده. الإخفاء يوقف ظهور العنصر في المنيو دون فقدان ضبطه.'
+              : 'Order here is paint order within each depth: the top row is drawn first and sits under the ones after it. Hiding stops an element showing in the menu without losing its settings.'}
+          </p>
+        )}
+      </section>
+
+      {sel && <LayerControls key={sel.id} layer={sel} lang={lang} onChange={(o) => patch(sel.id, o)} />}
+    </div>
+  )
+}
+
+// Every control for the ONE selected element. Each option comes from a
+// lib/dishComposition.js catalogue and each slider is bounded by LAYER_RANGE, so
+// the editor cannot offer a setting normalizeLayer() would clamp away.
+function LayerControls({ layer, lang, onChange }) {
+  const ar = lang === 'ar'
+  const R = LAYER_RANGE
+  const l = layer
+  return (
+    <section className="dcx-group" style={{ borderColor: 'var(--brand)' }}>
+      <div className="row-between" style={{ alignItems: 'center', gap: 8 }}>
+        <strong className="xs">
+          <Icon name="penLine" size={13} style={{ verticalAlign: 'middle' }} /> {ar ? 'ضبط العنصر المحدد' : 'Selected element'}
+          {l.name ? <span className="faint"> — {l.name}</span> : null}
+        </strong>
+        <button
+          type="button" className="btn btn-xs btn-ghost" style={{ flex: 'none' }}
+          onClick={() => onChange({ x: 50, y: 55, w: R.w.dflt, rot: 0, opacity: 1, blend: 'normal', filter: '', blur: 0, motion: '', anim: '', delay: 0, flip: false })}
+        >
+          <Icon name="undo" size={12} /> {ar ? 'إعادة الضبط' : 'Reset'}
+        </button>
+      </div>
+
+      <div className="field" style={{ marginBottom: 0 }}>
+        <label>{ar ? 'العمق' : 'Depth'}</label>
+        <div className="dcx-anims">
+          {LAYER_DEPTHS.map((d) => (
+            <button key={d.id} type="button" className={`chip ${l.depth === d.id ? 'active' : ''}`} aria-pressed={l.depth === d.id} onClick={() => onChange({ depth: d.id })}>
+              {ar ? d.ar : d.en}
+            </button>
+          ))}
+        </div>
+      </div>
+
+      <CxSlider label={ar ? 'الحجم' : 'Size'} format={lyPctLabel} min={R.w.min} max={R.w.max} step={R.w.step} value={l.w} onChange={(v) => onChange({ w: v })} />
+      <CxSlider label={ar ? 'الدوران' : 'Rotation'} format={cxDeg} min={R.rot.min} max={R.rot.max} step={R.rot.step} value={l.rot} onChange={(v) => onChange({ rot: v })} />
+      <CxSlider label={ar ? 'الموضع الأفقي (من حافة البداية)' : 'Horizontal position (from the start edge)'} format={lyPctLabel} min={R.x.min} max={R.x.max} step={R.x.step} value={l.x} onChange={(v) => onChange({ x: v })} />
+      <CxSlider label={ar ? 'الموضع الرأسي (من الأعلى)' : 'Vertical position (from the top)'} format={lyPctLabel} min={R.y.min} max={R.y.max} step={R.y.step} value={l.y} onChange={(v) => onChange({ y: v })} />
+      <CxSlider label={ar ? 'الشفافية' : 'Opacity'} format={cxPct} min={R.opacity.min} max={R.opacity.max} step={R.opacity.step} value={l.opacity} onChange={(v) => onChange({ opacity: v })} />
+      <CxSlider label={ar ? 'التمويه' : 'Blur'} format={cxPx} min={R.blur.min} max={R.blur.max} step={R.blur.step} value={l.blur} onChange={(v) => onChange({ blur: v })} />
+
+      <CxSelect lang={lang} label={ar ? 'المزج مع ما تحته' : 'Blend with what is under it'} options={BLEND_MODES} value={l.blend || 'normal'} onChange={(v) => onChange({ blend: v })} />
+      <CxSelect lang={lang} label={ar ? 'الفلتر' : 'Filter'} options={FILTERS} value={l.filter || ''} onChange={(v) => onChange({ filter: v })} />
+
+      <label className="row-between" style={{ cursor: 'pointer', gap: 10 }}>
+        <span className="xs bold">{ar ? 'قلب أفقي (صورة معكوسة)' : 'Flip horizontally'}</span>
+        <input type="checkbox" checked={!!l.flip} onChange={(e) => onChange({ flip: e.target.checked })} style={{ width: 22, height: 22, flex: 'none' }} />
+      </label>
+
+      <CxSelect lang={lang} label={ar ? 'حركة السكون (بعد وصوله)' : 'Idle motion'} options={LAYER_MOTIONS} value={l.motion || ''} onChange={(v) => onChange({ motion: v })} />
+      <p className="xs faint" style={{ margin: 0 }}>
+        {ar
+          ? 'حركة السكون متعمَّدة الخفّة: عنصر لا يتوقف عن الحركة يشبه بانر إعلاني لا صورة. تتوقف كلها لمن فعّل تقليل الحركة في جهازه.'
+          : 'Idle motion is deliberately tiny — a prop that never stops moving reads as a web banner. All of it stops for anyone with reduced motion on.'}
+      </p>
+
+      <div className="field" style={{ marginBottom: 0 }}>
+        <label>{ar ? 'حركة الظهور' : 'Entrance animation'}</label>
+        <div className="dcx-anims">
+          {ANIMS.map((a) => (
+            <button key={a.id || 'dflt'} type="button" className={`chip ${(l.anim || '') === a.id ? 'active' : ''}`} aria-pressed={(l.anim || '') === a.id} onClick={() => onChange({ anim: a.id })}>
+              {ar ? a.ar : a.en}
+            </button>
+          ))}
+        </div>
+      </div>
+      <CxSlider label={ar ? 'تأخير الظهور' : 'Entrance delay'} format={lyMsLabel} min={R.delay.min} max={R.delay.max} step={R.delay.step} value={l.delay} onChange={(v) => onChange({ delay: v })} />
+      <p className="xs faint" style={{ margin: 0 }}>
+        {ar
+          ? 'التأخير هو ما يجعل العناصر تصل واحداً بعد الآخر بدل أن تقفز كلها دفعة واحدة.'
+          : 'Delay is what makes elements arrive one after another instead of all landing at once.'}
+      </p>
+    </section>
   )
 }
 

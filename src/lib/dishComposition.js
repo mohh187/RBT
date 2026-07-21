@@ -107,6 +107,116 @@ export const RANGE = {
 // nothing on screen is worse than no slider, so the control does not exist.
 // Use blur and offset, which do exactly what they say.
 
+// ------------------------------------------------------------------ layers --
+//
+// REAL IMAGES, NOT DRAWINGS. The first attempt at decoration hand-authored
+// garnish as inline SVG and materials as CSS gradients. That approach cannot
+// reach photographic realism no matter how carefully it is drawn — a vector
+// petal reads as a sticker, a gradient "marble" reads as a gradient. So the
+// venue places its OWN cut-out photographs instead, and this is the model for
+// one placed image.
+//
+// Every layer is independent: its own position, size, rotation, depth, blend,
+// filter, motion and live effect. That is what makes a composition rather than
+// a wallpaper.
+export const LAYER_DEPTHS = [
+  { id: 'behind', ar: 'خلف الطبق', en: 'Behind the dish' },
+  { id: 'front', ar: 'أمام الطبق', en: 'In front of the dish' },
+]
+
+// How a placed element behaves once it has arrived. Idle motion is deliberately
+// tiny — a prop that keeps moving reads as a web banner, not a photograph.
+export const LAYER_MOTIONS = [
+  { id: '', ar: 'ثابت', en: 'Still' },
+  { id: 'float', ar: 'طفو خفيف', en: 'Gentle float' },
+  { id: 'sway', ar: 'تمايل', en: 'Sway' },
+  { id: 'spin', ar: 'دوران بطيء', en: 'Slow spin' },
+  { id: 'pulse', ar: 'نبض خفيف', en: 'Soft pulse' },
+]
+export const LAYER_MOTION_IDS = LAYER_MOTIONS.map((m) => m.id)
+
+export const LAYER_RANGE = {
+  x: { min: 0, max: 100, step: 0.5, dflt: 50 },   // percent of the box, from the start edge
+  y: { min: 0, max: 100, step: 0.5, dflt: 70 },
+  w: { min: 2, max: 120, step: 0.5, dflt: 22 },   // width as percent of the box's SMALLER side
+  rot: { min: -180, max: 180, step: 1, dflt: 0 },
+  opacity: { min: 0, max: 1, step: 0.05, dflt: 1 },
+  blur: { min: 0, max: 20, step: 0.5, dflt: 0 },
+  delay: { min: 0, max: 2000, step: 50, dflt: 0 }, // ms before it arrives
+}
+
+/**
+ * Normalise one placed layer. Returns null for anything unusable, so a bad row
+ * in the document drops that element instead of breaking the dish.
+ */
+export function normalizeLayer(raw) {
+  if (!raw || typeof raw !== 'object') return null
+  const url = String(raw.url || '')
+  if (!url) return null
+  const R = LAYER_RANGE
+  return {
+    id: String(raw.id || url).slice(0, 80),
+    url,
+    x: num(raw.x, R.x.dflt, R.x.min, R.x.max),
+    y: num(raw.y, R.y.dflt, R.y.min, R.y.max),
+    w: num(raw.w, R.w.dflt, R.w.min, R.w.max),
+    rot: num(raw.rot, R.rot.dflt, R.rot.min, R.rot.max),
+    depth: raw.depth === 'front' ? 'front' : 'behind',
+    opacity: num(raw.opacity, R.opacity.dflt, 0, 1),
+    blend: str(raw.blend, BLEND_IDS, 'normal'),
+    filter: filterCss(raw.filter),
+    blur: num(raw.blur, 0, R.blur.min, R.blur.max),
+    motion: str(raw.motion, LAYER_MOTION_IDS, ''),
+    anim: str(raw.anim, ANIM_IDS, ''),
+    delay: num(raw.delay, 0, R.delay.min, R.delay.max),
+    flip: !!raw.flip,
+  }
+}
+
+// `item.layersOff` is EDITOR-ONLY state and is deliberately not read here.
+// Hiding an element cannot mean "leave it in `layers` with a flag", because this
+// resolver draws anything carrying a url; a hidden element is therefore parked
+// in `layersOff` with the index it came from, and the editor splices it back
+// when it is shown again so paint order survives a hide/show. Renderers must
+// ignore that field entirely.
+
+/** All placed layers on an item, in paint order, split by depth. */
+export function resolveLayers(item) {
+  const raw = item && Array.isArray(item.layers) ? item.layers : []
+  const all = raw.map(normalizeLayer).filter(Boolean).slice(0, 24)
+  return { behind: all.filter((l) => l.depth === 'behind'), front: all.filter((l) => l.depth === 'front'), all }
+}
+
+/**
+ * Inline style for one placed layer. Position is percent-based so a composition
+ * holds its arrangement on any screen; width is a share of the box's SMALLER
+ * side (cqmin) so an element keeps its visual weight on a wide panoramic photo
+ * as well as a tall one — sizing by width alone is what made an earlier version
+ * render garnish three times too large on this venue's own images.
+ */
+export function layerStyle(l) {
+  if (!l) return null
+  const t = [`translate(-50%, -50%)`]
+  if (l.rot) t.push(`rotate(${l.rot}deg)`)
+  if (l.flip) t.push('scaleX(-1)')
+  const s = {
+    position: 'absolute',
+    insetInlineStart: `${l.x}%`,
+    top: `${l.y}%`,
+    width: `${l.w}cqmin`,
+    transform: t.join(' '),
+    opacity: l.opacity,
+    pointerEvents: 'none',
+  }
+  const filters = []
+  if (l.filter) filters.push(l.filter)
+  if (l.blur) filters.push(`blur(${l.blur}px)`)
+  if (filters.length) s.filter = filters.join(' ')
+  if (l.blend && l.blend !== 'normal') s.mixBlendMode = l.blend
+  if (l.delay) s.animationDelay = `${l.delay}ms`
+  return s
+}
+
 /**
  * resolveComposition(item, { variant }) -> everything a renderer needs.
  *
@@ -165,6 +275,7 @@ export function resolveComposition(item, options) {
     bg,
     img,
     shadow,
+    layers: resolveLayers(it),
     fx: String(it.effect || ''),
     anim: str(it.anim, ANIM_IDS, ''),
   }
@@ -229,6 +340,94 @@ export function bgVideoStyle(bg) {
   if (bg.blend && bg.blend !== 'normal') s.mixBlendMode = bg.blend
   if (bg.filter) s.filter = bg.filter
   if (bg.scale !== 1) { s.transform = `scale(${bg.scale})`; s.transformOrigin = bg.pos }
+  return s
+}
+
+// ------------------------------------------------------- the room backdrop --
+//
+// The wall the whole menu is set against. It was previously a single hard-coded
+// brick tile with no controls at all; the venue could neither change its colour,
+// its bond, its age, nor swap it for a photograph of its own room.
+
+export const WALL_PATTERNS = [
+  { id: 'none', ar: 'بدون جدار', en: 'No wall' },
+  { id: 'running', ar: 'طوب عادي', en: 'Running bond' },
+  { id: 'stack', ar: 'طوب مصفوف', en: 'Stack bond' },
+  { id: 'herringbone', ar: 'طوب متعاكس', en: 'Herringbone' },
+  { id: 'basket', ar: 'طوب متشابك', en: 'Basketweave' },
+  { id: 'roman', ar: 'طوب روماني', en: 'Roman (long)' },
+  { id: 'stone', ar: 'حجر', en: 'Stone' },
+  { id: 'plaster', ar: 'بلاستر', en: 'Plaster' },
+  { id: 'wood', ar: 'خشب', en: 'Wood panel' },
+  { id: 'image', ar: 'صورتي', en: 'My own image' },
+]
+export const WALL_PATTERN_IDS = WALL_PATTERNS.map((w) => w.id)
+
+// The finish is what makes brick read as REAL rather than as a flat pattern:
+// age, chipping, sheen and a pointed mortar edge are the difference between a
+// wall and a checkerboard.
+export const WALL_FINISHES = [
+  { id: 'clean', ar: 'نظيف', en: 'Clean' },
+  { id: 'aged', ar: 'قديم', en: 'Aged' },
+  { id: 'cracked', ar: 'متشقّق', en: 'Cracked' },
+  { id: 'glossy', ar: 'لامع', en: 'Glossy' },
+  { id: 'rough', ar: 'خشن', en: 'Rough' },
+  { id: 'whitewash', ar: 'مطليّ بالأبيض', en: 'Whitewashed' },
+]
+export const WALL_FINISH_IDS = WALL_FINISHES.map((f) => f.id)
+
+export const WALL_RANGE = {
+  scale: { min: 0.4, max: 3, step: 0.05, dflt: 1 },
+  opacity: { min: 0, max: 1, step: 0.05, dflt: 1 },
+  blur: { min: 0, max: 30, step: 0.5, dflt: 0 },
+  mortar: { min: 0, max: 1, step: 0.05, dflt: 0.5 },  // joint contrast
+  grout: { min: 1, max: 8, step: 0.5, dflt: 3 },      // joint width, px at scale 1
+}
+
+/**
+ * The venue's wall. Reads off the TENANT document (it is one room, not one per
+ * dish). Returns null when the venue turned it off, so a theme renders its own
+ * plain canvas instead.
+ */
+export function resolveWall(tenant) {
+  const t = (tenant && tenant.menuWall) || {}
+  const pattern = str(t.pattern, WALL_PATTERN_IDS, 'none')
+  if (pattern === 'none') return null
+  const url = String(t.url || '')
+  if (pattern === 'image' && !url) return null
+  const R = WALL_RANGE
+  return {
+    pattern,
+    url,
+    finish: str(t.finish, WALL_FINISH_IDS, 'clean'),
+    color: String(t.color || '#8a4a2c'),
+    mortarColor: String(t.mortarColor || '#b9a893'),
+    scale: num(t.scale, R.scale.dflt, R.scale.min, R.scale.max),
+    opacity: num(t.opacity, R.opacity.dflt, 0, 1),
+    blend: str(t.blend, BLEND_IDS, 'normal'),
+    filter: filterCss(t.filter),
+    blur: num(t.blur, 0, R.blur.min, R.blur.max),
+    mortar: num(t.mortar, R.mortar.dflt, 0, 1),
+    grout: num(t.grout, R.grout.dflt, R.grout.min, R.grout.max),
+    tint: String(t.tint || ''),
+    tintAmount: num(t.tintAmount, 0, 0, 1),
+  }
+}
+
+/** Inline style for the wall layer (the pattern itself is drawn by the theme). */
+export function wallStyle(w) {
+  if (!w) return null
+  const s = { opacity: w.opacity }
+  if (w.pattern === 'image' && w.url) {
+    s.backgroundImage = `url(${w.url})`
+    s.backgroundSize = w.scale === 1 ? 'cover' : `${Math.round(w.scale * 100)}%`
+    s.backgroundPosition = 'center'
+  }
+  const filters = []
+  if (w.filter) filters.push(w.filter)
+  if (w.blur) filters.push(`blur(${w.blur}px)`)
+  if (filters.length) s.filter = filters.join(' ')
+  if (w.blend && w.blend !== 'normal') s.mixBlendMode = w.blend
   return s
 }
 

@@ -6924,6 +6924,69 @@ body:has(.sd2-root) .toast-wrap { z-index: 840; }
   position: relative;
 }
 
+/* ---- THE VENUE'S OWN WALL (lib/dishComposition.js -> styles/menuwall.css) ----
+   --edt-wall above is the theme's fallback: one fixed running-bond tile with no
+   controls at all, which is exactly the thing the venue could not change. Once
+   `tenant.menuWall.pattern` exists the theme paints its own surface into an
+   .edt-wall element instead, so the bond, the clay, the mortar, the joint width,
+   the age, the sheen and a photograph of the venue's real room all become
+   settings. Nothing here fires until that field exists, so a menu that is live
+   today keeps the wall it has.
+
+   isolation: the wall's blend mode must act on the canvas colour and on nothing
+   else. Without an isolated group it would reach out past the menu, and the same
+   wall would then look different depending on what the app painted underneath. */
+.edt-wrap[data-wall] {
+  background-image: none;
+  isolation: isolate;
+}
+.edt-stg[data-wall] { background-image: none; }
+/* The venue's wall is allowed to show more of itself than the fallback tile did
+   — that is the whole point of having bought one — so the plaster closes later. */
+.edt-wrap[data-wall] .edt-sec::before {
+  background:
+    radial-gradient(74% 40% at 20% 3%, var(--edt-lamp), transparent 76%),
+    linear-gradient(180deg, transparent 30%, var(--edt-bg) 68%);
+}
+
+/* THE PLASTER THE WORDS SIT ON, and the reason the paragraph above is safe.
+   A venue wall is not the theme's own quiet tile: it can be a whitewash, a
+   cracked stone, or a photograph of the room, and it can be lighter than the
+   dark canvas or darker than the light one. Leaning on the section's
+   top-to-bottom fade alone is not enough, because the fade is a function of
+   HEIGHT and text is not: a dish with no photo starts its paragraph a third of
+   the way down the screen, and on two columns the words sit beside the picture
+   in the vertical middle of the section where the fade has not closed. Measured
+   over a white wall on the dark canvas that leaves body copy at 2.8:1, which
+   fails.
+   So the text carries its own plaster with it. The panel is solid canvas colour
+   with a same-colour shadow feathering it outward, which is the one way to get a
+   soft-edged RECTANGLE — a radial gradient reaches its corners at over 1.0 of
+   its own radius and leaves exactly the corners of a paragraph uncovered. The
+   result is 100 per cent canvas under every glyph in every layout: body copy
+   stays at 7.3:1 dark and 7.1:1 light no matter what the venue paints behind it.
+   Where the canvas is already solid — the whole phone layout below the fade —
+   the panel is the same colour as what it sits on and cannot be seen at all. */
+   The feather is pushed DOWNWARD rather than spread evenly, because the thing
+   directly above a paragraph is the dish: a symmetric halo would rise far enough
+   to wash the bottom of the plate in canvas colour. Offset this way it dies out
+   inside the section's own gap, where the vignette is already melting the photo
+   into the plaster anyway. */
+.edt-wrap[data-wall] .edt-main::before,
+.edt-stg[data-wall] .edt-stg-body::before {
+  content: '';
+  position: absolute;
+  inset: -8px -14px -18px;
+  z-index: -1;
+  pointer-events: none;
+  border-radius: 18px;
+  background: var(--edt-bg);
+  box-shadow: 0 10px 26px 16px var(--edt-bg);
+}
+/* the stage scrolls its body UP past the wall's fade, so it needs the same
+   plaster and a positioning context to hang it from */
+.edt-stg[data-wall] .edt-stg-body { position: relative; }
+
 /* Sticky category bar. OPAQUE by design: the old half-transparent gradient let the
    dish description and the gold button read straight through the chips
    («التصنيف يغطيه المنتج»). The bar is the outer element and the chips scroll in an
@@ -7291,10 +7354,14 @@ body:has(.sd2-root) .toast-wrap { z-index: 840; }
      2. .edt-comp is position: relative with z-index AUTO for the same reason.
         Giving it a z-index would isolate the photo from its own backdrop.
      3. paint order inside the photo box is: glow, dish surface (.dp-behind,
-        z-index 0), backdrop, photo, effect, vignette, front garnish (z-index
-        3). Every layer therefore has a defined thing underneath it to blend
-        with, and the backdrop can never reach a line of text: it is confined to
-        the photo box, which is a different grid track from .edt-main. */
+        z-index 0), backdrop, the venue's BEHIND layers, photo, effect, its
+        FRONT layers, vignette, front garnish (z-index 3). Every layer therefore
+        has a defined thing underneath it to blend with, and none of them can
+        reach a line of text: they are confined to the photo box, which is a
+        different grid track from .edt-main.
+        The placed layers are SIBLINGS of .edt-comp, never ancestors, so their
+        own containment (styles/menuwall.css needs container-type: size to
+        resolve cqmin widths) cannot isolate the dish photo from its backdrop. */
 /* .edt-backdrop, not .edt-bg: --edt-bg is the theme's canvas colour token and
    two things a line apart should not read as the same thing. */
 .edt-backdrop {
