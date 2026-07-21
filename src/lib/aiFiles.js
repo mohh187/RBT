@@ -15,6 +15,21 @@ const MAX_PDF_PAGES = 15
 const PDF_PAGE_WIDTH = 1400 // px — legible enough for names/prices
 const PDF_PAGE_QUALITY = 0.82
 
+// THE HARD CEILING that matters: a Firebase callable request cannot exceed 10 MB,
+// and an oversized request fails BEFORE it ever reaches the function — so nothing
+// is logged server-side and the assistant simply never answers. That is exactly
+// how this presented. Page images are therefore budgeted, not merely counted:
+// 15 pages at full width could alone reach 8 MB of base64, leaving no room for
+// the system prompt, the tool declarations and the conversation.
+const MAX_INLINE_B64 = 3_600_000 // ~3.6 MB of base64 across ALL pages
+// Long documents get smaller pages so MORE of them fit inside that budget —
+// a legible whole menu beats three perfect pages and a silent failure.
+function widthForPages(n) {
+  if (n > 10) return 900
+  if (n > 6) return 1100
+  return PDF_PAGE_WIDTH
+}
+
 const readAsDataURL = (file) => new Promise((res, rej) => { const r = new FileReader(); r.onload = () => res(r.result); r.onerror = rej; r.readAsDataURL(file) })
 const readAsText = (file) => new Promise((res, rej) => { const r = new FileReader(); r.onload = () => res(r.result); r.onerror = rej; r.readAsText(file) })
 
@@ -32,11 +47,13 @@ async function pdfToParts(file) {
   const count = Math.min(total, MAX_PDF_PAGES)
   const pages = []
   const textParts = []
+  const targetWidth = widthForPages(count)
+  let budget = MAX_INLINE_B64
 
   for (let i = 1; i <= count; i++) {
     const page = await pdf.getPage(i)
     const base = page.getViewport({ scale: 1 })
-    const scale = Math.min(2, PDF_PAGE_WIDTH / base.width)
+    const scale = Math.min(2, targetWidth / base.width)
     const viewport = page.getViewport({ scale })
     const canvas = document.createElement('canvas')
     canvas.width = Math.round(viewport.width)
@@ -46,8 +63,19 @@ async function pdfToParts(file) {
     ctx.fillStyle = '#ffffff'
     ctx.fillRect(0, 0, canvas.width, canvas.height)
     await page.render({ canvasContext: ctx, viewport }).promise
-    const dataUrl = canvas.toDataURL('image/jpeg', PDF_PAGE_QUALITY)
-    pages.push({ mime: 'image/jpeg', data: String(dataUrl).split(',')[1] })
+    let b64 = String(canvas.toDataURL('image/jpeg', PDF_PAGE_QUALITY)).split(',')[1]
+    // Still too heavy for what remains of the budget? Re-encode this page harder
+    // before giving up on it — a slightly softer page still reads, a missing one
+    // does not.
+    if (b64.length > budget && budget > 120_000) {
+      b64 = String(canvas.toDataURL('image/jpeg', 0.6)).split(',')[1]
+    }
+    if (b64.length > budget) {
+      canvas.width = 0; canvas.height = 0
+      break // budget spent: stop cleanly and report it, never overflow the request
+    }
+    budget -= b64.length
+    pages.push({ mime: 'image/jpeg', data: b64 })
     try {
       const tc = await page.getTextContent()
       const line = tc.items.map((it) => it.str).join(' ').trim()
@@ -56,7 +84,9 @@ async function pdfToParts(file) {
     canvas.width = 0; canvas.height = 0 // free the bitmap
   }
   await pdf.destroy().catch(() => {})
-  return { pages, text: textParts.join('\n\n').slice(0, MAX_TEXT), truncated: total > count, total }
+  // `truncated` must reflect what actually shipped, not the page cap alone —
+  // the budget may have stopped us earlier than MAX_PDF_PAGES did.
+  return { pages, text: textParts.join('\n\n').slice(0, MAX_TEXT), truncated: pages.length < total, total }
 }
 
 export async function fileToAttachment(file) {

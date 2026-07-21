@@ -1,10 +1,11 @@
 // EditorialLayout — skin 'editorial' («المجلة الداكنة»): dark-magazine menu.
-// One dish per screen inside a vertical scroll-snap stage (hidden scrollbars),
-// bottom-anchored photo melting into the near-black canvas, amber ingredient
-// amounts, a huge low-opacity vertical category label, and a current/total
-// progress read-out (Latin digits). Item open = EditorialItemStage below:
-// a FLIP photo-expand into a full-screen dark stage (transform/opacity only)
-// with staggered content and the full variants/modifiers/qty ordering flow.
+// One dish per screen inside a vertical page-scroll stage (hidden scrollbars),
+// a bottom-anchored photo melting into the warm near-black canvas, amber
+// ingredient amounts, a huge low-opacity vertical category label, and a
+// current/total progress read-out (Latin digits). Item open = EditorialItemStage
+// below: a FLIP photo-expand into a full-screen dark stage (transform/opacity
+// only) with staggered content and the COMPLETE dish record — gallery, story,
+// facts, allergens, offer, stock, variants, modifiers and «يُطلب معه» pairings.
 import { lazy, Suspense, useEffect, useMemo, useRef, useState } from 'react'
 import { createPortal } from 'react-dom'
 import { useI18n, pickLang } from '../../lib/i18n.jsx'
@@ -13,7 +14,8 @@ import ItemFx from '../ItemFx.jsx'
 import { Stepper, Empty } from '../ui.jsx'
 import { Price } from '../Riyal.jsx'
 import { usePortalRoot } from '../PortalRoot.jsx'
-import { offerForItem, discountedPrice } from '../../lib/offers.js'
+import { hasStory } from '../DishStory.jsx'
+import { offerForItem, discountedPrice, itemOfferLabel } from '../../lib/offers.js'
 
 // Built by a parallel agent — lazy + catch so a missing module never crashes
 // the menu; it simply renders nothing until the file exists.
@@ -32,6 +34,25 @@ function AmberAmounts({ text }) {
 }
 
 const isOut = (it) => it.available === false || (it.trackStock && (it.stock || 0) <= 0)
+const lowStock = (it) => (it.trackStock && (it.stock || 0) > 0 && (it.stock || 0) <= 5 ? it.stock : 0)
+const paragraphsOf = (body) => String(body || '').split(/\n\s*\n|\n/).map((p) => p.trim()).filter(Boolean)
+
+// Dish photos in this theme are often WIDE transparent cutouts (a plate shot
+// panoramically, e.g. 2029x651). One fixed box letterboxes those into a thin
+// strip. Reading the natural ratio lets the CSS give each shape its own stage:
+// 'wide' bleeds to the screen edges, 'tall' is height-capped, 'std' fills.
+function useImgFit() {
+  const [fit, setFit] = useState('')
+  const nodeRef = useRef(null)
+  const read = (n) => {
+    if (!n || !n.naturalWidth || !n.naturalHeight) return
+    const r = n.naturalWidth / n.naturalHeight
+    setFit(r >= 1.9 ? 'wide' : r <= 0.86 ? 'tall' : 'std')
+  }
+  // ref callback too: a cached photo is already complete before onLoad fires
+  const bind = (n) => { nodeRef.current = n; read(n) }
+  return { fit, bind, nodeRef, onLoad: (e) => read(e.currentTarget) }
+}
 
 export default function EditorialLayout({ cats, itemsByCat, visibleItems, filtered, activeCat, onPickCat, currency, offers, stickyTop, onOpen }) {
   const { t, lang } = useI18n()
@@ -67,11 +88,15 @@ export default function EditorialLayout({ cats, itemsByCat, visibleItems, filter
 
   return (
     <div className="edt-wrap" style={{ '--edt-top': stickyTop }}>
-      <div className="edt-cats scroll-x">
-        <button type="button" className={`edt-chip ${activeCat === 'all' ? 'on' : ''}`} onClick={() => onPickCat('all')}>{t('all')}</button>
-        {(cats || []).map((c) => (
-          <button key={c.id} type="button" className={`edt-chip ${activeCat === c.id ? 'on' : ''}`} onClick={() => onPickCat(c.id)}>{pickLang(c, 'name', lang)}</button>
-        ))}
+      {/* opaque sticky bar (outer) + its own scroller (inner): dish content can
+          never bleed through the chips, and the fade lives outside the scroller */}
+      <div className="edt-catbar">
+        <div className="edt-cats scroll-x">
+          <button type="button" className={`edt-chip ${activeCat === 'all' ? 'on' : ''}`} onClick={() => onPickCat('all')}>{t('all')}</button>
+          {(cats || []).map((c) => (
+            <button key={c.id} type="button" className={`edt-chip ${activeCat === c.id ? 'on' : ''}`} onClick={() => onPickCat(c.id)}>{pickLang(c, 'name', lang)}</button>
+          ))}
+        </div>
       </div>
       {flat.length === 0 ? (
         <div className="edt-empty"><Empty icon="menu" title={lang === 'ar' ? 'لا توجد أصناف' : 'No items'} /></div>
@@ -91,7 +116,7 @@ export default function EditorialLayout({ cats, itemsByCat, visibleItems, filter
 
 function EdtSection({ it, idx, catLabel, currency, offers, lang, t, onOpen }) {
   const ref = useRef(null)
-  const imgRef = useRef(null)
+  const { fit, bind, nodeRef, onLoad } = useImgFit()
   const [inview, setInview] = useState(false)
   useEffect(() => {
     const el = ref.current
@@ -102,23 +127,27 @@ function EdtSection({ it, idx, catLabel, currency, offers, lang, t, onOpen }) {
   }, [])
 
   const out = isOut(it)
+  const low = lowStock(it)
   const offer = offerForItem(it, offers)
+  const offerTag = offer ? itemOfferLabel(it, offers, currency) : ''
   const price = offer ? discountedPrice(it.price, offer) : it.price
   const name = pickLang(it, 'name', lang)
   const desc = pickLang(it, 'desc', lang)
   const ings = it.ingredients || []
   // FLIP origin: the photo's on-screen rect, so the stage grows out of it.
-  const open = () => { if (!out) onOpen(it, imgRef.current ? imgRef.current.getBoundingClientRect() : null) }
+  const open = () => { if (!out) onOpen(it, nodeRef.current ? nodeRef.current.getBoundingClientRect() : null) }
 
   return (
-    <section ref={ref} data-idx={idx} className={`edt-sec ${inview ? 'in' : ''} ${out ? 'is-out' : ''}`}>
+    <section ref={ref} data-idx={idx} data-fit={fit || undefined} className={`edt-sec ${inview ? 'in' : ''} ${out ? 'is-out' : ''}`}>
       <span className="edt-side" aria-hidden="true">{catLabel}</span>
       <div className="edt-main">
         <h2 className="edt-name">{name}</h2>
         <div className="edt-price">
           <Price value={price} currency={currency} lang={lang} />
           {offer && <span className="edt-was"><Price value={it.price} currency={currency} lang={lang} /></span>}
-          {out && <span className="edt-out">{t('soldOut')}</span>}
+          {offerTag && <span className="edt-tag edt-tag-offer">{offerTag}</span>}
+          {out && <span className="edt-tag edt-tag-out">{t('soldOut')}</span>}
+          {!out && low ? <span className="edt-tag edt-tag-low">{lang === 'ar' ? `آخر ${low}` : `Only ${low} left`}</span> : null}
         </div>
         <div className="edt-facts">
           {it.calories ? <span className="edt-fact"><i>{lang === 'ar' ? 'سعرات' : 'Calories'}</i><b>{it.calories}</b></span> : null}
@@ -141,8 +170,11 @@ function EdtSection({ it, idx, catLabel, currency, offers, lang, t, onOpen }) {
           {lang === 'ar' ? 'اعرض الطبق' : 'View dish'} <Icon name={lang === 'ar' ? 'back' : 'next'} size={15} />
         </button>
       </div>
-      <div className="edt-photo">
-        {it.imageUrl ? <img ref={imgRef} src={it.imageUrl} alt="" /> : <span className="edt-noimg"><Icon name="coffee" size={64} /></span>}
+      <div className="edt-photo" data-fit={fit || undefined}>
+        <span className="edt-glow" aria-hidden="true" />
+        {it.imageUrl
+          ? <img ref={bind} onLoad={onLoad} src={it.imageUrl} alt="" decoding="async" />
+          : <span className="edt-noimg"><Icon name="coffee" size={64} /></span>}
         <span className="edt-vignette" aria-hidden="true" />
         <button type="button" className="edt-photo-open" onClick={open} aria-label={name} tabIndex={-1} disabled={out} />
         <ItemFx kind={it.effect} />
@@ -157,22 +189,53 @@ function EdtSection({ it, idx, catLabel, currency, offers, lang, t, onOpen }) {
 // slides up staggered; close reverses. prefers-reduced-motion => crossfade.
 // Ordering is complete here: variants, modifier groups (min/max/required),
 // qty and add — same contract as ItemSheet's onAdd(variant, mods, qty).
-export function EditorialItemStage({ item, currency, onClose, onAdd, originRect = null }) {
+// allItems + onQuickAdd are OPTIONAL: with them the venue's curated «يُطلب معه»
+// pairings become tappable; without them the stage still renders everything
+// else, so an un-patched caller degrades instead of crashing.
+export function EditorialItemStage({ item, currency, onClose, onAdd, originRect = null, allItems = [], offers = null, onQuickAdd = null }) {
   const { t, lang } = useI18n()
+  const ar = lang === 'ar'
   const portalRoot = usePortalRoot()
   const heroRef = useRef(null)
   const closingRef = useRef(false)
+  const addedTimer = useRef(0)
+  const { fit, bind, onLoad } = useImgFit()
   const [closing, setClosing] = useState(false)
   const [err, setErr] = useState('')
+  const [added, setAdded] = useState('')
+  const [storyOpen, setStoryOpen] = useState(false)
   const reduced = prefersReduced()
   const variants = item.variants || []
   const groups = item.modifierGroups || []
   const [variant, setVariant] = useState(variants[0] || null)
   const [qty, setQty] = useState(1)
+  const [imgIdx, setImgIdx] = useState(0)
   const [selected, setSelected] = useState(() => groups.map(() => []))
   const name = pickLang(item, 'name', lang)
   const desc = pickLang(item, 'desc', lang)
   const ings = item.ingredients || []
+  const out = isOut(item)
+  const low = lowStock(item)
+  const offer = offerForItem(item, offers)
+  const offerTag = offer ? itemOfferLabel(item, offers, currency) : ''
+  const story = hasStory(item) ? item.story : null
+  const storyParas = story ? paragraphsOf(story.body) : []
+  // Per-item photo size for the detail view (0.6–1.8), same field the default
+  // sheet honours — the venue's own escape hatch for an awkward cutout.
+  const imgScale = Math.min(1.8, Math.max(0.6, Number(item.imageScale) || 1))
+  // primary photo first, then the extra gallery shots (deduped)
+  const gallery = useMemo(
+    () => [...new Set([item.imageUrl, ...(item.images || [])].filter(Boolean))],
+    [item.imageUrl, item.images],
+  )
+  const heroSrc = gallery[Math.min(imgIdx, Math.max(0, gallery.length - 1))] || ''
+  // Venue-curated «يُطلب معه»: item.pairings = [itemId, …] resolved against the
+  // live menu (same rule the default/spotlight views use).
+  const pairs = useMemo(() => {
+    const ids = Array.isArray(item.pairings) ? item.pairings : []
+    if (!ids.length || !allItems.length) return []
+    return ids.map((id) => allItems.find((x) => x.id === id)).filter((x) => x && x.id !== item.id).slice(0, 3)
+  }, [item.pairings, item.id, allItems])
 
   // FLIP open: place the hero at the origin rect via transform, then release.
   useEffect(() => {
@@ -212,6 +275,8 @@ export function EditorialItemStage({ item, currency, onClose, onAdd, originRect 
     return () => { document.documentElement.style.overflow = prev; window.removeEventListener('keydown', onKey) }
   }, []) // eslint-disable-line react-hooks/exhaustive-deps
 
+  useEffect(() => () => clearTimeout(addedTimer.current), [])
+
   // Same selection rules as ItemSheet (max 1 = radio; max N caps; min/required gate).
   const toggle = (gi, opt) => {
     setErr('')
@@ -230,14 +295,27 @@ export function EditorialItemStage({ item, currency, onClose, onAdd, originRect 
   }
   const flatMods = groups.flatMap((g, gi) => (selected[gi] || []).map((o) => ({ nameAr: o.nameAr, nameEn: o.nameEn, price: Number(o.price) || 0, recipe: o.recipe || [] })))
   const modSum = flatMods.reduce((s, m) => s + m.price, 0)
-  const total = ((variant ? variant.price : item.price || 0) + modSum) * qty
+  const base = (variant ? variant.price : item.price) || 0
+  // Offer pricing is shown the same way the item cards and the spotlight view
+  // show it; the cart applies the matching discount at checkout.
+  const unit = (offer ? discountedPrice(base, offer) : base) + modSum
+  const total = unit * qty
+  const wasTotal = (base + modSum) * qty
   const missing = groups.find((g, gi) => {
     const need = Math.max(Number(g.min) || 0, g.required ? 1 : 0)
     return need > 0 && (selected[gi] || []).length < need
   })
   const add = () => {
-    if (missing) { setErr(`${lang === 'ar' ? 'اختر من' : 'Choose from'}: ${pickLang(missing, 'name', lang)}`); return }
+    if (out) return
+    if (missing) { setErr(`${ar ? 'اختر من' : 'Choose from'}: ${pickLang(missing, 'name', lang)}`); return }
     onAdd(variant, flatMods, qty)
+  }
+  const quickAdd = (p) => {
+    if (!onQuickAdd) return
+    onQuickAdd(p)
+    setAdded(p.id)
+    clearTimeout(addedTimer.current)
+    addedTimer.current = setTimeout(() => setAdded(''), 1500)
   }
 
   if (!portalRoot) return null
@@ -245,29 +323,73 @@ export function EditorialItemStage({ item, currency, onClose, onAdd, originRect 
     <div className={`edt-stg ${closing ? 'closing' : ''}`} role="dialog" aria-modal="true" aria-label={name}>
       <button type="button" className="edt-stg-x" onClick={close} aria-label={t('close')}><Icon name="close" size={20} /></button>
       <div className="edt-stg-scroll">
-        <div className="edt-stg-hero" ref={heroRef}>
-          {item.imageUrl ? <img src={item.imageUrl} alt="" /> : <span className="edt-noimg"><Icon name="coffee" size={72} /></span>}
-          <span className="edt-vignette" aria-hidden="true" />
-          <ItemFx kind={item.effect} />
-          {item.hotspots?.length ? <Suspense fallback={null}><DishHotspots hotspots={item.hotspots} /></Suspense> : null}
+        <div className="edt-stg-media">
+          <div className="edt-stg-hero" ref={heroRef} data-fit={fit || undefined} style={{ '--edt-img-scale': imgScale }}>
+            <span className="edt-glow" aria-hidden="true" />
+            {heroSrc
+              ? <img ref={bind} onLoad={onLoad} src={heroSrc} alt="" decoding="async" />
+              : <span className="edt-noimg"><Icon name="coffee" size={72} /></span>}
+            <ItemFx kind={item.effect} />
+            {item.hotspots?.length ? <Suspense fallback={null}><DishHotspots hotspots={item.hotspots} /></Suspense> : null}
+          </div>
+          {gallery.length > 1 && (
+            <div className="edt-thumbs scroll-x">
+              {gallery.map((src, i) => (
+                <button key={src} type="button" className={`edt-thumb ${i === imgIdx ? 'on' : ''}`}
+                  onClick={() => setImgIdx(i)} aria-label={`${ar ? 'صورة' : 'Photo'} ${i + 1}`}>
+                  <img src={src} alt="" loading="lazy" decoding="async" />
+                </button>
+              ))}
+            </div>
+          )}
         </div>
         <div className="edt-stg-body">
+          {(offerTag || out || low || item.featured) && (
+            <div className="edt-stg-tags">
+              {offerTag && <span className="edt-tag edt-tag-offer">{offerTag}</span>}
+              {out && <span className="edt-tag edt-tag-out">{t('soldOut')}</span>}
+              {!out && low ? <span className="edt-tag edt-tag-low">{ar ? `آخر ${low}` : `Only ${low} left`}</span> : null}
+              {item.featured && <span className="edt-tag edt-tag-star"><Icon name="star" size={11} /> {ar ? 'مميّز' : 'Featured'}</span>}
+            </div>
+          )}
           <h2 className="edt-stg-name">{name}</h2>
+          {/* tracks the selected size, so the headline price never contradicts the bar */}
+          <div className="edt-stg-price">
+            <Price value={offer ? discountedPrice(base, offer) : base} currency={currency} lang={lang} />
+            {offer && <span className="edt-was"><Price value={base} currency={currency} lang={lang} /></span>}
+          </div>
           <div className="edt-facts">
-            {item.calories ? <span className="edt-fact"><i>{lang === 'ar' ? 'سعرات' : 'Calories'}</i><b>{item.calories}</b></span> : null}
-            {item.prepTime ? <span className="edt-fact"><i>{lang === 'ar' ? 'التحضير' : 'Prep'}</i><b>{item.prepTime} {t('minutesShort')}</b></span> : null}
-            {item.serves ? <span className="edt-fact"><i>{lang === 'ar' ? 'يكفي' : 'Serves'}</i><b>{item.serves}</b></span> : null}
-            {item.rating ? <span className="edt-fact"><i>{lang === 'ar' ? 'التقييم' : 'Rating'}</i><b>{item.rating}</b></span> : null}
+            {item.calories ? <span className="edt-fact"><i>{ar ? 'سعرات' : 'Calories'}</i><b>{item.calories}</b></span> : null}
+            {item.prepTime ? <span className="edt-fact"><i>{ar ? 'التحضير' : 'Prep'}</i><b>{item.prepTime} {t('minutesShort')}</b></span> : null}
+            {item.serves ? <span className="edt-fact"><i>{ar ? 'يكفي' : 'Serves'}</i><b>{item.serves}</b></span> : null}
+            {item.rating ? <span className="edt-fact"><i>{ar ? 'التقييم' : 'Rating'}</i><b>{item.rating}{item.reviewsCount ? ` (${item.reviewsCount})` : ''}</b></span> : null}
           </div>
           {desc && <p className="edt-stg-desc">{desc}</p>}
+          {item.allergens && (
+            <p className="edt-note"><Icon name="warning" size={14} /> <span>{ar ? 'قد يحتوي: ' : 'May contain: '}{item.allergens}</span></p>
+          )}
           {ings.length > 0 && (
             <div className="edt-ing edt-stg-ing">
-              <span className="edt-ing-title">{lang === 'ar' ? 'المكونات' : 'Ingredients'}</span>
+              <span className="edt-ing-title">{ar ? 'المكونات' : 'Ingredients'}</span>
               <ul>
                 {ings.map((g, i) => (
                   <li key={i} style={{ animationDelay: `${(0.3 + i * 0.05).toFixed(2)}s` }}><AmberAmounts text={pickLang(g, 'name', lang)} /></li>
                 ))}
               </ul>
+            </div>
+          )}
+          {story && (
+            <div className="edt-story">
+              <span className="edt-ing-title">{ar ? 'قصة الطبق' : 'The dish story'}</span>
+              {story.title && <h3 className="edt-story-t">{story.title}</h3>}
+              {(storyOpen ? storyParas : storyParas.slice(0, 1)).map((p, i) => <p key={i} className="edt-story-p">{p}</p>)}
+              {storyParas.length > 1 && (
+                <button type="button" className="edt-more" onClick={() => setStoryOpen((v) => !v)}>
+                  {storyOpen ? (ar ? 'إخفاء' : 'Show less') : (ar ? 'اقرأ المزيد' : 'Read more')}
+                </button>
+              )}
+              {story.sourceLine && <p className="edt-story-line"><Icon name="pin" size={13} /> <span>{story.sourceLine}</span></p>}
+              {story.chefLine && <p className="edt-story-line"><Icon name="kitchen" size={13} /> <span>{story.chefLine}</span></p>}
             </div>
           )}
           {variants.length > 0 && (
@@ -300,14 +422,48 @@ export function EditorialItemStage({ item, currency, onClose, onAdd, originRect 
               </div>
             </div>
           ))}
+          {pairs.length > 0 && (
+            <div className="edt-stg-field">
+              <span className="edt-stg-lbl">{ar ? 'يُطلب معه' : 'Goes well with'}</span>
+              <div className="edt-pair-row">
+                {pairs.map((p) => {
+                  const pOut = isOut(p)
+                  const pOffer = offerForItem(p, offers)
+                  const tappable = !!onQuickAdd && !pOut
+                  const Tag = tappable ? 'button' : 'div'
+                  const done = added === p.id
+                  return (
+                    <Tag key={p.id} className={`edt-pair ${done ? 'done' : ''} ${pOut ? 'is-out' : ''}`}
+                      {...(tappable ? { type: 'button', onClick: () => quickAdd(p), 'aria-label': `${t('addToCart')} ${pickLang(p, 'name', lang)}` } : {})}>
+                      <span className="edt-pair-media">
+                        {p.imageUrl ? <img src={p.imageUrl} alt="" loading="lazy" decoding="async" /> : <Icon name="coffee" size={18} />}
+                      </span>
+                      <span className="edt-pair-txt">
+                        <b>{pickLang(p, 'name', lang)}</b>
+                        <i>{pOut ? t('soldOut') : <Price value={pOffer ? discountedPrice(p.price, pOffer) : p.price} currency={currency} lang={lang} />}</i>
+                      </span>
+                      {tappable && (
+                        <span className="edt-pair-add" aria-hidden="true"><Icon name={done ? 'check' : 'add'} size={14} /></span>
+                      )}
+                    </Tag>
+                  )
+                })}
+              </div>
+            </div>
+          )}
           {err && <p className="edt-stg-err" role="alert">{err}</p>}
         </div>
       </div>
       {onAdd && (
         <div className="edt-stg-bar">
-          <Stepper value={qty} onChange={setQty} min={1} max={99} />
-          <div className="edt-stg-total"><Price value={total} currency={currency} lang={lang} /></div>
-          <button type="button" className="edt-stg-add" onClick={add}><Icon name="add" size={18} /> {t('addToCart')}</button>
+          <Stepper value={qty} onChange={setQty} min={1} max={item.trackStock && item.stock > 0 ? Math.min(99, item.stock) : 99} />
+          <div className="edt-stg-total">
+            <Price value={total} currency={currency} lang={lang} />
+            {offer && <span className="edt-was"><Price value={wasTotal} currency={currency} lang={lang} /></span>}
+          </div>
+          <button type="button" className="edt-stg-add" onClick={add} disabled={out}>
+            <Icon name={out ? 'no' : 'add'} size={18} /> {out ? t('soldOut') : t('addToCart')}
+          </button>
         </div>
       )}
     </div>,

@@ -6668,64 +6668,103 @@ body:has(.sd2-root) .toast-wrap { z-index: 840; }
 /* ==== themes-editorial-ocean v1 ==== */
 
 /* ============ EDITORIAL («المجلة الداكنة») — dark magazine, one dish/screen ============ */
-.edt-wrap {
-  --edt-bg: #0d0d0f;
+/* Warm copper/amber family (venue brand #a35f2b, editorial accent #f5b942) over a
+   warm near-black canvas. Contrast measured against --edt-bg: amber 11:1, muted
+   body text 7.2:1, near-black ink on the amber fills 10.5:1, control edges 3.5:1.
+   The item stage portals to <body> — OUTSIDE .edt-wrap — so the SAME tokens are
+   declared on .edt-stg. Without that every var() below resolved to nothing inside
+   the stage and the amber "add to cart" button rendered transparent (dark on dark). */
+.edt-wrap,
+.edt-stg {
+  --edt-bg: #100c0a;
+  --edt-bg-2: #191310;
   --edt-amber: #f5b942;
-  --edt-ink: #f4f2ee;
-  --edt-mut: #9a978f;
+  --edt-amber-soft: #ffdc9a;
+  --edt-copper: #c9773a;
+  --edt-ink: #f7f2e9;
+  --edt-mut: #a99c8c;
+  --edt-line: rgba(247, 242, 233, 0.14);
+  --edt-edge: rgba(247, 242, 233, 0.40);
+  --edt-on-amber: #1a1206;
+  --edt-alert: #ff8d70;
+}
+.edt-wrap {
   background: var(--edt-bg);
   color: var(--edt-ink);
   min-height: 100dvh;
   position: relative;
 }
-.edt-cats {
+
+/* Sticky category bar. OPAQUE by design: the old half-transparent gradient let the
+   dish description and the gold button read straight through the chips
+   («التصنيف يغطيه المنتج»). The bar is the outer element and the chips scroll in an
+   inner track, so the fade under the bar is not clipped by the scroller.
+   z-index 12 clears every dish layer and still sits below the app bar (100). */
+.edt-catbar {
   position: sticky;
-  top: var(--edt-top, 0);
-  z-index: 6;
-  display: flex;
-  gap: 8px;
-  padding: 10px 14px;
-  background: linear-gradient(180deg, var(--edt-bg) 62%, transparent);
+  top: var(--edt-top, 0px);
+  z-index: 12;
+  background: var(--edt-bg);
+  border-bottom: 1px solid var(--edt-line);
+  box-shadow: 0 14px 18px -10px var(--edt-bg);
 }
+.edt-cats {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 9px 14px 10px;
+  max-width: 1240px;
+  margin-inline: auto;
+  scrollbar-width: none;
+  -ms-overflow-style: none;
+}
+.edt-cats::-webkit-scrollbar { width: 0; height: 0; }
 .edt-chip {
   flex: none;
-  padding: 6px 15px;
+  min-height: 34px;
+  padding: 8px 16px;
   border-radius: 999px;
-  border: 1px solid rgba(255, 255, 255, 0.16);
-  background: transparent;
+  border: 1px solid var(--edt-edge);
+  background: rgba(247, 242, 233, 0.06);
   color: var(--edt-mut);
   font-size: 13px;
   font-weight: 700;
+  line-height: 1;
+  white-space: nowrap;
   cursor: pointer;
   transition: color .2s, border-color .2s, background .2s;
 }
+.edt-chip:hover { color: var(--edt-ink); border-color: var(--edt-amber); }
 .edt-chip.on {
-  color: var(--edt-bg);
+  color: var(--edt-on-amber);
   background: var(--edt-amber);
   border-color: var(--edt-amber);
 }
 .edt-empty { padding: 20vh 20px; color: var(--edt-mut); }
 
-.edt-stage {
-  height: calc(100dvh - var(--edt-top, 0px));
-  overflow-y: auto;
-  scroll-snap-type: y mandatory;
-  scrollbar-width: none;
-  -ms-overflow-style: none;
-}
-.edt-stage::-webkit-scrollbar { width: 0; height: 0; }
+/* Dishes ride the PAGE scroll — an inner full-height snap scroller trapped the
+   scroll under the hero, so there is no inner overflow container and no snap. */
+.edt-stage { position: relative; }
 
 .edt-sec {
+  --edt-pad: 20px;
   position: relative;
-  min-height: calc(100dvh - var(--edt-top, 0px));
-  scroll-snap-align: start;
-  scroll-snap-stop: always;
+  z-index: 0;
+  isolation: isolate; /* nothing inside a dish can ever paint over the chip bar */
+  min-height: 92svh;
   display: grid;
   grid-template-rows: 1fr auto;
+  gap: 14px;
   overflow: hidden;
-  padding: 22px 20px 0;
+  padding: 22px var(--edt-pad) 0;
+  scroll-margin-top: calc(var(--edt-top, 0px) + 62px);
 }
 .edt-sec.is-out { opacity: .82; }
+/* A panoramic cutout is only a shallow band at the foot of the screen, so the
+   section is shortened and the text optically centred — otherwise the dish sits
+   under a large empty gap. */
+.edt-sec[data-fit='wide'] { min-height: 78svh; }
+.edt-sec[data-fit='wide'] .edt-main { align-self: center; }
 
 /* huge low-opacity vertical category label hugging the side edge */
 .edt-side {
@@ -6738,7 +6777,7 @@ body:has(.sd2-root) .toast-wrap { z-index: 840; }
   font-weight: 900;
   letter-spacing: -0.03em;
   line-height: 1;
-  color: rgba(255, 255, 255, 0.05);
+  color: rgba(247, 242, 233, 0.05);
   pointer-events: none;
   user-select: none;
   white-space: nowrap;
@@ -6759,25 +6798,37 @@ body:has(.sd2-root) .toast-wrap { z-index: 840; }
   text-wrap: balance;
 }
 .edt-price {
-  display: inline-flex;
-  align-items: baseline;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
   gap: 10px;
   font-size: 20px;
   font-weight: 800;
   color: var(--edt-amber);
   margin-bottom: 14px;
 }
-.edt-was { font-size: 14px; color: var(--edt-mut); text-decoration: line-through; }
-.edt-out {
-  font-size: 12px; font-weight: 800; color: #ff7a7a;
-  border: 1px solid rgba(255, 122, 122, .5); border-radius: 6px; padding: 1px 8px;
+.edt-was { font-size: 14px; font-weight: 700; color: var(--edt-mut); text-decoration: line-through; }
+.edt-tag {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 4px 9px;
+  border-radius: 999px;
+  font-size: 11px;
+  font-weight: 800;
+  line-height: 1;
+  white-space: nowrap;
 }
+.edt-tag-offer { background: var(--edt-amber); color: var(--edt-on-amber); }
+.edt-tag-out { color: var(--edt-alert); border: 1px solid rgba(255, 141, 112, .55); }
+.edt-tag-low { color: var(--edt-amber-soft); border: 1px solid rgba(255, 220, 154, .45); }
+.edt-tag-star { color: var(--edt-copper); border: 1px solid rgba(201, 119, 58, .6); }
 .edt-facts { display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 14px; }
 .edt-fact {
   display: inline-flex; flex-direction: column; gap: 1px;
   padding: 5px 12px; border-radius: 10px;
-  background: rgba(255, 255, 255, 0.05);
-  border: 1px solid rgba(255, 255, 255, 0.07);
+  background: rgba(247, 242, 233, 0.05);
+  border: 1px solid var(--edt-line);
 }
 .edt-fact i { font-style: normal; font-size: 10px; color: var(--edt-mut); letter-spacing: .04em; }
 .edt-fact b { font-size: 14px; font-weight: 800; }
@@ -6788,7 +6839,7 @@ body:has(.sd2-root) .toast-wrap { z-index: 840; }
 }
 .edt-ing ul { list-style: none; margin: 0; padding: 0; display: grid; gap: 3px; }
 .edt-ing li {
-  font-size: 14px; line-height: 1.7; color: #d8d5cf;
+  font-size: 14px; line-height: 1.7; color: #ddd6ca;
   opacity: 0; transform: translateY(6px);
   transition: opacity .5s ease, transform .5s ease;
 }
@@ -6797,54 +6848,118 @@ body:has(.sd2-root) .toast-wrap { z-index: 840; }
 .edt-desc { font-size: 14px; line-height: 1.75; color: var(--edt-mut); max-width: 60ch; margin: 0 0 16px; }
 .edt-open-btn {
   display: inline-flex; align-items: center; gap: 7px;
-  padding: 11px 22px; border-radius: 999px;
-  background: var(--edt-amber); color: #1a1206;
+  min-height: 44px; padding: 11px 22px; border-radius: 999px;
+  background: var(--edt-amber); color: var(--edt-on-amber);
   font-weight: 800; font-size: 14px; border: none; cursor: pointer;
   transition: transform .15s ease, box-shadow .2s ease;
 }
-.edt-open-btn:hover { transform: translateY(-1px); box-shadow: 0 8px 24px rgba(245, 185, 66, .28); }
+.edt-open-btn:hover { transform: translateY(-1px); box-shadow: 0 8px 24px rgba(245, 185, 66, .24); }
 .edt-open-btn:active { transform: scale(.97); }
 .edt-open-btn:disabled { opacity: .5; cursor: default; }
 
-/* bottom-anchored huge photo melting into the canvas */
+/* Bottom-anchored photo melting into the canvas. The box HUGS the picture instead
+   of letterboxing it into one fixed frame: cutouts here range from panoramic
+   plates (ratio above 3) to tall glasses, and EditorialLayout tags each one
+   data-fit="wide|std|tall" from its natural size. */
 .edt-photo {
   position: relative;
   align-self: end;
   width: 100%;
-  height: 46dvh;
-  min-height: 240px;
+  min-height: 0;
+  display: flex;
+  align-items: flex-end;
+  justify-content: center;
 }
 .edt-photo img {
-  position: absolute; inset: 0;
-  width: 100%; height: 100%;
+  position: relative; /* paints above the ground glow, below the vignette */
+  display: block;
+  width: 100%;
+  height: auto;
+  max-height: min(46dvh, 430px);
   object-fit: contain;
   object-position: bottom center;
 }
-.edt-noimg {
-  position: absolute; inset: 0; display: grid; place-items: center;
-  color: rgba(255, 255, 255, 0.12);
+/* panoramic cutout: run it out to the screen edges so the dish reads big */
+.edt-photo[data-fit='wide'] {
+  margin-inline: calc(-1 * var(--edt-pad));
+  width: calc(100% + var(--edt-pad) * 2);
 }
+.edt-photo[data-fit='wide'] img { max-height: min(34dvh, 300px); }
+/* tall cutout: cap the height and let the dark canvas take the side margins */
+.edt-photo[data-fit='tall'] img { max-height: min(52dvh, 470px); }
+/* in-flow (not absolute): the photo box now hugs its content, so an absolutely
+   positioned placeholder would collapse the box to zero height */
+.edt-noimg {
+  position: relative;
+  display: grid; place-items: center;
+  width: 100%; min-height: min(30dvh, 240px);
+  color: rgba(247, 242, 233, 0.12);
+}
+/* warm ground light so a transparent cutout does not float in the void */
+.edt-glow {
+  position: absolute;
+  inset-inline: 4%;
+  bottom: -3%;
+  height: 62%;
+  pointer-events: none;
+  background: radial-gradient(58% 100% at 50% 100%, rgba(201, 119, 58, .20), transparent 72%);
+}
+/* Melt only the last sliver into the canvas. The old radial vignette assumed a
+   tall frame with the dish parked at the bottom; now that the box hugs the
+   picture, that shape reached full canvas colour at the corners and swallowed
+   the ends of a wide plate. */
 .edt-vignette {
   position: absolute; inset: 0; pointer-events: none;
-  background: radial-gradient(120% 80% at 50% 100%, transparent 40%, var(--edt-bg) 92%);
+  background: linear-gradient(180deg, transparent 86%, var(--edt-bg) 100%);
 }
 .edt-photo-open { position: absolute; inset: 0; background: none; border: none; cursor: pointer; }
 .edt-photo-open:disabled { cursor: default; }
 
 .edt-progress {
-  position: fixed; inset-block-end: 14px; inset-inline-start: 50%;
+  position: fixed;
+  inset-block-end: calc(var(--bottomnav-h, 0px) + var(--safe-b, 0px) + 12px);
+  inset-inline-start: 50%;
   transform: translateX(-50%);
-  z-index: 6; direction: ltr;
+  z-index: 11; direction: ltr;
   font-size: 12px; font-weight: 800; letter-spacing: .1em;
   color: var(--edt-mut);
-  background: rgba(13, 13, 15, .7); backdrop-filter: blur(6px);
-  padding: 4px 12px; border-radius: 999px; border: 1px solid rgba(255, 255, 255, .08);
+  background: rgba(16, 12, 10, .82); backdrop-filter: blur(6px);
+  padding: 4px 12px; border-radius: 999px; border: 1px solid var(--edt-line);
+}
+
+/* Tablet and desktop: two columns inside a centred measure. The single-column
+   phone layout left the text stranded against the far edge of a 1920 screen. */
+@media (min-width: 900px) {
+  .edt-cats { padding-inline: clamp(28px, 5vw, 72px); }
+  .edt-sec,
+  .edt-sec[data-fit='wide'] { min-height: min(88svh, 900px); }
+  .edt-sec {
+    --edt-pad: clamp(28px, 5vw, 72px);
+    max-width: 1240px;
+    margin-inline: auto;
+    grid-template-columns: minmax(0, 1fr) minmax(0, 1.05fr);
+    grid-template-rows: auto;
+    align-items: center;
+    gap: clamp(28px, 4vw, 60px);
+    padding-block: 48px;
+  }
+  .edt-main { align-self: center; }
+  .edt-photo { align-self: center; align-items: center; }
+  .edt-photo,
+  .edt-photo[data-fit='wide'] { margin-inline: 0; width: 100%; }
+  .edt-photo img,
+  .edt-photo[data-fit='wide'] img,
+  .edt-photo[data-fit='tall'] img { max-height: min(60svh, 560px); object-position: center; }
+  .edt-side { font-size: clamp(56px, 6vw, 104px); top: 8%; }
 }
 
 /* ---- Editorial full-screen item stage (FLIP) ---- */
 .edt-stg {
-  position: fixed; inset: 0; z-index: 60;
-  background: #0d0d0f; color: #f4f2ee;
+  position: fixed; inset: 0;
+  /* modal level: at z-index 60 the venue's bottom nav (100) and bell FAB (120)
+     painted straight over this stage and its add-to-cart bar */
+  z-index: var(--z-sheet, 310);
+  background: var(--edt-bg, #100c0a); color: var(--edt-ink, #f7f2e9);
   display: flex; flex-direction: column;
   animation: edtStgIn .25s ease-out;
 }
@@ -6853,51 +6968,212 @@ body:has(.sd2-root) .toast-wrap { z-index: 840; }
 @keyframes edtStgOut { to { opacity: 0; } }
 .edt-stg-x {
   position: absolute; top: 12px; inset-inline-start: 12px; z-index: 3;
-  width: 40px; height: 40px; border-radius: 50%;
-  background: rgba(0, 0, 0, .45); color: #fff; border: 1px solid rgba(255, 255, 255, .14);
+  width: 44px; height: 44px; border-radius: 50%;
+  background: rgba(247, 242, 233, .10); color: var(--edt-ink, #f7f2e9);
+  border: 1px solid var(--edt-edge, rgba(247, 242, 233, .4));
   display: grid; place-items: center; cursor: pointer;
+  backdrop-filter: blur(6px);
 }
-.edt-stg-scroll { flex: 1; overflow-y: auto; scrollbar-width: none; }
-.edt-stg-scroll::-webkit-scrollbar { width: 0; }
+.edt-stg-x:hover { background: rgba(247, 242, 233, .18); }
+.edt-stg-scroll { flex: 1; overflow-y: auto; scrollbar-width: none; -ms-overflow-style: none; }
+.edt-stg-scroll::-webkit-scrollbar { width: 0; height: 0; }
+.edt-stg-media { width: 100%; }
+/* The whole dish, centred, never cropped: object-fit was 'cover' inside a fixed
+   52dvh frame, which sliced the top and bottom off a wide plate. */
 .edt-stg-hero {
-  position: relative; width: 100%; height: 52dvh; min-height: 280px;
+  position: relative;
+  width: 100%;
+  min-height: min(30dvh, 260px);
+  display: flex; align-items: center; justify-content: center;
+  padding: clamp(56px, 14vw, 76px) clamp(18px, 6vw, 40px) 0;
   will-change: transform;
 }
-.edt-stg-hero img { width: 100%; height: 100%; object-fit: cover; object-position: center; }
-.edt-stg-body { padding: 18px 22px 20px; max-width: 720px; margin-inline: auto; }
-.edt-stg-name { font-size: clamp(24px, 6vw, 38px); font-weight: 900; letter-spacing: -.02em; margin: 0 0 12px; }
-.edt-stg-desc { font-size: 15px; line-height: 1.8; color: #b9b6af; margin: 0 0 16px; }
+.edt-stg-hero img {
+  position: relative; /* paints above the ground glow */
+  display: block;
+  width: 100%; height: auto;
+  max-height: calc(min(42dvh, 420px) * var(--edt-img-scale, 1));
+  object-fit: contain;
+  object-position: center;
+}
+.edt-stg-hero[data-fit='wide'] { min-height: min(26dvh, 220px); padding-inline: 0; }
+.edt-stg-hero[data-fit='tall'] img { max-height: calc(min(50dvh, 500px) * var(--edt-img-scale, 1)); }
+.edt-stg-hero .edt-glow {
+  inset: 6% 4% 8%;
+  height: auto;
+  background: radial-gradient(56% 62% at 50% 56%, rgba(201, 119, 58, .18), transparent 72%);
+}
+.edt-thumbs {
+  display: flex; gap: 8px;
+  width: fit-content; max-width: 100%;
+  margin-inline: auto; padding: 12px 18px 0;
+  scrollbar-width: none; -ms-overflow-style: none;
+}
+.edt-thumbs::-webkit-scrollbar { width: 0; height: 0; }
+.edt-thumb {
+  flex: none; width: 54px; height: 54px; padding: 0;
+  border-radius: 12px; overflow: hidden; cursor: pointer;
+  border: 1px solid var(--edt-line, rgba(247, 242, 233, .14));
+  background: var(--edt-bg-2, #191310);
+}
+.edt-thumb.on { border-color: var(--edt-amber, #f5b942); }
+.edt-thumb img { width: 100%; height: 100%; object-fit: cover; display: block; }
+
+.edt-stg-body { padding: 18px 22px 26px; max-width: 720px; margin-inline: auto; }
+.edt-stg-tags { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 10px; }
+.edt-stg-name { font-size: clamp(24px, 6vw, 38px); font-weight: 900; letter-spacing: -.02em; margin: 0 0 8px; text-wrap: balance; }
+.edt-stg-price {
+  display: flex; flex-wrap: wrap; align-items: baseline; gap: 10px;
+  font-size: 20px; font-weight: 800; color: var(--edt-amber, #f5b942); margin-bottom: 14px;
+}
+.edt-stg-desc { font-size: 15px; line-height: 1.85; color: var(--edt-mut, #a99c8c); max-width: 62ch; margin: 0 0 16px; }
+.edt-note {
+  display: flex; align-items: flex-start; gap: 8px;
+  margin: 0 0 16px; padding: 9px 12px; border-radius: 12px;
+  border: 1px solid rgba(255, 220, 154, .28);
+  background: rgba(255, 220, 154, .07);
+  color: var(--edt-amber-soft, #ffdc9a);
+  font-size: 13px; line-height: 1.6;
+}
 .edt-stg-ing li { animation: edtRise .5s ease both; opacity: 1; transform: none; }
 @keyframes edtRise { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: none; } }
-.edt-stg-field { margin-bottom: 16px; }
-.edt-stg-lbl { display: block; font-size: 13px; font-weight: 800; margin-bottom: 8px; }
-.edt-req { color: var(--edt-amber); }
-.edt-opt-note { color: #8a8880; font-weight: 500; font-size: 12px; }
+.edt-story {
+  margin: 0 0 18px; padding: 14px 16px;
+  border-radius: 14px;
+  border: 1px solid var(--edt-line, rgba(247, 242, 233, .14));
+  background: var(--edt-bg-2, #191310);
+}
+.edt-story-t { margin: 4px 0 8px; font-size: 17px; font-weight: 800; letter-spacing: -.01em; }
+.edt-story-p { margin: 0 0 8px; font-size: 14px; line-height: 1.9; color: var(--edt-mut, #a99c8c); }
+.edt-story-line {
+  display: flex; align-items: center; gap: 7px; margin: 8px 0 0;
+  font-size: 12.5px; font-weight: 700; color: var(--edt-copper, #c9773a);
+}
+.edt-more {
+  background: none; border: none; padding: 4px 0; cursor: pointer;
+  color: var(--edt-amber, #f5b942); font-size: 13px; font-weight: 800;
+}
+.edt-stg-field { margin-bottom: 18px; }
+.edt-stg-lbl { display: block; font-size: 13px; font-weight: 800; margin-bottom: 9px; }
+.edt-req { color: var(--edt-amber, #f5b942); }
+.edt-opt-note { color: var(--edt-mut, #a99c8c); font-weight: 600; font-size: 12px; }
 .edt-opts { display: flex; flex-wrap: wrap; gap: 8px; }
 .edt-opt {
-  padding: 8px 15px; border-radius: 12px;
-  border: 1px solid rgba(255, 255, 255, .16); background: rgba(255, 255, 255, .03);
-  color: #dedbd4; font-size: 13px; font-weight: 600; cursor: pointer;
-  transition: border-color .2s, background .2s;
+  min-height: 42px; padding: 10px 16px; border-radius: 12px;
+  border: 1px solid var(--edt-edge, rgba(247, 242, 233, .4));
+  background: rgba(247, 242, 233, .05);
+  color: var(--edt-ink, #f7f2e9);
+  font-size: 13px; font-weight: 700; cursor: pointer;
+  transition: border-color .2s, background .2s, color .2s;
 }
-.edt-opt.on { border-color: var(--edt-amber); background: rgba(245, 185, 66, .14); color: #fff; }
-.edt-stg-err { color: #ff8a8a; font-size: 13px; margin: 6px 0 0; }
+.edt-opt:hover { border-color: var(--edt-amber, #f5b942); }
+.edt-opt.on {
+  border-color: var(--edt-amber, #f5b942);
+  background: var(--edt-amber, #f5b942);
+  color: var(--edt-on-amber, #1a1206);
+}
+/* «يُطلب معه» — the venue's curated pairings, tappable to add straight to the cart */
+.edt-pair-row { display: flex; flex-wrap: wrap; gap: 8px; }
+.edt-pair {
+  flex: 1 1 210px; min-width: 0;
+  display: flex; align-items: center; gap: 10px;
+  padding-block: 8px;
+  padding-inline: 8px 12px;
+  border-radius: 14px;
+  border: 1px solid var(--edt-edge, rgba(247, 242, 233, .4));
+  background: rgba(247, 242, 233, .05);
+  color: var(--edt-ink, #f7f2e9);
+  font: inherit; text-align: start; cursor: default;
+  transition: border-color .2s, background .2s, transform .15s ease;
+}
+button.edt-pair { cursor: pointer; }
+button.edt-pair:hover { border-color: var(--edt-amber, #f5b942); }
+button.edt-pair:active { transform: scale(.98); }
+.edt-pair.done { border-color: var(--edt-amber, #f5b942); background: rgba(245, 185, 66, .16); }
+.edt-pair.is-out { opacity: .62; }
+.edt-pair.is-out .edt-pair-txt i { color: var(--edt-alert, #ff8d70); }
+.edt-pair-media {
+  flex: none; width: 46px; height: 46px; border-radius: 10px; overflow: hidden;
+  background: var(--edt-bg-2, #191310); color: var(--edt-mut, #a99c8c);
+  display: grid; place-items: center;
+}
+.edt-pair-media img { width: 100%; height: 100%; object-fit: cover; display: block; }
+.edt-pair-txt { display: grid; gap: 2px; min-width: 0; }
+.edt-pair-txt b { font-size: 13.5px; font-weight: 800; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.edt-pair-txt i { font-style: normal; font-size: 12.5px; font-weight: 700; color: var(--edt-amber, #f5b942); }
+.edt-pair-add {
+  flex: none; margin-inline-start: auto;
+  width: 28px; height: 28px; border-radius: 50%;
+  display: grid; place-items: center;
+  background: var(--edt-amber, #f5b942); color: var(--edt-on-amber, #1a1206);
+}
+.edt-stg-err { color: var(--edt-alert, #ff8d70); font-size: 13px; font-weight: 700; margin: 6px 0 0; }
 .edt-stg-bar {
   display: flex; align-items: center; gap: 12px;
   padding: 12px 18px calc(12px + env(safe-area-inset-bottom, 0px));
-  border-top: 1px solid rgba(255, 255, 255, .08);
-  background: rgba(13, 13, 15, .9); backdrop-filter: blur(10px);
+  border-top: 1px solid var(--edt-line, rgba(247, 242, 233, .14));
+  background: var(--edt-bg, #100c0a);
 }
-.edt-stg-total { font-size: 20px; font-weight: 900; color: var(--edt-amber); margin-inline-start: auto; }
+.edt-stg-bar .stepper { border-color: var(--edt-edge, rgba(247, 242, 233, .4)); }
+.edt-stg-bar .stepper button { color: var(--edt-amber, #f5b942); }
+.edt-stg-bar .stepper button:active { background: rgba(247, 242, 233, .10); }
+.edt-stg-bar .stepper .val { color: var(--edt-ink, #f7f2e9); }
+.edt-stg-total {
+  display: inline-flex; align-items: baseline; gap: 8px;
+  font-size: 20px; font-weight: 900; color: var(--edt-amber, #f5b942);
+  margin-inline-start: auto;
+}
 .edt-stg-add {
-  display: inline-flex; align-items: center; gap: 7px;
-  padding: 12px 22px; border-radius: 14px; border: none;
-  background: var(--edt-amber); color: #1a1206; font-weight: 800; font-size: 15px; cursor: pointer;
+  display: inline-flex; align-items: center; justify-content: center; gap: 7px;
+  min-height: 48px; padding: 13px 22px; border-radius: 14px; border: none;
+  background: var(--edt-amber, #f5b942);
+  color: var(--edt-on-amber, #1a1206);
+  font-weight: 800; font-size: 15px; cursor: pointer;
+  transition: transform .15s ease;
 }
 .edt-stg-add:active { transform: scale(.97); }
+.edt-stg-add:disabled {
+  background: rgba(247, 242, 233, .12); color: #e6ded1;
+  cursor: default; transform: none;
+}
+.edt-chip:focus-visible,
+.edt-open-btn:focus-visible,
+.edt-opt:focus-visible,
+.edt-more:focus-visible,
+.edt-thumb:focus-visible,
+.edt-pair:focus-visible,
+.edt-photo-open:focus-visible,
+.edt-stg-x:focus-visible,
+.edt-stg-add:focus-visible {
+  outline: 2px solid var(--edt-amber, #f5b942);
+  outline-offset: 2px;
+}
+
+@media (min-width: 900px) {
+  .edt-stg-scroll {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+    align-items: start;
+    gap: clamp(24px, 3vw, 56px);
+    width: 100%; max-width: 1280px; margin-inline: auto;
+    padding: clamp(24px, 3vw, 44px) clamp(24px, 4vw, 64px) 0;
+  }
+  .edt-stg-media { position: sticky; top: 0; }
+  /* padding-top keeps the dish clear of the floating close button */
+  .edt-stg-hero { padding-top: clamp(56px, 5vw, 76px); min-height: min(44dvh, 440px); }
+  .edt-stg-hero[data-fit='wide'] { min-height: min(34dvh, 320px); padding-inline: 0; }
+  .edt-stg-hero img,
+  .edt-stg-hero[data-fit='tall'] img { max-height: calc(min(56dvh, 560px) * var(--edt-img-scale, 1)); }
+  .edt-stg-body { padding: 0 0 32px; max-width: 620px; margin-inline: 0; }
+  .edt-stg-bar { width: 100%; max-width: 1280px; margin-inline: auto; padding-inline: clamp(24px, 4vw, 64px); }
+  .edt-stg-x { inset-inline-start: 20px; top: 20px; }
+}
+
 @media (prefers-reduced-motion: reduce) {
   .edt-ing li, .edt-stg-ing li { transition: none; animation: none; opacity: 1; transform: none; }
   .edt-stg, .edt-stg.closing { animation: none; }
+  .edt-chip, .edt-open-btn, .edt-opt, .edt-pair, .edt-stg-add { transition: none; }
+  .edt-open-btn:hover, .edt-open-btn:active, button.edt-pair:active, .edt-stg-add:active { transform: none; }
 }
 
 /* ============ OCEANART («اللوحة الفنية») — painted canvas, rotated plates, seals ============ */
@@ -7045,11 +7321,9 @@ body:has(.sd2-root) .toast-wrap { z-index: 840; }
 /* ==== /wait-game v1 ==== */
 
 /* ==== editorial scroll-fix v1 ==== */
-/* The inner full-height snap scroller trapped the page scroll under the hero
-   (audit finding). Editorial now rides the PAGE scroll like spotlight does:
-   tall snap-aligned sections, no inner overflow container. */
-.edt-stage { height: auto; overflow-y: visible; }
-.edt-sec { min-height: 92svh; scroll-snap-align: none; scroll-snap-stop: normal; }
+/* The page-scroll behaviour this block added (no inner snap scroller) now lives
+   in the main .edt-* block above, so the desktop media query there is not
+   overridden by a later flat rule. Nothing to declare here. */
 /* ==== /editorial scroll-fix v1 ==== */
 
 /* ==== review-showcase v1 ==== */

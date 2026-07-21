@@ -1113,6 +1113,8 @@ export default function MenuView({ tenant, tenantId, items, categories, offers =
         /* editorial detail: FLIP photo-expand full-screen stage (ordering included) */
         <EditorialItemStage
           item={viewItem} currency={currency} originRect={openRect}
+          allItems={allActive} offers={offers}
+          onQuickAdd={(s) => addLine(s, (s.variants && s.variants[0]) || null, [], 1)}
           onClose={() => { setViewItem(null); setOpenRect(null) }}
           onAdd={(variant, mods, qty) => { addLine(viewItem, variant, mods, qty); setViewItem(null); setOpenRect(null) }}
         />
