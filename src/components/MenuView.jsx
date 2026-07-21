@@ -918,6 +918,8 @@ export default function MenuView({ tenant, tenantId, items, categories, offers =
           filtered={!!search.trim() || activeCat !== 'all'}
           activeCat={activeCat} onPickCat={setActiveCat}
           currency={currency} offers={offers} stickyTop={stickyTop}
+          allItems={allActive} showPairings={!isHidden('pairings')}
+          onQuickAdd={(s) => addLine(s, (s.variants && s.variants[0]) || null, [], 1)}
           onOpen={(it, rect) => { setOpenRect(rect || null); setViewItem(it) }}
         />
       ) : menuLayout === 'oceanart' ? (

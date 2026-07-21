@@ -1,11 +1,19 @@
-// EditorialLayout — skin 'editorial' («المجلة الداكنة»): dark-magazine menu.
+// EditorialLayout — skin 'editorial' («المجلة الداكنة»): magazine menu.
 // One dish per screen inside a vertical page-scroll stage (hidden scrollbars),
-// a bottom-anchored photo melting into the warm near-black canvas, amber
-// ingredient amounts, a huge low-opacity vertical category label, and a
-// current/total progress read-out (Latin digits). Item open = EditorialItemStage
-// below: a FLIP photo-expand into a full-screen dark stage (transform/opacity
-// only) with staggered content and the COMPLETE dish record — gallery, story,
-// facts, allergens, offer, stock, variants, modifiers and «يُطلب معه» pairings.
+// the photo FIRST and the price under it, amber ingredient amounts, a huge
+// low-opacity vertical category label, and a current/total progress read-out
+// (Latin digits). Item open = EditorialItemStage below: a FLIP photo-expand
+// into a full-screen stage (transform/opacity only) with staggered content and
+// the COMPLETE dish record — gallery, story, facts, allergens, offer, stock,
+// variants, modifiers and «يُطلب معه» pairings.
+//
+// The room this theme dresses is a warm Sudanese fish house: red-brown brick,
+// walnut tables, rattan chairs, kerosene lanterns, painted clay pots and woven
+// straw baskets. So the canvas carries a brick + warm-plaster wall (pure CSS,
+// index.css), the primary buttons are BRICKS, and each dish screen hangs one
+// room ornament — lantern, clay pot or woven basket — behind the content.
+// Both themes are first-class: every colour here comes from an --edt-* token
+// and index.css re-declares the whole set under [data-theme='light'].
 import { lazy, Suspense, useEffect, useMemo, useRef, useState } from 'react'
 import { createPortal } from 'react-dom'
 import { useI18n, pickLang } from '../../lib/i18n.jsx'
@@ -56,7 +64,73 @@ function useImgFit() {
   return { fit, bind, nodeRef, onLoad: (e) => read(e.currentTarget) }
 }
 
-export default function EditorialLayout({ cats, itemsByCat, visibleItems, filtered, activeCat, onPickCat, currency, offers, stickyTop, onOpen }) {
+// Room ornaments — the three objects the owner photographed on his walls,
+// drawn as thin inline-SVG strokes so they cost nothing and tint from two
+// tokens (--edt-orn-ink / --edt-orn-warm) that both themes redefine. They are
+// pure chrome: aria-hidden, pointer-events none, and they sit in the photo
+// band at the inline-start edge where no text ever lands.
+function OrnLantern() {
+  return (
+    <svg viewBox="0 0 64 128" focusable="false" aria-hidden="true">
+      <circle className="edt-orn-glow" cx="32" cy="54" r="27" />
+      <g className="edt-orn-ink">
+        <path d="M32 2v11" />
+        <path d="M27 17c0-6 10-6 10 0" />
+        <path d="M21 30h22l-5-11H26z" />
+        <path d="M22 30h20l3 45H19z" />
+        <path d="M20 45h24M20 60h24" />
+        <path d="M18 75h28l-3 9H21z" />
+        <path d="M32 84v7" />
+      </g>
+      <path className="edt-orn-warm" d="M30 46c0-5 4-7 4-11 3 3 5 6 5 10 0 5-4 8-5 8s-4-3-4-7z" />
+    </svg>
+  )
+}
+
+function OrnClayPot() {
+  return (
+    <svg viewBox="0 0 96 118" focusable="false" aria-hidden="true">
+      <g className="edt-orn-ink">
+        <path d="M37 10h22l-3 13H40z" />
+        <path d="M40 23c-16 5-26 21-26 40 0 24 15 42 34 42s34-18 34-42c0-19-10-35-26-40z" />
+        <path d="M17 52c19 7 43 7 62 0" />
+        <path d="M15 70c21 8 45 8 66 0" />
+        <path d="M22 88c16 6 36 6 52 0" />
+      </g>
+      <path className="edt-orn-warm" d="M17 56c19 7 43 7 62 0v8c-19 7-43 7-62 0z" />
+    </svg>
+  )
+}
+
+function OrnWovenBasket() {
+  return (
+    <svg viewBox="0 0 112 112" focusable="false" aria-hidden="true">
+      <g className="edt-orn-ink">
+        <circle cx="56" cy="56" r="51" />
+        <circle cx="56" cy="56" r="38" />
+        <circle cx="56" cy="56" r="25" />
+        <circle cx="56" cy="56" r="12" />
+        <path d="M56 5v102M5 56h102M20 20l72 72M92 20L20 92" />
+      </g>
+      <circle className="edt-orn-warm" cx="56" cy="56" r="31" />
+    </svg>
+  )
+}
+
+const ORNAMENTS = ['lantern', 'pot', 'basket']
+function EdtOrnament({ idx }) {
+  const kind = ORNAMENTS[idx % ORNAMENTS.length]
+  return (
+    <span className="edt-orn" data-orn={kind} aria-hidden="true">
+      {kind === 'lantern' ? <OrnLantern /> : kind === 'pot' ? <OrnClayPot /> : <OrnWovenBasket />}
+    </span>
+  )
+}
+
+// allItems / onQuickAdd are OPTIONAL — with them the venue's curated «يُطلب معه»
+// pairings become tappable straight from the LIST row; without them the list
+// still renders everything else, so an un-patched caller degrades quietly.
+export default function EditorialLayout({ cats, itemsByCat, visibleItems, filtered, activeCat, onPickCat, currency, offers, stickyTop, onOpen, allItems = [], onQuickAdd = null, showPairings = true }) {
   const { t, lang } = useI18n()
   const stageRef = useRef(null)
   const [cur, setCur] = useState(0)
@@ -106,7 +180,11 @@ export default function EditorialLayout({ cats, itemsByCat, visibleItems, filter
         <>
           <div className="edt-stage" ref={stageRef}>
             {flat.map((it, i) => (
-              <EdtSection key={it.id} it={it} idx={i} catLabel={catName(it.categoryId)} currency={currency} offers={offers} lang={lang} t={t} onOpen={onOpen} />
+              <EdtSection
+                key={it.id} it={it} idx={i} catLabel={catName(it.categoryId)}
+                currency={currency} offers={offers} lang={lang} t={t} onOpen={onOpen}
+                allItems={allItems} onQuickAdd={onQuickAdd} showPairings={showPairings}
+              />
             ))}
           </div>
           <div className="edt-progress" aria-hidden="true">{cur + 1} / {flat.length}</div>
@@ -116,10 +194,12 @@ export default function EditorialLayout({ cats, itemsByCat, visibleItems, filter
   )
 }
 
-function EdtSection({ it, idx, catLabel, currency, offers, lang, t, onOpen }) {
+function EdtSection({ it, idx, catLabel, currency, offers, lang, t, onOpen, allItems = [], onQuickAdd = null, showPairings = true }) {
   const ref = useRef(null)
   const { fit, bind, nodeRef, onLoad } = useImgFit()
   const [inview, setInview] = useState(false)
+  const [added, setAdded] = useState('')
+  const addedTimer = useRef(0)
   useEffect(() => {
     const el = ref.current
     if (!el || typeof IntersectionObserver === 'undefined') return undefined
@@ -127,6 +207,7 @@ function EdtSection({ it, idx, catLabel, currency, offers, lang, t, onOpen }) {
     io.observe(el)
     return () => io.disconnect()
   }, [])
+  useEffect(() => () => clearTimeout(addedTimer.current), [])
 
   const out = isOut(it)
   const low = lowStock(it)
@@ -139,9 +220,44 @@ function EdtSection({ it, idx, catLabel, currency, offers, lang, t, onOpen }) {
   // FLIP origin: the photo's on-screen rect, so the stage grows out of it.
   const open = () => { if (!out) onOpen(it, nodeRef.current ? nodeRef.current.getBoundingClientRect() : null) }
 
+  // «يُطلب معه» in the LIST, not only inside the opened dish: the venue's
+  // curated item.pairings resolved against the live menu, exactly the rule the
+  // stage below uses. Capped at three so the row never becomes a second menu.
+  const pairs = useMemo(() => {
+    const ids = showPairings && Array.isArray(it.pairings) ? it.pairings : []
+    if (!ids.length || !allItems.length) return []
+    return ids.map((id) => allItems.find((x) => x.id === id)).filter((x) => x && x.id !== it.id).slice(0, 3)
+  }, [showPairings, it.pairings, it.id, allItems])
+
+  // One tap adds the pairing to the cart when the caller wired onQuickAdd;
+  // otherwise the chip opens that dish, which is still better than dead art.
+  const pickPair = (p) => {
+    if (isOut(p)) return
+    if (!onQuickAdd) { onOpen(p, null); return }
+    onQuickAdd(p)
+    setAdded(p.id)
+    clearTimeout(addedTimer.current)
+    addedTimer.current = setTimeout(() => setAdded(''), 1500)
+  }
+
   return (
     <section ref={ref} data-idx={idx} data-fit={fit || undefined} className={`edt-sec ${inview ? 'in' : ''} ${out ? 'is-out' : ''}`}>
+      <EdtOrnament idx={idx} />
       <span className="edt-side" aria-hidden="true">{catLabel}</span>
+      <div className="edt-photo" data-fit={fit || undefined}>
+        <span className="edt-glow" aria-hidden="true" />
+        {/* the material the dish stands on + its garnish scatter: the behind
+            layer paints under the photo, the front layer over it. Arrival is
+            tied to the same in-view flag the text uses. */}
+        <DishProps item={it} active={inview} catName={catLabel} />
+        {it.imageUrl
+          ? <img ref={bind} onLoad={onLoad} src={it.imageUrl} alt="" decoding="async" />
+          : <span className="edt-noimg"><Icon name="coffee" size={64} /></span>}
+        <span className="edt-vignette" aria-hidden="true" />
+        <button type="button" className="edt-photo-open" onClick={open} aria-label={name} tabIndex={-1} disabled={out} />
+        <ItemFx kind={it.effect} />
+        {it.hotspots?.length ? <Suspense fallback={null}><DishHotspots hotspots={it.hotspots} /></Suspense> : null}
+      </div>
       <div className="edt-main">
         <h2 className="edt-name">{name}</h2>
         <div className="edt-price">
@@ -168,23 +284,41 @@ function EdtSection({ it, idx, catLabel, currency, offers, lang, t, onOpen }) {
           </div>
         )}
         {desc && <p className="edt-desc">{desc}</p>}
+        {pairs.length > 0 && (
+          <div className="edt-lpairs">
+            <span className="edt-ing-title">{lang === 'ar' ? 'يُطلب معه' : 'Goes well with'}</span>
+            <div className="edt-lpair-row">
+              {pairs.map((p) => {
+                const pOut = isOut(p)
+                const pOffer = offerForItem(p, offers)
+                const done = added === p.id
+                const label = pickLang(p, 'name', lang)
+                const act = onQuickAdd ? t('addToCart') : (lang === 'ar' ? 'اعرض الطبق' : 'View dish')
+                return (
+                  <button
+                    key={p.id} type="button" disabled={pOut}
+                    className={`edt-lpair ${done ? 'done' : ''} ${pOut ? 'is-out' : ''}`}
+                    onClick={() => pickPair(p)} aria-label={`${act} ${label}`}
+                  >
+                    <span className="edt-lpair-media">
+                      {p.imageUrl ? <img src={p.imageUrl} alt="" loading="lazy" decoding="async" /> : <Icon name="coffee" size={16} />}
+                    </span>
+                    <span className="edt-lpair-txt">
+                      <b>{label}</b>
+                      <i>{pOut ? t('soldOut') : <Price value={pOffer ? discountedPrice(p.price, pOffer) : p.price} currency={currency} lang={lang} />}</i>
+                    </span>
+                    {!pOut && (
+                      <span className="edt-lpair-add" aria-hidden="true"><Icon name={done ? 'check' : (onQuickAdd ? 'add' : (lang === 'ar' ? 'back' : 'next'))} size={13} /></span>
+                    )}
+                  </button>
+                )
+              })}
+            </div>
+          </div>
+        )}
         <button type="button" className="edt-open-btn" onClick={open} disabled={out}>
           {lang === 'ar' ? 'اعرض الطبق' : 'View dish'} <Icon name={lang === 'ar' ? 'back' : 'next'} size={15} />
         </button>
-      </div>
-      <div className="edt-photo" data-fit={fit || undefined}>
-        <span className="edt-glow" aria-hidden="true" />
-        {/* the material the dish stands on + its garnish scatter: the behind
-            layer paints under the photo, the front layer over it. Arrival is
-            tied to the same in-view flag the text uses. */}
-        <DishProps item={it} active={inview} catName={catLabel} />
-        {it.imageUrl
-          ? <img ref={bind} onLoad={onLoad} src={it.imageUrl} alt="" decoding="async" />
-          : <span className="edt-noimg"><Icon name="coffee" size={64} /></span>}
-        <span className="edt-vignette" aria-hidden="true" />
-        <button type="button" className="edt-photo-open" onClick={open} aria-label={name} tabIndex={-1} disabled={out} />
-        <ItemFx kind={it.effect} />
-        {it.hotspots?.length ? <Suspense fallback={null}><DishHotspots hotspots={it.hotspots} /></Suspense> : null}
       </div>
     </section>
   )

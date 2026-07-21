@@ -318,8 +318,14 @@ export function useSystemThemeBody(tenant, section) {
     const bgKind = tenant?.appBg?.kind
     if (bgKind && bgKind !== 'mesh') document.body.setAttribute('data-appbg', bgKind)
     else document.body.removeAttribute('data-appbg')
-    // app chrome (top bar + bottom nav) — one attribute, both bars
-    applyChrome(tenant)
+    // The chrome preset (top bar + bottom nav colour) belongs to the DINER MENU
+    // ONLY. It is deliberately NOT applied to the staff shells: the menu is the
+    // venue's storefront and gets dressed to match the room it lives in, while
+    // the back office is a tool that must stay legible and consistent for staff
+    // whatever the storefront looks like. Applying it here made one setting
+    // repaint the entire system, which is what the owner asked us to separate.
+    // The menu applies it itself in lib/usePublicVenue.js.
+    clearChrome()
     // controllable selection color + venue button style (gradient/glow)
     applyUiFx(document.body, tenant)
     // SYSTEM font (plan idea #3): the whole back-office re-types from one pick.

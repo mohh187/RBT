@@ -6853,10 +6853,21 @@ body:has(.sd2-root) .toast-wrap { z-index: 840; }
 
 /* ==== themes-editorial-ocean v1 ==== */
 
-/* ============ EDITORIAL («المجلة الداكنة») — dark magazine, one dish/screen ============ */
-/* Warm copper/amber family (venue brand #a35f2b, editorial accent #f5b942) over a
-   warm near-black canvas. Contrast measured against --edt-bg: amber 11:1, muted
-   body text 7.2:1, near-black ink on the amber fills 10.5:1, control edges 3.5:1.
+/* ============ EDITORIAL («المجلة الداكنة») — magazine menu, one dish/screen ============ */
+/* Dressed for a warm Sudanese fish house: red-brown BRICK walls, walnut tables,
+   rattan chairs, kerosene lanterns, painted clay pots, woven straw baskets.
+   The canvas carries a brick + warm-plaster wall, the primary actions are
+   BRICKS, and the lantern amber stays the accent.
+
+   BOTH themes are first class. Every colour is a token here; the whole set is
+   re-declared under [data-theme='light'] at the foot of this section.
+   Measured (WCAG 2.x, sRGB):
+     dark  — ink on canvas 17.4:1, muted body 7.2:1 (5.7:1 over the wall's
+             lightest mortar), amber 11:1, white on the brick button 4.6:1 at
+             its lightest stop, brick vs canvas 3.0-4.2:1, control edges 3.5:1
+     light — ink on plaster 15.4:1, muted body 7.1:1 (5.7:1 over the wall),
+             ochre accent 6.1:1, cream on the ochre fills 6.5:1, white on the
+             brick button 4.6:1, brick vs plaster 3.9:1, control edges 3.5:1
    The item stage portals to <body> — OUTSIDE .edt-wrap — so the SAME tokens are
    declared on .edt-stg. Without that every var() below resolved to nothing inside
    the stage and the amber "add to cart" button rendered transparent (dark on dark). */
@@ -6868,14 +6879,46 @@ body:has(.sd2-root) .toast-wrap { z-index: 840; }
   --edt-amber-soft: #ffdc9a;
   --edt-copper: #c9773a;
   --edt-ink: #f7f2e9;
+  --edt-ink-2: #ddd6ca;
   --edt-mut: #a99c8c;
   --edt-line: rgba(247, 242, 233, 0.14);
   --edt-edge: rgba(247, 242, 233, 0.40);
+  /* the two neutral fills every control shares, so one pair of values flips
+     the whole theme instead of thirty hard-coded rgba() literals */
+  --edt-soft: rgba(247, 242, 233, 0.05);
+  --edt-soft-2: rgba(247, 242, 233, 0.10);
   --edt-on-amber: #1a1206;
   --edt-alert: #ff8d70;
+  /* THE WALL. One tiled inline-SVG data URI — no asset, no request, no DOM:
+     a 128x64 running-bond brick (two 61x29 courses, 3px joints), mortar a
+     shade LIGHTER than the brick face exactly as in the venue's photos, the
+     whole tile at 75% so the canvas colour still governs the room. */
+  --edt-wall: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='128' height='64'%3E%3Cg opacity='.75'%3E%3Crect width='128' height='64' fill='%233a2a20'/%3E%3Cg fill='%232a1a13'%3E%3Crect x='1.5' y='1.5' width='61' height='29' rx='1.5'/%3E%3Crect x='65.5' y='1.5' width='61' height='29' rx='1.5'/%3E%3Crect x='-30.5' y='33.5' width='61' height='29' rx='1.5'/%3E%3Crect x='33.5' y='33.5' width='61' height='29' rx='1.5'/%3E%3Crect x='97.5' y='33.5' width='61' height='29' rx='1.5'/%3E%3C/g%3E%3C/g%3E%3C/svg%3E");
+  /* the lantern pool that lights each dish, and the plaster the words sit on */
+  --edt-lamp: rgba(245, 185, 66, 0.11);
+  /* THE BRICK BUTTON. Identical clay in both themes — a warm fill, a lit top
+     arris, a shadowed bottom bed, a 5px radius. Lightest stop #bc5730 keeps a
+     white label at 4.62:1 and the shape at 4.2:1 against the dark canvas;
+     the darkest stop still clears 3.00:1 there, so the control never dissolves. */
+  --edt-brick-top: #bc5730;
+  --edt-brick-mid: #ab4b28;
+  --edt-brick-bot: #9c4324;
+  --edt-brick-ink: #ffffff;
+  --edt-mortar-lit: rgba(255, 231, 205, 0.30);
+  --edt-mortar-dark: rgba(46, 18, 8, 0.34);
+  /* the mortar bed the brick is laid into, and the shadow it throws */
+  --edt-brick-bed: rgba(46, 18, 8, 0.34);
+  --edt-brick-cast: rgba(46, 18, 8, 0.30);
+  /* room ornaments (lantern / clay pot / woven basket) */
+  --edt-orn-ink: #f7f2e9;
+  --edt-orn-warm: #f5b942;
+  --edt-orn-op: 0.18;
 }
 .edt-wrap {
-  background: var(--edt-bg);
+  background-color: var(--edt-bg);
+  background-image: var(--edt-wall);
+  background-repeat: repeat;
+  background-size: 128px 64px;
   color: var(--edt-ink);
   min-height: 100dvh;
   position: relative;
@@ -6905,13 +6948,15 @@ body:has(.sd2-root) .toast-wrap { z-index: 840; }
   -ms-overflow-style: none;
 }
 .edt-cats::-webkit-scrollbar { width: 0; height: 0; }
+/* Brick-shaped, because the shop is brick: squared off with a 6px radius, and
+   the active one is a laid brick. Not a pill any more. */
 .edt-chip {
   flex: none;
   min-height: 34px;
   padding: 8px 16px;
-  border-radius: 999px;
+  border-radius: 6px;
   border: 1px solid var(--edt-edge);
-  background: rgba(247, 242, 233, 0.06);
+  background: var(--edt-soft);
   color: var(--edt-mut);
   font-size: 13px;
   font-weight: 700;
@@ -6922,9 +6967,12 @@ body:has(.sd2-root) .toast-wrap { z-index: 840; }
 }
 .edt-chip:hover { color: var(--edt-ink); border-color: var(--edt-amber); }
 .edt-chip.on {
-  color: var(--edt-on-amber);
-  background: var(--edt-amber);
-  border-color: var(--edt-amber);
+  color: var(--edt-brick-ink);
+  border-color: transparent;
+  background: linear-gradient(180deg, var(--edt-brick-top) 0%, var(--edt-brick-mid) 48%, var(--edt-brick-bot) 100%);
+  box-shadow:
+    inset 0 1px 0 var(--edt-mortar-lit),
+    inset 0 -2px 0 var(--edt-mortar-dark);
 }
 .edt-empty { padding: 20vh 20px; color: var(--edt-mut); }
 
@@ -6932,6 +6980,9 @@ body:has(.sd2-root) .toast-wrap { z-index: 840; }
    scroll under the hero, so there is no inner overflow container and no snap. */
 .edt-stage { position: relative; }
 
+/* PHOTO FIRST, then the price and everything that explains it — the venue's
+   own reading order («الصور يجب ان تكون فوق السعر»). Row 1 hugs the picture,
+   row 2 takes the rest, so the dish leads and the words follow it down. */
 .edt-sec {
   --edt-pad: 20px;
   position: relative;
@@ -6939,18 +6990,61 @@ body:has(.sd2-root) .toast-wrap { z-index: 840; }
   isolation: isolate; /* nothing inside a dish can ever paint over the chip bar */
   min-height: 92svh;
   display: grid;
-  grid-template-rows: 1fr auto;
+  grid-template-rows: auto 1fr;
   gap: 14px;
   overflow: hidden;
-  padding: 22px var(--edt-pad) 0;
+  padding: 14px var(--edt-pad) 30px;
   scroll-margin-top: calc(var(--edt-top, 0px) + 62px);
 }
+/* The room, per dish: a lantern pool over the brick at the top, then warm
+   plaster taking over exactly where the words start. The brick therefore
+   frames the FOOD and never sits under a paragraph. */
+.edt-sec::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  z-index: -1;
+  pointer-events: none;
+  background:
+    radial-gradient(74% 40% at 20% 3%, var(--edt-lamp), transparent 76%),
+    linear-gradient(180deg, transparent 26%, var(--edt-bg) 60%);
+}
 .edt-sec.is-out { opacity: .82; }
-/* A panoramic cutout is only a shallow band at the foot of the screen, so the
-   section is shortened and the text optically centred — otherwise the dish sits
-   under a large empty gap. */
+/* A panoramic cutout is only a shallow band, so the section is shortened and
+   the text optically centred — otherwise the dish sits above a large gap. */
 .edt-sec[data-fit='wide'] { min-height: 78svh; }
 .edt-sec[data-fit='wide'] .edt-main { align-self: center; }
+
+/* Room ornaments — a hanging kerosene lantern, a painted clay pot, a woven
+   straw basket, rotating one per dish. They live in the photo band at the
+   inline-start edge, behind everything, at an opacity where they read as wall
+   objects and cannot move any text contrast measurably. */
+.edt-orn {
+  position: absolute;
+  top: 0;
+  inset-inline-start: 1%;
+  z-index: 0;
+  /* the vh half of each min() is what keeps an ornament inside the photo band
+     on a short landscape phone — it must never reach down under a paragraph,
+     because a stroke at this opacity would cost that text about a stop */
+  width: clamp(44px, min(11vw, 12vh), 78px);
+  opacity: var(--edt-orn-op, .16);
+  pointer-events: none;
+  user-select: none;
+}
+.edt-orn[data-orn='pot'] { top: 4%; width: clamp(50px, min(12vw, 15vh), 88px); }
+.edt-orn[data-orn='basket'] { top: 5%; width: clamp(52px, min(13vw, 20vh), 94px); }
+.edt-orn svg { display: block; width: 100%; height: auto; overflow: visible; }
+.edt-orn-ink {
+  fill: none;
+  stroke: var(--edt-orn-ink);
+  stroke-width: 2.4;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+.edt-orn-warm { fill: var(--edt-orn-warm); stroke: none; opacity: .6; }
+.edt-orn-glow { fill: var(--edt-orn-warm); opacity: .38; }
+.edt-orn[data-orn='basket'] .edt-orn-warm { fill: none; stroke: var(--edt-orn-warm); stroke-width: 3.4; opacity: .6; }
 
 /* huge low-opacity vertical category label hugging the side edge */
 .edt-side {
@@ -6963,7 +7057,7 @@ body:has(.sd2-root) .toast-wrap { z-index: 840; }
   font-weight: 900;
   letter-spacing: -0.03em;
   line-height: 1;
-  color: rgba(247, 242, 233, 0.05);
+  color: var(--edt-soft);
   pointer-events: none;
   user-select: none;
   white-space: nowrap;
@@ -7005,15 +7099,17 @@ body:has(.sd2-root) .toast-wrap { z-index: 840; }
   line-height: 1;
   white-space: nowrap;
 }
+/* outline tags take their edge from their OWN text colour, so a theme flip
+   moves the border with the ink instead of stranding a dark-only rgba() */
 .edt-tag-offer { background: var(--edt-amber); color: var(--edt-on-amber); }
-.edt-tag-out { color: var(--edt-alert); border: 1px solid rgba(255, 141, 112, .55); }
-.edt-tag-low { color: var(--edt-amber-soft); border: 1px solid rgba(255, 220, 154, .45); }
-.edt-tag-star { color: var(--edt-copper); border: 1px solid rgba(201, 119, 58, .6); }
+.edt-tag-out { color: var(--edt-alert); border: 1px solid color-mix(in srgb, currentColor 55%, transparent); }
+.edt-tag-low { color: var(--edt-amber-soft); border: 1px solid color-mix(in srgb, currentColor 45%, transparent); }
+.edt-tag-star { color: var(--edt-copper); border: 1px solid color-mix(in srgb, currentColor 60%, transparent); }
 .edt-facts { display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 14px; }
 .edt-fact {
   display: inline-flex; flex-direction: column; gap: 1px;
-  padding: 5px 12px; border-radius: 10px;
-  background: rgba(247, 242, 233, 0.05);
+  padding: 5px 12px; border-radius: 6px;
+  background: var(--edt-soft);
   border: 1px solid var(--edt-line);
 }
 .edt-fact i { font-style: normal; font-size: 10px; color: var(--edt-mut); letter-spacing: .04em; }
@@ -7025,31 +7121,106 @@ body:has(.sd2-root) .toast-wrap { z-index: 840; }
 }
 .edt-ing ul { list-style: none; margin: 0; padding: 0; display: grid; gap: 3px; }
 .edt-ing li {
-  font-size: 14px; line-height: 1.7; color: #ddd6ca;
+  font-size: 14px; line-height: 1.7; color: var(--edt-ink-2);
   opacity: 0; transform: translateY(6px);
   transition: opacity .5s ease, transform .5s ease;
 }
 .edt-sec.in .edt-ing li { opacity: 1; transform: none; }
 .edt-amt { color: var(--edt-amber); font-weight: 800; }
 .edt-desc { font-size: 14px; line-height: 1.75; color: var(--edt-mut); max-width: 60ch; margin: 0 0 16px; }
+
+/* «يُطلب معه» ON THE ITEM IN THE LIST, not only inside the opened dish. Wraps
+   instead of scrolling (house rule: no scrollbars anywhere), capped at three. */
+.edt-lpairs { margin: 0 0 16px; }
+.edt-lpair-row { display: flex; flex-wrap: wrap; gap: 7px; }
+.edt-lpair {
+  flex: 0 1 auto; max-width: 100%; min-width: 0;
+  display: inline-flex; align-items: center; gap: 8px;
+  padding-block: 5px;
+  padding-inline: 5px 10px;
+  border-radius: 8px;
+  border: 1px solid var(--edt-edge);
+  background: var(--edt-soft);
+  color: var(--edt-ink);
+  font: inherit; text-align: start; cursor: pointer;
+  transition: border-color .2s, background .2s, transform .15s ease;
+}
+.edt-lpair:hover { border-color: var(--edt-amber); }
+.edt-lpair:active { transform: scale(.98); }
+.edt-lpair.done { border-color: var(--edt-amber); background: var(--edt-soft-2); }
+.edt-lpair.is-out, .edt-lpair:disabled { opacity: .62; cursor: default; transform: none; }
+.edt-lpair.is-out .edt-lpair-txt i { color: var(--edt-alert); }
+.edt-lpair-media {
+  flex: none; width: 34px; height: 34px; border-radius: 6px; overflow: hidden;
+  background: var(--edt-bg-2); color: var(--edt-mut);
+  display: grid; place-items: center;
+}
+.edt-lpair-media img { width: 100%; height: 100%; object-fit: cover; display: block; }
+.edt-lpair-txt { display: grid; gap: 1px; min-width: 0; }
+.edt-lpair-txt b { font-size: 12.5px; font-weight: 800; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.edt-lpair-txt i { font-style: normal; font-size: 12px; font-weight: 700; color: var(--edt-amber); }
+/* a very small brick, laid into the chip */
+.edt-lpair-add {
+  flex: none; margin-inline-start: 2px;
+  width: 24px; height: 24px; border-radius: 5px;
+  display: grid; place-items: center;
+  color: var(--edt-brick-ink);
+  background: linear-gradient(180deg, var(--edt-brick-top) 0%, var(--edt-brick-mid) 48%, var(--edt-brick-bot) 100%);
+  box-shadow: inset 0 1px 0 var(--edt-mortar-lit), inset 0 -1px 0 var(--edt-mortar-dark);
+}
+
+/* THE BRICK BUTTON — «يجب ان تكون الازرار على شكل طوب». A single laid clay
+   brick: warm fill, lit top arris, shadowed bottom bed, a small 5px radius and
+   a faint pore texture. Still unmistakably a button, and still legible. */
+.edt-brick,
+.edt-open-btn,
+.edt-stg-add {
+  position: relative;
+  color: var(--edt-brick-ink);
+  border: none;
+  border-radius: 5px;
+  background-color: var(--edt-brick-mid);
+  background-image:
+    repeating-linear-gradient(101deg, rgba(255, 255, 255, .022) 0 3px, rgba(46, 18, 8, .03) 3px 7px),
+    linear-gradient(180deg, var(--edt-brick-top) 0%, var(--edt-brick-mid) 48%, var(--edt-brick-bot) 100%);
+  box-shadow:
+    inset 0 1px 0 var(--edt-mortar-lit),
+    inset 0 -2px 0 var(--edt-mortar-dark),
+    0 2px 0 var(--edt-brick-bed),
+    0 7px 16px var(--edt-brick-cast);
+}
 .edt-open-btn {
   display: inline-flex; align-items: center; gap: 7px;
-  min-height: 44px; padding: 11px 22px; border-radius: 999px;
-  background: var(--edt-amber); color: var(--edt-on-amber);
-  font-weight: 800; font-size: 14px; border: none; cursor: pointer;
+  min-height: 44px; padding: 12px 22px;
+  font-weight: 800; font-size: 14px; cursor: pointer;
   transition: transform .15s ease, box-shadow .2s ease;
 }
-.edt-open-btn:hover { transform: translateY(-1px); box-shadow: 0 8px 24px rgba(245, 185, 66, .24); }
-.edt-open-btn:active { transform: scale(.97); }
+.edt-open-btn:hover {
+  transform: translateY(-1px);
+  box-shadow:
+    inset 0 1px 0 var(--edt-mortar-lit),
+    inset 0 -2px 0 var(--edt-mortar-dark),
+    0 3px 0 var(--edt-brick-bed),
+    0 10px 22px var(--edt-brick-cast);
+}
+.edt-open-btn:active {
+  transform: translateY(1px);
+  box-shadow:
+    inset 0 1px 0 var(--edt-mortar-lit),
+    inset 0 -2px 0 var(--edt-mortar-dark),
+    0 1px 0 var(--edt-brick-bed);
+}
 .edt-open-btn:disabled { opacity: .5; cursor: default; }
 
-/* Bottom-anchored photo melting into the canvas. The box HUGS the picture instead
-   of letterboxing it into one fixed frame: cutouts here range from panoramic
-   plates (ratio above 3) to tall glasses, and EditorialLayout tags each one
-   data-fit="wide|std|tall" from its natural size. */
+/* The photo now LEADS the section, still melting into the canvas at its foot so
+   the table recedes into the plaster the words sit on. The box HUGS the picture
+   instead of letterboxing it into one fixed frame: cutouts here range from
+   panoramic plates (ratio above 3) to tall glasses, and EditorialLayout tags
+   each one data-fit="wide|std|tall" from its natural size. Caps are tighter
+   than they were, because the price and its details now follow underneath. */
 .edt-photo {
   position: relative;
-  align-self: end;
+  align-self: start;
   width: 100%;
   min-height: 0;
   display: flex;
@@ -7061,7 +7232,7 @@ body:has(.sd2-root) .toast-wrap { z-index: 840; }
   display: block;
   width: 100%;
   height: auto;
-  max-height: min(46dvh, 430px);
+  max-height: min(38dvh, 360px);
   object-fit: contain;
   object-position: bottom center;
 }
@@ -7070,16 +7241,16 @@ body:has(.sd2-root) .toast-wrap { z-index: 840; }
   margin-inline: calc(-1 * var(--edt-pad));
   width: calc(100% + var(--edt-pad) * 2);
 }
-.edt-photo[data-fit='wide'] img { max-height: min(34dvh, 300px); }
-/* tall cutout: cap the height and let the dark canvas take the side margins */
-.edt-photo[data-fit='tall'] img { max-height: min(52dvh, 470px); }
+.edt-photo[data-fit='wide'] img { max-height: min(27dvh, 250px); }
+/* tall cutout: cap the height and let the canvas take the side margins */
+.edt-photo[data-fit='tall'] img { max-height: min(44dvh, 400px); }
 /* in-flow (not absolute): the photo box now hugs its content, so an absolutely
    positioned placeholder would collapse the box to zero height */
 .edt-noimg {
   position: relative;
   display: grid; place-items: center;
-  width: 100%; min-height: min(30dvh, 240px);
-  color: rgba(247, 242, 233, 0.12);
+  width: 100%; min-height: min(26dvh, 210px);
+  color: var(--edt-soft-2);
 }
 /* warm ground light so a transparent cutout does not float in the void */
 .edt-glow {
@@ -7109,8 +7280,8 @@ body:has(.sd2-root) .toast-wrap { z-index: 840; }
   z-index: 11; direction: ltr;
   font-size: 12px; font-weight: 800; letter-spacing: .1em;
   color: var(--edt-mut);
-  background: rgba(16, 12, 10, .82); backdrop-filter: blur(6px);
-  padding: 4px 12px; border-radius: 999px; border: 1px solid var(--edt-line);
+  background: var(--edt-bg); backdrop-filter: blur(6px);
+  padding: 4px 12px; border-radius: 6px; border: 1px solid var(--edt-line);
 }
 
 /* Tablet and desktop: two columns inside a centred measure. The single-column
@@ -7123,7 +7294,8 @@ body:has(.sd2-root) .toast-wrap { z-index: 840; }
     --edt-pad: clamp(28px, 5vw, 72px);
     max-width: 1240px;
     margin-inline: auto;
-    grid-template-columns: minmax(0, 1fr) minmax(0, 1.05fr);
+    /* the photo leads here too, so it takes the wider of the two columns */
+    grid-template-columns: minmax(0, 1.05fr) minmax(0, 1fr);
     grid-template-rows: auto;
     align-items: center;
     gap: clamp(28px, 4vw, 60px);
@@ -7145,7 +7317,12 @@ body:has(.sd2-root) .toast-wrap { z-index: 840; }
   /* modal level: at z-index 60 the venue's bottom nav (100) and bell FAB (120)
      painted straight over this stage and its add-to-cart bar */
   z-index: var(--z-sheet, 310);
-  background: var(--edt-bg, #100c0a); color: var(--edt-ink, #f7f2e9);
+  /* the same room: brick behind the dish at the top, plaster under the record */
+  background-color: var(--edt-bg, #100c0a);
+  background-image: linear-gradient(180deg, transparent 0%, var(--edt-bg, #100c0a) 36%), var(--edt-wall);
+  background-repeat: no-repeat, repeat;
+  background-size: 100% 100%, 128px 64px;
+  color: var(--edt-ink, #f7f2e9);
   display: flex; flex-direction: column;
   animation: edtStgIn .25s ease-out;
 }
@@ -7154,13 +7331,13 @@ body:has(.sd2-root) .toast-wrap { z-index: 840; }
 @keyframes edtStgOut { to { opacity: 0; } }
 .edt-stg-x {
   position: absolute; top: 12px; inset-inline-start: 12px; z-index: 3;
-  width: 44px; height: 44px; border-radius: 50%;
-  background: rgba(247, 242, 233, .10); color: var(--edt-ink, #f7f2e9);
+  width: 44px; height: 44px; border-radius: 10px;
+  background: var(--edt-soft-2, rgba(247, 242, 233, .10)); color: var(--edt-ink, #f7f2e9);
   border: 1px solid var(--edt-edge, rgba(247, 242, 233, .4));
   display: grid; place-items: center; cursor: pointer;
   backdrop-filter: blur(6px);
 }
-.edt-stg-x:hover { background: rgba(247, 242, 233, .18); }
+.edt-stg-x:hover { border-color: var(--edt-amber, #f5b942); }
 .edt-stg-scroll { flex: 1; overflow-y: auto; scrollbar-width: none; -ms-overflow-style: none; }
 .edt-stg-scroll::-webkit-scrollbar { width: 0; height: 0; }
 .edt-stg-media { width: 100%; }
@@ -7215,9 +7392,9 @@ body:has(.sd2-root) .toast-wrap { z-index: 840; }
 .edt-stg-desc { font-size: 15px; line-height: 1.85; color: var(--edt-mut, #a99c8c); max-width: 62ch; margin: 0 0 16px; }
 .edt-note {
   display: flex; align-items: flex-start; gap: 8px;
-  margin: 0 0 16px; padding: 9px 12px; border-radius: 12px;
-  border: 1px solid rgba(255, 220, 154, .28);
-  background: rgba(255, 220, 154, .07);
+  margin: 0 0 16px; padding: 9px 12px; border-radius: 8px;
+  border: 1px solid var(--edt-note-edge, rgba(255, 220, 154, .28));
+  background: var(--edt-note-bg, rgba(255, 220, 154, .07));
   color: var(--edt-amber-soft, #ffdc9a);
   font-size: 13px; line-height: 1.6;
 }
@@ -7245,18 +7422,22 @@ body:has(.sd2-root) .toast-wrap { z-index: 840; }
 .edt-opt-note { color: var(--edt-mut, #a99c8c); font-weight: 600; font-size: 12px; }
 .edt-opts { display: flex; flex-wrap: wrap; gap: 8px; }
 .edt-opt {
-  min-height: 42px; padding: 10px 16px; border-radius: 12px;
+  min-height: 42px; padding: 10px 16px; border-radius: 6px;
   border: 1px solid var(--edt-edge, rgba(247, 242, 233, .4));
-  background: rgba(247, 242, 233, .05);
+  background: var(--edt-soft, rgba(247, 242, 233, .05));
   color: var(--edt-ink, #f7f2e9);
   font-size: 13px; font-weight: 700; cursor: pointer;
   transition: border-color .2s, background .2s, color .2s;
 }
 .edt-opt:hover { border-color: var(--edt-amber, #f5b942); }
+/* a chosen option is a laid brick, same as every other committed action */
 .edt-opt.on {
-  border-color: var(--edt-amber, #f5b942);
-  background: var(--edt-amber, #f5b942);
-  color: var(--edt-on-amber, #1a1206);
+  border-color: transparent;
+  color: var(--edt-brick-ink, #ffffff);
+  background: linear-gradient(180deg, var(--edt-brick-top, #bc5730) 0%, var(--edt-brick-mid, #ab4b28) 48%, var(--edt-brick-bot, #9c4324) 100%);
+  box-shadow:
+    inset 0 1px 0 var(--edt-mortar-lit, rgba(255, 231, 205, .3)),
+    inset 0 -2px 0 var(--edt-mortar-dark, rgba(46, 18, 8, .34));
 }
 /* «يُطلب معه» — the venue's curated pairings, tappable to add straight to the cart */
 .edt-pair-row { display: flex; flex-wrap: wrap; gap: 8px; }
@@ -7265,9 +7446,9 @@ body:has(.sd2-root) .toast-wrap { z-index: 840; }
   display: flex; align-items: center; gap: 10px;
   padding-block: 8px;
   padding-inline: 8px 12px;
-  border-radius: 14px;
+  border-radius: 8px;
   border: 1px solid var(--edt-edge, rgba(247, 242, 233, .4));
-  background: rgba(247, 242, 233, .05);
+  background: var(--edt-soft, rgba(247, 242, 233, .05));
   color: var(--edt-ink, #f7f2e9);
   font: inherit; text-align: start; cursor: default;
   transition: border-color .2s, background .2s, transform .15s ease;
@@ -7275,11 +7456,11 @@ body:has(.sd2-root) .toast-wrap { z-index: 840; }
 button.edt-pair { cursor: pointer; }
 button.edt-pair:hover { border-color: var(--edt-amber, #f5b942); }
 button.edt-pair:active { transform: scale(.98); }
-.edt-pair.done { border-color: var(--edt-amber, #f5b942); background: rgba(245, 185, 66, .16); }
+.edt-pair.done { border-color: var(--edt-amber, #f5b942); background: var(--edt-soft-2, rgba(247, 242, 233, .10)); }
 .edt-pair.is-out { opacity: .62; }
 .edt-pair.is-out .edt-pair-txt i { color: var(--edt-alert, #ff8d70); }
 .edt-pair-media {
-  flex: none; width: 46px; height: 46px; border-radius: 10px; overflow: hidden;
+  flex: none; width: 46px; height: 46px; border-radius: 6px; overflow: hidden;
   background: var(--edt-bg-2, #191310); color: var(--edt-mut, #a99c8c);
   display: grid; place-items: center;
 }
@@ -7289,9 +7470,13 @@ button.edt-pair:active { transform: scale(.98); }
 .edt-pair-txt i { font-style: normal; font-size: 12.5px; font-weight: 700; color: var(--edt-amber, #f5b942); }
 .edt-pair-add {
   flex: none; margin-inline-start: auto;
-  width: 28px; height: 28px; border-radius: 50%;
+  width: 28px; height: 28px; border-radius: 5px;
   display: grid; place-items: center;
-  background: var(--edt-amber, #f5b942); color: var(--edt-on-amber, #1a1206);
+  color: var(--edt-brick-ink, #ffffff);
+  background: linear-gradient(180deg, var(--edt-brick-top, #bc5730) 0%, var(--edt-brick-mid, #ab4b28) 48%, var(--edt-brick-bot, #9c4324) 100%);
+  box-shadow:
+    inset 0 1px 0 var(--edt-mortar-lit, rgba(255, 231, 205, .3)),
+    inset 0 -1px 0 var(--edt-mortar-dark, rgba(46, 18, 8, .34));
 }
 .edt-stg-err { color: var(--edt-alert, #ff8d70); font-size: 13px; font-weight: 700; margin: 6px 0 0; }
 .edt-stg-bar {
@@ -7302,7 +7487,7 @@ button.edt-pair:active { transform: scale(.98); }
 }
 .edt-stg-bar .stepper { border-color: var(--edt-edge, rgba(247, 242, 233, .4)); }
 .edt-stg-bar .stepper button { color: var(--edt-amber, #f5b942); }
-.edt-stg-bar .stepper button:active { background: rgba(247, 242, 233, .10); }
+.edt-stg-bar .stepper button:active { background: var(--edt-soft-2, rgba(247, 242, 233, .10)); }
 .edt-stg-bar .stepper .val { color: var(--edt-ink, #f7f2e9); }
 .edt-stg-total {
   display: inline-flex; align-items: baseline; gap: 8px;
@@ -7311,15 +7496,22 @@ button.edt-pair:active { transform: scale(.98); }
 }
 .edt-stg-add {
   display: inline-flex; align-items: center; justify-content: center; gap: 7px;
-  min-height: 48px; padding: 13px 22px; border-radius: 14px; border: none;
-  background: var(--edt-amber, #f5b942);
-  color: var(--edt-on-amber, #1a1206);
+  min-height: 48px; padding: 14px 22px;
   font-weight: 800; font-size: 15px; cursor: pointer;
-  transition: transform .15s ease;
+  transition: transform .15s ease, box-shadow .2s ease;
 }
-.edt-stg-add:active { transform: scale(.97); }
+.edt-stg-add:active {
+  transform: translateY(1px);
+  box-shadow:
+    inset 0 1px 0 var(--edt-mortar-lit, rgba(255, 231, 205, .3)),
+    inset 0 -2px 0 var(--edt-mortar-dark, rgba(46, 18, 8, .34)),
+    0 1px 0 var(--edt-mortar-dark, rgba(46, 18, 8, .34));
+}
 .edt-stg-add:disabled {
-  background: rgba(247, 242, 233, .12); color: #e6ded1;
+  background-image: none;
+  background-color: var(--edt-soft-2, rgba(247, 242, 233, .12));
+  color: var(--edt-mut, #a99c8c);
+  box-shadow: inset 0 0 0 1px var(--edt-line, rgba(247, 242, 233, .14));
   cursor: default; transform: none;
 }
 .edt-chip:focus-visible,
@@ -7328,6 +7520,7 @@ button.edt-pair:active { transform: scale(.98); }
 .edt-more:focus-visible,
 .edt-thumb:focus-visible,
 .edt-pair:focus-visible,
+.edt-lpair:focus-visible,
 .edt-photo-open:focus-visible,
 .edt-stg-x:focus-visible,
 .edt-stg-add:focus-visible {
@@ -7355,11 +7548,62 @@ button.edt-pair:active { transform: scale(.98); }
   .edt-stg-x { inset-inline-start: 20px; top: 20px; }
 }
 
+/* ---- Editorial in the LIGHT theme ----
+   Not a tint of the dark one: the whole token set is re-derived for warm
+   plaster. The BRICK stays the same clay in both themes — it is the venue's
+   identity, and the same fill happens to clear every threshold on either
+   canvas (white label 4.62:1 at the lightest stop; the shape 4.2:1 on the dark
+   canvas, 3.9:1 on the light one). Selectors carry the class chain so they win
+   on specificity wherever the dark rule used one. */
+[data-theme='light'] .edt-wrap,
+[data-theme='light'] .edt-stg {
+  --edt-bg: #f7f0e6;
+  --edt-bg-2: #efe4d4;
+  --edt-amber: #8a4a12;
+  --edt-amber-soft: #7d4d10;
+  --edt-copper: #8f4a1d;
+  --edt-ink: #24170e;
+  --edt-ink-2: #3d2c1e;
+  --edt-mut: #5f4d3d;
+  --edt-line: rgba(36, 23, 14, 0.16);
+  --edt-edge: rgba(36, 23, 14, 0.52);
+  --edt-soft: rgba(36, 23, 14, 0.05);
+  --edt-soft-2: rgba(36, 23, 14, 0.10);
+  --edt-on-amber: #fff8ee;
+  --edt-alert: #b3341a;
+  --edt-wall: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='128' height='64'%3E%3Cg opacity='.8'%3E%3Crect width='128' height='64' fill='%23f2eae0'/%3E%3Cg fill='%23e2d0bc'%3E%3Crect x='1.5' y='1.5' width='61' height='29' rx='1.5'/%3E%3Crect x='65.5' y='1.5' width='61' height='29' rx='1.5'/%3E%3Crect x='-30.5' y='33.5' width='61' height='29' rx='1.5'/%3E%3Crect x='33.5' y='33.5' width='61' height='29' rx='1.5'/%3E%3Crect x='97.5' y='33.5' width='61' height='29' rx='1.5'/%3E%3C/g%3E%3C/g%3E%3C/svg%3E");
+  --edt-lamp: rgba(181, 115, 42, 0.10);
+  --edt-orn-ink: #6b4a2e;
+  --edt-orn-warm: #b5732a;
+  --edt-orn-op: 0.24;
+  --edt-note-edge: rgba(125, 77, 16, 0.32);
+  --edt-note-bg: rgba(125, 77, 16, 0.07);
+  /* a brick throws a softer shadow on a lit plaster wall than in a dark room */
+  --edt-brick-bed: rgba(46, 18, 8, 0.26);
+  --edt-brick-cast: rgba(46, 18, 8, 0.18);
+}
+/* the amber ground-light under a cutout has to become a clay one, or it reads
+   as a stain on the plaster instead of a lamp */
+[data-theme='light'] .edt-glow {
+  background: radial-gradient(58% 100% at 50% 100%, rgba(143, 74, 29, .16), transparent 74%);
+}
+[data-theme='light'] .edt-stg-hero .edt-glow {
+  background: radial-gradient(56% 62% at 50% 56%, rgba(143, 74, 29, .14), transparent 74%);
+}
+/* the vertical category watermark needs a touch more ink to survive on cream */
+[data-theme='light'] .edt-side { color: rgba(36, 23, 14, 0.08); }
+/* the catbar's own drop-off is a shadow, not a copy of the page colour */
+[data-theme='light'] .edt-catbar { box-shadow: 0 10px 16px -12px rgba(36, 23, 14, .40); }
+[data-theme='light'] .edt-progress { background: rgba(247, 240, 230, .90); }
+/* the brick itself is unchanged — it is the venue's identity, and its bed
+   shadow already flips through --edt-brick-bed / --edt-brick-cast above */
+
 @media (prefers-reduced-motion: reduce) {
   .edt-ing li, .edt-stg-ing li { transition: none; animation: none; opacity: 1; transform: none; }
   .edt-stg, .edt-stg.closing { animation: none; }
-  .edt-chip, .edt-open-btn, .edt-opt, .edt-pair, .edt-stg-add { transition: none; }
-  .edt-open-btn:hover, .edt-open-btn:active, button.edt-pair:active, .edt-stg-add:active { transform: none; }
+  .edt-chip, .edt-open-btn, .edt-opt, .edt-pair, .edt-lpair, .edt-stg-add { transition: none; }
+  .edt-open-btn:hover, .edt-open-btn:active,
+  button.edt-pair:active, .edt-lpair:active, .edt-stg-add:active { transform: none; }
 }
 
 /* ============ OCEANART («اللوحة الفنية») — painted canvas, rotated plates, seals ============ */

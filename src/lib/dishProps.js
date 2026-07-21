@@ -22,8 +22,17 @@
 // ---------------------------------------------------------------- surfaces --
 
 // grain -> which hand-authored SVG overlay DishProps draws on the plane.
+//          An unknown grain simply draws no overlay, which is how 'brick' works:
+//          a running-bond course is exact in CSS and needs no strokes on top.
 // reflective -> the material earns a soft specular smear under the dish.
+//
+// The first three entries are the room «صاج السمك» actually has — a solid
+// walnut table, a clay brick ledge and a woven rattan mat — so a venue picking
+// blind lands on its own furniture first.
 export const SURFACES = [
+  { id: 'venueWalnut',  labelAr: 'طاولة جوز داكنة', labelEn: 'Dark walnut table', grain: 'wood',   reflective: true,  tone: 'warm' },
+  { id: 'brickLedge',   labelAr: 'حافة طوب',        labelEn: 'Brick ledge',       grain: 'brick',  reflective: false, tone: 'warm' },
+  { id: 'rattanMat',    labelAr: 'حصيرة خوص',       labelEn: 'Woven rattan mat',  grain: 'linen',  reflective: false, tone: 'warm' },
   { id: 'darkMarble',   labelAr: 'رخام داكن',   labelEn: 'Dark marble',  grain: 'marble', reflective: true,  tone: 'cool' },
   { id: 'warmWood',     labelAr: 'طاولة خشب',   labelEn: 'Warm wood',    grain: 'wood',   reflective: false, tone: 'warm' },
   { id: 'brushedSteel', labelAr: 'ستيل مصقول',  labelEn: 'Brushed steel', grain: 'steel',  reflective: true,  tone: 'cool' },
@@ -105,7 +114,9 @@ const AUTO_RULES = [
   {
     id: 'seafood',
     words: ['سمك', 'سمكة', 'سلمون', 'هامور', 'ربيان', 'جمبري', 'صاج', 'بحري', 'مأكولات بحرية', 'fish', 'salmon', 'shrimp', 'prawn', 'seafood', 'hamour', 'tuna', 'calamari'],
-    surface: 'slate',
+    // fish houses serve on wood, not on a cold slate slab — the automatic pick
+    // now lands on the solid walnut table the rooms actually have
+    surface: 'venueWalnut',
     props: ['lemonWedge', 'parsley', 'chilli', 'garlicClove'],
   },
   {

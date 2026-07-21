@@ -209,6 +209,10 @@
   height: 34px;
   background: linear-gradient(180deg, #101014 0%, #17171c 100%);
 }
+/* the venue's own furniture leads the picker */
+.dpx-chip[data-s='venueWalnut'] { background: linear-gradient(180deg, #7a462a 0%, #55301a 58%, #2a1509 100%); }
+.dpx-chip[data-s='brickLedge'] { background: linear-gradient(180deg, #8a4726 0%, #9e7658 47%, #8b4223 53%, #46200f 100%); }
+.dpx-chip[data-s='rattanMat'] { background: linear-gradient(180deg, #b99a68 0%, #8e6c40 58%, #3a2916 100%); }
 .dpx-chip[data-s='darkMarble'] { background: linear-gradient(180deg, #26262c 0%, #17171b 55%, #101014 100%); }
 .dpx-chip[data-s='warmWood'] { background: linear-gradient(180deg, #6b452a 0%, #4a2f1c 60%, #2e1d11 100%); }
 .dpx-chip[data-s='brushedSteel'] { background: linear-gradient(180deg, #7b8087 0%, #4e5359 55%, #2c2f34 100%); }

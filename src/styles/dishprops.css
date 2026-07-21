@@ -82,6 +82,72 @@
     radial-gradient(72% 58% at 50% 100%, rgba(255, 255, 255, .07), transparent 70%);
 }
 
+/* ---- the venue's own furniture (first three entries of SURFACES) ---- */
+
+/* dark walnut table — the real thing: a deep red-brown board with wide plank
+   seams, close grain from the wood SVG overlay, and the SATIN sheen a waxed
+   solid-wood top has (a broad, soft specular band, not a mirror). */
+.dp-root[data-surface='venueWalnut'] .dp-plane {
+  background:
+    /* the room light landing on the far edge of the board */
+    radial-gradient(116% 82% at 50% 3%, rgba(226, 158, 92, .26), transparent 62%),
+    /* satin sheen: one wide low-contrast band, off-axis */
+    linear-gradient(97deg, transparent 26%, rgba(255, 228, 190, .07) 47%, rgba(255, 228, 190, .04) 56%, transparent 74%),
+    /* plank seams, wider apart than the generic wood so the board reads solid */
+    repeating-linear-gradient(90.5deg, rgba(23, 11, 5, .20) 0 2px, transparent 2px 96px),
+    /* close grain */
+    repeating-linear-gradient(90.5deg, rgba(23, 11, 5, .085) 0 5px, rgba(255, 220, 180, .022) 5px 11px),
+    linear-gradient(180deg, rgba(84, 47, 25, 0) 0%, rgba(84, 47, 25, .60) 12%, rgba(63, 34, 17, .96) 44%, rgba(38, 20, 10, 1) 100%);
+}
+.dp-root[data-surface='venueWalnut'] .dp-grain { opacity: .48; }
+.dp-root[data-surface='venueWalnut'] .dp-horizon {
+  background: linear-gradient(90deg, transparent, rgba(240, 190, 132, .18) 22%, rgba(248, 206, 152, .28) 50%, rgba(240, 190, 132, .18) 78%, transparent);
+}
+.dp-root[data-surface='venueWalnut'] .dp-reflect {
+  background:
+    radial-gradient(44% 84% at 50% 100%, rgba(226, 158, 92, .16), transparent 72%),
+    radial-gradient(72% 58% at 50% 100%, rgba(255, 232, 200, .05), transparent 70%);
+}
+
+/* brick ledge — a clay course the dish stands on: a lit top face, the mortar
+   bed, then one row of brick fronts. Running bond is unnecessary for a single
+   visible course, so the joints are one repeating layer pinned to the bottom
+   band; every part of it is a gradient, nothing is downloaded. */
+.dp-root[data-surface='brickLedge'] .dp-plane {
+  background-color: rgba(58, 30, 17, 1);
+  background-image:
+    /* vertical mortar joints — only across the front course */
+    repeating-linear-gradient(90deg, rgba(150, 116, 88, .40) 0 3px, transparent 3px 62px),
+    /* the mortar bed under the top face, and the top face itself */
+    linear-gradient(180deg,
+      rgba(120, 62, 34, 0) 0%,
+      rgba(120, 62, 34, .52) 12%,
+      rgba(102, 51, 27, .95) 42%,
+      rgba(158, 118, 88, .85) 48%,
+      rgba(139, 66, 35, 1) 52%,
+      rgba(112, 51, 26, 1) 84%,
+      rgba(66, 30, 15, 1) 100%);
+  background-size: 62px 48%, 100% 100%;
+  background-position: 0 100%, 0 0;
+  background-repeat: repeat-x, no-repeat;
+}
+.dp-root[data-surface='brickLedge'] .dp-grain { opacity: 0; }
+.dp-root[data-surface='brickLedge'] .dp-horizon {
+  top: 9%;
+  background: linear-gradient(90deg, transparent, rgba(255, 208, 160, .16) 22%, rgba(255, 216, 172, .24) 50%, rgba(255, 208, 160, .16) 78%, transparent);
+}
+
+/* woven rattan mat — cream straw over a dark table, the weave running both
+   ways with the light catching only the top of each strand */
+.dp-root[data-surface='rattanMat'] .dp-plane {
+  background:
+    repeating-linear-gradient(90deg, rgba(255, 236, 200, .10) 0 4px, rgba(60, 38, 20, .16) 4px 9px),
+    repeating-linear-gradient(0deg, rgba(255, 236, 200, .07) 0 4px, rgba(60, 38, 20, .13) 4px 9px),
+    linear-gradient(180deg, rgba(146, 111, 66, 0) 0%, rgba(140, 106, 62, .58) 12%, rgba(112, 84, 48, .95) 44%, rgba(58, 41, 22, 1) 100%);
+}
+.dp-root[data-surface='rattanMat'] .dp-grain { opacity: .5; }
+.dp-root[data-surface='rattanMat'] .dp-horizon { opacity: .55; }
+
 /* dark marble — cool stone, faint warm veining, a real sheen */
 .dp-root[data-surface='darkMarble'] .dp-plane {
   background:
@@ -362,6 +428,38 @@
   74% { opacity: .92; }
   84% { opacity: .38; }
 }
+
+/* ----------------------------------------------------------- light theme -- */
+
+/* The materials themselves do NOT change: a walnut table is dark in a lit room
+   too, and repainting it pale would throw away the one thing that makes the
+   cutout look photographed. What changes is how it MEETS the page — on warm
+   plaster the contact shadow has to come down and the far edge has to catch
+   some room light, or the surface reads as a smudge under the dish.
+   Scoped to the editorial menu on purpose: the admin picker's preview stage
+   (.dpx-stage) is always dark, whatever theme the dashboard is in. */
+[data-theme='light'] .edt-photo .dp-contact,
+[data-theme='light'] .edt-stg-hero .dp-contact {
+  background: radial-gradient(50% 50% at 50% 50%, rgba(52, 27, 13, .44), rgba(52, 27, 13, .21) 44%, transparent 73%);
+}
+[data-theme='light'] .edt-photo .dp-contact::after,
+[data-theme='light'] .edt-stg-hero .dp-contact::after {
+  background: radial-gradient(50% 50% at 50% 50%, rgba(52, 27, 13, .52), transparent 70%);
+}
+/* the plaster light washing over the far edge of the material */
+[data-theme='light'] .edt-photo .dp-plane::after,
+[data-theme='light'] .edt-stg-hero .dp-plane::after {
+  content: '';
+  position: absolute;
+  inset-inline: 0;
+  top: 0;
+  height: 38%;
+  pointer-events: none;
+  background: linear-gradient(180deg, rgba(247, 240, 230, .58), rgba(247, 240, 230, 0));
+}
+/* a lit room does not need the hard white lip a dark one did */
+[data-theme='light'] .edt-photo .dp-horizon,
+[data-theme='light'] .edt-stg-hero .dp-horizon { opacity: .45; }
 
 /* Small screens carry the most dishes and the weakest GPUs: shorten the plane
    and drop the per-prop shadows, which are the cheapest thing to lose. */
