@@ -288,15 +288,27 @@ export default function ScreenPlayer() {
   const [specRoom, setSpecRoom] = useState(null)
   const specRoomId = specMatch?.roomId || ''
   useEffect(() => {
-    if (!tid || !specRoomId) { setSpecRoom(null); return undefined }
+    // Clear the previous room IMMEDIATELY when the match switches, so the new
+    // match id is never briefly paired with the old game's room while its first
+    // snapshot is in flight. LiveMatchScreen also refuses to draw a board whose
+    // room.gameId disagrees with the match, but resetting here closes the window
+    // rather than relying on that check alone.
+    setSpecRoom(null)
+    if (!tid || !specRoomId) return undefined
     let alive = true
     const stop = watchRoom(tid, specRoomId, (r) => { if (alive) setSpecRoom(r || null) })
     return () => { alive = false; stop?.() }
   }, [tid, specRoomId, subN])
 
-  // Finished-board hold + dead-board watchdog. Stamped in an effect (never in
-  // render) and read below; the 1s `beat` heartbeat re-evaluates the takeover
-  // every second, so a finished or abandoned board is released promptly.
+  // Finished-board hold: anchored to the room's OWN endedAt, which the server
+  // stamps in the same transaction that ends the room, so it arrives in the
+  // SAME snapshot as status==='ended'. Reading it synchronously here (rather
+  // than stamping a ref in an effect that runs a render LATER) removes the ~1s
+  // flash of the menu playlist that appeared between the board ending and the
+  // win banner. It also means a reload minutes later does NOT replay a stale
+  // "live" banner: the hold is measured from when the match actually ended, not
+  // from when this screen first noticed. A ref stamp remains as a fallback for
+  // the (unexpected) case of an ended room with no endedAt.
   const endedStamp = useRef({ key: '', at: 0 })
   useEffect(() => {
     const key = specRoom && specRoom.status === 'ended' ? (specRoom.roomId || specRoomId) : ''
@@ -314,7 +326,7 @@ export default function ScreenPlayer() {
     const phase = spectatePhase(specMatch, specRoom, Date.now())
     if (phase === 'live') return { on: true, mode: 'live' }
     if (phase === 'ended') {
-      const { at } = endedStamp.current
+      const at = Number(specRoom?.endedAt) || endedStamp.current.at
       if (at && Date.now() - at < SPECTATE_RESULT_HOLD_MS) return { on: true, mode: 'ended' }
       return { on: false, mode: '' }
     }

@@ -16,7 +16,7 @@
 // The logic that decides WHICH match to show, and when it has ended or died,
 // lives in lib/spectate.js. This file is only the frame around the board.
 // ===========================================================================
-import { Suspense, lazy, useMemo } from 'react'
+import { Component, Suspense, lazy, useMemo } from 'react'
 import {
   isSpectatableGame,
   spectateSides,
@@ -25,16 +25,39 @@ import {
 } from '../../lib/spectate.js'
 import '../../styles/spectate.css'
 
-// HARD SAFETY LIMIT (mirrors SPECTATABLE_GAMES in lib/spectate.js): ONLY these
-// two boards may ever mount on a public screen. Wist and Jackaroo hold each
-// player's private HAND inside the shared room state, so rendering them here
-// would show one guest's cards to the whole cafe. This map is the structural
-// gate — a game that is not in it CANNOT be rendered and instead gets the honest
-// "cannot be shown live" panel below. Do NOT add hidden-information games.
+// The board's JS chunk is fetched the moment a match goes live. A rejected
+// dynamic import (a fresh deploy dropped the old hash, or a network blip) throws
+// in render, and there is only ONE error boundary in the whole app — the
+// app-level ChunkBoundary — which would replace the ENTIRE all-day signage
+// (menu, offers, prayer times) with a manual "reload page" prompt nobody taps on
+// a wall-mounted TV. So the load also falls back locally: a failed board chunk
+// becomes null, and the boundary below turns any board RENDER error into the
+// honest waiting frame, so the core signage always survives the games feature
+// failing.
+const boardFallback = { default: () => null }
 const BOARDS = {
-  chess: lazy(() => import('../games/Chess.jsx')),
-  ludo: lazy(() => import('../games/Ludo.jsx')),
+  chess: lazy(() => import('../games/Chess.jsx').catch(() => boardFallback)),
+  ludo: lazy(() => import('../games/Ludo.jsx').catch(() => boardFallback)),
 }
+
+// A render error inside a board (an unexpected state shape) must never escape to
+// the app boundary and take the signage down. It renders the provided fallback
+// frame instead, and recovers automatically when the match id changes.
+class BoardBoundary extends Component {
+  constructor(props) { super(props); this.state = { dead: false } }
+  static getDerivedStateFromError() { return { dead: true } }
+  componentDidUpdate(prev) {
+    if (this.state.dead && prev.resetKey !== this.props.resetKey) this.setState({ dead: false })
+  }
+  render() { return this.state.dead ? this.props.fallback : this.props.children }
+}
+
+// HARD SAFETY LIMIT (mirrors SPECTATABLE_GAMES in lib/spectate.js): ONLY chess
+// and ludo may ever mount on a public screen — see BOARDS above. Wist and
+// Jackaroo hold each player's private HAND inside the shared room state, so
+// rendering them here would show one guest's cards to the whole cafe. BOARDS is
+// the structural gate: a game not in it CANNOT be rendered and gets the honest
+// "cannot be shown live" panel below. Do NOT add hidden-information games.
 
 // Latin digits always (hard repo rule) — small integers, but formatted safely.
 const fmt = (n) => { try { return Number(n || 0).toLocaleString('ar-SA-u-nu-latn') } catch (_) { return String(n) } }
@@ -114,9 +137,19 @@ export default function LiveMatchScreen({ match, room, venue = null, mode = 'liv
     )
   }
 
-  // Room not drawable yet (still in the lobby, or momentarily unread). Honest
-  // waiting frame rather than an empty board.
-  if (!room || (room.status !== 'playing' && room.status !== 'ended')) {
+  // Room not drawable yet (still in the lobby, or momentarily unread), OR the
+  // room we hold is not the one this match is about. That last case is the
+  // important one: when the live match switches (table X's chess ends, table Y's
+  // ludo begins) the new match id arrives one snapshot BEFORE its room does, so
+  // for a moment `room` is still the previous game's room. Mounting the board
+  // chosen by the NEW match.gameId against the OLD room state crashes the board
+  // (e.g. Ludo reading room.state.tokens on a chess room) and, with only the
+  // app-level boundary above it, would white-screen the whole signage. It is
+  // also the privacy backstop: the board is only ever fed a room whose OWN
+  // gameId is the allowlisted game being shown, so a mismatched or spoofed room
+  // can never be driven onto the screen. Require the room to name the same game.
+  if (!room || String(room.gameId) !== String(gameId)
+      || (room.status !== 'playing' && room.status !== 'ended')) {
     return (
       <Notice
         venue={venue}
@@ -154,9 +187,14 @@ export default function LiveMatchScreen({ match, room, venue = null, mode = 'liv
           onMove/onExit/mySeat, so it is non-interactive by contract too. */}
       <div className="sv-board">
         <div className="sv-board-inner">
-          <Suspense fallback={<div className="sv-spin" aria-hidden="true" />}>
-            <Board room={room} mySeat={null} lang="ar" brand={brand} />
-          </Suspense>
+          <BoardBoundary
+            resetKey={match?.id || ''}
+            fallback={<div className="sv-spin" aria-hidden="true" />}
+          >
+            <Suspense fallback={<div className="sv-spin" aria-hidden="true" />}>
+              <Board room={room} mySeat={null} lang="ar" brand={brand} />
+            </Suspense>
+          </BoardBoundary>
         </div>
       </div>
 

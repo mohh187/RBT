@@ -662,11 +662,21 @@ export default function GamesCenter({
       enterRoom(rid, gid)
       return
     }
-    // The game opens right now — no second tap, no "come back later".
+    // The game opens right now — no second tap, no "come back later". But a
+    // party game must still route through the LOBBY (play with the table vs
+    // invite a friend), exactly as pickGame does; calling startGame on it would
+    // silently drop a first-timer into a single-device hotseat game instead.
     const target = pendingId || enabled[0]?.id
     setPendingId('')
-    if (target) startGame(target)
-    else setView('browse')
+    if (!target) { setView('browse'); return }
+    if (gameById(target)?.multiplayer) {
+      rememberScroll()
+      setActiveId(target)
+      activeRef.current = target
+      setView('lobby')
+      return
+    }
+    startGame(target)
   }
 
   // A finished run adds to lifetime points, updates the per-game device best,
@@ -935,7 +945,7 @@ export default function GamesCenter({
         >
           <Icon name={inGame ? 'back' : 'close'} size={19} />
         </button>
-        {!inGame ? <Icon name="games" size={20} style={{ flex: '0 0 auto' }} aria-hidden="true" /> : null}
+        {!inGame ? <Icon name="games" size={20} strokeWidth={1.9} style={{ flex: '0 0 auto' }} aria-hidden="true" /> : null}
         <strong className="gh-bar-title">{inGame ? gameName(active, lang) : t.hub}</strong>
         {inGame ? (
           <>
@@ -1161,7 +1171,7 @@ export default function GamesCenter({
 
           {enabled.length === 0 ? (
             <div className="gh-empty">
-              <span className="gh-empty-ico" style={{ background: brand }}><Icon name="games" size={24} /></span>
+              <span className="gh-empty-ico" style={{ background: brand }}><Icon name="games" size={24} strokeWidth={1.9} /></span>
               <p className="gh-gate-why">{t.empty}</p>
               <p className="gh-gate-why faint">{t.emptyHint}</p>
             </div>

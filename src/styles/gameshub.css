@@ -712,7 +712,10 @@
 .gh-reveal {
   position: absolute;
   inset: 0;
-  z-index: 6;
+  /* Above the sticky category chips (z-index 20): the reward reveal is a modal
+     that must cover ALL in-body chrome, and the chips share its stacking
+     context, so a lower value let them show through on top of the prize. */
+  z-index: 40;
   display: flex;
   align-items: center;
   justify-content: center;
