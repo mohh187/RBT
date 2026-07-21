@@ -4,10 +4,12 @@
      .chrome-*   a mock phone bar pair (top app bar + bottom nav) painted with a
                  chrome preset's real tokens, used by the Settings picker,
      .dpx-*      a dark stage the item editor renders the real DishProps layer
-                 onto, over the item's own photo.
+                 onto, over the item's own photo,
+     .dcx-*      the dish-composer stage: the same idea for lib/dishComposition,
+                 plus the entrance-animation keyframes the preview replays.
 
    Imported from routes/admin/Settings.jsx and routes/admin/Items.jsx. Nothing
-   here leaks: every rule is under one of the two prefixes above.
+   here leaks: every rule is under one of the three prefixes above.
 
    HARD RULES observed: no emoji, Latin digits only, and no visible scrollbars
    (the one scrollable strip below hides its bar in every engine). */
@@ -240,3 +242,202 @@
   overflow: hidden;
   text-overflow: ellipsis;
 }
+
+/* ====================================================== dish composer === */
+
+/* The composer stage is painted by resolveComposition() + bgStyle() + imgStyle()
+   from lib/dishComposition.js — the very functions the menu renders with — so a
+   slider here cannot promise something the menu will not draw.
+
+   The canvas is the editorial theme's near-black on purpose: blend modes read
+   completely differently on light and dark, so previewing a Multiply over a
+   white card would be a lie about where the dish actually lives. */
+.dcx-stage {
+  position: relative;
+  isolation: isolate;
+  overflow: hidden;
+  margin-inline: auto;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: var(--r-md, 12px);
+  border: 1px solid var(--border);
+  background: radial-gradient(120% 88% at 50% 10%, #1b1b21 0%, #0d0d10 62%, #08080a 100%);
+}
+/* two shapes, because the owner composes the photo separately for the browsing
+   list and for the item's own screen */
+.dcx-stage[data-variant='list'] { width: 208px; height: 176px; }
+.dcx-stage[data-variant='stage'] { width: 100%; max-width: 300px; height: 292px; }
+
+.dcx-bg {
+  position: absolute;
+  inset: 0;
+  z-index: 0;
+}
+.dcx-bg video {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
+}
+
+/* DELIBERATELY NO z-index: the photo's mix-blend-mode has to reach the backdrop
+   underneath it, and a z-index here would wrap the photo in its own group where
+   there is nothing to blend WITH. Being positioned and later in the DOM already
+   paints it above the backdrop — the same reasoning the editorial theme applies
+   to .edt-comp. */
+.dcx-shot {
+  position: relative;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 100%;
+  height: 100%;
+}
+.dcx-shot img {
+  display: block;
+  width: auto;
+  max-width: 74%;
+  max-height: 78%;
+  object-fit: contain;
+}
+
+/* a name/price line under the photo: without it there is nothing to judge the
+   photo's size against */
+.dcx-meta {
+  position: absolute;
+  inset-inline: 0;
+  bottom: 6px;
+  z-index: 4;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 1px;
+  padding-inline: 8px;
+  pointer-events: none;
+  text-shadow: 0 1px 10px rgba(0, 0, 0, .55);
+}
+.dcx-meta b {
+  max-width: 100%;
+  font-size: 11px;
+  color: #fff;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.dcx-meta span {
+  font-size: 10px;
+  color: rgba(255, 255, 255, .72);
+}
+
+/* the live effect is drawn by the menu's own <ItemFx/>; here it only needs to
+   sit above the photo instead of under it */
+.dcx-stage > .itemfx { z-index: 3; }
+
+.dcx-empty {
+  position: relative;
+  padding: 0 14px;
+  color: rgba(255, 255, 255, .5);
+  font-size: var(--fs-xs, 11px);
+  text-align: center;
+}
+
+/* ---- entrance animations (preview) ---------------------------------------
+   A DELIBERATE MIRROR of the editorial theme's .edt-comp[data-anim] rules in
+   index.css: same distances, same durations, same easings, and the same
+   technique — the individual translate / rotate / scale properties, which
+   COMPOSE with the composition's inline `transform` instead of overwriting the
+   placement the owner just dialled in. Kept under its own prefix rather than
+   reusing the theme's selectors, which only fire under that layout's in-view
+   latch and are not the admin's to depend on. If the theme retimes an entrance,
+   retime it here too or the preview starts lying. */
+.dcx-shot img[data-anim] { opacity: 0; }
+.dcx-shot img[data-anim='sweep'] { --dcx-sweep: -16%; }
+[dir='rtl'] .dcx-shot img[data-anim='sweep'] { --dcx-sweep: 16%; }
+.dcx-shot img[data-anim='rise'] { animation: dcxDishRise .6s cubic-bezier(0.25, 1, 0.5, 1) both; }
+.dcx-shot img[data-anim='fade'] { animation: dcxDishFade .5s ease both; }
+.dcx-shot img[data-anim='zoom'] { animation: dcxDishZoom .55s cubic-bezier(0.25, 1, 0.5, 1) both; }
+.dcx-shot img[data-anim='drop'] { animation: dcxDishDrop .72s cubic-bezier(0.2, 0.82, 0.28, 1) both; }
+.dcx-shot img[data-anim='tilt'] { animation: dcxDishTilt .62s cubic-bezier(0.2, 0.82, 0.28, 1) both; }
+.dcx-shot img[data-anim='sweep'] { animation: dcxDishSweep .66s cubic-bezier(0.25, 1, 0.5, 1) both; }
+
+@keyframes dcxDishRise { from { opacity: 0; translate: 0 14%; } to { opacity: 1; translate: 0 0; } }
+@keyframes dcxDishFade { from { opacity: 0; } to { opacity: 1; } }
+@keyframes dcxDishZoom { from { opacity: 0; scale: 0.86; } to { opacity: 1; scale: 1; } }
+@keyframes dcxDishDrop {
+  0% { opacity: 0; translate: 0 -22%; }
+  62% { opacity: 1; translate: 0 4%; }
+  100% { opacity: 1; translate: 0 0; }
+}
+@keyframes dcxDishTilt { from { opacity: 0; rotate: -7deg; translate: 0 9%; } to { opacity: 1; rotate: 0deg; translate: 0 0; } }
+@keyframes dcxDishSweep { from { opacity: 0; translate: var(--dcx-sweep, -16%) 0; } to { opacity: 1; translate: 0 0; } }
+
+@media (prefers-reduced-motion: reduce) {
+  .dcx-shot img[data-anim] { opacity: 1; animation: none; }
+}
+
+/* the animation picker: chips wrap, so this strip never scrolls */
+.dcx-anims {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 5px;
+}
+
+/* the 3x3 backdrop-position pad */
+.dcx-pos {
+  display: grid;
+  grid-template-columns: repeat(3, 30px);
+  gap: 4px;
+}
+.dcx-pos button {
+  width: 30px;
+  height: 24px;
+  padding: 0;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: var(--surface);
+  cursor: pointer;
+}
+.dcx-pos button[data-on='true'] { background: var(--brand); border-color: var(--brand); }
+
+/* one control group — a titled card with its own reset */
+.dcx-group {
+  display: flex;
+  flex-direction: column;
+  gap: 9px;
+  padding: 10px;
+  border: 1px solid var(--border);
+  border-radius: var(--r-md, 12px);
+  background: var(--surface-2);
+}
+/* the two size/position blocks (list vs opened item) inside الصورة: the active
+   one is ringed so it is never ambiguous which preview a slider is moving */
+.dcx-sub {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 8px;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  background: var(--surface);
+}
+.dcx-sub[data-live='true'] { border-color: var(--brand); }
+.dcx-sub-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+/* slider row: label + live value on one line, the control under it */
+.dcx-slider { display: flex; flex-direction: column; gap: 2px; }
+.dcx-slider-top {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  font-size: var(--fs-xs, 11px);
+}
+.dcx-slider-top b { font-weight: 600; color: var(--text); }
+.dcx-slider-top span { color: var(--text-muted); direction: ltr; }
+.dcx-slider input[type='range'] { width: 100%; }

@@ -22,7 +22,6 @@ import { ItemSheet } from '../../components/MenuView.jsx'
 import ModelStudio from '../../components/ModelStudio.jsx'
 import ItemFx from '../../components/ItemFx.jsx'
 import DishHotspots from '../../components/DishHotspots.jsx'
-import { ITEM_EFFECTS } from '../../lib/itemEffects.js'
 import { lex, venueType } from '../../lib/venueTypes.js'
 import { sectionTemplate, templateOptions } from '../../lib/systemTemplates.js'
 // Surface + garnish: the catalogue is data-only (no React, no CSS), the drawing
@@ -30,16 +29,23 @@ import { sectionTemplate, templateOptions } from '../../lib/systemTemplates.js'
 // real thing rather than an approximation of it.
 import { SURFACES, PROPS, PROP_CATEGORIES } from '../../lib/dishProps.js'
 import DishProps from '../../components/menuThemes/DishProps.jsx'
+// Dish composition: the ONE contract for the backdrop, the photo on it, the
+// effect over it and how it arrives. The composer below builds every control
+// from these catalogues and previews with the renderer's own style functions,
+// so a control and the pixel it produces cannot drift.
+import { BLEND_MODES, FILTERS, ANIMS, FX, RANGE, resolveComposition, bgStyle, imgStyle } from '../../lib/dishComposition.js'
 import '../../styles/appearance.css'
 
+// NOTE: none of the composition fields live here. An item nobody has composed
+// must not carry a document full of defaults, so the composer treats an absent
+// key as "default" and only writes what the owner actually moved.
 const blank = () => ({
   nameAr: '', nameEn: '', price: '', calories: '', categoryId: '',
-  descAr: '', descEn: '', kdsWarning: '', imageUrl: '', images: [], imageStyle: '', imageScale: 1, effect: '', hotspots: [], story: null, arStandeeUrl: '', model3dUrl: '', model3dUsdzUrl: '', available: true, availableFrom: '', availableTo: '', countsForLoyalty: true, featured: false, promoNotify: 'default', trackStock: false, stock: '',
+  descAr: '', descEn: '', kdsWarning: '', imageUrl: '', images: [], imageStyle: '', hotspots: [], story: null, arStandeeUrl: '', model3dUrl: '', model3dUsdzUrl: '', available: true, availableFrom: '', availableTo: '', countsForLoyalty: true, featured: false, promoNotify: 'default', trackStock: false, stock: '',
   prepTime: '', serves: '', rating: '', reviewsCount: '',
   ingredients: [], variants: [], modifierGroups: [], sortOrder: 0,
   recipe: [], variantRecipes: {},
   namePriceLayout: '', nameColor: '', priceColor: '', namePriceStyle: '',
-  bgUrl: '', bgKind: '', bgOpacity: 0.5, bgPos: 'center', bgScale: 1,
   // dish styling layer (lib/dishProps.js): '' surface = the layer is off, which
   // is the default for every new item — it renders only when asked for
   surface: '', props: null,
@@ -74,6 +80,97 @@ const DENSITY_CHOICES = [
   ['normal', 'متوسطة', 'Normal'],
   ['rich', 'غنية', 'Rich'],
 ]
+
+// ---------------------------------------------------- dish composition ------
+// The default of every field lib/dishComposition.js reads, in that module's own
+// terms. `null` on the three list-only fields is not "zero": resolveComposition
+// falls back to the opened-item value while they are absent, which is exactly
+// what an owner who only tuned the item screen expects the list to do.
+const COMPOSE_DEFAULTS = {
+  bgUrl: '', bgKind: '', bgOpacity: RANGE.bgOpacity.dflt, bgPos: 'center', bgScale: 1, bgBlend: 'normal', bgFilter: '',
+  imageScale: RANGE.scale.dflt, imageX: RANGE.offset.dflt, imageY: RANGE.offset.dflt,
+  listScale: null, listX: null, listY: null,
+  imageRot: RANGE.rot.dflt, imageBlend: 'normal', imageFilter: '', imageBlur: RANGE.blur.dflt,
+  shadowOn: false, shadowX: 0, shadowY: 14, shadowBlur: RANGE.shadowBlur.dflt, shadowOpacity: 0.45, shadowColor: '#000000',
+  effect: '', anim: '',
+}
+
+// The bounds resolveComposition() clamps each numeric field to. Sliders read
+// them and the save clamps to them, so a value that reaches the document is
+// always a value the renderer will honour. bgScale and the two shadow offsets
+// have no RANGE entry — those numbers come from resolveComposition's own clamps.
+const COMPOSE_BOUNDS = {
+  bgOpacity: [RANGE.bgOpacity.min, RANGE.bgOpacity.max],
+  bgScale: [0.5, 3],
+  imageScale: [RANGE.scale.min, RANGE.scale.max],
+  listScale: [RANGE.scale.min, RANGE.scale.max],
+  imageX: [RANGE.offset.min, RANGE.offset.max],
+  imageY: [RANGE.offset.min, RANGE.offset.max],
+  listX: [RANGE.offset.min, RANGE.offset.max],
+  listY: [RANGE.offset.min, RANGE.offset.max],
+  imageRot: [RANGE.rot.min, RANGE.rot.max],
+  imageBlur: [RANGE.blur.min, RANGE.blur.max],
+  shadowX: [-60, 60],
+  shadowY: [-60, 60],
+  shadowBlur: [RANGE.shadowBlur.min, RANGE.shadowBlur.max],
+  shadowOpacity: [RANGE.opacity.min, RANGE.opacity.max],
+}
+const compClamp = (v, key, dflt) => {
+  const b = COMPOSE_BOUNDS[key]
+  const n = Number(v)
+  if (!Number.isFinite(n) || !b) return dflt
+  return Math.min(b[1], Math.max(b[0], n))
+}
+// A list-only override: absent stays absent (null), a number is clamped.
+const compOpt = (v, key) => (v == null || v === '' ? null : compClamp(v, key, null))
+const compId = (v, catalogue, dflt) => (catalogue.some((c) => c.id === String(v || '')) ? String(v || '') : dflt)
+
+/**
+ * What the composer contributes to the item's save payload.
+ *
+ * A key is written ONLY when the owner moved it off its default, or when the
+ * stored document already carries that key (so a reset can clear a value that
+ * really is saved). An item nobody has composed therefore gains nothing —
+ * the alternative, stamping twenty-six defaults onto every dish in the menu,
+ * would bloat every document and make "never touched" indistinguishable from
+ * "deliberately set to the default".
+ */
+function composePayload(form, original) {
+  const f = form || {}
+  const orig = original || {}
+  const next = {
+    bgUrl: String(f.bgUrl || ''),
+    bgKind: f.bgUrl ? (f.bgKind || 'image') : '',
+    bgOpacity: compClamp(f.bgOpacity, 'bgOpacity', COMPOSE_DEFAULTS.bgOpacity),
+    bgPos: String(f.bgPos || 'center'),
+    bgScale: compClamp(f.bgScale, 'bgScale', COMPOSE_DEFAULTS.bgScale),
+    bgBlend: compId(f.bgBlend, BLEND_MODES, 'normal'),
+    bgFilter: compId(f.bgFilter, FILTERS, ''),
+    imageScale: compClamp(f.imageScale, 'imageScale', COMPOSE_DEFAULTS.imageScale),
+    imageX: compClamp(f.imageX, 'imageX', COMPOSE_DEFAULTS.imageX),
+    imageY: compClamp(f.imageY, 'imageY', COMPOSE_DEFAULTS.imageY),
+    listScale: compOpt(f.listScale, 'listScale'),
+    listX: compOpt(f.listX, 'listX'),
+    listY: compOpt(f.listY, 'listY'),
+    imageRot: compClamp(f.imageRot, 'imageRot', COMPOSE_DEFAULTS.imageRot),
+    imageBlend: compId(f.imageBlend, BLEND_MODES, 'normal'),
+    imageFilter: compId(f.imageFilter, FILTERS, ''),
+    imageBlur: compClamp(f.imageBlur, 'imageBlur', COMPOSE_DEFAULTS.imageBlur),
+    shadowOn: !!f.shadowOn,
+    shadowX: compClamp(f.shadowX, 'shadowX', COMPOSE_DEFAULTS.shadowX),
+    shadowY: compClamp(f.shadowY, 'shadowY', COMPOSE_DEFAULTS.shadowY),
+    shadowBlur: compClamp(f.shadowBlur, 'shadowBlur', COMPOSE_DEFAULTS.shadowBlur),
+    shadowOpacity: compClamp(f.shadowOpacity, 'shadowOpacity', COMPOSE_DEFAULTS.shadowOpacity),
+    shadowColor: String(f.shadowColor || COMPOSE_DEFAULTS.shadowColor),
+    effect: compId(f.effect, FX, ''),
+    anim: compId(f.anim, ANIMS, ''),
+  }
+  const out = {}
+  Object.keys(COMPOSE_DEFAULTS).forEach((k) => {
+    if (next[k] !== COMPOSE_DEFAULTS[k] || orig[k] !== undefined) out[k] = next[k]
+  })
+  return out
+}
 
 export default function Items() {
   const { t, lang } = useI18n()
@@ -477,7 +574,8 @@ function EditorSection({ title, first, id }) {
 function EditorTabs({ lang }) {
   const tabs = [
     ['ie-basics', lang === 'ar' ? 'الأساسي' : 'Basics'],
-    ['ie-images', lang === 'ar' ? 'الصور والمؤثرات' : 'Images & FX'],
+    ['ie-images', lang === 'ar' ? 'الصور' : 'Images'],
+    ['ie-compose', lang === 'ar' ? 'تركيب الصنف' : 'Composition'],
     ['ie-dish', lang === 'ar' ? 'السطح والزينة' : 'Surface & garnish'],
     ['ie-pricing', lang === 'ar' ? 'المقاسات والإضافات' : 'Sizes & mods'],
     ['ie-ar', lang === 'ar' ? '3D وAR' : '3D & AR'],
@@ -517,6 +615,10 @@ function ItemEditor({ tenantId, cats, currency, value, onClose, onSaved, onDelet
   const [materials, setMaterials] = useState([])
   const isNew = !form.id
   const set = (k, v) => setForm((f) => ({ ...f, [k]: v }))
+  // The document as it arrived. composePayload() needs it to tell "the owner
+  // never touched this" (write nothing) from "the owner reset it" (write the
+  // default, which clears what is stored).
+  const origRef = useRef(value || {})
 
   useEffect(() => { if (!tenantId) return; return watchMaterials(tenantId, setMaterials) }, [tenantId])
 
@@ -530,6 +632,7 @@ function ItemEditor({ tenantId, cats, currency, value, onClose, onSaved, onDelet
       const f = new File([blob], `item-${Date.now()}.webp`, { type: 'image/webp' })
       const url = await uploadImage(tenantId, f)
       if (target === 'extra') set('images', [...(form.images || []), url])
+      else if (target === 'bg') setForm((s) => ({ ...s, bgUrl: url, bgKind: 'image' }))
       else set('imageUrl', url)
     } catch (_) {
       toast.error(lang === 'ar' ? 'تعذّر رفع الصورة' : 'Upload failed')
@@ -698,7 +801,10 @@ function ItemEditor({ tenantId, cats, currency, value, onClose, onSaved, onDelet
     } finally { setDishStoryBusy(false) }
   }
 
-  // per-item detail backdrop (image or video) — size is guarded inside storage.js
+  // per-item backdrop VIDEO — size is guarded inside storage.js. A backdrop
+  // IMAGE does not come through here: it rides the same pick → crop → upload
+  // path the dish photo uses (onPick(e, 'bg')), so the owner frames it once
+  // instead of discovering later that the interesting half is off-screen.
   const onBgPick = (kind) => async (e) => {
     const file = e.target.files?.[0]
     e.target.value = ''
@@ -706,7 +812,7 @@ function ItemEditor({ tenantId, cats, currency, value, onClose, onSaved, onDelet
     setUploading(true)
     try {
       const url = kind === 'video' ? await uploadFile(tenantId, file, 'itembg') : await uploadImage(tenantId, file)
-      setForm((f) => ({ ...f, bgUrl: url, bgKind: kind, bgOpacity: f.bgOpacity ?? 0.5, bgPos: f.bgPos || 'center', bgScale: f.bgScale || 1 }))
+      setForm((f) => ({ ...f, bgUrl: url, bgKind: kind }))
     } catch (err) {
       toast.error(err?.message || (lang === 'ar' ? 'تعذّر الرفع' : 'Upload failed'))
     } finally {
@@ -789,8 +895,6 @@ function ItemEditor({ tenantId, cats, currency, value, onClose, onSaved, onDelet
         imageUrl: form.imageUrl || '',
         images: (form.images || []).filter(Boolean),
         imageStyle: form.imageStyle || '',
-        imageScale: Math.min(1.8, Math.max(0.6, Number(form.imageScale) || 1)),
-        effect: form.effect || '',
         hotspots: (form.hotspots || [])
           .filter((h) => h && (h.label || '').trim())
           .slice(0, 8)
@@ -842,11 +946,10 @@ function ItemEditor({ tenantId, cats, currency, value, onClose, onSaved, onDelet
         nameColor: form.nameColor || '',
         priceColor: form.priceColor || '',
         namePriceStyle: form.namePriceStyle || '',
-        bgUrl: form.bgUrl || '',
-        bgKind: form.bgUrl ? (form.bgKind || 'image') : '',
-        bgOpacity: Math.min(1, Math.max(0.1, Number(form.bgOpacity ?? 0.5))),
-        bgPos: form.bgPos || 'center',
-        bgScale: Math.min(3, Math.max(1, Number(form.bgScale) || 1)),
+        // «تركيب الصنف» — backdrop, photo, shadow, effect, entrance. Clamped to
+        // the same bounds resolveComposition() clamps to, and emitted only for
+        // the fields this item actually uses (see composePayload).
+        ...composePayload(form, origRef.current),
         // dish styling layer, in the exact shape lib/dishProps.js reads back.
         // Never `undefined` on either key — Firestore rejects that outright.
         surface: form.surface || '',
@@ -1025,35 +1128,6 @@ function ItemEditor({ tenantId, cats, currency, value, onClose, onSaved, onDelet
           <p className="xs faint">{lang === 'ar' ? 'الشفاف العائم: تظهر الصورة بلا إطار بظلّ ناعم — مثالي لصور PNG بدون خلفية في ثيم المتجر.' : 'Transparent float: frameless image with a soft shadow — ideal for background-free PNGs in the storefront theme.'}</p>
         </div>
 
-        {/* per-item image size INSIDE the product-detail view (list cards unaffected) */}
-        <div className="field">
-          <label>{lang === 'ar' ? 'حجم الصورة داخل تفاصيل المنتج' : 'Image size in the product details'} <span className="faint">({Math.round((Number(form.imageScale) || 1) * 100)}%)</span></label>
-          <div className="row" style={{ gap: 10, alignItems: 'center' }}>
-            <span className="xs faint">{lang === 'ar' ? 'أصغر' : 'Smaller'}</span>
-            <input type="range" min="0.6" max="1.8" step="0.05" value={Number(form.imageScale) || 1} onChange={(e) => set('imageScale', Number(e.target.value))} style={{ flex: 1 }} />
-            <span className="xs faint">{lang === 'ar' ? 'أكبر' : 'Bigger'}</span>
-            {(Number(form.imageScale) || 1) !== 1 && <button type="button" className="btn btn-xs btn-ghost" onClick={() => set('imageScale', 1)}>{lang === 'ar' ? 'إعادة' : 'Reset'}</button>}
-          </div>
-          <p className="xs faint">{lang === 'ar' ? 'يكبّر/يصغّر الصورة عند فتح تفاصيل المنتج فقط، دون التأثير على حجمها في القائمة.' : 'Scales the photo only when the product is opened — the menu card stays as-is.'}</p>
-        </div>
-
-        {/* live visual effect over the item (menu detail + spotlight + in-app 3D viewer) */}
-        <div className="field">
-          <label>{lang === 'ar' ? 'مؤثر حي على الصنف' : 'Live effect'}</label>
-          <div className="row" style={{ gap: 10, alignItems: 'center' }}>
-            <select className="select grow" value={form.effect || ''} onChange={(e) => set('effect', e.target.value)}>
-              {ITEM_EFFECTS.map((fx) => <option key={fx.id} value={fx.id}>{lang === 'ar' ? fx.ar : fx.en}</option>)}
-            </select>
-            {form.imageUrl && (
-              <span style={{ position: 'relative', width: 52, height: 52, flex: 'none', borderRadius: 10, overflow: 'hidden' }}>
-                <img src={form.imageUrl} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
-                <ItemFx kind={form.effect} />
-              </span>
-            )}
-          </div>
-          <p className="xs faint">{lang === 'ar' ? 'بخار أو دخان أو لمعان يتحرك فوق الصنف في تفاصيل المنيو وفي عارض المجسم داخل التطبيق. في وضع AR على الطاولة (الكاميرا) يظهر المجسم فقط بلا مؤثر — قيد تقني من نظام التشغيل.' : 'Animates over the photo in the menu detail and the in-app 3D viewer. Real camera AR shows the bare model only (OS limitation).'}</p>
-        </div>
-
         {/* «نقاط تفاعلية على الصورة» — tappable ingredient/sauce pins inside the dish photo */}
         <div className="field">
           <label>
@@ -1155,67 +1229,13 @@ function ItemEditor({ tenantId, cats, currency, value, onClose, onSaved, onDelet
           </div>
         </div>
 
-        {/* Per-item detail BACKDROP (image/video) — wins over the venue-wide
-            immersive backdrop; tuned live against a mini mock of the detail sheet */}
-        <div className="card card-pad stack" style={{ gap: 10, background: 'var(--surface-2)', border: '1px solid var(--border)', marginBottom: 'var(--sp-3)' }}>
-          <div className="row-between">
-            <strong className="xs"><Icon name="image" size={13} style={{ verticalAlign: 'middle' }} /> {lang === 'ar' ? 'خلفية خاصة بشاشة هذا الصنف (صورة أو فيديو)' : 'Item detail backdrop (image/video)'}</strong>
-            {form.bgUrl && (
-              <button type="button" className="btn btn-xs btn-outline" onClick={() => setForm((f) => ({ ...f, bgUrl: '', bgKind: '' }))}>{lang === 'ar' ? 'إزالة' : 'Remove'}</button>
-            )}
-          </div>
-          <p className="xs faint" style={{ margin: 0 }}>{lang === 'ar' ? 'تظهر خلف تفاصيل الصنف عند فتحه، وتتفوق على الخلفية الموحدة في الاستوديو — لكل صنف أجواؤه الخاصة.' : 'Shows behind this item\'s detail view and overrides the venue-wide backdrop.'}</p>
-          <div className="row" style={{ gap: 8, flexWrap: 'wrap' }}>
-            <label className="btn btn-sm" style={{ cursor: 'pointer' }}>
-              <Icon name="image" size={14} /> {lang === 'ar' ? 'رفع صورة' : 'Upload image'}
-              <input hidden type="file" accept="image/*" onChange={onBgPick('image')} />
-            </label>
-            <label className="btn btn-sm" style={{ cursor: 'pointer' }}>
-              <Icon name="play" size={14} /> {lang === 'ar' ? 'رفع فيديو' : 'Upload video'}
-              <input hidden type="file" accept="video/*" onChange={onBgPick('video')} />
-            </label>
-            {uploading && <Spinner />}
-          </div>
-          {form.bgUrl && (
-            <div className="row wrap" style={{ gap: 14, alignItems: 'flex-start' }}>
-              <div className="stack grow" style={{ gap: 8, minWidth: 200 }}>
-                <div className="field" style={{ marginBottom: 0 }}>
-                  <label>{lang === 'ar' ? `الشفافية: ${Math.round((form.bgOpacity ?? 0.5) * 100)}%` : `Opacity: ${Math.round((form.bgOpacity ?? 0.5) * 100)}%`}</label>
-                  <input type="range" min="0.1" max="1" step="0.05" value={form.bgOpacity ?? 0.5} style={{ width: '100%' }} onChange={(e) => set('bgOpacity', Number(e.target.value))} />
-                </div>
-                <div className="field" style={{ marginBottom: 0 }}>
-                  <label>{lang === 'ar' ? `التكبير: ${Number(form.bgScale || 1).toFixed(1)}×` : `Zoom: ${Number(form.bgScale || 1).toFixed(1)}×`}</label>
-                  <input type="range" min="1" max="3" step="0.1" value={form.bgScale || 1} style={{ width: '100%' }} onChange={(e) => set('bgScale', Number(e.target.value))} />
-                </div>
-                <div className="field" style={{ marginBottom: 0 }}>
-                  <label>{lang === 'ar' ? 'موقع الخلفية' : 'Position'}</label>
-                  <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 32px)', gap: 4 }} dir="ltr">
-                    {['left top', 'center top', 'right top', 'left center', 'center', 'right center', 'left bottom', 'center bottom', 'right bottom'].map((p) => (
-                      <button key={p} type="button" onClick={() => set('bgPos', p)} aria-label={p}
-                        style={{ width: 32, height: 26, borderRadius: 6, border: '1px solid var(--border)', cursor: 'pointer', background: (form.bgPos || 'center') === p ? 'var(--brand)' : 'var(--surface)' }} />
-                    ))}
-                  </div>
-                </div>
-              </div>
-              {/* live mini mock of the item detail sheet */}
-              <div style={{ width: 172, height: 300, borderRadius: 18, overflow: 'hidden', position: 'relative', border: '1px solid var(--border)', background: 'var(--surface)', flex: 'none', isolation: 'isolate' }}>
-                {form.bgKind === 'video' ? (
-                  <video src={form.bgUrl} autoPlay muted loop playsInline
-                    style={{ position: 'absolute', inset: 0, width: '100%', height: '100%', objectFit: 'cover', objectPosition: form.bgPos || 'center', opacity: form.bgOpacity ?? 0.5, transform: Number(form.bgScale) > 1 ? `scale(${Number(form.bgScale)})` : undefined, transformOrigin: form.bgPos || 'center' }} />
-                ) : (
-                  <div style={{ position: 'absolute', inset: 0, backgroundImage: `url(${form.bgUrl})`, backgroundSize: Number(form.bgScale) > 1 ? `${Number(form.bgScale) * 100}%` : 'cover', backgroundPosition: form.bgPos || 'center', opacity: form.bgOpacity ?? 0.5 }} />
-                )}
-                <div style={{ position: 'absolute', inset: 0, display: 'grid', placeItems: 'center' }}>
-                  <div className="stack" style={{ gap: 6, alignItems: 'center' }}>
-                    {form.imageUrl && <img src={form.imageUrl} alt="" style={{ width: 76, height: 76, borderRadius: '50%', objectFit: 'cover', boxShadow: 'var(--sh-2)' }} />}
-                    <strong className="small" style={{ textShadow: '0 1px 10px rgba(0,0,0,0.35)' }}>{form.nameAr || (lang === 'ar' ? 'اسم الصنف' : 'Item name')}</strong>
-                    <span className="xs bold num" style={{ textShadow: '0 1px 10px rgba(0,0,0,0.35)' }}>{form.price || '00'} {currency}</span>
-                  </div>
-                </div>
-              </div>
-            </div>
-          )}
-        </div>
+        <EditorSection id="ie-compose" title={lang === 'ar' ? 'تركيب الصنف' : 'Dish composition'} />
+        <CompositionEditor
+          form={form} setForm={setForm} lang={lang} currency={currency} uploading={uploading}
+          onPickBgImage={(e) => onPick(e, 'bg')}
+          onEditBgImage={() => setCropState({ src: form.bgUrl, target: 'bg' })}
+          onPickBgVideo={onBgPick('video')}
+        />
 
         <EditorSection id="ie-dish" title={lang === 'ar' ? 'السطح والزينة حول الطبق' : 'Dish surface & garnish'} />
         <div className="card card-pad stack" style={{ gap: 10, background: 'var(--surface-2)', border: '1px solid var(--border)', marginBottom: 'var(--sp-3)' }}>
@@ -1510,6 +1530,341 @@ function ItemEditor({ tenantId, cats, currency, value, onClose, onSaved, onDelet
         <ModifierGroupsEditor groups={form.modifierGroups || []} onChange={(g) => set('modifierGroups', g)} currency={currency} materials={materials} />
       </div>
     </Sheet>
+  )
+}
+
+// ---------------------------------------------------------------------------
+// «تركيب الصنف» — the per-dish visual composer.
+//
+// The owner asked to decide how each dish looks and how it arrives: the backdrop
+// behind it and how it BLENDS with the photo, filters, a live effect over it,
+// the photo's size SEPARATELY in the menu list and in the opened item, its
+// position, rotation and blur, a shadow he can move, and an entrance animation.
+//
+// Nothing here invents a value: every option comes from a catalogue in
+// lib/dishComposition.js and every slider is bounded by that module's RANGE, so
+// the editor cannot offer a setting the renderer would clamp away. The preview
+// is drawn by resolveComposition() + bgStyle() + imgStyle() — the very functions
+// the menu renders with — so it cannot promise something the menu will not draw.
+
+// value formatters, Latin digits only (hard rule)
+const cxPct = (v) => `${Math.round(Number(v) * 100)}%`
+const cxTimes = (v) => `${Number(v).toFixed(2)}×`
+const cxDeg = (v) => `${Number(v)}°`
+const cxPx = (v) => `${Number(v)} px`
+const cxOff = (v) => `${Number(v)}%`
+const cxNum = (v, dflt) => (Number.isFinite(Number(v)) ? Number(v) : dflt)
+
+const BG_POSITIONS = ['left top', 'center top', 'right top', 'left center', 'center', 'right center', 'left bottom', 'center bottom', 'right bottom']
+
+// One slider bound to a contract RANGE: label, live value, control.
+function CxSlider({ label, value, min, max, step, format, onChange }) {
+  return (
+    <div className="dcx-slider">
+      <div className="dcx-slider-top">
+        <b>{label}</b>
+        <span className="num">{format ? format(value) : String(value)}</span>
+      </div>
+      <input type="range" min={min} max={max} step={step} value={value} onChange={(e) => onChange(Number(e.target.value))} />
+    </div>
+  )
+}
+
+// One catalogue picker (blend modes, filters). Renders the Arabic label.
+function CxSelect({ label, value, options, lang, onChange }) {
+  return (
+    <div className="field" style={{ marginBottom: 0 }}>
+      <label>{label}</label>
+      <select className="select" value={value || ''} onChange={(e) => onChange(e.target.value)}>
+        {options.map((o) => <option key={o.id || 'dflt'} value={o.id}>{lang === 'ar' ? o.ar : o.en}</option>)}
+      </select>
+    </div>
+  )
+}
+
+// A titled group with its own reset — five small cards instead of one wall of sliders.
+function CxGroup({ icon, title, hint, resetLabel, onReset, children }) {
+  return (
+    <section className="dcx-group">
+      <div className="row-between" style={{ alignItems: 'center', gap: 8 }}>
+        <strong className="xs"><Icon name={icon} size={13} style={{ verticalAlign: 'middle' }} /> {title}</strong>
+        <button type="button" className="btn btn-xs btn-ghost" style={{ flex: 'none' }} onClick={onReset}>
+          <Icon name="undo" size={12} /> {resetLabel}
+        </button>
+      </div>
+      {hint ? <p className="xs faint" style={{ margin: 0 }}>{hint}</p> : null}
+      {children}
+    </section>
+  )
+}
+
+function CompositionEditor({ form, setForm, lang, currency, uploading, onPickBgImage, onEditBgImage, onPickBgVideo }) {
+  const ar = lang === 'ar'
+  const patch = (o) => setForm((f) => ({ ...f, ...o }))
+  const set = (k, v) => patch({ [k]: v })
+
+  // Which variant the stage is showing. The two size/position blocks below are
+  // ringed to match, so it is never ambiguous which one a slider is moving.
+  const [variant, setVariant] = useState('list')
+  const [replay, setReplay] = useState(0)
+  const comp = resolveComposition(form, { variant })
+
+  // Replay the entrance whenever the choice or the previewed variant changes —
+  // an animation you cannot see is an animation you cannot judge.
+  useEffect(() => { setReplay((r) => r + 1) }, [form.anim, variant])
+
+  // '' means "leave it to the theme"; the stage shows a gentle rise for it and
+  // says so, rather than pretending to know what each theme does.
+  const animPreview = comp.anim === 'none' ? '' : (comp.anim || 'rise')
+  const bgWrapStyle = comp.bg && comp.bg.kind === 'video'
+    ? {
+      opacity: comp.bg.opacity,
+      ...(comp.bg.blend !== 'normal' ? { mixBlendMode: comp.bg.blend } : null),
+      ...(comp.bg.filter ? { filter: comp.bg.filter } : null),
+    }
+    : null
+  const bgVideoStyle = comp.bg
+    ? {
+      objectPosition: comp.bg.pos,
+      ...(comp.bg.scale !== 1 ? { transform: `scale(${comp.bg.scale})`, transformOrigin: comp.bg.pos } : null),
+    }
+    : null
+
+  // The list values FALL BACK to the opened-item ones while they are unset
+  // (resolveComposition does exactly this), so the sliders must show the value
+  // that is really in force — not a zero the list does not use.
+  const stageScale = cxNum(form.imageScale, RANGE.scale.dflt)
+  const stageX = cxNum(form.imageX, RANGE.offset.dflt)
+  const stageY = cxNum(form.imageY, RANGE.offset.dflt)
+  const listScale = form.listScale != null ? cxNum(form.listScale, stageScale) : stageScale
+  const listX = form.listX != null ? cxNum(form.listX, stageX) : stageX
+  const listY = form.listY != null ? cxNum(form.listY, stageY) : stageY
+  const listFollows = form.listScale == null && form.listX == null && form.listY == null
+
+  const resetBg = () => patch({ bgOpacity: COMPOSE_DEFAULTS.bgOpacity, bgPos: COMPOSE_DEFAULTS.bgPos, bgScale: COMPOSE_DEFAULTS.bgScale, bgBlend: COMPOSE_DEFAULTS.bgBlend, bgFilter: COMPOSE_DEFAULTS.bgFilter })
+  const resetImg = () => patch({
+    imageScale: COMPOSE_DEFAULTS.imageScale, imageX: COMPOSE_DEFAULTS.imageX, imageY: COMPOSE_DEFAULTS.imageY,
+    listScale: null, listX: null, listY: null,
+    imageRot: COMPOSE_DEFAULTS.imageRot, imageBlend: COMPOSE_DEFAULTS.imageBlend, imageFilter: COMPOSE_DEFAULTS.imageFilter, imageBlur: COMPOSE_DEFAULTS.imageBlur,
+  })
+  const resetShadow = () => patch({
+    shadowOn: false, shadowX: COMPOSE_DEFAULTS.shadowX, shadowY: COMPOSE_DEFAULTS.shadowY,
+    shadowBlur: COMPOSE_DEFAULTS.shadowBlur,
+    shadowOpacity: COMPOSE_DEFAULTS.shadowOpacity, shadowColor: COMPOSE_DEFAULTS.shadowColor,
+  })
+  const resetLabel = ar ? 'إعادة الضبط' : 'Reset'
+
+  return (
+    <div className="stack" style={{ gap: 10, marginBottom: 'var(--sp-3)' }}>
+      <p className="xs faint" style={{ margin: 0 }}>
+        {ar
+          ? 'تتحكم هنا في شكل هذا الصنف وحده: خلفيته وطريقة مزجها، مقاس صورته وموضعها في القائمة وفي شاشة الصنف كلٌّ على حدة، ظلّه، المؤثر فوقه، وطريقة ظهوره. كل قيمة تبقى على الافتراضي ما لم تحرّكها.'
+          : 'Controls how this one item looks: its backdrop and blend, its photo size and position separately in the list and on its own screen, its shadow, the effect over it, and how it appears.'}
+      </p>
+
+      <section className="dcx-group">
+        <div className="row-between" style={{ alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
+          <strong className="xs"><Icon name="eye" size={13} style={{ verticalAlign: 'middle' }} /> {ar ? 'معاينة حية' : 'Live preview'}</strong>
+          <div className="row" style={{ gap: 6, flex: 'none' }}>
+            <button type="button" className={`chip ${variant === 'list' ? 'active' : ''}`} onClick={() => setVariant('list')}>{ar ? 'القائمة' : 'Menu list'}</button>
+            <button type="button" className={`chip ${variant === 'stage' ? 'active' : ''}`} onClick={() => setVariant('stage')}>{ar ? 'الصنف المفتوح' : 'Opened item'}</button>
+            <button type="button" className="btn btn-xs btn-outline" onClick={() => setReplay((r) => r + 1)}>
+              <Icon name="reload" size={12} /> {ar ? 'إعادة الحركة' : 'Replay'}
+            </button>
+          </div>
+        </div>
+
+        <div className="dcx-stage" data-variant={variant}>
+          {comp.bg && comp.bg.kind === 'video' ? (
+            <span className="dcx-bg" style={bgWrapStyle}>
+              <video key={comp.bg.url} src={comp.bg.url} autoPlay muted loop playsInline style={bgVideoStyle} />
+            </span>
+          ) : comp.bg ? (
+            <span className="dcx-bg" style={bgStyle(comp.bg)} />
+          ) : null}
+
+          {form.imageUrl ? (
+            <span className="dcx-shot">
+              <img key={replay} src={form.imageUrl} alt="" data-anim={animPreview || undefined} style={imgStyle(comp.img, comp.shadow) || undefined} />
+            </span>
+          ) : (
+            <span className="dcx-empty">{ar ? 'ارفع صورة الصنف لترى التركيب — الأفضل صورة بخلفية شفافة' : 'Upload the item photo to compose it (a transparent cutout works best)'}</span>
+          )}
+
+          <ItemFx kind={comp.fx} />
+
+          <span className="dcx-meta">
+            <b>{form.nameAr || form.nameEn || (ar ? 'اسم الصنف' : 'Item name')}</b>
+            <span className="num">{form.price || '0'} {currency}</span>
+          </span>
+        </div>
+
+        <p className="xs faint" style={{ margin: 0 }}>
+          {ar
+            ? 'الخلفية الداكنة هنا هي نفسها خلفية ثيم المجلة — وضع المزج يختلف كلياً فوق الفاتح والداكن، فالمعاينة تريك الحالة الحقيقية.'
+            : 'The dark canvas mirrors the editorial theme: blend modes read completely differently on light and dark.'}
+        </p>
+      </section>
+
+      <CxGroup icon="image" title={ar ? 'الخلفية' : 'Backdrop'} resetLabel={resetLabel} onReset={resetBg}
+        hint={ar ? 'صورة أو فيديو خلف هذا الصنف — تتفوق على الخلفية الموحّدة في الاستوديو.' : 'An image or video behind this item, overriding the venue-wide backdrop.'}>
+        <div className="row" style={{ gap: 6, flexWrap: 'wrap', alignItems: 'center' }}>
+          <label className="btn btn-sm btn-outline" style={{ cursor: 'pointer' }}>
+            <Icon name="image" size={13} /> {ar ? 'رفع صورة' : 'Upload image'}
+            <input hidden type="file" accept="image/*" onChange={onPickBgImage} />
+          </label>
+          <label className="btn btn-sm btn-outline" style={{ cursor: 'pointer' }}>
+            <Icon name="play" size={13} /> {ar ? 'رفع فيديو' : 'Upload video'}
+            <input hidden type="file" accept="video/*" onChange={onPickBgVideo} />
+          </label>
+          {form.bgUrl && form.bgKind !== 'video' && (
+            <button type="button" className="btn btn-sm btn-outline" onClick={onEditBgImage}>
+              <Icon name="search" size={13} /> {ar ? 'قص وتأطير' : 'Crop'}
+            </button>
+          )}
+          {form.bgUrl && (
+            <button type="button" className="btn-link xs" style={{ color: 'var(--danger)' }} onClick={() => patch({ bgUrl: '', bgKind: '' })}>{ar ? 'إزالة الخلفية' : 'Remove'}</button>
+          )}
+          {uploading && <span className="spinner" style={{ flex: 'none' }} />}
+        </div>
+
+        {form.bgUrl ? (
+          <div className="stack" style={{ gap: 9 }}>
+            <CxSlider label={ar ? 'شفافية الخلفية' : 'Backdrop opacity'} format={cxPct}
+              min={RANGE.bgOpacity.min} max={RANGE.bgOpacity.max} step={RANGE.bgOpacity.step}
+              value={cxNum(form.bgOpacity, RANGE.bgOpacity.dflt)} onChange={(v) => set('bgOpacity', v)} />
+            <CxSlider label={ar ? 'تكبير الخلفية' : 'Backdrop zoom'} format={cxTimes}
+              min={COMPOSE_BOUNDS.bgScale[0]} max={COMPOSE_BOUNDS.bgScale[1]} step={0.05}
+              value={cxNum(form.bgScale, COMPOSE_DEFAULTS.bgScale)} onChange={(v) => set('bgScale', v)} />
+            <div className="field" style={{ marginBottom: 0 }}>
+              <label>{ar ? 'موقع الخلفية' : 'Backdrop position'}</label>
+              <div className="dcx-pos" dir="ltr">
+                {BG_POSITIONS.map((p) => (
+                  <button key={p} type="button" aria-label={p} data-on={(form.bgPos || 'center') === p ? 'true' : 'false'}
+                    aria-pressed={(form.bgPos || 'center') === p} onClick={() => set('bgPos', p)} />
+                ))}
+              </div>
+            </div>
+            <CxSelect lang={lang} label={ar ? 'مزج الخلفية مع سطح الشاشة' : 'Backdrop blend with the surface'} options={BLEND_MODES}
+              value={form.bgBlend || 'normal'} onChange={(v) => set('bgBlend', v)} />
+            <CxSelect lang={lang} label={ar ? 'فلتر الخلفية' : 'Backdrop filter'} options={FILTERS}
+              value={form.bgFilter || ''} onChange={(v) => set('bgFilter', v)} />
+          </div>
+        ) : (
+          <p className="xs faint" style={{ margin: 0 }}>{ar ? 'لا خلفية لهذا الصنف — يظهر على خلفية الثيم العادية.' : 'No backdrop: the item sits on the theme background.'}</p>
+        )}
+      </CxGroup>
+
+      <CxGroup icon="camera" title={ar ? 'الصورة' : 'The photo'} resetLabel={resetLabel} onReset={resetImg}
+        hint={ar ? 'المقاس والموضع يُضبطان لكل شاشة على حدة: صورة بحجم صف في القائمة لا تكفي شاشة الصنف.' : 'Size and position are set per screen: a photo sized for a list row cannot carry a full item screen.'}>
+        <div className="dcx-sub" data-live={variant === 'list' ? 'true' : 'false'}>
+          <div className="dcx-sub-head">
+            <strong className="xs">{ar ? 'في القائمة (أثناء التصفح)' : 'In the menu list'}</strong>
+            {!listFollows && (
+              <button type="button" className="btn btn-xs btn-ghost" style={{ flex: 'none' }} onClick={() => patch({ listScale: null, listX: null, listY: null })}>
+                {ar ? 'اتبع الصنف المفتوح' : 'Follow the item screen'}
+              </button>
+            )}
+          </div>
+          <CxSlider label={ar ? 'الحجم في القائمة' : 'Size in the list'} format={cxTimes}
+            min={RANGE.scale.min} max={RANGE.scale.max} step={RANGE.scale.step}
+            value={listScale} onChange={(v) => set('listScale', v)} />
+          <CxSlider label={ar ? 'الإزاحة الأفقية في القائمة' : 'Horizontal offset in the list'} format={cxOff}
+            min={RANGE.offset.min} max={RANGE.offset.max} step={RANGE.offset.step}
+            value={listX} onChange={(v) => set('listX', v)} />
+          <CxSlider label={ar ? 'الإزاحة الرأسية في القائمة' : 'Vertical offset in the list'} format={cxOff}
+            min={RANGE.offset.min} max={RANGE.offset.max} step={RANGE.offset.step}
+            value={listY} onChange={(v) => set('listY', v)} />
+          {listFollows && (
+            <p className="xs faint" style={{ margin: 0 }}>{ar ? 'تتبع القائمة حالياً قيم الصنف المفتوح — حرّك أي مؤشر هنا لتفصلها.' : 'The list currently follows the item screen — move any slider here to split them.'}</p>
+          )}
+        </div>
+
+        <div className="dcx-sub" data-live={variant === 'stage' ? 'true' : 'false'}>
+          <div className="dcx-sub-head">
+            <strong className="xs">{ar ? 'في الصنف المفتوح' : 'On the opened item'}</strong>
+          </div>
+          <CxSlider label={ar ? 'الحجم في الصنف المفتوح' : 'Size on the item screen'} format={cxTimes}
+            min={RANGE.scale.min} max={RANGE.scale.max} step={RANGE.scale.step}
+            value={stageScale} onChange={(v) => set('imageScale', v)} />
+          <CxSlider label={ar ? 'الإزاحة الأفقية' : 'Horizontal offset'} format={cxOff}
+            min={RANGE.offset.min} max={RANGE.offset.max} step={RANGE.offset.step}
+            value={stageX} onChange={(v) => set('imageX', v)} />
+          <CxSlider label={ar ? 'الإزاحة الرأسية' : 'Vertical offset'} format={cxOff}
+            min={RANGE.offset.min} max={RANGE.offset.max} step={RANGE.offset.step}
+            value={stageY} onChange={(v) => set('imageY', v)} />
+        </div>
+
+        <CxSlider label={ar ? 'الميلان (الدوران)' : 'Rotation'} format={cxDeg}
+          min={RANGE.rot.min} max={RANGE.rot.max} step={RANGE.rot.step}
+          value={cxNum(form.imageRot, RANGE.rot.dflt)} onChange={(v) => set('imageRot', v)} />
+        <CxSlider label={ar ? 'التمويه' : 'Blur'} format={cxPx}
+          min={RANGE.blur.min} max={RANGE.blur.max} step={RANGE.blur.step}
+          value={cxNum(form.imageBlur, RANGE.blur.dflt)} onChange={(v) => set('imageBlur', v)} />
+        <CxSelect lang={lang} label={ar ? 'مزج الصورة مع خلفيتها' : 'Photo blend'} options={BLEND_MODES}
+          value={form.imageBlend || 'normal'} onChange={(v) => set('imageBlend', v)} />
+        <CxSelect lang={lang} label={ar ? 'فلتر الصورة' : 'Photo filter'} options={FILTERS}
+          value={form.imageFilter || ''} onChange={(v) => set('imageFilter', v)} />
+      </CxGroup>
+
+      <CxGroup icon="moon" title={ar ? 'الظل' : 'Shadow'} resetLabel={resetLabel} onReset={resetShadow}
+        hint={ar ? 'ظل يتبع حدود الطبق نفسه لا حدود المربع — مناسب للصور المقصوصة الخلفية، ويمكن تحريكه في أي اتجاه.' : 'A shadow that follows the dish cutout rather than its box, movable in any direction.'}>
+        <label className="row-between" style={{ cursor: 'pointer', gap: 10 }}>
+          <span className="xs bold">{ar ? 'تشغيل الظل' : 'Shadow on'}</span>
+          <input type="checkbox" checked={!!form.shadowOn} onChange={(e) => set('shadowOn', e.target.checked)} style={{ width: 22, height: 22, flex: 'none' }} />
+        </label>
+        {form.shadowOn && (
+          <div className="stack" style={{ gap: 9 }}>
+            <CxSlider label={ar ? 'إزاحة الظل أفقياً' : 'Shadow X'} format={cxPx}
+              min={COMPOSE_BOUNDS.shadowX[0]} max={COMPOSE_BOUNDS.shadowX[1]} step={1}
+              value={cxNum(form.shadowX, COMPOSE_DEFAULTS.shadowX)} onChange={(v) => set('shadowX', v)} />
+            <CxSlider label={ar ? 'إزاحة الظل رأسياً' : 'Shadow Y'} format={cxPx}
+              min={COMPOSE_BOUNDS.shadowY[0]} max={COMPOSE_BOUNDS.shadowY[1]} step={1}
+              value={cxNum(form.shadowY, COMPOSE_DEFAULTS.shadowY)} onChange={(v) => set('shadowY', v)} />
+            <CxSlider label={ar ? 'نعومة الظل' : 'Shadow blur'} format={cxPx}
+              min={RANGE.shadowBlur.min} max={RANGE.shadowBlur.max} step={RANGE.shadowBlur.step}
+              value={cxNum(form.shadowBlur, RANGE.shadowBlur.dflt)} onChange={(v) => set('shadowBlur', v)} />
+            <CxSlider label={ar ? 'قوة الظل' : 'Shadow strength'} format={cxPct}
+              min={RANGE.opacity.min} max={RANGE.opacity.max} step={RANGE.opacity.step}
+              value={cxNum(form.shadowOpacity, COMPOSE_DEFAULTS.shadowOpacity)} onChange={(v) => set('shadowOpacity', v)} />
+            <div className="field" style={{ marginBottom: 0 }}>
+              <label>{ar ? 'لون الظل' : 'Shadow colour'}</label>
+              <div className="row" style={{ gap: 6 }}>
+                <input type="color" className="input" style={{ width: 40, padding: 2, height: 38, cursor: 'pointer', flex: 'none' }}
+                  value={form.shadowColor || COMPOSE_DEFAULTS.shadowColor} onChange={(e) => set('shadowColor', e.target.value)} />
+                <input className="input grow" style={{ minWidth: 0 }} dir="ltr" placeholder={COMPOSE_DEFAULTS.shadowColor}
+                  value={form.shadowColor || ''} onChange={(e) => set('shadowColor', e.target.value)} />
+              </div>
+            </div>
+          </div>
+        )}
+      </CxGroup>
+
+      <CxGroup icon="sparkles" title={ar ? 'المؤثر الحي' : 'Live effect'} resetLabel={resetLabel} onReset={() => set('effect', '')}
+        hint={ar
+          ? 'بخار أو دخان أو لمعان يتحرك فوق الصنف في المنيو وفي عارض المجسم داخل التطبيق. في وضع AR على الطاولة (الكاميرا) يظهر المجسم فقط بلا مؤثر — قيد تقني من نظام التشغيل.'
+          : 'Animates over the photo in the menu and the in-app 3D viewer. Real camera AR shows the bare model only (OS limitation).'}>
+        <CxSelect lang={lang} label={ar ? 'المؤثر فوق الصنف' : 'Effect over the dish'} options={FX}
+          value={form.effect || ''} onChange={(v) => set('effect', v)} />
+      </CxGroup>
+
+      <CxGroup icon="zap" title={ar ? 'حركة الظهور' : 'Entrance animation'} resetLabel={resetLabel} onReset={() => set('anim', '')}
+        hint={ar
+          ? 'كيف يدخل هذا الصنف الشاشة. «افتراضي» يترك القرار للثيم، والمعاينة تعرضه كصعود خفيف. تتوقف كل الحركات تلقائياً لمن فعّل تقليل الحركة في جهازه.'
+          : 'How this item enters the screen. Default leaves it to the theme; all of them stop for anyone with reduced motion switched on.'}>
+        <div className="dcx-anims">
+          {ANIMS.map((a) => (
+            <button key={a.id || 'dflt'} type="button" className={`chip ${(form.anim || '') === a.id ? 'active' : ''}`}
+              aria-pressed={(form.anim || '') === a.id} onClick={() => set('anim', a.id)}>
+              {ar ? a.ar : a.en}
+            </button>
+          ))}
+        </div>
+        <button type="button" className="btn btn-sm btn-outline" style={{ alignSelf: 'flex-start' }} onClick={() => setReplay((r) => r + 1)}>
+          <Icon name="play" size={13} /> {ar ? 'شغّل الحركة في المعاينة' : 'Play it in the preview'}
+        </button>
+      </CxGroup>
+    </div>
   )
 }
 

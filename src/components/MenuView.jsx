@@ -20,6 +20,7 @@ import { evaluateOffers, activeAutoOffers, offerForItem, discountedPrice } from 
 import { alertParty } from '../lib/notify.js'
 import { initTracking, identify, trackItemView, trackItemClose, trackCartAdd, trackSearch, trackCheckout, trackOrdered, trackGame } from '../lib/track.js'
 import ItemFx from './ItemFx.jsx'
+import { RANGE } from '../lib/dishComposition.js'
 import GamesIcon from './GamesIcon.jsx'
 import '../styles/tactile.css'
 import '../styles/scrollfix.css'
@@ -1545,9 +1546,11 @@ export function ItemSheet({ item, tenant, currency, tenantId, onClose, onAdd, de
   const sheetLayout = resolveSkin(tenant, 'menu')?.layout?.menuLayout
   const globalImgStyle = resolveSkin(tenant, 'menu')?.itemImageStyle || ''
   const imgStyle = item.imageStyle || globalImgStyle || (['storefront', 'gallery'].includes(sheetLayout) ? 'float' : 'circle')
-  // Per-product size of the image in THIS detail view (0.6–1.8). List cards are
-  // unaffected — some photos look right in the grid but need scaling in the sheet.
-  const detailScale = Math.min(1.8, Math.max(0.6, Number(item.imageScale) || 1))
+  // Per-product size of the image in THIS detail view. The bounds come from the
+  // composition contract rather than being repeated here: this used to hard-clamp
+  // to 1.8 while the editor's slider went to 2.6, so the last third of the slider
+  // silently did nothing on this sheet.
+  const detailScale = Math.min(RANGE.scale.max, Math.max(RANGE.scale.min, Number(item.imageScale) || 1))
   const scaleStyle = detailScale !== 1 ? { transform: `scale(${detailScale})`, transformOrigin: 'center' } : null
   const [variant, setVariant] = useState(variants[0] || null)
   const [qty, setQty] = useState(1)

@@ -7272,6 +7272,88 @@ body:has(.sd2-root) .toast-wrap { z-index: 840; }
 .edt-photo-open { position: absolute; inset: 0; background: none; border: none; cursor: pointer; }
 .edt-photo-open:disabled { cursor: default; }
 
+/* ---- PER-DISH COMPOSITION (lib/dishComposition.js) ----
+   The venue composes each dish itself: a backdrop behind it, the photo placed
+   and sized on that backdrop, a filter and a blend mode that marry the two, a
+   shadow it casts, a live effect over it, and the way it arrives.
+
+   THE STACKING CONTRACT. mix-blend-mode only blends an element with what is
+   ALREADY PAINTED inside the nearest isolated group, so a stacking context in
+   the wrong place turns every blend mode into a silent no-op. Three rules keep
+   that from happening, and all three are load-bearing:
+     1. .edt-photo carries NO z-index / transform / filter / isolation, so the
+        blending group in the list stays .edt-sec — which already sets
+        isolation: isolate and paints the lamp + plaster gradient beneath every
+        dish at z-index -1. That gradient is what a blend mode acts on.
+        (In the stage the group is .edt-stg-hero: its FLIP transform isolates
+        it, so blending there acts on the glow, the dish surface and the item's
+        own backdrop — see the report note about backdrop-less blends.)
+     2. .edt-comp is position: relative with z-index AUTO for the same reason.
+        Giving it a z-index would isolate the photo from its own backdrop.
+     3. paint order inside the photo box is: glow, dish surface (.dp-behind,
+        z-index 0), backdrop, photo, effect, vignette, front garnish (z-index
+        3). Every layer therefore has a defined thing underneath it to blend
+        with, and the backdrop can never reach a line of text: it is confined to
+        the photo box, which is a different grid track from .edt-main. */
+/* .edt-backdrop, not .edt-bg: --edt-bg is the theme's canvas colour token and
+   two things a line apart should not read as the same thing. */
+.edt-backdrop {
+  position: absolute;
+  inset: 0;
+  /* z-index stays auto: tree order alone puts this after the dish surface and
+     before the photo, and an unnecessary stacking context here would be one
+     more thing to get wrong later */
+  pointer-events: none;
+  /* A backdrop is a photograph, not a panel. Feathering the outer edge lets it
+     join the brick room instead of cutting a hard rectangle out of it; the
+     centre stays at full strength so the picture still reads. */
+  -webkit-mask-image: radial-gradient(132% 132% at 50% 50%, #000 74%, transparent 100%);
+  mask-image: radial-gradient(132% 132% at 50% 50%, #000 74%, transparent 100%);
+}
+video.edt-backdrop { width: 100%; height: 100%; display: block; }
+/* The photo box, to the pixel: the effect layer inherits it, so a steam plume
+   stays glued to the plate after the dish has been moved, scaled or rotated. */
+.edt-comp {
+  position: relative;
+  display: block;
+  width: 100%;
+  min-width: 0;
+}
+.edt-fx { position: absolute; inset: 0; pointer-events: none; }
+
+/* ---- how a dish ARRIVES (ANIMS in lib/dishComposition.js) ----
+   Written with the individual translate / scale / rotate properties on purpose:
+   those COMPOSE with the composition's own inline `transform`, where a
+   transform keyframe would overwrite the venue's placement the moment the
+   animation ran. Nothing here touches a layout property.
+   In the list the trigger is the section's in-view latch; in the stage the
+   layout only sets data-anim when there is no FLIP to conflict with. */
+.edt-comp[data-anim] .edt-dish { opacity: 0; }
+.edt-comp[data-anim='sweep'] .edt-dish { --edt-sweep: -16%; }
+[dir='rtl'] .edt-comp[data-anim='sweep'] .edt-dish { --edt-sweep: 16%; }
+.edt-sec.in .edt-comp[data-anim='rise'] .edt-dish,
+.edt-stg-hero .edt-comp[data-anim='rise'] .edt-dish { animation: edtDishRise .6s cubic-bezier(0.25, 1, 0.5, 1) both; }
+.edt-sec.in .edt-comp[data-anim='fade'] .edt-dish,
+.edt-stg-hero .edt-comp[data-anim='fade'] .edt-dish { animation: edtDishFade .5s ease both; }
+.edt-sec.in .edt-comp[data-anim='zoom'] .edt-dish,
+.edt-stg-hero .edt-comp[data-anim='zoom'] .edt-dish { animation: edtDishZoom .55s cubic-bezier(0.25, 1, 0.5, 1) both; }
+.edt-sec.in .edt-comp[data-anim='drop'] .edt-dish,
+.edt-stg-hero .edt-comp[data-anim='drop'] .edt-dish { animation: edtDishDrop .72s cubic-bezier(0.2, 0.82, 0.28, 1) both; }
+.edt-sec.in .edt-comp[data-anim='tilt'] .edt-dish,
+.edt-stg-hero .edt-comp[data-anim='tilt'] .edt-dish { animation: edtDishTilt .62s cubic-bezier(0.2, 0.82, 0.28, 1) both; }
+.edt-sec.in .edt-comp[data-anim='sweep'] .edt-dish,
+.edt-stg-hero .edt-comp[data-anim='sweep'] .edt-dish { animation: edtDishSweep .66s cubic-bezier(0.25, 1, 0.5, 1) both; }
+@keyframes edtDishRise { from { opacity: 0; translate: 0 14%; } to { opacity: 1; translate: 0 0; } }
+@keyframes edtDishFade { from { opacity: 0; } to { opacity: 1; } }
+@keyframes edtDishZoom { from { opacity: 0; scale: 0.86; } to { opacity: 1; scale: 1; } }
+@keyframes edtDishDrop {
+  0% { opacity: 0; translate: 0 -22%; }
+  62% { opacity: 1; translate: 0 4%; }
+  100% { opacity: 1; translate: 0 0; }
+}
+@keyframes edtDishTilt { from { opacity: 0; rotate: -7deg; translate: 0 9%; } to { opacity: 1; rotate: 0deg; translate: 0 0; } }
+@keyframes edtDishSweep { from { opacity: 0; translate: var(--edt-sweep, -16%) 0; } to { opacity: 1; translate: 0 0; } }
+
 .edt-progress {
   position: fixed;
   inset-block-end: calc(var(--bottomnav-h, 0px) + var(--safe-b, 0px) + 12px);
@@ -7351,16 +7433,21 @@ body:has(.sd2-root) .toast-wrap { z-index: 840; }
   padding: clamp(56px, 14vw, 76px) clamp(18px, 6vw, 40px) 0;
   will-change: transform;
 }
+/* Size is a TRANSFORM now, not a cap. --edt-img-scale used to multiply this
+   max-height, which changes nothing whenever the photo is already shorter than
+   the cap — which is most of them, and is why the venue reported the size
+   control doing nothing in this theme. lib/dishComposition.js turns the same
+   field into scale() on the photo itself (and the list has its own listScale). */
 .edt-stg-hero img {
   position: relative; /* paints above the ground glow */
   display: block;
   width: 100%; height: auto;
-  max-height: calc(min(42dvh, 420px) * var(--edt-img-scale, 1));
+  max-height: min(42dvh, 420px);
   object-fit: contain;
   object-position: center;
 }
 .edt-stg-hero[data-fit='wide'] { min-height: min(26dvh, 220px); padding-inline: 0; }
-.edt-stg-hero[data-fit='tall'] img { max-height: calc(min(50dvh, 500px) * var(--edt-img-scale, 1)); }
+.edt-stg-hero[data-fit='tall'] img { max-height: min(50dvh, 500px); }
 .edt-stg-hero .edt-glow {
   inset: 6% 4% 8%;
   height: auto;
@@ -7542,7 +7629,7 @@ button.edt-pair:active { transform: scale(.98); }
   .edt-stg-hero { padding-top: clamp(56px, 5vw, 76px); min-height: min(44dvh, 440px); }
   .edt-stg-hero[data-fit='wide'] { min-height: min(34dvh, 320px); padding-inline: 0; }
   .edt-stg-hero img,
-  .edt-stg-hero[data-fit='tall'] img { max-height: calc(min(56dvh, 560px) * var(--edt-img-scale, 1)); }
+  .edt-stg-hero[data-fit='tall'] img { max-height: min(56dvh, 560px); }
   .edt-stg-body { padding: 0 0 32px; max-width: 620px; margin-inline: 0; }
   .edt-stg-bar { width: 100%; max-width: 1280px; margin-inline: auto; padding-inline: clamp(24px, 4vw, 64px); }
   .edt-stg-x { inset-inline-start: 20px; top: 20px; }
@@ -7604,6 +7691,19 @@ button.edt-pair:active { transform: scale(.98); }
   .edt-chip, .edt-open-btn, .edt-opt, .edt-pair, .edt-lpair, .edt-stg-add { transition: none; }
   .edt-open-btn:hover, .edt-open-btn:active,
   button.edt-pair:active, .edt-lpair:active, .edt-stg-add:active { transform: none; }
+  /* every per-dish entrance goes still, and the photo goes back to full opacity
+     — the start state above must never be what a reduced-motion diner is left
+     looking at. `transform` is NOT reset here: it carries the venue's placement
+     of the dish, which is composition and not motion. */
+  .edt-comp[data-anim] .edt-dish,
+  .edt-sec.in .edt-comp[data-anim] .edt-dish,
+  .edt-stg-hero .edt-comp[data-anim] .edt-dish {
+    animation: none;
+    opacity: 1;
+    translate: none;
+    scale: none;
+    rotate: none;
+  }
 }
 
 /* ============ OCEANART («اللوحة الفنية») — painted canvas, rotated plates, seals ============ */

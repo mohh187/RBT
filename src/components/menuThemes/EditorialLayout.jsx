@@ -26,6 +26,8 @@ import { hasStory } from '../DishStory.jsx'
 import { offerForItem, discountedPrice, itemOfferLabel } from '../../lib/offers.js'
 // Surface + garnish scatter behind the dish cutout (see lib/dishProps.js).
 import DishProps from './DishProps.jsx'
+// The ONE contract for how a dish is composed: backdrop, photo, effect, entrance.
+import { resolveComposition, bgStyle, imgStyle } from '../../lib/dishComposition.js'
 
 // Built by a parallel agent — lazy + catch so a missing module never crashes
 // the menu; it simply renders nothing until the file exists.
@@ -63,6 +65,90 @@ function useImgFit() {
   const bind = (n) => { nodeRef.current = n; read(n) }
   return { fit, bind, nodeRef, onLoad: (e) => read(e.currentTarget) }
 }
+
+// ---------------------------------------------------------------------------
+// PER-DISH COMPOSITION — the venue's own art direction for a single dish:
+// the backdrop behind it, where the photo sits on that backdrop and how big it
+// is, the filter and blend that marry the two, the shadow it casts, the live
+// effect over it, and the way it arrives on screen.
+//
+// EVERY value comes from lib/dishComposition.js. Nothing here reads a raw item
+// field and nothing here clamps, so the admin editor and this renderer read the
+// same contract and cannot drift apart.
+//
+// WHY THE LAYER ORDER IS LOAD-BEARING
+// mix-blend-mode blends an element with what is ALREADY PAINTED inside the
+// nearest isolated group, so:
+//   1. the backdrop must be painted BEFORE the photo (it is the photo's
+//      blending backdrop), and after the theme's own glow and dish surface (so
+//      the backdrop's own blend mode has something to act on too),
+//   2. no element between the blending group and the photo may create a
+//      stacking context — .edt-photo and .edt-comp therefore carry no z-index,
+//      no transform, no filter and no isolation. See index.css (.edt-comp).
+// In the list the blending group is .edt-sec (it sets isolation: isolate and
+// paints the lamp/plaster gradient at z-index -1); in the stage it is
+// .edt-stg-hero, which the FLIP transform isolates.
+// ---------------------------------------------------------------------------
+
+// A video backdrop is the same layer with a different kind of paint: reuse the
+// module's opacity / blend / filter and swap background-image for the element.
+// (bg.pos and bg.scale are already resolved and clamped by the module.)
+function bgVideoStyle(bg) {
+  const s = bgStyle(bg)
+  if (!s) return undefined
+  const out = { opacity: s.opacity, objectFit: 'cover', objectPosition: bg.pos }
+  if (s.mixBlendMode) out.mixBlendMode = s.mixBlendMode
+  if (s.filter) out.filter = s.filter
+  if (bg.scale !== 1) { out.transform = `scale(${bg.scale})`; out.transformOrigin = bg.pos }
+  return out
+}
+
+// The backdrop layer. Mounted as a direct child of the photo box (list) or the
+// hero band (stage) so it fills that whole area, always behind the dish, always
+// transparent to touch, and never anywhere near a line of text.
+function EdtBackdrop({ bg }) {
+  if (!bg) return null
+  if (bg.kind === 'video') {
+    // A moving backdrop is motion like any other: under prefers-reduced-motion
+    // it holds its first frame instead of looping behind the dish.
+    const still = prefersReduced()
+    return (
+      <video
+        className="edt-backdrop" style={bgVideoStyle(bg)} src={bg.url} aria-hidden="true"
+        autoPlay={!still} loop={!still} preload={still ? 'metadata' : 'auto'}
+        muted playsInline
+      />
+    )
+  }
+  return <span className="edt-backdrop" style={bgStyle(bg) || undefined} aria-hidden="true" />
+}
+
+// The dish itself plus the effect that plays over it, in a box that is exactly
+// the photo box — so a steam plume stays glued to the plate even after the
+// photo has been moved, scaled or rotated.
+//
+// `anim` is the entrance the venue chose. The stylesheet plays it with the
+// individual translate / scale / rotate properties, which COMPOSE with the
+// composition's own inline transform instead of overwriting it.
+function EdtDish({ comp, src, anim = '', bind = null, onLoad = null, fallback = 64 }) {
+  const photo = imgStyle(comp.img, comp.shadow)
+  return (
+    <span className="edt-comp" data-anim={anim || undefined}>
+      {src
+        ? <img className="edt-dish" ref={bind} onLoad={onLoad} src={src} alt="" decoding="async" style={photo || undefined} />
+        : <span className="edt-noimg"><Icon name="coffee" size={fallback} /></span>}
+      {comp.fx ? (
+        <span className="edt-fx" aria-hidden="true" style={photo && photo.transform ? { transform: photo.transform } : undefined}>
+          <ItemFx kind={comp.fx} />
+        </span>
+      ) : null}
+    </span>
+  )
+}
+
+// '' is the theme's own default (no photo entrance, exactly as before) and
+// 'none' is the venue asking for stillness — neither mounts an animation.
+const animAttr = (comp) => (comp.anim && comp.anim !== 'none' ? comp.anim : '')
 
 // Room ornaments — the three objects the owner photographed on his walls,
 // drawn as thin inline-SVG strokes so they cost nothing and tint from two
@@ -202,7 +288,10 @@ function EdtSection({ it, idx, catLabel, currency, offers, lang, t, onOpen, allI
   const addedTimer = useRef(0)
   useEffect(() => {
     const el = ref.current
-    if (!el || typeof IntersectionObserver === 'undefined') return undefined
+    // No observer means no arrival signal, and the entrance animation below
+    // starts the photo at opacity 0 — so fall straight through to "arrived"
+    // rather than leaving a dish permanently invisible.
+    if (!el || typeof IntersectionObserver === 'undefined') { setInview(true); return undefined }
     const io = new IntersectionObserver((entries) => entries.forEach((e) => setInview(e.isIntersecting)), { threshold: 0.35 })
     io.observe(el)
     return () => io.disconnect()
@@ -217,7 +306,12 @@ function EdtSection({ it, idx, catLabel, currency, offers, lang, t, onOpen, allI
   const name = pickLang(it, 'name', lang)
   const desc = pickLang(it, 'desc', lang)
   const ings = it.ingredients || []
+  // the venue's art direction for THIS dish, at list size (item.listScale and
+  // friends, falling back to the stage values for items saved before the split)
+  const comp = useMemo(() => resolveComposition(it, { variant: 'list' }), [it])
   // FLIP origin: the photo's on-screen rect, so the stage grows out of it.
+  // getBoundingClientRect already reports the TRANSFORMED box, so a dish the
+  // venue has moved or scaled still hands the stage the rect a diner can see.
   const open = () => { if (!out) onOpen(it, nodeRef.current ? nodeRef.current.getBoundingClientRect() : null) }
 
   // «يُطلب معه» in the LIST, not only inside the opened dish: the venue's
@@ -250,12 +344,10 @@ function EdtSection({ it, idx, catLabel, currency, offers, lang, t, onOpen, allI
             layer paints under the photo, the front layer over it. Arrival is
             tied to the same in-view flag the text uses. */}
         <DishProps item={it} active={inview} catName={catLabel} />
-        {it.imageUrl
-          ? <img ref={bind} onLoad={onLoad} src={it.imageUrl} alt="" decoding="async" />
-          : <span className="edt-noimg"><Icon name="coffee" size={64} /></span>}
+        <EdtBackdrop bg={comp.bg} />
+        <EdtDish comp={comp} src={it.imageUrl} anim={animAttr(comp)} bind={bind} onLoad={onLoad} fallback={64} />
         <span className="edt-vignette" aria-hidden="true" />
         <button type="button" className="edt-photo-open" onClick={open} aria-label={name} tabIndex={-1} disabled={out} />
-        <ItemFx kind={it.effect} />
         {it.hotspots?.length ? <Suspense fallback={null}><DishHotspots hotspots={it.hotspots} /></Suspense> : null}
       </div>
       <div className="edt-main">
@@ -360,9 +452,15 @@ export function EditorialItemStage({ item, currency, onClose, onAdd, originRect 
   const offerTag = offer ? itemOfferLabel(item, offers, currency) : ''
   const story = hasStory(item) ? item.story : null
   const storyParas = story ? paragraphsOf(story.body) : []
-  // Per-item photo size for the detail view (0.6–1.8), same field the default
-  // sheet honours — the venue's own escape hatch for an awkward cutout.
-  const imgScale = Math.min(1.8, Math.max(0.6, Number(item.imageScale) || 1))
+  // The venue's art direction for this dish at STAGE size. item.imageScale used
+  // to move only a max-height cap here, which does nothing at all when the photo
+  // is already shorter than the cap («الخيار الحالي لايعمل في هذا الثيم»); the
+  // module turns it into a real transform, and the list has its own listScale.
+  const comp = useMemo(() => resolveComposition(item, { variant: 'stage' }), [item])
+  // The FLIP is the stage's own entrance. When there is no origin rect (opened
+  // from a pairing chip) there is no FLIP, so the dish plays the entrance the
+  // venue chose for it instead of simply appearing.
+  const stageAnim = originRect ? '' : animAttr(comp)
   // primary photo first, then the extra gallery shots (deduped)
   const gallery = useMemo(
     () => [...new Set([item.imageUrl, ...(item.images || [])].filter(Boolean))],
@@ -464,15 +562,13 @@ export function EditorialItemStage({ item, currency, onClose, onAdd, originRect 
       <button type="button" className="edt-stg-x" onClick={close} aria-label={t('close')}><Icon name="close" size={20} /></button>
       <div className="edt-stg-scroll">
         <div className="edt-stg-media">
-          <div className="edt-stg-hero" ref={heroRef} data-fit={fit || undefined} style={{ '--edt-img-scale': imgScale }}>
+          <div className="edt-stg-hero" ref={heroRef} data-fit={fit || undefined}>
             <span className="edt-glow" aria-hidden="true" />
             {/* quieter here: the stage variant caps the scatter and shortens
                 the surface, so the full dish record stays the subject */}
             <DishProps item={item} active variant="stage" />
-            {heroSrc
-              ? <img ref={bind} onLoad={onLoad} src={heroSrc} alt="" decoding="async" />
-              : <span className="edt-noimg"><Icon name="coffee" size={72} /></span>}
-            <ItemFx kind={item.effect} />
+            <EdtBackdrop bg={comp.bg} />
+            <EdtDish comp={comp} src={heroSrc} anim={stageAnim} bind={bind} onLoad={onLoad} fallback={72} />
             {item.hotspots?.length ? <Suspense fallback={null}><DishHotspots hotspots={item.hotspots} /></Suspense> : null}
           </div>
           {gallery.length > 1 && (
