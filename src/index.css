@@ -144,6 +144,141 @@
 }
 
 /* ============================================================
+   APP CHROME — the top bar (.app-bar) and the bottom navs
+   (.m-bottomnav for the diner, .bottom-nav for staff).
+
+   Chrome is FURNITURE, not an overlay: it is ALWAYS opaque, so a
+   dish photo or a scrolling page can never be seen faintly through
+   it. (Before this, .app-bar was 80% surface + blur and the
+   data-header='transparent' style was fully see-through, which is
+   what made menu content ghost through the bar above the category
+   chips.)
+
+   HOW TO SET A CHROME THEME — a settings screen can drive it with
+   one attribute, on <html>, on <body>, or on any shell element:
+
+       document.documentElement.dataset.chrome = 'terracotta'
+       <body data-chrome={tenant.chromeTheme || 'auto'}>
+
+   Values:
+     auto        (default) follows the light/dark theme
+     terracotta  «طوبي» warm brick — the look the owner asked for
+     ink         near-black
+     navy        deep navy
+     forest      forest green
+     sand        neutral light
+
+   A venue that wants something bespoke can skip the presets and set
+   the tokens directly (inline style on the same element) — every
+   chrome rule in this file reads ONLY these tokens and nothing else:
+
+     --chrome-bg      solid bar background (never translucent)
+     --chrome-bg-2    inset/active-pill background inside the bar
+     --chrome-text    primary text on the bar (venue name, active tab)
+     --chrome-muted   inactive tab labels          (>= 4.5:1 on --chrome-bg)
+     --chrome-icon    icon-button colour           (>= 3:1 on --chrome-bg)
+     --chrome-active  active tab text + icon       (>= 4.5:1 on --chrome-bg)
+     --chrome-border  hairline separating bar from page
+     --chrome-shadow  elevation under/over the bar
+     --chrome-badge / --chrome-on-badge   the cart-count dot
+
+   IMPORTANT — why the colour tokens are NOT given :root defaults:
+   a custom property whose value is `var(--something)` is substituted
+   on the element that DECLARES it, so `:root { --chrome-bg: var(--surface) }`
+   would freeze the ROOT surface and ignore every scope that
+   re-declares the palette (.platform-scope, the 8 [data-systheme]
+   skins, body[data-custheme]). So the auto behaviour lives in the
+   var() FALLBACK at each point of use — `var(--chrome-bg, var(--surface))`
+   — which resolves --surface on the bar itself and therefore follows
+   whatever scope the bar happens to sit in. Only literal values
+   (--chrome-shadow, --chrome-badge) are safe to default at :root.
+
+   Every preset STATES its own text/icon colours rather than
+   inheriting --text / --brand, so its contrast is fixed and holds
+   whichever way the light/dark switch is thrown. Measured against
+   each preset's own --chrome-bg: text 7.6-17.6:1, muted 5.4-9.2:1,
+   icons 6.1-11.4:1, active 6.3-13.1:1 — WCAG AA asks 4.5:1 for text
+   and 3:1 for icons, so every preset clears both with room to spare.
+   ============================================================ */
+:root {
+  --chrome-shadow: 0 6px 18px -14px rgba(0, 0, 0, 0.55);
+  /* cart-count dot. The old #ef4444 gave its numerals only 3.76:1 — an AA fail.
+     #c62828 gives 5.62:1 for the numerals, and the dot itself reads 5.62:1 on
+     the light bar / 3.21:1 on the dark bar (non-text needs 3:1). */
+  --chrome-badge: #c62828;
+  --chrome-on-badge: #ffffff;
+}
+[data-theme='dark'] {
+  --chrome-shadow: 0 8px 22px -14px rgba(0, 0, 0, 0.9);
+}
+/* ---- chrome presets. Contrast vs their own --chrome-bg is noted per line. --- */
+:root[data-chrome='terracotta'],
+[data-chrome='terracotta'] {
+  --chrome-bg: #7c3a22;
+  --chrome-bg-2: #91462a;
+  --chrome-text: #fdf1e8;    /* 7.61:1 */
+  --chrome-muted: #f0c7ab;   /* 5.42:1 */
+  --chrome-icon: #f5d5be;    /* 6.09:1 */
+  --chrome-active: #ffd9a0;  /* 6.31:1 */
+  --chrome-border: #98543a;
+  --chrome-shadow: 0 8px 22px -14px rgba(40, 16, 6, 0.85);
+  /* a saturated red disappears on brick (1.5:1) — pale red keeps the "alert"
+     read at 4.45:1 for the dot and 8.86:1 for the numerals inside it */
+  --chrome-badge: #fca5a5;
+  --chrome-on-badge: #3b0d0d;
+}
+:root[data-chrome='ink'],
+[data-chrome='ink'] {
+  --chrome-bg: #101014;
+  --chrome-bg-2: #1c1c22;
+  --chrome-text: #f6f6f7;    /* 17.58:1 */
+  --chrome-muted: #b4b4bd;   /* 9.22:1 */
+  --chrome-icon: #c8c8d0;    /* 11.42:1 */
+  --chrome-active: #ffcf7a;  /* 13.07:1 */
+  --chrome-border: #2b2b33;
+  --chrome-shadow: 0 8px 22px -14px rgba(0, 0, 0, 0.9);
+  --chrome-badge: #fca5a5;   /* 10.00:1 dot */
+  --chrome-on-badge: #3b0d0d; /* 8.86:1 numerals */
+}
+:root[data-chrome='navy'],
+[data-chrome='navy'] {
+  --chrome-bg: #10243f;
+  --chrome-bg-2: #17314f;
+  --chrome-text: #eef3fb;    /* 14.00:1 */
+  --chrome-muted: #a9c2e0;   /* 8.53:1 */
+  --chrome-icon: #bcd2ea;    /* 10.06:1 */
+  --chrome-active: #8ec5ff;  /* 8.60:1 */
+  --chrome-border: #26405f;
+  --chrome-shadow: 0 8px 22px -14px rgba(4, 12, 24, 0.9);
+  --chrome-badge: #fca5a5;   /* 8.22:1 dot */
+  --chrome-on-badge: #3b0d0d; /* 8.86:1 numerals */
+}
+:root[data-chrome='forest'],
+[data-chrome='forest'] {
+  --chrome-bg: #11291f;
+  --chrome-bg-2: #1a3a2b;
+  --chrome-text: #eef6f0;    /* 14.02:1 */
+  --chrome-muted: #a5c8b3;   /* 8.46:1 */
+  --chrome-icon: #b9d7c4;    /* 9.98:1 */
+  --chrome-active: #86d9ad;  /* 9.22:1 */
+  --chrome-border: #26483a;
+  --chrome-shadow: 0 8px 22px -14px rgba(4, 18, 12, 0.9);
+  --chrome-badge: #fca5a5;   /* 8.13:1 dot */
+  --chrome-on-badge: #3b0d0d; /* 8.86:1 numerals */
+}
+:root[data-chrome='sand'],
+[data-chrome='sand'] {
+  --chrome-bg: #f4f2ef;
+  --chrome-bg-2: #e8e5e0;
+  --chrome-text: #1b1a18;    /* 15.56:1 */
+  --chrome-muted: #5b574f;   /* 6.43:1 */
+  --chrome-icon: #4a453e;    /* 8.50:1 */
+  --chrome-active: #8a4321;  /* 6.47:1 */
+  --chrome-border: #ddd8d1;
+  --chrome-shadow: 0 8px 22px -16px rgba(60, 50, 40, 0.55);
+}
+
+/* ============================================================
    PLATFORM CONSOLE THEME — a fixed, isolated "command center"
    identity (violet + cyan on cool slate). Because these custom
    properties are (re)defined on the .platform-scope container,
@@ -421,9 +556,16 @@ ul {
   align-items: center;
   gap: var(--sp-2);
   padding-inline: var(--sp-3);
-  background: color-mix(in srgb, var(--surface) 80%, transparent);
-  border-bottom: 1px solid var(--border);
-  backdrop-filter: saturate(160%) blur(12px);
+  /* SOLID. Was `color-mix(surface 80%, transparent)` + blur, which let dish
+     photos ghost through the bar as the page scrolled under it. */
+  background: var(--chrome-bg, var(--surface));
+  color: var(--chrome-text, var(--text));
+  border-bottom: 1px solid var(--chrome-border, var(--border));
+  box-shadow: var(--chrome-shadow);
+}
+.app-bar .icon-btn { color: var(--chrome-icon, var(--text)); }
+@media (hover: hover) {
+  .app-bar .icon-btn:hover { background: color-mix(in srgb, var(--chrome-text, var(--text)) 12%, transparent); }
 }
 .app-bar h1 {
   font-size: var(--fs-md);
@@ -431,19 +573,30 @@ ul {
 /* ===== Header (app-bar) styles — chosen by skin or manual override ===== */
 .db-brand { display: flex; align-items: center; gap: var(--sp-2); min-width: 0; }
 .db-brand strong { font-size: var(--fs-md); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.app-bar[data-header='glass'] { background: color-mix(in srgb, var(--surface) 52%, transparent); backdrop-filter: saturate(180%) blur(22px); }
-.app-bar[data-header='transparent'] { background: transparent; border-bottom-color: transparent; backdrop-filter: none; }
+/* 'glass' keeps its frosted READ (inner top highlight, soft edge) but is now
+   opaque — a 52%-surface bar over a full-bleed dish photo was the leak the
+   owner reported. */
+.app-bar[data-header='glass'] {
+  background: var(--chrome-bg, var(--surface));
+  backdrop-filter: none;
+  box-shadow: inset 0 1px 0 color-mix(in srgb, var(--chrome-text, var(--text)) 14%, transparent), var(--chrome-shadow);
+  border-bottom-color: color-mix(in srgb, var(--chrome-border, var(--border)) 70%, transparent);
+}
+/* 'transparent' now means CHROMELESS, not see-through: the bar takes the page's
+   own colour and drops its border/shadow, so it reads as "no bar" while still
+   being opaque. Content scrolling underneath is hidden, never ghosted. */
+.app-bar[data-header='transparent'] { background: var(--chrome-bg, var(--surface)); border-bottom-color: transparent; backdrop-filter: none; box-shadow: none; }
 .app-bar[data-header='gradient'] { background: linear-gradient(120deg, var(--brand), var(--brand-strong)); border-bottom: none; }
 .app-bar[data-header='gradient'] .db-brand strong { color: var(--on-brand); }
 .app-bar[data-header='gradient'] .icon-btn { color: var(--on-brand); background: color-mix(in srgb, #fff 18%, transparent); border: 1px solid color-mix(in srgb, #fff 32%, transparent); }
 .app-bar[data-header='gradient'] .dot { background: rgba(255, 255, 255, .22) !important; }
-.app-bar[data-header='bordered'] { background: var(--surface); border-bottom: 2px solid var(--brand); backdrop-filter: none; }
+.app-bar[data-header='bordered'] { background: var(--chrome-bg, var(--surface)); border-bottom: 2px solid var(--chrome-active, var(--brand)); backdrop-filter: none; }
 .app-bar[data-header='minimal'] .db-brand img, .app-bar[data-header='minimal'] .db-brand .dot { display: none; }
 .app-bar[data-header='minimal'] .db-brand strong { font-size: var(--fs-sm); font-weight: 700; }
 .app-bar[data-header='large'] .db-brand strong { font-size: var(--fs-lg); font-weight: 900; letter-spacing: -.01em; }
 .app-bar[data-header='centered'] .db-brand { position: absolute; left: 0; right: 0; margin-inline: auto; width: fit-content; max-width: 60%; pointer-events: none; }
-.app-bar[data-header='elevated'] { background: var(--surface); border-bottom: none; box-shadow: var(--sh-2); backdrop-filter: none; }
-.app-bar[data-header='float'] { margin: 8px 10px 0; height: var(--appbar-h); top: calc(var(--safe-t) + 8px); padding-top: 0; border: 1px solid var(--border); border-radius: var(--r-pill); box-shadow: var(--sh-3); background: color-mix(in srgb, var(--surface) 86%, transparent); }
+.app-bar[data-header='elevated'] { background: var(--chrome-bg, var(--surface)); border-bottom: none; box-shadow: var(--sh-2); backdrop-filter: none; }
+.app-bar[data-header='float'] { margin: 8px 10px 0; height: var(--appbar-h); top: calc(var(--safe-t) + 8px); padding-top: 0; border: 1px solid var(--chrome-border, var(--border)); border-radius: var(--r-pill); box-shadow: var(--sh-3); background: var(--chrome-bg, var(--surface)); }
 /* floating language/theme toggles when the header style is 'none' */
 .db-floating { position: fixed; top: calc(var(--safe-t) + 10px); inset-inline-end: 12px; z-index: var(--z-appbar); display: flex; gap: 8px; }
 .db-floating .icon-btn { background: color-mix(in srgb, var(--surface) 78%, transparent); border: 1px solid var(--border-strong); border-radius: var(--r-pill); backdrop-filter: saturate(160%) blur(12px); width: 38px; height: 38px; }
@@ -497,9 +650,9 @@ ul {
   height: calc(var(--bottomnav-h) + var(--safe-b));
   padding-bottom: var(--safe-b);
   display: flex;
-  background: color-mix(in srgb, var(--surface) 88%, transparent);
-  border-top: 1px solid var(--border);
-  backdrop-filter: saturate(160%) blur(14px);
+  /* SOLID chrome (was 88% surface + blur — page content bled through it). */
+  background: var(--chrome-bg, var(--surface));
+  border-top: 1px solid var(--chrome-border, var(--border));
 }
 .bottom-nav a {
   flex: 1;
@@ -509,7 +662,8 @@ ul {
   justify-content: center;
   gap: 2px;
   font-size: 10px;
-  color: var(--text-faint);
+  /* was --text-faint = 3.74:1 on the dark surface (AA fail for a 10px label) */
+  color: var(--chrome-muted, var(--text-muted));
   transition: color var(--dur-fast);
   min-height: var(--tap);
 }
@@ -518,9 +672,14 @@ ul {
   line-height: 1;
 }
 .bottom-nav a.active {
-  color: var(--sel, var(--brand));
+  color: var(--sel, var(--chrome-active, var(--brand)));
   font-weight: 700;
 }
+/* A dark-mode brand sits around 3.3:1 on the dark bar, so this 10px label was
+   an AA fail. Lift the brand toward white FOR CHROME ONLY (7.2:1) — the brand
+   itself is untouched everywhere else, and any [data-systheme] rule further
+   down the file still overrides this. */
+[data-theme='dark'] .bottom-nav a.active { color: var(--sel, var(--chrome-active, color-mix(in srgb, var(--brand) 60%, #ffffff))); }
 
 /* ===== Buttons ===== */
 .btn {
@@ -1074,17 +1233,29 @@ ul {
 /* ===== diner-menu glass (tenant.menuGlass): CHROME surfaces only — bars,
    search, floating buttons — never item cards, so all 31 skins stay intact.
    Token-driven, so every skin's own palette keeps its contrast. ===== */
-[data-menuglass] .m-bottomnav,
+/* NOTE: the top bar and the bottom nav USED to be in this list. They are not
+   any more — they are chrome, and chrome stays opaque (see the APP CHROME block
+   near the top of this file). Only the free-floating controls, which are meant
+   to hover above the page, stay glassy. */
 [data-menuglass] .m-search,
 [data-menuglass] .m-fab,
 [data-menuglass] .m-waiter-fab,
-.venue-above:has([data-menuglass]) .app-bar,
 .venue-above:has([data-menuglass]) .db-floating .icon-btn {
   background: color-mix(in srgb, var(--surface) calc(var(--glass-alpha) * 100%), transparent);
   backdrop-filter: blur(var(--glass-blur)) saturate(var(--glass-sat));
   -webkit-backdrop-filter: blur(var(--glass-blur)) saturate(var(--glass-sat));
   border-color: color-mix(in srgb, var(--border) 60%, transparent);
   box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.28), 0 8px 24px rgba(0, 0, 0, 0.07);
+}
+/* the bars keep the liquid READ — inner highlight + soft lift — over an opaque
+   chrome fill, so the frosted identity survives without the see-through leak */
+[data-menuglass] .m-bottomnav,
+.venue-above:has([data-menuglass]) .app-bar {
+  background: var(--chrome-bg, var(--surface));
+  backdrop-filter: none;
+  -webkit-backdrop-filter: none;
+  border-color: var(--chrome-border, var(--border));
+  box-shadow: inset 0 1px 0 color-mix(in srgb, var(--chrome-text, var(--text)) 14%, transparent), 0 8px 24px rgba(0, 0, 0, 0.07);
 }
 /* the sticky category bar sets its bg inline (var(--bg)) — theme layer must win */
 [data-menuglass] .cat-bar {
@@ -1094,7 +1265,7 @@ ul {
 }
 /* liquid lens on the active bottom-nav item */
 [data-menuglass] .m-bottomnav button.active {
-  background: color-mix(in srgb, var(--surface) 75%, transparent);
+  background: var(--chrome-bg-2, var(--surface-2));
   border-radius: var(--r-pill);
   box-shadow: inset 0 1.5px 0 rgba(255, 255, 255, 0.5), inset 0 -1.5px 0 rgba(0, 0, 0, 0.08);
 }
@@ -1143,7 +1314,7 @@ ul {
 [data-menuglass='full'] .backdrop { backdrop-filter: blur(5px); -webkit-backdrop-filter: blur(5px); }
 [data-theme='dark'] [data-menuglass] .m-bottomnav,
 [data-theme='dark'] .venue-above:has([data-menuglass]) .app-bar {
-  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.1), 0 8px 24px rgba(0, 0, 0, 0.3);
+  box-shadow: inset 0 1px 0 color-mix(in srgb, var(--chrome-text, var(--text)) 10%, transparent), 0 8px 24px rgba(0, 0, 0, 0.3);
 }
 
 /* ===== system-wide ambient background (tenant.appBg) ===== */
@@ -3459,7 +3630,7 @@ body[data-theme='dark'] .pos-fullscreen[data-systheme='glass'] { background: var
 [data-menu-layout='gallery'] .special-card img { width: 104px; height: 104px; }
 
 /* header controls get a readable bordered backing over a custom background */
-.app-bar-overbg .icon-btn { background: color-mix(in srgb, var(--surface) 72%, transparent); border: 1px solid var(--border-strong); border-radius: var(--r-pill); }
+.app-bar-overbg .icon-btn { background: color-mix(in srgb, var(--chrome-text, var(--text)) 10%, transparent); border: 1px solid color-mix(in srgb, var(--chrome-text, var(--text)) 26%, transparent); border-radius: var(--r-pill); color: var(--chrome-icon, var(--text)); }
 
 .food-card { display: flex; gap: var(--sp-3); padding: var(--sp-3); background: var(--surface); border: 1px solid var(--border); border-radius: var(--r-lg); box-shadow: var(--sh-1); text-align: start; width: 100%; align-items: center; transition: transform var(--dur-fast), box-shadow var(--dur-fast); }
 .food-card:active { transform: scale(.99); }
@@ -3595,7 +3766,9 @@ body[data-theme='dark'] .pos-fullscreen[data-systheme='glass'] { background: var
 [data-item-detail='immersive'] .ingredient .nm { font-size: var(--fs-base); color: var(--text); flex: 1; }
 /* navigate between adjacent dishes (swipe + chevrons) with a soft entrance */
 [data-item-detail='immersive'] { position: relative; }
-.dish-nav-btn { position: absolute; top: 50px; z-index: 3; width: 38px; height: 38px; border-radius: 50%; display: grid; place-items: center; background: rgba(255, 255, 255, .16); color: #fff; backdrop-filter: blur(6px); border: 1px solid rgba(255, 255, 255, .28); box-shadow: var(--sh-1); transition: transform var(--dur-fast); }
+/* prev/next dish chevrons. Were hard-coded white-on-white-glass, which made
+   them invisible on the LIGHT theme; now token-driven so they invert with it. */
+.dish-nav-btn { position: absolute; top: 50px; z-index: 3; width: 38px; height: 38px; border-radius: 50%; display: grid; place-items: center; background: color-mix(in srgb, var(--surface) 88%, transparent); color: var(--text); backdrop-filter: blur(6px); border: 1px solid var(--border-strong); box-shadow: var(--sh-1); transition: transform var(--dur-fast); }
 .dish-nav-btn.start { inset-inline-start: 8px; }
 .dish-nav-btn.end { inset-inline-end: 8px; }
 .dish-nav-btn:active { transform: scale(.9); }
@@ -3613,38 +3786,47 @@ body[data-theme='dark'] .pos-fullscreen[data-systheme='glass'] { background: var
 .stars button.on svg { fill: currentColor; }
 .stars button:active { transform: scale(1.18); }
 
-.m-bottomnav { position: fixed; inset-inline: 0; bottom: 0; z-index: var(--z-bottomnav); height: calc(var(--bottomnav-h) + var(--safe-b)); padding-bottom: var(--safe-b); display: flex; background: color-mix(in srgb, var(--surface) 90%, transparent); border-top: 1px solid var(--border); backdrop-filter: saturate(160%) blur(14px); }
-.m-bottomnav button { flex: 1; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 3px; font-size: 10px; color: var(--text-faint); position: relative; }
-.m-bottomnav button.active { color: var(--brand); }
+/* SOLID chrome: the diner nav sits over full-bleed dish photography, so it is
+   opaque (was 90% surface + blur) and reads its colours from the chrome tokens
+   so a chrome preset (data-chrome) restyles it wholesale. */
+.m-bottomnav { position: fixed; inset-inline: 0; bottom: 0; z-index: var(--z-bottomnav); height: calc(var(--bottomnav-h) + var(--safe-b)); padding-bottom: var(--safe-b); display: flex; background: var(--chrome-bg, var(--surface)); color: var(--chrome-text, var(--text)); border-top: 1px solid var(--chrome-border, var(--border)); }
+/* was --text-faint = 3.74:1 on the dark surface — an AA fail for a 10px label */
+.m-bottomnav button { flex: 1; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 3px; font-size: 10px; color: var(--chrome-muted, var(--text-muted)); position: relative; }
+.m-bottomnav button.active { color: var(--sel, var(--chrome-active, var(--brand))); }
+/* see the .bottom-nav note above: the raw brand is ~3.3:1 on the dark bar */
+[data-theme='dark'] .m-bottomnav button.active { color: var(--sel, var(--chrome-active, color-mix(in srgb, var(--brand) 60%, #ffffff))); }
 .m-bottomnav button.center-cart-btn { position: relative; overflow: visible; z-index: 10; }
-.m-bottomnav button.center-cart-btn .cart-circle-container { width: 44px; height: 44px; border-radius: 50%; background: linear-gradient(135deg, var(--brand), var(--brand-strong, var(--brand))); color: var(--on-brand, #ffffff); display: flex; align-items: center; justify-content: center; box-shadow: 0 4px 14px rgba(0,0,0,0.18), inset 0 2px 2px rgba(255,255,255,0.15); margin-top: -24px; border: 3px solid var(--surface); transition: transform 0.2s cubic-bezier(0.175, 0.885, 0.32, 1.275); }
+.m-bottomnav button.center-cart-btn .cart-circle-container { width: 44px; height: 44px; border-radius: 50%; background: linear-gradient(135deg, var(--brand), var(--brand-strong, var(--brand))); color: var(--on-brand, #ffffff); display: flex; align-items: center; justify-content: center; box-shadow: 0 4px 14px rgba(0,0,0,0.18), inset 0 2px 2px rgba(255,255,255,0.15); margin-top: -24px; border: 3px solid var(--chrome-bg, var(--surface)); transition: transform 0.2s cubic-bezier(0.175, 0.885, 0.32, 1.275); }
 .m-bottomnav button.center-cart-btn:active .cart-circle-container { transform: scale(0.92); }
-.m-bottomnav button.center-cart-btn .cart-badge-count { position: absolute; top: -3px; right: -3px; background: #ef4444; color: #ffffff; font-size: 8px; font-weight: 900; width: 15px; height: 15px; border-radius: 50%; display: grid; place-items: center; border: 1px solid var(--surface); box-shadow: 0 1px 3px rgba(0,0,0,0.1); }
+.m-bottomnav button.center-cart-btn .cart-badge-count { position: absolute; top: -3px; right: -3px; background: var(--chrome-badge); color: var(--chrome-on-badge); font-size: 8px; font-weight: 900; width: 15px; height: 15px; border-radius: 50%; display: grid; place-items: center; border: 1px solid var(--chrome-bg, var(--surface)); box-shadow: 0 1px 3px rgba(0,0,0,0.1); }
 .m-bottomnav .cart-badge { position: absolute; top: 7px; inset-inline-end: 26%; background: var(--brand); color: var(--on-brand); border-radius: 999px; font-size: 9px; font-weight: 800; min-width: 16px; height: 16px; display: grid; place-items: center; padding: 0 4px; }
 /* ===== Bottom-nav styles — chosen by skin or manual override ===== */
 /* pill: active item sits inside a rounded brand-tinted pill */
-.m-bottomnav[data-nav='pill'] button.active::before { content: ''; position: absolute; top: 6px; bottom: 6px; inset-inline: 14%; background: color-mix(in srgb, var(--brand) 15%, transparent); border-radius: var(--r-pill); }
+.m-bottomnav[data-nav='pill'] button.active::before { content: ''; position: absolute; top: 6px; bottom: 6px; inset-inline: 14%; background: color-mix(in srgb, var(--chrome-active, var(--brand)) 18%, transparent); border-radius: var(--r-pill); }
 /* floating: detached rounded bar with side margins */
-.m-bottomnav[data-nav='floating'] { inset-inline: 12px; bottom: calc(var(--safe-b) + 10px); height: var(--bottomnav-h); padding-bottom: 0; border: 1px solid var(--border); border-radius: var(--r-pill); box-shadow: var(--sh-3); overflow: hidden; }
-/* glass: heavier translucency + blur */
-.m-bottomnav[data-nav='glass'] { background: color-mix(in srgb, var(--surface) 42%, transparent); backdrop-filter: saturate(190%) blur(26px); }
+.m-bottomnav[data-nav='floating'] { inset-inline: 12px; bottom: calc(var(--safe-b) + 10px); height: var(--bottomnav-h); padding-bottom: 0; border: 1px solid var(--chrome-border, var(--border)); border-radius: var(--r-pill); box-shadow: var(--sh-3); overflow: hidden; }
+/* glass: keeps the frosted READ (inner highlight) but is opaque — a 42%-surface
+   dock over dish photography was the worst of the see-through chrome. */
+.m-bottomnav[data-nav='glass'] { background: var(--chrome-bg, var(--surface)); backdrop-filter: none; box-shadow: inset 0 1px 0 color-mix(in srgb, var(--chrome-text, var(--text)) 14%, transparent); }
 /* labeled: emphasize the text labels */
 .m-bottomnav[data-nav='labeled'] button { font-size: 11px; font-weight: 700; gap: 4px; }
 /* icononly: hide labels, tighten */
 .m-bottomnav[data-nav='icononly'] button span:last-child { display: none; }
 .m-bottomnav[data-nav='icononly'] button { gap: 0; }
 /* segmented: each item in its own contained tile */
-.m-bottomnav[data-nav='segmented'] { background: var(--surface); backdrop-filter: none; gap: 6px; padding: 6px 8px; padding-bottom: calc(6px + var(--safe-b)); }
-.m-bottomnav[data-nav='segmented'] button { background: var(--surface-2); border-radius: var(--r-md); }
-.m-bottomnav[data-nav='segmented'] button.active { background: color-mix(in srgb, var(--brand) 16%, var(--surface-2)); }
+.m-bottomnav[data-nav='segmented'] { background: var(--chrome-bg, var(--surface)); backdrop-filter: none; gap: 6px; padding: 6px 8px; padding-bottom: calc(6px + var(--safe-b)); }
+.m-bottomnav[data-nav='segmented'] button { background: var(--chrome-bg-2, var(--surface-2)); border-radius: var(--r-md); }
+.m-bottomnav[data-nav='segmented'] button.active { background: color-mix(in srgb, var(--chrome-active, var(--brand)) 18%, var(--chrome-bg-2, var(--surface-2))); }
 /* bordered: dividers between items, solid bg */
-.m-bottomnav[data-nav='bordered'] { background: var(--surface); backdrop-filter: none; border-top: 2px solid var(--border-strong); }
-.m-bottomnav[data-nav='bordered'] button + button { border-inline-start: 1px solid var(--border); }
+.m-bottomnav[data-nav='bordered'] { background: var(--chrome-bg, var(--surface)); backdrop-filter: none; border-top: 2px solid var(--chrome-border, var(--border-strong)); }
+.m-bottomnav[data-nav='bordered'] button + button { border-inline-start: 1px solid var(--chrome-border, var(--border)); }
 /* elevated: solid bg, rounded top corners, lifted shadow */
-.m-bottomnav[data-nav='elevated'] { background: var(--surface); backdrop-filter: none; border-top: none; border-radius: var(--r-xl) var(--r-xl) 0 0; box-shadow: 0 -10px 30px rgba(0, 0, 0, .12); }
-/* minimal: thin & faint labels */
-.m-bottomnav[data-nav='minimal'] { background: color-mix(in srgb, var(--surface) 80%, transparent); }
-.m-bottomnav[data-nav='minimal'] button span:last-child { font-size: 9px; opacity: .65; }
+.m-bottomnav[data-nav='elevated'] { background: var(--chrome-bg, var(--surface)); backdrop-filter: none; border-top: none; border-radius: var(--r-xl) var(--r-xl) 0 0; box-shadow: 0 -10px 30px rgba(0, 0, 0, .12); }
+/* minimal: thin labels — still opaque (was 80% surface). The old `opacity: .65`
+   on the label dropped --chrome-muted to 3.3:1 (AA fail); "minimal" is now
+   carried by the smaller type alone, with the colour left at full strength. */
+.m-bottomnav[data-nav='minimal'] { background: var(--chrome-bg, var(--surface)); }
+.m-bottomnav[data-nav='minimal'] button span:last-child { font-size: 9px; }
 
 /* showcase / gallery view */
 .showcase-grid { display: grid; grid-template-columns: repeat(2, 1fr); gap: var(--sp-4); }
@@ -3777,18 +3959,20 @@ body[data-theme='dark'] .pos-fullscreen[data-systheme='glass'] { background: var
 .store-card-media img { max-width: 100%; max-height: 100%; object-fit: contain; filter: drop-shadow(0 16px 13px rgba(0, 0, 0, .45)); }
 .store-card-name { font-weight: 800; font-size: var(--fs-base); line-height: 1.25; }
 .store-card-price { color: var(--brand); font-weight: 800; margin-top: 4px; font-size: var(--fs-sm); }
-.store-add { position: absolute; bottom: -14px; left: 50%; transform: translateX(-50%); width: 32px; height: 32px; border-radius: 50%; background: var(--brand); color: #fff; display: grid; place-items: center; box-shadow: 0 6px 14px rgba(0, 0, 0, .28); }
+.store-add { position: absolute; bottom: -14px; left: 50%; transform: translateX(-50%); width: 32px; height: 32px; border-radius: 50%; background: var(--brand); color: var(--on-brand); display: grid; place-items: center; box-shadow: 0 6px 14px rgba(0, 0, 0, .28); }
 /* per-item override: framed circle (for ordinary photos instead of transparent PNGs) */
 .store-card-media[data-imgstyle='circle'] { width: 92px; height: 92px; border-radius: 50%; overflow: hidden; border: 3px solid var(--surface); background: var(--surface-2); box-shadow: 0 12px 22px rgba(0, 0, 0, .26); }
 .store-card-media[data-imgstyle='circle'] img { width: 100%; height: 100%; object-fit: cover; filter: none; }
-.store-hero-media[data-imgstyle='circle'] { width: 184px; height: 184px; border-radius: 50%; overflow: hidden; border: 4px solid rgba(255, 255, 255, .22); background: rgba(0, 0, 0, .12); }
+/* the storefront page is painted in the venue's brand, so its rims/tints must be
+   mixed from --on-brand — hard-coded white broke any venue with a pale brand */
+.store-hero-media[data-imgstyle='circle'] { width: 184px; height: 184px; border-radius: 50%; overflow: hidden; border: 4px solid color-mix(in srgb, var(--on-brand) 22%, transparent); background: color-mix(in srgb, var(--on-brand) 12%, transparent); }
 .store-hero-media[data-imgstyle='circle'] img { width: 100%; height: 100%; object-fit: cover; filter: none; }
 /* storefront thumbnail strip (image #10): tap a thumb to swipe the hero to that product */
 .store-thumbs { display: flex; gap: 12px; justify-content: center; overflow-x: auto; scrollbar-width: none; padding: 2px 16px 14px; }
 .store-thumbs::-webkit-scrollbar { display: none; }
-.store-thumb { width: 52px; height: 52px; border-radius: 50%; overflow: hidden; flex: none; border: 2px solid transparent; opacity: .55; transition: opacity var(--dur-fast), border-color var(--dur-fast), transform var(--dur-fast); background: rgba(255, 255, 255, .12); display: grid; place-items: center; color: rgba(255, 255, 255, .65); }
+.store-thumb { width: 52px; height: 52px; border-radius: 50%; overflow: hidden; flex: none; border: 2px solid transparent; opacity: .55; transition: opacity var(--dur-fast), border-color var(--dur-fast), transform var(--dur-fast); background: color-mix(in srgb, var(--on-brand) 12%, transparent); display: grid; place-items: center; color: color-mix(in srgb, var(--on-brand) 65%, transparent); }
 .store-thumb img { width: 100%; height: 100%; object-fit: cover; }
-.store-thumb.on { opacity: 1; border-color: rgba(255, 255, 255, .92); transform: scale(1.08); }
+.store-thumb.on { opacity: 1; border-color: color-mix(in srgb, var(--on-brand) 92%, transparent); transform: scale(1.08); }
 /* "Noir Gourmet" (image #10): warm gold accents on the dark storefront */
 [data-skin='gourmet'] .store-card-price, [data-skin='gourmet'] .store-hero-price { color: #E0851B; }
 [data-skin='gourmet'] .store-add { background: #E0851B; }
@@ -4206,7 +4390,7 @@ body[data-theme='dark'] .pos-fullscreen[data-systheme='glass'] { background: var
     height: 70px !important;
     padding-bottom: 0 !important;
     border-radius: var(--r-pill) !important;
-    border: 1px solid var(--border) !important;
+    border: 1px solid var(--chrome-border, var(--border)) !important;
     box-shadow: 0 10px 30px rgba(0, 0, 0, 0.18) !important;
   }
   .m-bottomnav button {
@@ -4241,7 +4425,9 @@ body[data-theme='dark'] .pos-fullscreen[data-systheme='glass'] { background: var
   }
   .app-bar .icon-btn:hover {
     transform: scale(1.08) !important;
-    background: var(--surface-2) !important;
+    /* derived from the chrome, not --surface-2: on a terracotta/navy bar a
+       neutral grey hover blob was the wrong colour entirely */
+    background: color-mix(in srgb, var(--chrome-text, var(--text)) 12%, transparent) !important;
   }
 
   /* Convert the bottom sheet into a premium centered floating dialog */
@@ -9908,3 +10094,71 @@ button.edt-pair:active { transform: scale(.98); }
 .gmbp-emblem span:nth-child(3) { width: 18px; height: 18px; background: #4f9d55; }
 .gmbp-emblem span:nth-child(4) { width: 13px; height: 13px; background: #d4557f; }
 /* ==== /games-a v1 ==== */
+
+/* ==== app-chrome v1 ==== */
+/* Enforcement layer for the APP CHROME token system declared near the top of
+   this file. It lives at the END so it out-ranks the later per-systheme and
+   per-breakpoint overrides, and it is deliberately gated:
+
+   1. The DINER bars are always opaque, whatever skin/header/nav style is
+      picked. This is the fix for content ghosting through the top bar above
+      the category chips on the editorial («المجلة الداكنة») menu, where the
+      page under the bar is a full-bleed dish photograph.
+   2. The preset overrides only fire when a venue has EXPLICITLY chosen a
+      chrome theme (data-chrome, any value other than 'auto'). With no
+      attribute — today's default — nothing here changes the staff shells.  */
+
+/* --- 1. diner chrome is opaque, period --- */
+.venue-above > .app-bar,
+.venue-above > .app-bar[data-header='glass'],
+.venue-above > .app-bar[data-header='transparent'],
+.venue-above > .app-bar[data-header='float'] {
+  background-color: var(--chrome-bg, var(--surface));
+  -webkit-backdrop-filter: none;
+  backdrop-filter: none;
+}
+.venue-above > .app-bar[data-header='gradient'] {
+  /* keeps its brand gradient — already fully opaque, so nothing leaks */
+  background-color: transparent;
+}
+.m-bottomnav,
+.m-bottomnav[data-nav='glass'],
+.m-bottomnav[data-nav='minimal'],
+.m-bottomnav[data-nav='floating'] {
+  -webkit-backdrop-filter: none;
+  backdrop-filter: none;
+}
+/* the sticky category bar sets `color-mix(var(--bg) 72%, transparent)` + blur
+   from an INLINE style in MenuView.jsx, so dish rows scrolled visibly through
+   it too. Same class of bug as the header; !important is the only way to beat
+   an inline style. The editorial menu uses its own .edt-catbar (already solid). */
+.venue-above .cat-bar,
+.venue-above .cat-circles {
+  background: var(--bg) !important;
+  -webkit-backdrop-filter: none !important;
+  backdrop-filter: none !important;
+}
+
+/* --- 2. an explicitly chosen chrome preset owns both bars everywhere --- */
+[data-chrome]:not([data-chrome='auto']) .app-bar,
+[data-chrome]:not([data-chrome='auto']) .m-bottomnav,
+[data-chrome]:not([data-chrome='auto']) .bottom-nav {
+  background: var(--chrome-bg, var(--surface)) !important;
+  color: var(--chrome-text, var(--text));
+  -webkit-backdrop-filter: none !important;
+  backdrop-filter: none !important;
+}
+[data-chrome]:not([data-chrome='auto']) .app-bar { border-bottom-color: var(--chrome-border, var(--border)); }
+[data-chrome]:not([data-chrome='auto']) .m-bottomnav,
+[data-chrome]:not([data-chrome='auto']) .bottom-nav { border-top-color: var(--chrome-border, var(--border)); }
+[data-chrome]:not([data-chrome='auto']) .app-bar .icon-btn { color: var(--chrome-icon, var(--text)); }
+[data-chrome]:not([data-chrome='auto']) .app-bar .db-brand strong { color: var(--chrome-text, var(--text)); }
+[data-chrome]:not([data-chrome='auto']) .m-bottomnav button,
+[data-chrome]:not([data-chrome='auto']) .bottom-nav a { color: var(--chrome-muted, var(--text-muted)); }
+[data-chrome]:not([data-chrome='auto']) .m-bottomnav button.active,
+[data-chrome]:not([data-chrome='auto']) .bottom-nav a.active { color: var(--chrome-active, var(--brand)); }
+/* the brand-filled cart button keeps the venue's brand, but its ring and its
+   count dot follow the bar so the FAB still looks cut out of the chrome */
+[data-chrome]:not([data-chrome='auto']) .m-bottomnav .center-cart-btn .cart-circle-container { border-color: var(--chrome-bg, var(--surface)); }
+[data-chrome]:not([data-chrome='auto']) .m-bottomnav .center-cart-btn .cart-badge-count { border-color: var(--chrome-bg, var(--surface)); }
+/* ==== /app-chrome v1 ==== */

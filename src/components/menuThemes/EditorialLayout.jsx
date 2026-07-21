@@ -16,6 +16,8 @@ import { Price } from '../Riyal.jsx'
 import { usePortalRoot } from '../PortalRoot.jsx'
 import { hasStory } from '../DishStory.jsx'
 import { offerForItem, discountedPrice, itemOfferLabel } from '../../lib/offers.js'
+// Surface + garnish scatter behind the dish cutout (see lib/dishProps.js).
+import DishProps from './DishProps.jsx'
 
 // Built by a parallel agent — lazy + catch so a missing module never crashes
 // the menu; it simply renders nothing until the file exists.
@@ -172,6 +174,10 @@ function EdtSection({ it, idx, catLabel, currency, offers, lang, t, onOpen }) {
       </div>
       <div className="edt-photo" data-fit={fit || undefined}>
         <span className="edt-glow" aria-hidden="true" />
+        {/* the material the dish stands on + its garnish scatter: the behind
+            layer paints under the photo, the front layer over it. Arrival is
+            tied to the same in-view flag the text uses. */}
+        <DishProps item={it} active={inview} catName={catLabel} />
         {it.imageUrl
           ? <img ref={bind} onLoad={onLoad} src={it.imageUrl} alt="" decoding="async" />
           : <span className="edt-noimg"><Icon name="coffee" size={64} /></span>}
@@ -326,6 +332,9 @@ export function EditorialItemStage({ item, currency, onClose, onAdd, originRect 
         <div className="edt-stg-media">
           <div className="edt-stg-hero" ref={heroRef} data-fit={fit || undefined} style={{ '--edt-img-scale': imgScale }}>
             <span className="edt-glow" aria-hidden="true" />
+            {/* quieter here: the stage variant caps the scatter and shortens
+                the surface, so the full dish record stays the subject */}
+            <DishProps item={item} active variant="stage" />
             {heroSrc
               ? <img ref={bind} onLoad={onLoad} src={heroSrc} alt="" decoding="async" />
               : <span className="edt-noimg"><Icon name="coffee" size={72} /></span>}

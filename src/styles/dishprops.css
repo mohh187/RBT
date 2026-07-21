@@ -1,0 +1,391 @@
+/* Dish prop & surface library — materials + motion.
+   Imported ONLY from components/menuThemes/DishProps.jsx.
+
+   The editorial theme parks a transparent dish cutout on near-black. This
+   stylesheet gives it something to stand on and something to sit among:
+
+     .dp-behind   layer painted UNDER the dish photo (surface, contact shadow,
+                  the props that sit behind the plate)
+     .dp-front    layer painted OVER the dish photo (the props nearest camera)
+
+   Both layers are absolutely positioned inside the photo box and take no
+   pointer events, so tapping the dish still opens it.
+
+   Motion rules honoured here:
+     - transform and opacity only, never a layout property
+     - spring-shaped easing, never linear
+     - arrival plays ONCE per dish (the .in latch lives in JS)
+     - idle life only runs while the dish owns the viewport (.live), so a menu
+       scrolled past ten dishes is not animating ten dishes
+     - everything goes still under prefers-reduced-motion
+*/
+
+.dp-root {
+  position: absolute;
+  inset: 0;
+  overflow: hidden;
+  pointer-events: none;
+  /* size container so props can be measured against the SMALLER side of the
+     photo box (cqmin below). `contain: paint` alone did not give us that. */
+  container-type: size;
+  user-select: none;
+}
+/* paints below the photo: positioned, z-index 0, earlier in the DOM */
+.dp-behind { z-index: 0; }
+/* paints above the photo and its vignette; still transparent to touch */
+.dp-front { z-index: 3; }
+
+/* ------------------------------------------------------------- surfaces -- */
+
+/* The plane bleeds past the photo box so the material never shows a hard side
+   edge; the section clips it. Its top is transparent in every material, so the
+   surface emerges out of the dark canvas instead of starting on a seam. */
+.dp-plane {
+  position: absolute;
+  inset-inline: -9%;
+  bottom: 0;
+  height: var(--dp-plane, 26%);
+  min-height: 74px;
+  opacity: 0;
+}
+.dp-grain {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  opacity: .7;
+  -webkit-mask-image: linear-gradient(180deg, transparent 0%, #000 26%, #000 82%, transparent 100%);
+  mask-image: linear-gradient(180deg, transparent 0%, #000 26%, #000 82%, transparent 100%);
+}
+/* the lit lip where the material catches the room light */
+.dp-horizon {
+  position: absolute;
+  inset-inline: 6%;
+  top: 11%;
+  height: 1px;
+  background: linear-gradient(90deg, transparent, rgba(255, 255, 255, .10) 20%, rgba(255, 255, 255, .17) 50%, rgba(255, 255, 255, .10) 80%, transparent);
+}
+/* soft specular smear under the dish — the reflection a polished material owes
+   the object standing on it. A mirrored copy of the photo was rejected: the
+   dish already sits on the bottom edge of its box, so a real mirror image
+   would be clipped away by the section. */
+.dp-reflect {
+  position: absolute;
+  left: 50%;
+  bottom: 0;
+  width: 64%;
+  height: 82%;
+  transform: translateX(-50%);
+  opacity: 0;
+  background:
+    radial-gradient(44% 84% at 50% 100%, rgba(245, 185, 66, .17), transparent 72%),
+    radial-gradient(72% 58% at 50% 100%, rgba(255, 255, 255, .07), transparent 70%);
+}
+
+/* dark marble — cool stone, faint warm veining, a real sheen */
+.dp-root[data-surface='darkMarble'] .dp-plane {
+  background:
+    radial-gradient(120% 84% at 50% 6%, rgba(168, 168, 186, .13), transparent 62%),
+    linear-gradient(180deg, rgba(40, 39, 44, 0) 0%, rgba(40, 39, 44, .58) 15%, rgba(31, 30, 35, .93) 44%, rgba(19, 18, 21, 1) 100%);
+}
+/* warm wood — plank grain plus the venue copper bouncing off it */
+.dp-root[data-surface='warmWood'] .dp-plane {
+  background:
+    radial-gradient(110% 78% at 50% 4%, rgba(201, 119, 58, .20), transparent 64%),
+    repeating-linear-gradient(91deg, rgba(0, 0, 0, .07) 0 7px, rgba(255, 255, 255, .018) 7px 15px),
+    linear-gradient(180deg, rgba(60, 36, 20, 0) 0%, rgba(60, 36, 20, .62) 13%, rgba(47, 28, 15, .96) 46%, rgba(27, 16, 9, 1) 100%);
+}
+.dp-root[data-surface='warmWood'] .dp-grain { opacity: .55; }
+.dp-root[data-surface='warmWood'] .dp-horizon {
+  background: linear-gradient(90deg, transparent, rgba(232, 176, 110, .16) 22%, rgba(240, 190, 128, .24) 50%, rgba(232, 176, 110, .16) 78%, transparent);
+}
+/* brushed steel — a fine horizontal brush pass and an off-axis specular band */
+.dp-root[data-surface='brushedSteel'] .dp-plane {
+  background:
+    linear-gradient(104deg, transparent 34%, rgba(255, 255, 255, .06) 50%, transparent 64%),
+    repeating-linear-gradient(180deg, rgba(255, 255, 255, .035) 0 1px, transparent 1px 3px),
+    linear-gradient(180deg, rgba(104, 109, 116, 0) 0%, rgba(98, 103, 110, .52) 13%, rgba(70, 74, 80, .93) 44%, rgba(37, 40, 44, 1) 100%);
+}
+.dp-root[data-surface='brushedSteel'] .dp-grain { opacity: .9; }
+.dp-root[data-surface='brushedSteel'] .dp-reflect {
+  background:
+    radial-gradient(44% 84% at 50% 100%, rgba(196, 216, 232, .16), transparent 72%),
+    radial-gradient(72% 58% at 50% 100%, rgba(255, 255, 255, .09), transparent 70%);
+}
+/* slate — matte, uneven, no sheen at all */
+.dp-root[data-surface='slate'] .dp-plane {
+  background:
+    radial-gradient(72% 58% at 76% 34%, rgba(0, 0, 0, .38), transparent 66%),
+    radial-gradient(82% 62% at 28% 16%, rgba(255, 255, 255, .055), transparent 62%),
+    linear-gradient(180deg, rgba(50, 52, 55, 0) 0%, rgba(46, 48, 51, .58) 13%, rgba(33, 35, 37, .96) 46%, rgba(17, 18, 20, 1) 100%);
+}
+.dp-root[data-surface='slate'] .dp-horizon { opacity: .5; }
+/* linen — woven thread, soft folds, warm and light-swallowing */
+.dp-root[data-surface='linen'] .dp-plane {
+  background:
+    repeating-linear-gradient(90deg, rgba(255, 255, 255, .026) 0 2px, transparent 2px 4px),
+    repeating-linear-gradient(0deg, rgba(0, 0, 0, .05) 0 2px, transparent 2px 4px),
+    linear-gradient(180deg, rgba(84, 71, 58, 0) 0%, rgba(79, 67, 55, .56) 13%, rgba(60, 51, 41, .95) 46%, rgba(33, 27, 22, 1) 100%);
+}
+.dp-root[data-surface='linen'] .dp-grain { opacity: .8; }
+.dp-root[data-surface='linen'] .dp-horizon { opacity: .35; }
+/* shelf edge — a top face, a lit nose, then the dark front board */
+.dp-root[data-surface='shelf'] .dp-plane {
+  background:
+    repeating-linear-gradient(91deg, rgba(0, 0, 0, .06) 0 8px, rgba(255, 255, 255, .015) 8px 17px),
+    linear-gradient(180deg,
+      rgba(64, 41, 23, 0) 0%,
+      rgba(64, 41, 23, .6) 12%,
+      rgba(53, 34, 19, .97) 50%,
+      rgba(126, 84, 46, .92) 55%,
+      rgba(148, 100, 55, .95) 57%,
+      rgba(70, 44, 24, 1) 61%,
+      rgba(26, 16, 9, 1) 100%);
+}
+.dp-root[data-surface='shelf'] .dp-grain { opacity: .45; }
+.dp-root[data-surface='shelf'] .dp-horizon { top: 9%; }
+
+/* contact shadow — the single detail that stops a cutout floating */
+.dp-contact {
+  position: absolute;
+  left: 50%;
+  bottom: 1%;
+  width: 54%;
+  height: 12%;
+  min-height: 22px;
+  transform: translateX(-50%);
+  opacity: 0;
+  background: radial-gradient(50% 50% at 50% 50%, rgba(0, 0, 0, .66), rgba(0, 0, 0, .32) 44%, transparent 73%);
+}
+/* the tight dark core right where the dish meets the material */
+.dp-contact::after {
+  content: '';
+  position: absolute;
+  left: 50%;
+  top: 54%;
+  width: 54%;
+  height: 46%;
+  transform: translate(-50%, -50%);
+  background: radial-gradient(50% 50% at 50% 50%, rgba(0, 0, 0, .74), transparent 70%);
+}
+/* the detail stage gives the dish more air, so its plane sits tighter */
+.dp-stage .dp-plane { min-height: 56px; }
+.dp-stage .dp-contact { width: 46%; height: 10%; }
+
+/* ---------------------------------------------------------------- props -- */
+
+.dp-prop {
+  position: absolute;
+  /* physical left/top on purpose: the scatter is authored in screen space and
+     must not mirror with the RTL document */
+  left: var(--x);
+  top: var(--y);
+  /* cqmin, NOT a percentage: a percentage resolves against the box WIDTH while
+     --y resolves against its HEIGHT, so on a wide panoramic photo the two
+     disagreed and props rendered several times too large and were clipped.
+     cqmin ties size to the smaller side, so a garnish keeps the same visual
+     weight whatever shape the dish photo is. */
+  width: calc(var(--w) * 1cqmin);
+  transform: translate(-50%, -50%);
+}
+/* Older engines without size container queries: fall back to the previous
+   width-relative behaviour rather than rendering zero-width props. */
+@supports not (width: 1cqmin) {
+  .dp-prop { width: calc(var(--w) * 1%); }
+}
+.dp-arrive,
+.dp-idle {
+  display: block;
+}
+.dp-arrive { opacity: 0; }
+.dp-prop svg {
+  display: block;
+  width: 100%;
+  height: auto;
+  overflow: visible;
+}
+.dp-prop[data-flip='1'] svg { transform: scaleX(-1); }
+/* things with mass pivot on the point they touch, not on their middle */
+.dp-m-drop .dp-arrive,
+.dp-m-lay .dp-arrive { transform-origin: 50% 92%; }
+
+/* each prop casts its own small contact shadow (front layer only — a prop
+   behind the plate has nothing visible to cast onto) */
+.dp-m-drift::after,
+.dp-m-drop::after,
+.dp-m-lay::after {
+  content: '';
+  position: absolute;
+  left: 50%;
+  bottom: -5%;
+  width: 88%;
+  height: 24%;
+  z-index: -1;
+  transform: translateX(-50%) scaleX(.7);
+  opacity: 0;
+  background: radial-gradient(50% 50% at 50% 50%, rgba(0, 0, 0, .5), transparent 70%);
+}
+.dp-behind .dp-prop::after { display: none; }
+
+/* specular path inside ice / tomato art */
+.dp-shine { opacity: .3; }
+
+/* --------------------------------------------------------------- motion -- */
+
+/* arrival: fires once, when the dish first reaches the viewport */
+.dp-root.in .dp-plane { animation: dp-plane-in 900ms cubic-bezier(.2, .82, .28, 1) both; }
+.dp-root.in .dp-contact { animation: dp-contact-in 980ms cubic-bezier(.2, .82, .28, 1) both 90ms; }
+.dp-root.in .dp-reflect { animation: dp-fade-in 1200ms cubic-bezier(.3, .7, .3, 1) both 260ms; }
+
+.dp-root.in .dp-arrive {
+  animation-fill-mode: both;
+  animation-delay: var(--d, 0ms);
+}
+/* a petal is light: it falls slowly, slides sideways through the air, turns
+   over twice and rocks to a stop */
+.dp-root.in .dp-m-drift .dp-arrive {
+  animation-name: dp-drift;
+  animation-duration: 1520ms;
+  animation-timing-function: cubic-bezier(.34, .02, .3, 1);
+}
+/* an ice cube or a tomato has mass: it accelerates down, squashes on contact,
+   bounces once and stills */
+.dp-root.in .dp-m-drop .dp-arrive {
+  animation-name: dp-drop;
+  animation-duration: 1080ms;
+}
+/* seeds and grains roll the last stretch into place */
+.dp-root.in .dp-m-tumble .dp-arrive {
+  animation-name: dp-tumble;
+  animation-duration: 720ms;
+  animation-timing-function: cubic-bezier(.16, .84, .24, 1);
+}
+/* a sprig or a stick was placed by hand: it settles with a small overshoot */
+.dp-root.in .dp-m-lay .dp-arrive {
+  animation-name: dp-lay;
+  animation-duration: 820ms;
+  animation-timing-function: cubic-bezier(.18, .96, .26, 1.04);
+}
+.dp-root.in .dp-prop::after {
+  animation: dp-shadow-in 720ms cubic-bezier(.2, .8, .3, 1) both;
+  animation-delay: calc(var(--d, 0ms) + 430ms);
+}
+
+/* idle life — only while this dish owns the viewport */
+.dp-root.live .dp-has-idle .dp-idle {
+  animation: dp-idle-rock 7.4s cubic-bezier(.45, .05, .55, .95) infinite;
+  animation-delay: calc(var(--d, 0ms) + 1700ms);
+}
+/* de-sync neighbours so the scatter never breathes as one block */
+.dp-root.live .dp-has-idle:nth-child(2n) .dp-idle { animation-duration: 9.3s; }
+.dp-root.live .dp-has-idle:nth-child(3n) .dp-idle { animation-duration: 11.1s; }
+.dp-root.live .dp-m-lay.dp-has-idle .dp-idle {
+  animation-name: dp-idle-sway;
+  animation-duration: 12.5s;
+}
+.dp-root.live .dp-has-shine .dp-shine {
+  animation: dp-glint 9.6s cubic-bezier(.4, 0, .2, 1) infinite;
+  animation-delay: calc(var(--d, 0ms) + 2200ms);
+}
+
+@keyframes dp-plane-in {
+  from { opacity: 0; transform: translate3d(0, 9px, 0); }
+  to { opacity: 1; transform: translate3d(0, 0, 0); }
+}
+@keyframes dp-fade-in {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+@keyframes dp-contact-in {
+  from { opacity: 0; transform: translateX(-50%) scaleX(.72); }
+  to { opacity: 1; transform: translateX(-50%) scaleX(1); }
+}
+@keyframes dp-shadow-in {
+  from { opacity: 0; transform: translateX(-50%) scaleX(.7); }
+  to { opacity: 1; transform: translateX(-50%) scaleX(1); }
+}
+@keyframes dp-drift {
+  0% { opacity: 0; transform: translate3d(var(--dx, 0px), -52px, 0) rotate(calc(var(--r, 0deg) - 38deg)) scale(.84); }
+  16% { opacity: 1; }
+  34% { transform: translate3d(calc(var(--dx, 0px) * -0.5), -33px, 0) rotate(calc(var(--r, 0deg) + 18deg)) scale(.92); }
+  56% { transform: translate3d(calc(var(--dx, 0px) * 0.34), -17px, 0) rotate(calc(var(--r, 0deg) - 11deg)) scale(.97); }
+  76% { transform: translate3d(calc(var(--dx, 0px) * -0.16), -6px, 0) rotate(calc(var(--r, 0deg) + 5deg)) scale(1); }
+  90% { transform: translate3d(calc(var(--dx, 0px) * 0.06), -1px, 0) rotate(calc(var(--r, 0deg) - 2deg)) scale(1); }
+  100% { opacity: 1; transform: translate3d(0, 0, 0) rotate(var(--r, 0deg)) scale(1); }
+}
+/* per-keyframe easing: gravity on the way down, a spring out of every contact */
+@keyframes dp-drop {
+  0% {
+    opacity: 0;
+    transform: translate3d(0, -44px, 0) rotate(calc(var(--r, 0deg) - 10deg)) scale(.9, 1.08);
+    animation-timing-function: cubic-bezier(.5, .02, .72, .2);
+  }
+  24% { opacity: 1; animation-timing-function: cubic-bezier(.5, .02, .72, .2); }
+  54% {
+    transform: translate3d(0, 0, 0) rotate(var(--r, 0deg)) scale(1.1, .88);
+    animation-timing-function: cubic-bezier(.2, .85, .3, 1);
+  }
+  68% {
+    transform: translate3d(0, -11px, 0) rotate(calc(var(--r, 0deg) + 3deg)) scale(.97, 1.05);
+    animation-timing-function: cubic-bezier(.5, .02, .72, .2);
+  }
+  82% {
+    transform: translate3d(0, 0, 0) rotate(var(--r, 0deg)) scale(1.05, .96);
+    animation-timing-function: cubic-bezier(.2, .85, .3, 1);
+  }
+  91% { transform: translate3d(0, -3.5px, 0) rotate(var(--r, 0deg)) scale(1); }
+  100% { opacity: 1; transform: translate3d(0, 0, 0) rotate(var(--r, 0deg)) scale(1); }
+}
+@keyframes dp-tumble {
+  0% { opacity: 0; transform: translate3d(var(--dx, 0px), -18px, 0) rotate(calc(var(--r, 0deg) - 150deg)) scale(.62); }
+  35% { opacity: 1; }
+  74% { transform: translate3d(calc(var(--dx, 0px) * -0.1), 1.5px, 0) rotate(calc(var(--r, 0deg) + 16deg)) scale(1.06); }
+  100% { opacity: 1; transform: translate3d(0, 0, 0) rotate(var(--r, 0deg)) scale(1); }
+}
+@keyframes dp-lay {
+  from { opacity: 0; transform: translate3d(0, 14px, 0) rotate(calc(var(--r, 0deg) + 9deg)) scale(.9); }
+  to { opacity: 1; transform: translate3d(0, 0, 0) rotate(var(--r, 0deg)) scale(1); }
+}
+/* idle is deliberately below the threshold of "an animation": a slow breath,
+   not a loop the eye can lock onto */
+@keyframes dp-idle-rock {
+  0%, 100% { transform: rotate(-1.2deg) translate3d(0, 0, 0); }
+  28% { transform: rotate(.5deg) translate3d(0, -.8px, 0); }
+  62% { transform: rotate(1.3deg) translate3d(0, .3px, 0); }
+}
+@keyframes dp-idle-sway {
+  0%, 100% { transform: rotate(-.55deg); }
+  50% { transform: rotate(.75deg); }
+}
+@keyframes dp-glint {
+  0%, 66%, 100% { opacity: .3; }
+  74% { opacity: .92; }
+  84% { opacity: .38; }
+}
+
+/* Small screens carry the most dishes and the weakest GPUs: shorten the plane
+   and drop the per-prop shadows, which are the cheapest thing to lose. */
+@media (max-width: 480px) {
+  .dp-plane { min-height: 62px; }
+  .dp-prop::after { display: none; }
+}
+
+/* Everything still. Props keep their final placement, the surface keeps its
+   material — only the motion goes away. */
+@media (prefers-reduced-motion: reduce) {
+  .dp-root .dp-plane,
+  .dp-root .dp-contact,
+  .dp-root .dp-reflect,
+  .dp-root .dp-arrive,
+  .dp-root .dp-idle,
+  .dp-root .dp-shine,
+  .dp-root .dp-prop::after {
+    animation: none !important;
+  }
+  .dp-root .dp-plane { opacity: 1; transform: none; }
+  .dp-root .dp-contact { opacity: 1; transform: translateX(-50%); }
+  .dp-root .dp-reflect { opacity: 1; }
+  .dp-root .dp-arrive { opacity: 1; transform: rotate(var(--r, 0deg)); }
+  .dp-root .dp-idle { transform: none; }
+  .dp-root .dp-prop::after { opacity: .9; transform: translateX(-50%); }
+}
