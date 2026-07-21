@@ -839,6 +839,7 @@ export default function Settings() {
 
       {cropState && (
         <ImageCropper file={cropState.file} aspect={cropState.kind === 'logo' ? 1 : 2.5}
+          shape={cropState.kind === 'logo' ? 'round' : 'rect'}
           output={cropState.kind === 'logo' ? { width: 512, height: 512 } : { width: 1500, height: 600 }}
           title={cropState.kind === 'logo' ? (ar ? 'قص الشعار' : 'Crop logo') : (ar ? 'قص الغلاف' : 'Crop cover')}
           hint={cropState.kind === 'logo' ? (ar ? 'المقاس المناسب 512×512' : 'Recommended 512×512') : (ar ? 'المقاس المناسب 1500×600' : 'Recommended 1500×600')}

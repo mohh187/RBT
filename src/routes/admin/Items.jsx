@@ -849,9 +849,9 @@ function ItemEditor({ tenantId, cats, currency, value, onClose, onSaved, onDelet
     >
       <div className="stack">
         {cropState && (
-          <ImageCropper file={cropState.file} imageSrc={cropState.src} aspect={1} output={{ width: 800, height: 800 }}
+          <ImageCropper file={cropState.file} imageSrc={cropState.src}
             title={cropState.src ? (lang === 'ar' ? 'تعديل صورة الصنف' : 'Edit item image') : (lang === 'ar' ? 'قص صورة الصنف' : 'Crop item image')}
-            hint={lang === 'ar' ? 'حرّك وكبّر/صغّر لضبط الصورة على الثيم (مربّع يناسب كل الأشكال)' : 'Move & zoom to fit the theme (square fits all shapes)'}
+            hint={lang === 'ar' ? 'اختر الشكل المناسب لثيمك، ثم حرّك وكبّر لضبط الصورة' : 'Pick the shape your theme needs, then move and zoom to fit'}
             onClose={() => setCropState(null)} onCropped={onCropped} />
         )}
         <EditorTabs lang={lang} />

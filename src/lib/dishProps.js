@@ -355,6 +355,14 @@ export function resolveDishProps(item, options) {
   const opts = options || {}
   const variant = opts.variant === 'stage' ? 'stage' : 'list'
   const cfg = readConfig(it)
+
+  // OPT-IN, NOT OPT-OUT. This used to decorate every dish automatically from a
+  // keyword guess, which put garnish on plates that never asked for it and made
+  // the menu look busy rather than styled. Decoration is a choice the venue
+  // makes per dish; nothing is drawn until it does.
+  const chosen = !!(cfg.explicit || cfg.ids || cfg.surface || it.surface)
+  if (!chosen) return { surface: null, props: [], plane: 0 }
+
   const rule = autoRuleFor(it, opts.catName)
 
   // surface: explicit id wins, then a surface set inside item.props, then auto

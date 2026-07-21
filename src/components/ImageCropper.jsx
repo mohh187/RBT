@@ -5,10 +5,38 @@ import Icon from './Icon.jsx'
 import { useI18n } from '../lib/i18n.jsx'
 import { fileToDataUrl, getCroppedBlob } from '../lib/cropImage.js'
 
-// Pan + zoom + crop an image before upload. Outputs a fixed-size WebP blob.
+// Pan + zoom + crop an image before upload. Outputs a WebP blob.
 // Pass `file` (new upload) OR `imageSrc` (edit an EXISTING image URL in place).
-export default function ImageCropper({ file, imageSrc, aspect, output, title, hint, onClose, onCropped }) {
+//
+// SHAPE IS EXPLICIT, NOT INFERRED. This used to draw a ROUND crop whenever the
+// aspect happened to be 1, so every square dish photo came out as a circle —
+// right for an avatar, wrong for food. Pass shape="round" when you actually
+// want a circle.
+//
+// RATIO IS THE VENUE'S CHOICE. Different menu themes want different shapes (the
+// editorial theme wants a wide cutout, cards want square, a hero wants tall), so
+// unless a caller pins `aspect`, the ratio can be switched right here — and the
+// output resolution follows the chosen ratio instead of squashing into a fixed
+// box.
+const RATIOS = [
+  { id: 'square', ar: 'مربّع', en: 'Square', v: 1, w: 1000, h: 1000 },
+  { id: 'wide', ar: 'عريض', en: 'Wide', v: 16 / 9, w: 1600, h: 900 },
+  { id: 'photo', ar: 'صورة', en: 'Photo', v: 4 / 3, w: 1440, h: 1080 },
+  { id: 'tall', ar: 'طولي', en: 'Tall', v: 3 / 4, w: 1080, h: 1440 },
+  { id: 'story', ar: 'ستوري', en: 'Story', v: 9 / 16, w: 900, h: 1600 },
+  { id: 'free', ar: 'حر', en: 'Free', v: null, w: 1600, h: 1600 },
+]
+
+export default function ImageCropper({ file, imageSrc, aspect, output, title, hint, shape, onClose, onCropped }) {
   const { t, lang } = useI18n()
+  const ar = lang === 'ar'
+  const locked = typeof aspect === 'number'
+  const [ratioId, setRatioId] = useState(() => {
+    if (!locked) return 'square'
+    const hit = RATIOS.find((r) => r.v && Math.abs(r.v - aspect) < 0.01)
+    return hit ? hit.id : 'square'
+  })
+  const ratio = RATIOS.find((r) => r.id === ratioId) || RATIOS[0]
   const [src, setSrc] = useState('')
   const [crop, setCrop] = useState({ x: 0, y: 0 })
   const [zoom, setZoom] = useState(1)
@@ -28,14 +56,18 @@ export default function ImageCropper({ file, imageSrc, aspect, output, title, hi
     if (!areaPixels) return
     setBusy(true)
     try {
-      const blob = await getCroppedBlob(src, areaPixels, output)
+      // Honour the caller's fixed output when it pinned one; otherwise size the
+      // export to the ratio the venue picked, so a wide crop exports wide.
+      const size = output || { width: ratio.w, height: ratio.h }
+      const blob = await getCroppedBlob(src, areaPixels, size)
       onCropped(blob)
     } catch (_) {
       setBusy(false)
     }
   }
 
-  const round = aspect === 1
+  const round = shape === 'round'
+  const effAspect = locked ? aspect : (ratio.v || undefined)
 
   return (
     <Sheet
@@ -51,13 +83,29 @@ export default function ImageCropper({ file, imageSrc, aspect, output, title, hi
     >
       <div className="stack">
         {hint && <p className="xs faint text-center">{hint}</p>}
+        {!locked && (
+          <div className="scroll-x" style={{ display: 'flex', gap: 6, paddingBottom: 2 }}>
+            {RATIOS.map((r) => (
+              <button
+                key={r.id}
+                type="button"
+                className={`chip${r.id === ratioId ? ' on' : ''}`}
+                style={{ flex: 'none' }}
+                aria-pressed={r.id === ratioId}
+                onClick={() => { setRatioId(r.id); setZoom(1); setCrop({ x: 0, y: 0 }) }}
+              >
+                {ar ? r.ar : r.en}
+              </button>
+            ))}
+          </div>
+        )}
         <div style={{ position: 'relative', width: '100%', height: 300, background: '#0c0c0d', borderRadius: 'var(--r-md)', overflow: 'hidden' }}>
           {src && (
             <Cropper
               image={src}
               crop={crop}
               zoom={zoom}
-              aspect={aspect}
+              aspect={effAspect}
               cropShape={round ? 'round' : 'rect'}
               showGrid={!round}
               restrictPosition
