@@ -216,5 +216,21 @@ export function imgStyle(img, shadow) {
   return s
 }
 
+/**
+ * Inline style for a VIDEO backdrop. Same layer, but painted by a <video>
+ * element rather than a background-image, so the size/position that bgStyle
+ * expresses as background-size/position become object-fit and a transform.
+ * Kept here rather than in one theme: every layout that supports a video
+ * backdrop needs the identical mapping, and a second copy is how the two drift.
+ */
+export function bgVideoStyle(bg) {
+  if (!bg) return null
+  const s = { opacity: bg.opacity, objectFit: 'cover', objectPosition: bg.pos }
+  if (bg.blend && bg.blend !== 'normal') s.mixBlendMode = bg.blend
+  if (bg.filter) s.filter = bg.filter
+  if (bg.scale !== 1) { s.transform = `scale(${bg.scale})`; s.transformOrigin = bg.pos }
+  return s
+}
+
 /** True when the item has any composition worth rendering a backdrop layer for. */
 export const hasBackdrop = (comp) => !!(comp && comp.bg)

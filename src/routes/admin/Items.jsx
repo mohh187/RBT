@@ -101,7 +101,7 @@ const COMPOSE_DEFAULTS = {
 // have no RANGE entry — those numbers come from resolveComposition's own clamps.
 const COMPOSE_BOUNDS = {
   bgOpacity: [RANGE.bgOpacity.min, RANGE.bgOpacity.max],
-  bgScale: [0.5, 3],
+  bgScale: [RANGE.bgScale.min, RANGE.bgScale.max],
   imageScale: [RANGE.scale.min, RANGE.scale.max],
   listScale: [RANGE.scale.min, RANGE.scale.max],
   imageX: [RANGE.offset.min, RANGE.offset.max],
