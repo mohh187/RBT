@@ -722,8 +722,12 @@ function EditorTabs({ lang }) {
     const el = document.getElementById(id)
     if (el && el.scrollIntoView) el.scrollIntoView({ behavior: 'smooth', block: 'start' })
   }
+  // The chips WRAP rather than scroll. They grew to nine in one non-wrapping row
+  // with the scrollbar hidden (a house rule), which on a desktop with a mouse
+  // left the last chips unreachable: nothing to drag, and no wheel axis to turn.
+  // Wrapping needs no affordance and keeps every chip reachable everywhere.
   return (
-    <div className="row ie-tabs" style={{ gap: 6, flexWrap: 'nowrap', overflowX: 'auto', position: 'sticky', top: -1, zIndex: 3, background: 'var(--surface)', paddingBlock: 6, marginBlock: -6 }}>
+    <div className="row ie-tabs" style={{ gap: 6, flexWrap: 'wrap', position: 'sticky', top: -1, zIndex: 3, background: 'var(--surface)', paddingBlock: 6, marginBlock: -6 }}>
       {tabs.map(([id, label]) => (
         <button key={id} type="button" className="chip" style={{ flex: 'none' }} onClick={() => jump(id)}>{label}</button>
       ))}
@@ -1205,6 +1209,16 @@ function ItemEditor({ tenantId, cats, currency, value, onClose, onSaved, onDelet
             {form.imageUrl && !uploading && (
               <button type="button" className="btn btn-sm btn-outline" style={{ padding: '4px 6px' }} disabled={bgBusy} onClick={stripBg}>
                 <Icon name="sparkles" size={13} /> {bgBusy ? (lang === 'ar' ? 'يعالج…' : 'Working…') : (lang === 'ar' ? 'إزالة الخلفية' : 'Remove bg')}
+              </button>
+            )}
+            {form.imageUrl && !uploading && (
+              <button
+                type="button"
+                className="btn btn-sm btn-outline"
+                style={{ padding: '4px 6px', color: 'var(--danger)', borderColor: 'var(--danger)' }}
+                onClick={() => { if (window.confirm(lang === 'ar' ? 'إزالة صورة هذا الصنف؟' : 'Remove this item image?')) set('imageUrl', '') }}
+              >
+                <Icon name="delete" size={13} /> {lang === 'ar' ? 'إزالة الصورة' : 'Remove image'}
               </button>
             )}
             {!uploading && (
