@@ -111,7 +111,9 @@ export function groupErrors(errors) {
 
 // ---- Executive assistant (platform owner, cross-venue, with real tools) -----
 
-const EXEC_MODELS = { fast: 'gemini-2.5-flash', deep: 'gemini-2.5-pro' }
+// 'gemini-2.5-pro' was retired by Google (404 on use, though still listed).
+// Both ids verified against the live API.
+const EXEC_MODELS = { fast: 'gemini-2.5-flash', deep: 'gemini-pro-latest' }
 
 const EXEC_SYSTEM = [
   'أنت «المساعد التنفيذي الأعلى» لمالك منصة rbt360 — منصة قوائم ومطاعم متعددة المنشآت. تعمل بصلاحية المالك الكاملة على المنصة بأكملها: كل المنشآت، الاشتراكات، الفوترة، النطاقات، التعاميم، الدعم، ومراقبة الأخطاء.',

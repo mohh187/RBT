@@ -311,7 +311,7 @@ export default function Chat() {
                 <span className="faint xs">طراز نموذج الذكاء الاصطناعي</span>
                 <select className="select input-sm" value={aiModel} onChange={(e) => setAiModel(e.target.value)}>
                   <option value="gemini-2.5-flash">Gemini 2.5 Flash (افتراضي)</option>
-                  <option value="gemini-2.5-pro">Gemini 2.5 Pro (ذكي)</option>
+                  <option value="gemini-pro-latest">Gemini Pro (ذكي)</option>
                   <option value="gpt-4o-mini">GPT-4o Mini (سريع)</option>
                   <option value="gpt-4o">GPT-4o (شامل قوي)</option>
                 </select>

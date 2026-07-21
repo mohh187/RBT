@@ -165,6 +165,36 @@ const STATUS_AR = {
 }
 const NOTIFY_STATUSES = ['accepted', 'preparing', 'ready', 'served', 'cancelled', 'refunded']
 
+// A WhatsApp template parameter. Meta REJECTS the whole message when a parameter
+// is empty or contains a newline/tab, so every value is collapsed to one line
+// and can never come back empty — an order placed without a name must not cost
+// the customer their notification.
+function waParam(v, fallback = '-') {
+  const s = String(v == null ? '' : v).replace(/[\r\n\t]+/g, ' ').replace(/\s+/g, ' ').trim().slice(0, 120)
+  return s || fallback
+}
+
+// Money the way a guest reads it: Latin digits, two decimals, currency named in
+// Arabic. (Arabic-Indic numerals are a hard project rule against.)
+function money(n, currency) {
+  const v = Number(n)
+  const num = Number.isFinite(v) ? v.toFixed(2) : '0.00'
+  const cur = String(currency || 'SAR').toUpperCase()
+  return cur === 'SAR' ? `${num} ريال` : `${num} ${cur}`
+}
+
+// The order, said briefly. Returns at most `max` lines plus a "+N more" line, so
+// a twenty-item order does not turn a status notice into a wall of text.
+function orderLines(order, max = 6) {
+  const items = Array.isArray(order && order.items) ? order.items : []
+  const shown = items.slice(0, max).map((l) => ({
+    name: String(l.nameAr || l.nameEn || '').trim() || 'صنف',
+    qty: Number(l.qty) || 1,
+    total: Number(l.lineTotal != null ? l.lineTotal : (Number(l.unitPrice) || 0) * (Number(l.qty) || 1)),
+  }))
+  return { shown, hidden: Math.max(0, items.length - shown.length), count: items.length }
+}
+
 // TRIGGER: when a customer's order changes status, message them on WhatsApp (and
 // email if their email is on the order). The customer gave their phone at order
 // time (implied consent for order updates). Venue can disable via customerNotify.
@@ -203,22 +233,69 @@ const onOrderCustomerNotify = onDocumentUpdated('tenants/{tid}/orders/{oid}', as
     .replace(/\{status\}|\{الحالة\}/g, statusText)
   const customText = (tenant.msgTemplates && tenant.msgTemplates.orderStatus) || ''
 
+  // Who the message is FOR. A guest may order without giving a name, so there is
+  // always a polite fallback rather than an empty greeting.
+  const customerName = waParam(after.customerName, 'عميلنا العزيز')
+  const totalText = money(after.total, after.currency)
+  const { shown, hidden, count } = orderLines(after)
+
   if (phone && ch.whatsapp !== false) {
     // Venue's own approved template name wins; else the platform template.
     const tmpl = (creds && creds.templates && creds.templates.templateOrderUpdate) || process.env.WA_TEMPLATE_ORDER_UPDATE
     if (tmpl) {
-      // Template vars: {{1}} venue, {{2}} order code, {{3}} status text.
-      await sendWhatsAppTemplate(phone, tmpl, lang, [venueName, code || '-', statusText], creds).catch(() => {})
+      // The PARAMETER COUNT must match the template exactly or Meta rejects the
+      // whole message, so it is chosen by which template is configured rather
+      // than assumed. Ours greets the customer and carries the order; the Meta
+      // sample templates used while setting up take the older three.
+      const ours = /^rbt360_order_status/.test(String(tmpl))
+      const params = ours
+        ? [customerName, waParam(venueName), waParam(code, '-'), waParam(statusText), waParam(totalText)]
+        : [waParam(venueName), waParam(code, '-'), waParam(statusText)]
+      await sendWhatsAppTemplate(phone, tmpl, lang, params, creds).catch(() => {})
     } else {
       // No approved template configured yet → best-effort free-form (24h window only).
-      await sendWhatsAppText(phone, customText ? fillTpl(customText) : `${venueName}\n${statusText} ${code}`, creds).catch(() => {})
+      const lines = [
+        `مرحباً ${customerName}`,
+        '',
+        `طلبك لدى ${venueName}`,
+        `رقم الطلب: ${code || '-'}`,
+        `الحالة: ${statusText}`,
+        `الإجمالي: ${totalText}`,
+      ].join('\n')
+      await sendWhatsAppText(phone, customText ? fillTpl(customText) : lines, creds).catch(() => {})
     }
   }
   if (email && ch.email !== false) {
+    const rows = shown.map((l) => `
+      <tr>
+        <td style="padding:9px 14px;border-bottom:1px solid #eceef1;font-size:14px;">${esc(l.name)}${l.qty > 1 ? ` <span style="color:#5c6270;">&times;${l.qty}</span>` : ''}</td>
+        <td style="padding:9px 14px;border-bottom:1px solid #eceef1;font-size:14px;white-space:nowrap;" align="left" dir="ltr">${esc(l.total.toFixed(2))}</td>
+      </tr>`).join('')
+    const moreRow = hidden > 0
+      ? `<tr><td colspan="2" style="padding:9px 14px;border-bottom:1px solid #eceef1;font-size:13px;color:#5c6270;">و${hidden} صنفاً آخر</td></tr>`
+      : ''
+    const table = count > 0 ? `
+      <table role="presentation" cellpadding="0" cellspacing="0" border="0" width="100%" style="margin:16px 0;border:1px solid #eceef1;border-radius:12px;border-collapse:separate;overflow:hidden;">
+        ${rows}${moreRow}
+        <tr>
+          <td style="padding:11px 14px;font-weight:700;font-size:14px;">الإجمالي</td>
+          <td style="padding:11px 14px;font-weight:700;font-size:14px;white-space:nowrap;" align="left" dir="ltr">${esc(totalText)}</td>
+        </tr>
+      </table>` : ''
+    const where = after.tableLabel ? `<p style="margin:0 0 6px;color:#5c6270;font-size:13px;">الطاولة: ${esc(after.tableLabel)}</p>` : ''
     await sendEmail({
       to: email, subject: `${venueName} — ${statusText} ${code}`.replace(/[\r\n]+/g, ' '),
       fromName: venueName, replyTo: tenant.contactEmail || undefined,
-      html: emailShell(esc(venueName), `<p style="font-size:16px">${esc(customText ? fillTpl(customText) : statusText)}</p><p style="color:#5c5c66">رقم الطلب: ${esc(code)}</p>`),
+      html: emailShell(
+        `${esc(venueName)} — ${esc(statusText)}`,
+        `<p style="margin:0 0 12px;">مرحباً ${esc(customerName)},</p>
+         <p style="margin:0 0 4px;">${esc(customText ? fillTpl(customText) : statusText)}</p>
+         <p style="margin:0 0 6px;color:#5c6270;font-size:13px;">رقم الطلب: <span dir="ltr">${esc(code || '-')}</span></p>
+         ${where}
+         ${table}
+         <p style="margin:0;color:#5c6270;font-size:12.5px;">هذه رسالة آلية بخصوص طلبك لدى ${esc(venueName)}.</p>`,
+        `${statusText} — ${venueName}`,
+      ),
     }).catch(() => {})
   }
 })

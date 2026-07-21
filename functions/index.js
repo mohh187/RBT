@@ -368,22 +368,48 @@ exports.geminiProxy = onCall(async (request) => {
     throw new HttpsError('failed-precondition', 'Gemini API key is not configured on the server.')
   }
 
-  // Gemini 2.5 enables "thinking" by default, and that reasoning is billed
+  // Gemini 2.5 flash enables "thinking" by default, and that reasoning is billed
   // against maxOutputTokens — on short budgets it eats the whole budget and
-  // returns empty/truncated replies. Disable it (thinkingBudget:0). (Proven fix
-  // from the wbs project — we need fast, complete, non-chain-of-thought answers.)
+  // returns empty/truncated replies, so we disable it (thinkingBudget:0).
+  //
+  // BUT that must not be forced blindly: the newer "pro"/thinking models REJECT
+  // a zero budget outright ("Budget 0 is invalid. This model only works in
+  // thinking mode"), which turned every deep-mode request into a 400 and left
+  // the assistant showing an empty bubble. So the budget is a preference, not a
+  // demand — and if the model says it needs to think, we let it think and retry
+  // rather than failing the user's request.
   const outBody = { ...(body || {}) }
-  outBody.generationConfig = { ...(outBody.generationConfig || {}), thinkingConfig: { thinkingBudget: 0 } }
+  const callerSetThinking = !!(outBody.generationConfig && outBody.generationConfig.thinkingConfig)
+  if (!callerSetThinking) {
+    outBody.generationConfig = { ...(outBody.generationConfig || {}), thinkingConfig: { thinkingBudget: 0 } }
+  }
 
   const url = `https://generativelanguage.googleapis.com/v1beta/models/${model || 'gemini-2.5-flash'}:generateContent?key=${apiKey}`
-  const res = await fetch(url, {
+  const post = (payload) => fetch(url, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify(outBody),
+    body: JSON.stringify(payload),
   })
+
+  let res = await post(outBody)
+
+  // The model needs thinking mode: drop our budget and ask again.
+  if (!res.ok && res.status === 400 && !callerSetThinking) {
+    const probe = await res.clone().text().catch(() => '')
+    if (/thinking mode|Budget 0 is invalid|thinkingBudget/i.test(probe)) {
+      const retry = { ...outBody }
+      const gen = { ...(retry.generationConfig || {}) }
+      delete gen.thinkingConfig
+      retry.generationConfig = gen
+      res = await post(retry)
+    }
+  }
 
   if (!res.ok) {
     const text = await res.text().catch(() => '')
+    // Logged, not just thrown: a silent proxy failure is what made this look
+    // like the assistant "not responding" instead of a named API error.
+    console.error('geminiProxy failed', { model: model || 'gemini-2.5-flash', status: res.status, body: text.slice(0, 300) })
     throw new HttpsError('internal', `Gemini API error: ${res.status} - ${text.slice(0, 180)}`)
   }
 

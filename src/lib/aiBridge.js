@@ -12,7 +12,12 @@ import { analyzeBrand } from './brandInsight.js'
 const MODEL = import.meta.env.VITE_GEMINI_MODEL || 'gemini-2.5-flash'
 
 // Fast = quick flash model; Deep = stronger reasoning model for complex analysis/plans.
-export const AI_MODELS = { fast: MODEL || 'gemini-2.5-flash', deep: 'gemini-2.5-pro' }
+// 'gemini-2.5-pro' was RETIRED by Google and answers 404 ("no longer available"),
+// which is what made deep mode return an empty bubble instead of a reply. Both
+// ids below were verified against the live API before being put here — do not
+// change them to a model without calling it first, because the models LIST still
+// advertises retired ids that fail on use.
+export const AI_MODELS = { fast: MODEL || 'gemini-2.5-flash', deep: 'gemini-pro-latest' }
 
 export const aiConfigured = () => firebaseReady
 
