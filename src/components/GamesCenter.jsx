@@ -76,6 +76,10 @@ const TXT = {
     anyGame: 'هذه البطولة تحتسب كل الألعاب — اختر أي لعبة من القائمة وتُحتسب جولتك فيها.',
     notHere: 'هذه اللعبة لم تعد مفعّلة في هذا المكان. اختر واحدة من القائمة.',
     waitHost: 'مقعدك محفوظ. تبدأ الجولة حين يبدأها المضيف.',
+    nowH: 'ما يحدث الآن',
+    pastH: 'الطاولة ومن حولك',
+    more: 'المزيد',
+    expand: 'توسيع البطاقة',
     rewardsH: 'جوائز هذا المكان',
     archetype: 'نمطك',
     won: 'ربحت جائزة',
@@ -121,6 +125,10 @@ const TXT = {
     anyGame: 'Every game counts in this tournament — pick any game below and your round enters it.',
     notHere: 'This game is no longer enabled at this venue. Pick one from the list.',
     waitHost: 'Your seat is saved. The round begins when the host starts it.',
+    nowH: 'Happening now',
+    pastH: 'Your table & who is around',
+    more: 'More',
+    expand: 'Expand card',
     rewardsH: 'Rewards at this venue',
     archetype: 'Your type',
     won: 'You won a reward',
@@ -304,6 +312,14 @@ export default function GamesCenter({
   const [memResume, setMemResume] = useState({})
   const [reveal, setReveal] = useState(null)
 
+  // Which lower-priority «now» cards the guest has expanded from their one-line
+  // teaser. Add-only for the session — opening one is deliberate, and having it
+  // silently re-collapse would feel like the card vanished.
+  const [nowOpen, setNowOpen] = useState(() => new Set())
+  const openNowItem = useCallback((key) => {
+    setNowOpen((s) => (s.has(key) ? s : new Set(s).add(key)))
+  }, [])
+
   // The running tournament is watched here rather than inside the card, because
   // a finished round must be posted to it even when the card is scrolled away.
   // watchLiveTournament calls back with a WRAPPER ({ tournament, upcoming, all,
@@ -399,6 +415,24 @@ export default function GamesCenter({
     setView('play')
     setRunKey((k) => k + 1)
   }, [tenantId, enabled, t])
+
+  // Table-vs-table is shown BEFORE registration — it is the reason to register,
+  // not a reward for having done so. When an unregistered guest actually enters
+  // a board from it, capture their name first through the very same gate every
+  // game uses, then drop them onto the board. Registration is never skipped,
+  // only deferred to the last honest moment.
+  const pendingRoomRef = useRef(null)
+  const openRoomGated = useCallback((rid, gid) => {
+    if (!rid) return
+    if (!store.registered) {
+      pendingRoomRef.current = { roomId: rid, gameId: gid }
+      setPendingId('')
+      setErr('')
+      setView('gate')
+      return
+    }
+    enterRoom(rid, gid)
+  }, [store.registered, enterRoom])
 
   // Arriving from an invite link: the join page already seated this guest, so
   // go straight to the board instead of making them find the game again.
@@ -619,6 +653,15 @@ export default function GamesCenter({
     setWarn(ok ? '' : t.offline)
     setBusy(false)
     try { onIdentify?.({ name: nm, phone: ph }) } catch (_) { /* caller's problem, not the guest's */ }
+    // A table-vs-table board was waiting on this registration: enter it now,
+    // ahead of opening any game from the shelves.
+    if (pendingRoomRef.current) {
+      const { roomId: rid, gameId: gid } = pendingRoomRef.current
+      pendingRoomRef.current = null
+      setPendingId('')
+      enterRoom(rid, gid)
+      return
+    }
     // The game opens right now — no second tap, no "come back later".
     const target = pendingId || enabled[0]?.id
     setPendingId('')
@@ -892,6 +935,7 @@ export default function GamesCenter({
         >
           <Icon name={inGame ? 'back' : 'close'} size={19} />
         </button>
+        {!inGame ? <Icon name="games" size={20} style={{ flex: '0 0 auto' }} aria-hidden="true" /> : null}
         <strong className="gh-bar-title">{inGame ? gameName(active, lang) : t.hub}</strong>
         {inGame ? (
           <>
@@ -1010,7 +1054,11 @@ export default function GamesCenter({
             <p className="gh-hint"><Icon name="award" size={14} />{hint}</p>
           ) : null}
 
-          {store.registered ? (
+          {/* Who you are, sized to what you have done. A first-timer (no rounds
+              yet) gets a single calm greeting pill — never a scoreboard of
+              zeros above the fold — and it grows into the full card with points,
+              rank and personal bests only once there is something real to show. */}
+          {store.registered && store.plays > 0 ? (
             <section className="gh-player">
               <span className="gh-player-glow" style={{ background: brand }} />
               <div className="gh-player-top">
@@ -1043,47 +1091,77 @@ export default function GamesCenter({
                 </ul>
               ) : null}
             </section>
+          ) : store.registered ? (
+            <div className="gh-player-pill">
+              <span className="gh-avatar gh-avatar-sm" style={{ background: brand }}>
+                <Icon name="user" size={15} />
+              </span>
+              <strong className="gh-pill-hi">{t.hello} {store.name}</strong>
+              {store.archetype ? (
+                <span className="gh-arche"><Icon name="sparkles" size={11} />{store.archetype}</span>
+              ) : null}
+            </div>
           ) : null}
 
-          {/* The social shelf. Every card self-hides when it has nothing true
-              to show — no tournament running, no challenge left, no table —
-              so mounting them all permanently costs an empty render, not a
-              row of hollow placeholders. */}
-          {store.registered ? (
-            <>
-              <HappyHourBanner
-                tenantId={tenantId} tenant={tenant} lang={lang} table={table}
-                player={socialPlayer} onPlay={pickGame}
-              />
-              <WeeklyTournament
-                tenantId={tenantId} tenant={tenant} lang={lang} table={table}
-                player={socialPlayer} onPlay={pickGame}
-              />
-              <HangingChallenge
-                tenantId={tenantId} tenant={tenant} lang={lang} table={table}
-                player={socialPlayer} onPlay={pickGame} result={lastRun}
-              />
+          {/* «ما يحدث الآن» — the live, act-now surfaces in priority order:
+              table-vs-table, then hanging challenge, tournament, happy hour.
+              Every card self-hides when it has nothing true to show, and the
+              whole area (heading and all) disappears on a quiet day via :has().
+              The first card that actually has content is shown in full; each
+              lower one collapses to a one-line teaser that opens on tap, so
+              nothing is ever hidden for good — only tucked. */}
+          <section className="gh-now" aria-label={t.nowH}>
+            <h3 className="gh-now-h"><Icon name="flame" size={14} />{t.nowH}</h3>
+
+            {/* The one surface shown before registration: it is the REASON to
+                register, not a reward. Entering a board from it routes through
+                the gate (openRoomGated) so a name is captured first. */}
+            <div className={`gh-now-item${nowOpen.has('vs') ? ' is-open' : ''}`}>
               <TableVsTable
                 tenantId={tenantId} tenant={tenant} lang={lang} table={table}
-                player={socialPlayer} onOpenRoom={enterRoom}
+                player={socialPlayer} onOpenRoom={openRoomGated}
               />
-              {/* There is no separate post-round screen — a finished run drops
-                  the player back here — so the champions board lives on the
-                  shelf, narrowed to whatever they just played. */}
-              <TableChampions
-                tenantId={tenantId} tenant={tenant} lang={lang} table={table}
-                player={socialPlayer} gameId={lastRun?.gameId || ''}
-              />
-              <PlayedWith
-                tenantId={tenantId} tenant={tenant} lang={lang} table={table}
-                player={socialPlayer}
-              />
-            </>
-          ) : null}
+              <button type="button" className="gh-now-cover" onClick={() => openNowItem('vs')} aria-label={t.expand}>
+                <span className="gh-now-more"><Icon name="arrowUpDown" size={13} />{t.more}</span>
+              </button>
+            </div>
+
+            {store.registered ? (
+              <>
+                <div className={`gh-now-item${nowOpen.has('challenge') ? ' is-open' : ''}`}>
+                  <HangingChallenge
+                    tenantId={tenantId} tenant={tenant} lang={lang} table={table}
+                    player={socialPlayer} onPlay={pickGame} result={lastRun}
+                  />
+                  <button type="button" className="gh-now-cover" onClick={() => openNowItem('challenge')} aria-label={t.expand}>
+                    <span className="gh-now-more"><Icon name="arrowUpDown" size={13} />{t.more}</span>
+                  </button>
+                </div>
+                <div className={`gh-now-item${nowOpen.has('tournament') ? ' is-open' : ''}`}>
+                  <WeeklyTournament
+                    tenantId={tenantId} tenant={tenant} lang={lang} table={table}
+                    player={socialPlayer} onPlay={pickGame}
+                  />
+                  <button type="button" className="gh-now-cover" onClick={() => openNowItem('tournament')} aria-label={t.expand}>
+                    <span className="gh-now-more"><Icon name="arrowUpDown" size={13} />{t.more}</span>
+                  </button>
+                </div>
+                <div className={`gh-now-item${nowOpen.has('happy') ? ' is-open' : ''}`}>
+                  <HappyHourBanner
+                    tenantId={tenantId} tenant={tenant} lang={lang} table={table}
+                    player={socialPlayer} onPlay={pickGame}
+                  />
+                  <button type="button" className="gh-now-cover" onClick={() => openNowItem('happy')} aria-label={t.expand}>
+                    <span className="gh-now-more"><Icon name="arrowUpDown" size={13} />{t.more}</span>
+                  </button>
+                </div>
+              </>
+            ) : null}
+          </section>
 
           {enabled.length === 0 ? (
             <div className="gh-empty">
-              <span className="gh-empty-ico" style={{ background: brand }}><Icon name="theater" size={22} /></span>
+              <span className="gh-empty-ico" style={{ background: brand }}><Icon name="games" size={24} /></span>
               <p className="gh-gate-why">{t.empty}</p>
               <p className="gh-gate-why faint">{t.emptyHint}</p>
             </div>
@@ -1156,6 +1234,22 @@ export default function GamesCenter({
               <p className="gh-note">{t.boardNote}</p>
             </>
           )}
+
+          {/* Retrospective boards — the champions of this table and the people
+              you have played with — live at the bottom, near the rewards. Both
+              self-hide when there is nothing true to show, so this whole block
+              (heading included) disappears via :has() on a fresh device. */}
+          <section className="gh-past" aria-label={t.pastH}>
+            <h3 className="gh-past-h"><Icon name="star" size={13} />{t.pastH}</h3>
+            <TableChampions
+              tenantId={tenantId} tenant={tenant} lang={lang} table={table}
+              player={socialPlayer} gameId={lastRun?.gameId || ''}
+            />
+            <PlayedWith
+              tenantId={tenantId} tenant={tenant} lang={lang} table={table}
+              player={socialPlayer}
+            />
+          </section>
         </div>
       )}
 

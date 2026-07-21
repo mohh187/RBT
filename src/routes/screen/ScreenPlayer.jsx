@@ -5,6 +5,9 @@ import { Price } from '../../components/Riyal.jsx'
 import { orderNumber } from '../../lib/format.js'
 import DesignSlideView from '../../components/DesignSlideView.jsx'
 import Icon from '../../components/Icon.jsx'
+import { watchRoom } from '../../lib/gameRoom.js'
+import { watchSpectatableMatch, spectatePhase, SPECTATE_RESULT_HOLD_MS } from '../../lib/spectate.js'
+import LiveMatchScreen from '../../components/screen/LiveMatchScreen.jsx'
 
 // Digital signage player — open /screen on any TV/tablet browser, enter the
 // 6-char pairing code from Admin → Screens, and it plays the venue playlist
@@ -270,6 +273,54 @@ export default function ScreenPlayer() {
   // touching the venue profile (venue stays the fallback).
   const venueEff = useMemo(() => (screen?.brand && venue ? { ...venue, brandColor: screen.brand, themeColor: screen.brand } : venue), [venue, screen?.brand])
 
+  // ---- LIVE VENUE SPECTATOR SCREEN --------------------------------------
+  // The signage runs the normal menu/offers playlist all day and AUTOMATICALLY
+  // cuts to a table-versus-table board the instant two tables start a live
+  // chess/ludo match, then hands the screen back the moment that board ends or
+  // is abandoned. All the "which match / is it alive" logic lives in
+  // lib/spectate.js. `subN` re-subscribes on reconnect, like watchScreen above.
+  const [specMatch, setSpecMatch] = useState(null)
+  useEffect(() => {
+    if (!tid) { setSpecMatch(null); return undefined }
+    return watchSpectatableMatch(tid, ({ match }) => setSpecMatch(match || null))
+  }, [tid, subN])
+
+  const [specRoom, setSpecRoom] = useState(null)
+  const specRoomId = specMatch?.roomId || ''
+  useEffect(() => {
+    if (!tid || !specRoomId) { setSpecRoom(null); return undefined }
+    let alive = true
+    const stop = watchRoom(tid, specRoomId, (r) => { if (alive) setSpecRoom(r || null) })
+    return () => { alive = false; stop?.() }
+  }, [tid, specRoomId, subN])
+
+  // Finished-board hold + dead-board watchdog. Stamped in an effect (never in
+  // render) and read below; the 1s `beat` heartbeat re-evaluates the takeover
+  // every second, so a finished or abandoned board is released promptly.
+  const endedStamp = useRef({ key: '', at: 0 })
+  useEffect(() => {
+    const key = specRoom && specRoom.status === 'ended' ? (specRoom.roomId || specRoomId) : ''
+    if (key && endedStamp.current.key !== key) endedStamp.current = { key, at: Date.now() }
+    if (!key) endedStamp.current = { key: '', at: 0 }
+  }, [specRoom, specRoomId])
+
+  // TAKEOVER RULE — the ONLY phases that seize the whole screen:
+  //   'live'  a fresh, in-progress board
+  //   'ended' a just-finished board, for SPECTATE_RESULT_HOLD_MS only
+  // 'waiting' (lobby), 'stale' (silent past the watchdog) and 'none' all leave
+  // the normal playlist running, so a dead or abandoned match can NEVER strand
+  // the screen on a frozen board.
+  const spec = useMemo(() => {
+    const phase = spectatePhase(specMatch, specRoom, Date.now())
+    if (phase === 'live') return { on: true, mode: 'live' }
+    if (phase === 'ended') {
+      const { at } = endedStamp.current
+      if (at && Date.now() - at < SPECTATE_RESULT_HOLD_MS) return { on: true, mode: 'ended' }
+      return { on: false, mode: '' }
+    }
+    return { on: false, mode: '' }
+  }, [specMatch, specRoom, beat])
+
   // advance: images/menu by duration, videos on ended — frozen while paused
   useEffect(() => {
     clearTimeout(timer.current)
@@ -314,6 +365,14 @@ export default function ScreenPlayer() {
   }
 
   if (screen === undefined) return <div className="scr-root scr-center"><div className="spinner" /></div>
+
+  // ---- LIVE VENUE SPECTATOR SCREEN takeover ----
+  // Overrides the playlist while a match is live (or just finished). Placed
+  // before the empty-playlist and player returns so it can cut in even when the
+  // venue configured no signage content at all.
+  if (spec.on && specMatch) {
+    return <LiveMatchScreen match={specMatch} room={specRoom} venue={venueEff} mode={spec.mode} />
+  }
 
   // ---- empty playlist ----
   if (!slide) {

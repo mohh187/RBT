@@ -10,6 +10,7 @@
 import '../../styles/gameshub.css'
 import '../../styles/gameart.css'
 import Icon from '../Icon.jsx'
+import GamesIcon from '../GamesIcon.jsx'
 
 const n = (v) => Number(v || 0).toLocaleString('ar-SA-u-nu-latn')
 
@@ -107,6 +108,47 @@ export const GAME_ART = {
     name: '',
     hook: 'ورق وبِلي، ومضمار حول اللوح.',
   },
+
+  // ---- the insight + trivia shelves, ranked #2 and #3 by the hub. These six
+  // had NO entry and fell through to the hash fallback, so a personality game
+  // could draw a grill flame. Each now names its own bespoke scene below. Like
+  // the table games, these art keys are deliberately NOT added to ART_KINDS.
+  knowledgeQuiz: {
+    art: 'ideaBulb',
+    c: ['#132145', '#3552a8', '#ffd76b'],
+    name: 'موسوعة الأسئلة',
+    hook: 'سؤال من عشرة حقول، وشرح بعد كل إجابة.',
+  },
+  brainPuzzles: {
+    art: 'jigsaw',
+    c: ['#20143f', '#5b46c4', '#c3b2ff', '#ffd27a'],
+    name: 'ألغاز الذكاء',
+    hook: 'متتابعات ومنطق، ومراحل تزداد صعوبة.',
+  },
+  wordRiddles: {
+    art: 'crossword',
+    c: ['#3a2410', '#b0741d', '#ffe1a8'],
+    name: 'ألغاز الكلمات',
+    hook: 'أحاجٍ وأمثال ومفردات عربية.',
+  },
+  tasteProfile: {
+    art: 'flavorWheel',
+    c: ['#2a1330', '#9c3d80', '#ffd0e6'],
+    name: 'ذوقك يحكي عنك',
+    hook: 'اختَر بين صنفين، واقرأ ما يقوله ذوقك.',
+  },
+  mindMirror: {
+    art: 'mirrorFace',
+    c: ['#122740', '#3f74b0', '#c6e2ff'],
+    name: 'مرآة الشخصية',
+    hook: 'مواقف تتبدّل بإجاباتك، ثم صورتك كما أنت.',
+  },
+  decisionStyle: {
+    art: 'balanceScale',
+    c: ['#123026', '#2c8a6a', '#ffdf9e'],
+    name: 'كيف تقرر؟',
+    hook: 'مواقف قصيرة تكشف أسلوبك في الحسم.',
+  },
 }
 
 // A stable, coherent palette for a game with no hand-picked entry: the venue's
@@ -157,6 +199,7 @@ export function gameHook(game, lang = 'ar') {
 // thumb is used:
 //     .gh-card-art        16 / 11   -> roughly x   4 .. 156 survives
 //     .gh-grid-hero art    4 / 3    -> roughly x  11 .. 149
+//     .gh-gate-art         1 / 1.1  -> roughly x  33 .. 127
 //     .gh-promo-tile       1 / 1.18 -> roughly x  36 .. 124   <- binding case
 // Everything load-bearing therefore lives inside x 36..124, y 0..104. Only
 // decoration may sit outside it.
@@ -447,6 +490,177 @@ function SceneJackaroo({ c }) {
 }
 
 // ---------------------------------------------------------------------------
+// BESPOKE SCENES for the insight + trivia shelves.
+//
+// Same exception, same rule as the five table games above: each draws a real,
+// recognisable object rather than an abstract field, because these are the
+// shelves the hub ranks #2 and #3 (one carrying «الأكثر إدهاشاً»), and a
+// hash-picked grill flame behind a personality game told the guest nothing.
+// All load-bearing geometry stays inside the binding safe area x 36..124, and
+// none of these art keys is added to ART_KINDS.
+// ---------------------------------------------------------------------------
+
+// knowledgeQuiz — a lightbulb whose filament is bent into a question mark.
+function SceneKnowledge({ c }) {
+  const [deep, mid, hi] = c
+  return (
+    <g>
+      <circle cx="80" cy="45" r="31" fill={mid} opacity="0.4" />
+      {/* idea rays — decoration, free to sit outside the safe area */}
+      <path
+        d="M80 9 v-6 M58 17 l-4.5 -4.5 M102 17 l4.5 -4.5 M47 41 h-6 M113 41 h6"
+        fill="none" stroke={hi} strokeWidth="3" strokeLinecap="round" opacity="0.6"
+      />
+      <g className="ga-lift">
+        <circle cx="80" cy="43" r="25" fill={hi} />
+        <path d="M69 65 h22 l-2 6 h-18 z" fill={mid} />
+        <path className="ga-rule" d="M71 68.5 h18 M73 73.5 h14" strokeWidth="1.6" />
+        <path d="M75 77 h10 v2 a5 5 0 0 1 -10 0 z" fill={mid} />
+      </g>
+      <path
+        d="M72 37 a9 9 0 1 1 12 8.4 q-4 2.7 -4 6.6"
+        fill="none" stroke={deep} strokeWidth="5" strokeLinecap="round" strokeLinejoin="round"
+      />
+      <circle cx="80" cy="57.5" r="3.1" fill={deep} />
+    </g>
+  )
+}
+
+// brainPuzzles — three placed jigsaw pieces, one empty slot, and the final
+// piece lifted just above the slot it belongs to.
+function SceneBrain({ c }) {
+  const [deep, mid, hi, accent] = c
+  const acc = accent || hi
+  return (
+    <g>
+      <g className="ga-lift">
+        <rect x="50" y="24" width="28" height="28" rx="5" fill={hi} />
+        <rect x="50" y="58" width="28" height="28" rx="5" fill={mid} />
+        <rect x="84" y="58" width="28" height="28" rx="5" fill={hi} />
+        {/* knobs bridge the pieces, so the grid reads as interlocking */}
+        <circle cx="64" cy="55" r="5" fill={hi} />
+        <circle cx="81" cy="72" r="5" fill={mid} />
+        {/* the empty slot */}
+        <rect x="84" y="24" width="28" height="28" rx="5" fill={deep} opacity="0.3" />
+        <rect className="ga-edge" x="84" y="24" width="28" height="28" rx="5" strokeWidth="1.4" strokeDasharray="4 4" />
+      </g>
+      {/* the last piece, hovering over its slot */}
+      <g className="ga-lift-sm" transform="rotate(9 103 16)">
+        <rect x="90" y="4" width="26" height="26" rx="5" fill={acc} />
+        <circle cx="116" cy="17" r="4.6" fill={acc} />
+        <rect className="ga-edge" x="90" y="4" width="26" height="26" rx="5" strokeWidth="1.2" />
+      </g>
+    </g>
+  )
+}
+
+// wordRiddles — a small crossword, a handful of cells filled with letter
+// strokes. The abstract glyphs only need to read as "words in progress".
+function SceneWord({ c }) {
+  const [deep, mid, hi] = c
+  const cell = (x, y, fill) => <rect x={x} y={y} width="20" height="20" rx="3.5" fill={fill} />
+  return (
+    <g>
+      <g className="ga-lift">
+        {[38, 60, 82, 104].map((x) => <g key={`a${x}`}>{cell(x, 44, hi)}</g>)}
+        {cell(60, 20, hi)}
+        {cell(60, 68, hi)}
+        {/* the crossing cell, tinted to mark where the two words link */}
+        {cell(60, 44, mid)}
+        <g className="ga-edge">
+          {[38, 60, 82, 104].map((x) => (
+            <rect key={`ea${x}`} x={x} y="44" width="20" height="20" rx="3.5" strokeWidth="1" />
+          ))}
+          <rect x="60" y="20" width="20" height="20" rx="3.5" strokeWidth="1" />
+          <rect x="60" y="68" width="20" height="20" rx="3.5" strokeWidth="1" />
+        </g>
+      </g>
+      <g fill="none" stroke={deep} strokeWidth="2.6" strokeLinecap="round" strokeLinejoin="round">
+        <path d="M45 49 v10 M45 59 h7" />
+        <path d="M87 50 l5 8 l5 -8" />
+        <path d="M65 25 h10 M70 25 v10" />
+        <path d="M66 73 v10 M74 73 v10 M66 78 h8" />
+      </g>
+    </g>
+  )
+}
+
+// tasteProfile — a flavour wheel. Its segment colours are FIXED: a wheel of
+// flavours is inherently many-hued, exactly as the table games carry the real
+// colours of their board, so they are not derived from the tile palette.
+const FLAVOR = ['#e0662a', '#e8b53a', '#3f9d54', '#2f8fb0', '#8a5cc4', '#d64d7a']
+function SceneTaste({ c }) {
+  const [deep, , hi] = c
+  const cx = 80
+  const cy = 48
+  const R = 30
+  const pt = (deg, r) => [
+    (cx + Math.cos((deg * Math.PI) / 180) * r).toFixed(2),
+    (cy + Math.sin((deg * Math.PI) / 180) * r).toFixed(2),
+  ]
+  return (
+    <g>
+      <g className="ga-lift">
+        {FLAVOR.map((col, i) => {
+          const [x0, y0] = pt(i * 60 - 90, R)
+          const [x1, y1] = pt(i * 60 - 30, R)
+          return <path key={col} d={`M${cx} ${cy} L${x0} ${y0} A${R} ${R} 0 0 1 ${x1} ${y1} Z`} fill={col} opacity="0.92" />
+        })}
+        <circle className="ga-edge" cx={cx} cy={cy} r={R} strokeWidth="1.4" />
+        {FLAVOR.map((_, i) => {
+          const [x, y] = pt(i * 60 - 90, R)
+          return <line key={`s${i}`} className="ga-rule" x1={cx} y1={cy} x2={x} y2={y} strokeWidth="1" />
+        })}
+        <circle cx={cx} cy={cy} r="8" fill={deep} />
+        <circle cx={cx} cy={cy} r="8" fill="none" stroke={hi} strokeWidth="1.4" opacity="0.6" />
+      </g>
+      {/* the tasting needle, pointing at one flavour */}
+      <g className="ga-lift-sm">
+        <path d={`M${cx} ${cy} L${cx + 3} ${cy - 2} L${pt(-54, R + 5)[0]} ${pt(-54, R + 5)[1]} L${cx - 3} ${cy + 2} Z`} fill={hi} />
+        <circle cx={cx} cy={cy} r="3.4" fill={hi} />
+      </g>
+    </g>
+  )
+}
+
+// mindMirror — a profile bust and its reflection across a central mirror line.
+// The reflection is the same path mirrored across x = 80 and dimmed.
+const BUST_D =
+  'M46 92 C47 74 54 71 61 69 C55 62 54 53 58 45 C62 36 70 32 76 36 '
+  + 'C80 39 79 44 77 47 L80 51 L76 54 L80 58 L75 61 L78 65 L74 68 L74 92 Z'
+function SceneMirror({ c }) {
+  const [deep, mid, hi] = c
+  return (
+    <g>
+      <rect x="72" y="20" width="16" height="76" fill={hi} opacity="0.12" />
+      <path d="M80 22 v72" stroke={hi} strokeWidth="2" strokeLinecap="round" opacity="0.5" />
+      <path className="ga-lift" d={BUST_D} fill={mid} />
+      <path d={BUST_D} fill={hi} opacity="0.5" transform="matrix(-1 0 0 1 160 0)" />
+      <path d={BUST_D} fill="none" stroke={deep} strokeWidth="1.2" opacity="0.4" />
+    </g>
+  )
+}
+
+// decisionStyle — a balance scale, tipped mid-decision toward the heavier pan.
+function SceneDecision({ c }) {
+  const [, mid, hi] = c
+  return (
+    <g>
+      <path className="ga-lift" d="M77 41 h6 v45 h-6 z" fill={mid} />
+      <path d="M63 86 h34 l-5 7 h-24 z" fill={mid} />
+      <path className="ga-rule" d="M66 89.5 h28" strokeWidth="1.4" />
+      <path d="M80 32 l6 9 h-12 z" fill={hi} />
+      <path className="ga-lift" d="M52 37 L108 45" fill="none" stroke={hi} strokeWidth="4" strokeLinecap="round" />
+      <path d="M53 38 v11 M107 45 v13" stroke={hi} strokeWidth="1.4" opacity="0.7" />
+      <g className="ga-lift-sm">
+        <path d="M42 49 q11 10 22 0 z" fill={hi} />
+        <path d="M96 58 q11 10 22 0 z" fill={hi} />
+      </g>
+    </g>
+  )
+}
+
+// ---------------------------------------------------------------------------
 // The art scenes. Each draws inside a 160 x 104 box on top of the tile's own
 // gradient, using only the game's three colours. Deliberately geometric —
 // abstract shapes read as "designed" at thumbnail size where illustration
@@ -470,12 +684,12 @@ function Scene({ art, c }) {
     case 'dash':
       return (
         <g>
-          <path d="M16 74 h128" stroke={hi} strokeWidth="3" opacity="0.28" {...common} />
-          <path d="M8 30 h44 M16 46 h34 M4 62 h26" stroke={hi} strokeWidth="4" opacity="0.35" {...common} />
-          <rect x="86" y="40" width="52" height="9" rx="4.5" fill={hi} />
-          <circle cx="100" cy="32" r="6" fill={hi} opacity="0.85" />
-          <circle cx="118" cy="30" r="8" fill={mid} stroke={hi} strokeWidth="2.5" />
-          <path d="M96 74 q16 -10 32 0" stroke={hi} strokeWidth="3" opacity="0.5" {...common} />
+          <path d="M12 76 h136" stroke={hi} strokeWidth="3" opacity="0.28" {...common} />
+          <path d="M14 34 h34 M22 48 h26 M10 62 h20" stroke={hi} strokeWidth="4" opacity="0.35" {...common} />
+          <rect x="54" y="44" width="52" height="9" rx="4.5" fill={hi} />
+          <circle cx="68" cy="36" r="6" fill={hi} opacity="0.85" />
+          <circle cx="90" cy="34" r="8" fill={mid} stroke={hi} strokeWidth="2.5" />
+          <path d="M62 72 q18 -10 36 0" stroke={hi} strokeWidth="3" opacity="0.5" {...common} />
         </g>
       )
     case 'burst':
@@ -506,22 +720,22 @@ function Scene({ art, c }) {
     case 'fall':
       return (
         <g>
-          <circle cx="42" cy="22" r="7" fill={hi} opacity="0.9" />
-          <circle cx="86" cy="14" r="5" fill={mid} />
-          <circle cx="112" cy="34" r="6.5" fill={hi} opacity="0.7" />
-          <circle cx="62" cy="44" r="5" fill={hi} opacity="0.5" />
-          <path d="M34 66 h92 l-13 30 a6 6 0 0 1 -5 3 H52 a6 6 0 0 1 -5 -3 Z" fill={hi} />
-          <path d="M34 66 h92" stroke={c[0]} strokeWidth="5" opacity="0.35" {...common} />
+          <circle cx="52" cy="22" r="7" fill={hi} opacity="0.9" />
+          <circle cx="82" cy="14" r="5" fill={mid} />
+          <circle cx="106" cy="32" r="6.5" fill={hi} opacity="0.7" />
+          <circle cx="68" cy="42" r="5" fill={hi} opacity="0.5" />
+          <path d="M38 66 h84 l-12 30 a6 6 0 0 1 -5 3 H55 a6 6 0 0 1 -5 -3 Z" fill={hi} />
+          <path d="M38 66 h84" stroke={c[0]} strokeWidth="5" opacity="0.35" {...common} />
         </g>
       )
     case 'quiz':
       return (
         <g>
-          <rect x="24" y="26" width="94" height="50" rx="14" fill={mid} opacity="0.6" />
-          <path d="M42 86 l10 -14 h18 Z" fill={mid} opacity="0.6" />
-          <path d="M60 44 a10 10 0 1 1 12 15 v5" stroke={hi} strokeWidth="5" {...common} />
-          <circle cx="72" cy="70" r="3.6" fill={hi} />
-          <circle cx="128" cy="24" r="5" fill={hi} opacity="0.55" />
+          <rect x="38" y="26" width="84" height="50" rx="14" fill={mid} opacity="0.6" />
+          <path d="M64 86 l10 -14 h18 Z" fill={mid} opacity="0.6" />
+          <path d="M74 44 a10 10 0 1 1 12 15 v5" stroke={hi} strokeWidth="5" {...common} />
+          <circle cx="80" cy="70" r="3.6" fill={hi} />
+          <circle cx="110" cy="24" r="5" fill={hi} opacity="0.55" />
         </g>
       )
     case 'stack':
@@ -550,17 +764,17 @@ function Scene({ art, c }) {
             return (
               <rect
                 key={`${col}-${row}`}
-                x={26 + col * 38}
-                y={20 + row * 38}
-                width="30"
-                height="30"
-                rx="9"
+                x={38 + col * 30}
+                y={24 + row * 32}
+                width="26"
+                height="26"
+                rx="8"
                 fill={on ? hi : mid}
                 opacity={on ? 0.95 : 0.5}
               />
             )
           })}
-          <path d="M33 27 l16 16 M49 27 l-16 16" stroke={c[0]} strokeWidth="3" opacity="0.55" {...common} />
+          <path d="M44 30 l14 14 M58 30 l-14 14" stroke={c[0]} strokeWidth="3" opacity="0.55" {...common} />
         </g>
       )
     case 'heat':
@@ -568,20 +782,20 @@ function Scene({ art, c }) {
         <g>
           <path d="M80 16 q18 20 8 34 q-4 6 -8 8 q-4 -2 -8 -8 q-10 -14 8 -34 Z" fill={hi} />
           <path d="M80 34 q10 12 4 22 q-2 4 -4 5 q-2 -1 -4 -5 q-6 -10 4 -22 Z" fill={c[0]} opacity="0.55" />
-          <path d="M28 74 h104 M34 86 h92" stroke={mid} strokeWidth="7" {...common} />
-          <path d="M28 74 h104" stroke={hi} strokeWidth="2" opacity="0.6" {...common} />
+          <path d="M40 76 h80 M46 88 h68" stroke={mid} strokeWidth="7" {...common} />
+          <path d="M40 76 h80" stroke={hi} strokeWidth="2" opacity="0.6" {...common} />
         </g>
       )
     case 'bubbles':
       return (
         <g>
-          <circle cx="46" cy="60" r="20" fill={mid} opacity="0.75" />
-          <circle cx="86" cy="38" r="14" fill={hi} opacity="0.85" />
-          <circle cx="112" cy="68" r="17" fill={mid} opacity="0.6" />
-          <circle cx="74" cy="78" r="9" fill={hi} opacity="0.55" />
-          <circle cx="126" cy="30" r="7" fill={hi} opacity="0.4" />
-          <circle cx="40" cy="53" r="5" fill={hi} opacity="0.45" />
-          <circle cx="81" cy="33" r="4" fill="#fff" opacity="0.6" />
+          <circle cx="58" cy="60" r="19" fill={mid} opacity="0.75" />
+          <circle cx="92" cy="40" r="14" fill={hi} opacity="0.85" />
+          <circle cx="104" cy="70" r="16" fill={mid} opacity="0.6" />
+          <circle cx="74" cy="80" r="9" fill={hi} opacity="0.55" />
+          <circle cx="112" cy="34" r="7" fill={hi} opacity="0.4" />
+          <circle cx="46" cy="46" r="6" fill={hi} opacity="0.45" />
+          <circle cx="88" cy="36" r="4" fill="#fff" opacity="0.6" />
         </g>
       )
     // the five bespoke table-game scenes (see the long note above)
@@ -595,6 +809,19 @@ function Scene({ art, c }) {
       return <SceneWist c={c} />
     case 'marbleTrack':
       return <SceneJackaroo c={c} />
+    // the six bespoke insight + trivia scenes (see the note above)
+    case 'ideaBulb':
+      return <SceneKnowledge c={c} />
+    case 'jigsaw':
+      return <SceneBrain c={c} />
+    case 'crossword':
+      return <SceneWord c={c} />
+    case 'flavorWheel':
+      return <SceneTaste c={c} />
+    case 'mirrorFace':
+      return <SceneMirror c={c} />
+    case 'balanceScale':
+      return <SceneDecision c={c} />
     case 'mind':
     default:
       return (
@@ -692,7 +919,13 @@ export default function GamePromo({
   rewardLine,
 }) {
   const t = TXT[lang] || TXT.ar
-  const tiles = games.slice(0, 4)
+  // Party / multiplayer games lead the hero. They carry the real board art and
+  // are the headline draw, yet they are registered LAST — so a plain
+  // slice(0, 4) showed a new guest four arcade tiles and never Ludo, chess,
+  // dominoes, wist or jackaroo. A stable sort keeps registry order within each
+  // group and still fills four when a venue enabled no party games.
+  const isParty = (g) => g?.multiplayer === true || g?.kind === 'party'
+  const tiles = [...games].sort((a, b) => Number(isParty(b)) - Number(isParty(a))).slice(0, 4)
   const feats = [
     { icon: 'shapes', h: t.f1, d: t.f1d },
     { icon: 'user', h: t.f2, d: t.f2d },
@@ -704,6 +937,11 @@ export default function GamePromo({
       <div className="gh-promo-scroll">
         <div className="gh-promo-hero">
           <span className="gh-promo-glow" style={{ background: brand }} />
+          {/* The games mark — the SAME one on the menu chip — at the large size
+              it was designed for, carrying the hub's identity. */}
+          <span className="gh-promo-mark" style={{ background: brand }}>
+            <GamesIcon size={40} strokeWidth={1.7} animated title={t.kicker} />
+          </span>
           <div className="gh-promo-tiles">
             {tiles.map((g, i) => (
               <span key={g.id} className="gh-promo-tile" style={{ '--i': i }}>
@@ -749,7 +987,7 @@ export default function GamePromo({
 
       <div className="gh-promo-foot">
         <button type="button" className="gh-cta gh-press" style={{ background: brand }} onClick={onStart}>
-          <Icon name="play" size={16} />
+          <GamesIcon size={18} />
           {t.cta}
         </button>
       </div>

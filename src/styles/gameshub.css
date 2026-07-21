@@ -216,6 +216,26 @@
   opacity: 0.42;
   pointer-events: none;
 }
+/* The games mark, rendered large as the hub's emblem. Brand-filled plate, the
+   mark in white via currentColor — the same identity as the primary CTA.
+   Centred by the promo column's text-align: center. */
+.gh-promo-mark {
+  position: relative;
+  z-index: 1;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 74px;
+  height: 74px;
+  margin-bottom: 20px;
+  border-radius: 22px;
+  color: #fff;
+  box-shadow:
+    0 18px 34px -16px rgba(0, 0, 0, 0.9),
+    inset 0 1px 0 rgba(255, 255, 255, 0.3),
+    inset 0 0 0 1px rgba(255, 255, 255, 0.14);
+}
+
 .gh-promo-tiles {
   position: relative;
   display: flex;
@@ -524,15 +544,26 @@
 /* ===========================================================================
    category tabs + sections + cards
    =========================================================================== */
+/* The filter must never scroll away from the shelves it filters: with 22 games
+   across five shelves it would otherwise be gone the moment browsing starts.
+   It sticks to the top of the scrolling body (directly under the title bar),
+   over a blurred backdrop so cards pass cleanly beneath it. Full-bleed via the
+   negative inline margins so the backdrop reaches both screen edges. */
 .gh-chips {
+  position: sticky;
+  inset-block-start: 0;
+  z-index: 20;
   display: flex;
   gap: 7px;
-  margin: -4px calc(var(--gh-pad) * -1) -4px;
-  padding: 4px var(--gh-pad);
+  margin: -2px calc(var(--gh-pad) * -1) 2px;
+  padding: 9px var(--gh-pad) 10px;
   overflow-x: auto;
   overscroll-behavior-x: contain;
   scrollbar-width: none;
   -ms-overflow-style: none;
+  background: linear-gradient(180deg, rgba(8, 13, 18, 0.94) 0%, rgba(8, 13, 18, 0.9) 62%, rgba(8, 13, 18, 0) 100%);
+  backdrop-filter: blur(16px) saturate(150%);
+  -webkit-backdrop-filter: blur(16px) saturate(150%);
 }
 .gh-chips::-webkit-scrollbar { width: 0; height: 0; }
 .gh-tab {
@@ -889,3 +920,112 @@
   .gh-card:hover, .gh-card:active { transform: none; }
   .gh-card:hover .gh-card-art { transform: none; }
 }
+
+/* ===========================================================================
+   REORGANISATION: first-timer greeting pill, the «now» live area, and the
+   retrospective block. The goal is that the first screenful is the mark, the
+   title, the party hero and whatever is genuinely live — never a scoreboard
+   of zeros — and that nothing is clipped or permanently hidden.
+   =========================================================================== */
+
+/* ---- the compact greeting, for a guest who has not played yet ---- */
+.gh-player-pill {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 8px 14px 8px 10px;
+  border-radius: 999px;
+  background: var(--gh-surface);
+  box-shadow: inset 0 0 0 1px var(--gh-line), inset 0 1px 0 rgba(255, 255, 255, 0.07);
+}
+.gh-avatar-sm { width: 30px; height: 30px; border-radius: 10px; }
+.gh-pill-hi {
+  min-width: 0;
+  font-size: 14px;
+  font-weight: 800;
+  letter-spacing: -0.2px;
+  overflow-wrap: anywhere;
+}
+
+/* ---- «ما يحدث الآن» ---- */
+/* The whole area — heading included — is gone on a quiet day. Every social
+   card renders `.sp-card` only when it has something true to show, so when no
+   card is present there is nothing to head. Fail-safe: a browser without :has()
+   simply shows the heading and every full card, which is still correct. */
+.gh-now { display: flex; flex-direction: column; gap: 12px; }
+.gh-now:not(:has(.sp-card)) { display: none; }
+.gh-now-h {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: 2px 0 0;
+  font-size: 13.5px;
+  font-weight: 800;
+  letter-spacing: -0.1px;
+  color: var(--gh-ink);
+}
+.gh-now-h svg { color: var(--gh-brand); filter: brightness(1.55); }
+
+.gh-now-item { position: relative; }
+/* An item whose card self-hid is an empty wrapper — remove it (and its cover)
+   so the area truly collapses to nothing rather than leaving hollow scaffolding. */
+.gh-now-item:not(:has(.sp-card)) { display: none; }
+/* The card carries its own bottom margin for the old stacked layout; the column
+   gap owns spacing here, so neutralise it. */
+.gh-now-item > .sp-card { margin-bottom: 0; }
+
+/* The expand affordance is hidden by default: the first (full) card never needs
+   it, and neither does an already-opened one, nor a :has-less browser. */
+.gh-now-cover { display: none; }
+
+/* Collapse every LIVE card AFTER the first one to a one-line teaser, unless the
+   guest has opened it. `A:has(.sp-card) ~ B:has(.sp-card)` selects every live
+   card that has an earlier live card — i.e. all but the first — so the top
+   live item stays full and the rest tuck away. Empty wrappers carry no
+   `.sp-card`, so they are transparent to this and never become the "first". */
+.gh-now-item:has(.sp-card) ~ .gh-now-item:has(.sp-card):not(.is-open) {
+  max-height: 74px;
+  overflow: hidden;
+}
+.gh-now-item:has(.sp-card) ~ .gh-now-item:has(.sp-card):not(.is-open) .gh-now-cover {
+  display: flex;
+  position: absolute;
+  inset: 0;
+  align-items: flex-end;
+  justify-content: center;
+  padding: 0 0 9px;
+  border: 0;
+  border-radius: 18px;
+  background: linear-gradient(180deg, rgba(8, 13, 18, 0) 34%, rgba(8, 13, 18, 0.55) 66%, rgba(8, 13, 18, 0.9) 100%);
+  cursor: pointer;
+  -webkit-tap-highlight-color: transparent;
+}
+.gh-now-more {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 5px 13px;
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--gh-brand) 34%, rgba(10, 16, 22, 0.92));
+  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.16);
+  color: #f6f9fb;
+  font-size: 11.5px;
+  font-weight: 800;
+}
+.gh-now-more svg { flex: 0 0 auto; }
+
+/* ---- retrospective block (table champions + people you have played with) ---- */
+.gh-past { display: flex; flex-direction: column; gap: 12px; }
+.gh-past:not(:has(.sp-card)) { display: none; }
+.gh-past-h {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: 4px 0 0;
+  font-size: 13px;
+  font-weight: 800;
+  letter-spacing: -0.1px;
+  color: var(--gh-dim);
+}
+.gh-past-h svg { color: var(--gh-brand); filter: brightness(1.4); }
+.gh-past > .sp-card { margin-bottom: 0; }

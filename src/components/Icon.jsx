@@ -13,8 +13,14 @@ import {
   Zap, ArrowUp, NotepadText, Briefcase, Theater, PenLine, Package, ChartColumnBig,
   Palette, Layers, Type as TypeIcon, Shapes, Pause, RotateCw, Share, SquarePlus,
 } from 'lucide-react'
+import GamesIcon from './GamesIcon.jsx'
 
 const MAP = {
+  // The games mark is a bespoke composition, not a lucide glyph, but it takes
+  // the same size/strokeWidth props so it drops into the Icon system cleanly.
+  // Registering it here is what lets the admin nav and anywhere else show the
+  // SAME mark the guest sees on the menu chip and in the games hub.
+  games: GamesIcon,
   home: Home,
   menu: UtensilsCrossed,
   cashier: ReceiptText,
