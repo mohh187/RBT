@@ -25,7 +25,9 @@ async function sendEmail({ to, subject, html, replyTo, fromName }) {
   try {
     const r = await fetch('https://api.resend.com/emails', {
       method: 'POST',
-      headers: { Authorization: 'Bearer ' + key, 'Content-Type': 'application/json' },
+      // charset stated explicitly: Arabic subjects and bodies must not be left
+      // to the receiver's guess.
+      headers: { Authorization: 'Bearer ' + key, 'Content-Type': 'application/json; charset=utf-8' },
       body: JSON.stringify({ from: brandedFrom(fromName), to: Array.isArray(to) ? to : [to], subject, html, reply_to: replyTo || undefined }),
     })
     return { ok: r.ok, status: r.status }
@@ -41,15 +43,48 @@ function esc(s) {
   return String(s == null ? '' : s).replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]))
 }
 
-function emailShell(title, bodyHtml) {
-  return `<!doctype html><html dir="rtl" lang="ar"><body style="margin:0;background:#f4f4f6;font-family:Tahoma,Arial,sans-serif">
-  <div style="max-width:560px;margin:0 auto;padding:24px">
-    <div style="background:#fff;border-radius:14px;padding:24px;border:1px solid #e7e7ea">
-      <h1 style="font-size:20px;margin:0 0 12px">${title}</h1>
-      ${bodyHtml}
-    </div>
-    <p style="text-align:center;color:#9a9aa5;font-size:12px;margin-top:16px">RBT360</p>
-  </div></body></html>`
+// Arabic-first transactional shell. Signature is unchanged so every existing
+// caller keeps working.
+//
+// Written against real email-client constraints, not browser ones:
+//   - <meta charset="utf-8"> in a real <head>. Without it some clients guess the
+//     encoding and Arabic arrives as "??????".
+//   - TABLE layout with inline styles. Outlook (Word engine) ignores flexbox,
+//     grid and most <style> blocks; tables are the only reliably centred layout.
+//   - System font stack that actually contains Arabic faces — web fonts are
+//     commonly blocked, and a missing Arabic face is what produces tofu boxes.
+//   - A hidden preheader, so the inbox preview line is a real sentence instead
+//     of scraping the first words of the body.
+//   - Readable contrast (the old footer gray was ~2.8:1 and vanished).
+function emailShell(title, bodyHtml, preheader) {
+  const pre = String(preheader || '').replace(/[<>]/g, '')
+  return `<!doctype html>
+<html dir="rtl" lang="ar" xmlns="http://www.w3.org/1999/xhtml">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<meta name="color-scheme" content="light dark">
+<title>${title}</title>
+</head>
+<body style="margin:0;padding:0;background:#f2f3f5;">
+<div style="display:none;max-height:0;overflow:hidden;opacity:0;">${pre}</div>
+<table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="background:#f2f3f5;padding:24px 12px;">
+  <tr><td align="center">
+    <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="max-width:560px;width:100%;background:#ffffff;border:1px solid #e3e4e8;border-radius:16px;overflow:hidden;font-family:'Segoe UI',Tahoma,Arial,sans-serif;">
+      <tr><td style="height:4px;background:#7c2d2d;font-size:0;line-height:0;">&nbsp;</td></tr>
+      <tr><td style="padding:28px 28px 8px;" align="right">
+        <h1 style="margin:0;font-size:20px;line-height:1.45;font-weight:700;color:#14151a;">${title}</h1>
+      </td></tr>
+      <tr><td style="padding:4px 28px 28px;color:#3f434d;font-size:15px;line-height:1.8;" align="right">
+        ${bodyHtml}
+      </td></tr>
+      <tr><td style="padding:16px 28px;border-top:1px solid #eceef1;background:#fafbfc;" align="center">
+        <div style="font-size:12px;color:#5c6270;letter-spacing:.3px;">RBT360</div>
+      </td></tr>
+    </table>
+  </td></tr>
+</table>
+</body></html>`
 }
 
 // ---------------------------- WhatsApp (Meta Cloud API) ----------------------------
@@ -149,9 +184,19 @@ const onOrderCustomerNotify = onDocumentUpdated('tenants/{tid}/orders/{oid}', as
   const venueName = tenant.name || 'متجرك'
   const code = after.code ? '#' + after.code : ''
   const statusText = STATUS_AR[after.status] || after.status
-  const lang = tenant.locale || 'ar'
   // Venue-branded sending: own WhatsApp number (if connected) + custom text template.
   const creds = await waCredsFor(db, event.params.tid)
+  // TEMPLATE LANGUAGE is a property of the TEMPLATE, not of the venue's UI.
+  // Meta rejects a send whose language code is not one the template was approved
+  // in, so a venue running an Arabic UI whose template was approved in en_US (or
+  // the reverse) would have every message silently fail. The language configured
+  // ALONGSIDE the template name therefore wins; the UI locale is a last resort.
+  // Declared AFTER `creds` on purpose — reading it above would be a temporal
+  // dead zone reference and would throw on every order update.
+  const lang = (creds && creds.templates && creds.templates.templateLang)
+    || process.env.WA_LANG
+    || tenant.locale
+    || 'ar'
   const fillTpl = (s) => String(s || '')
     .replace(/\{venue\}|\{المنشأة\}/g, venueName)
     .replace(/\{code\}|\{الطلب\}/g, code || '-')
