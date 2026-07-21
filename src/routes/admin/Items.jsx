@@ -28,7 +28,7 @@ import { sectionTemplate, templateOptions } from '../../lib/systemTemplates.js'
 // Surface + garnish: the catalogue is data-only (no React, no CSS), the drawing
 // component is the very one the live menu uses — so the editor preview is the
 // real thing rather than an approximation of it.
-import { SURFACES, PROPS, PROP_CATEGORIES } from '../../lib/dishProps.js'
+import { SURFACES, PROPS, PROP_CATEGORIES, resolveDishProps } from '../../lib/dishProps.js'
 import DishProps from '../../components/menuThemes/DishProps.jsx'
 // Dish composition: the ONE contract for the backdrop, the photo on it, the
 // effect over it and how it arrives. The composer below builds every control
@@ -51,8 +51,12 @@ const blank = () => ({
   recipe: [], variantRecipes: {},
   namePriceLayout: '', nameColor: '', priceColor: '', namePriceStyle: '',
   // dish styling layer (lib/dishProps.js): '' surface = the layer is off, which
-  // is the default for every new item — it renders only when asked for
-  surface: '', props: null,
+  // is the default for every new item — it renders only when asked for.
+  // `contactShadow` and `reflect` are the two effects the surface CAN add under
+  // the dish. Both start off: an invented shadow under a photograph that already
+  // carries its own lighting is the «ظل غبي» the owner reported, and it is his
+  // call to make per dish, not the theme's. See styles/dishprops.css.
+  surface: '', props: null, contactShadow: false, reflect: false,
 })
 
 // The garnish half of the item document, read back into the flat shape the
@@ -1011,6 +1015,14 @@ function ItemEditor({ tenantId, cats, currency, value, onClose, onSaved, onDelet
     surface: form.surface || '',
     props: dpPropsValue,
   }
+  // The material this dish will ACTUALLY stand on, asked of the very resolver
+  // the menu uses — so «تلقائي حسب الصنف» resolves to a real entry here too,
+  // and «بدون سطح» resolves to nothing. Computed on every render rather than
+  // memoised: the inputs are the dish name, its category and its ingredient
+  // lines, and a dependency list that missed one of them would leave the two
+  // switches below describing the wrong material.
+  const dpSurface = resolveDishProps(dpPreviewItem, { variant: 'stage', catName: dpCatName }).surface
+  const dpReflective = !!(dpSurface && dpSurface.reflective)
 
   const save = async () => {
     if (!form.nameAr.trim() && !form.nameEn.trim()) {
@@ -1105,6 +1117,12 @@ function ItemEditor({ tenantId, cats, currency, value, onClose, onSaved, onDelet
         // Never `undefined` on either key — Firestore rejects that outright.
         surface: form.surface || '',
         props: dpPropsValue,
+        // The two surface effects, in the shape styles/dishprops.css opts in on.
+        // They are written unconditionally as booleans (never undefined) and
+        // forced off when the surface layer itself is off, so a dish can never
+        // carry a shadow flag with no surface under it to cast one.
+        contactShadow: dpOn && !!dpSurface && !!form.contactShadow,
+        reflect: dpOn && dpReflective && !!form.reflect,
       }
       await saveItem(tenantId, form.id, payload)
       onSaved()
@@ -1432,6 +1450,37 @@ function ItemEditor({ tenantId, cats, currency, value, onClose, onSaved, onDelet
                 </div>
               </div>
 
+              {/* The two effects the surface can add UNDER the dish. Both are
+                  off by default and per item: a contact shadow invented under a
+                  photograph that already carries its own lighting is the «ظل
+                  غبي» the owner reported, and a reflection belongs only to a
+                  polished material. Fields: item.contactShadow / item.reflect
+                  (see styles/dishprops.css). */}
+              <div className="stack" style={{ gap: 8, borderTop: '1px solid var(--border)', paddingTop: 8 }}>
+                <label className="row-between" style={{ cursor: dpSurface ? 'pointer' : 'default', gap: 10, alignItems: 'flex-start', opacity: dpSurface ? 1 : 0.55 }}>
+                  <span className="stack" style={{ gap: 2 }}>
+                    <span className="xs bold">{lang === 'ar' ? 'ظل ملامسة تحت الطبق' : 'Contact shadow under the dish'}</span>
+                    <span className="xs faint">
+                      {dpSurface
+                        ? (lang === 'ar' ? 'ظل بيضاوي خفيف عند التقاء الطبق بالسطح، يمنعه من الطفو. مطفأ إلا إذا طلبته — صورة فيها ظلّها الحقيقي لا تحتاجه.' : 'A soft ellipse where the dish meets the material, so the cutout stops floating. Off unless you ask for it: a photo that already carries its own shadow does not need a second one.')
+                        : (lang === 'ar' ? 'لا سطح تحت الطبق، فلا شيء يقع عليه الظل. اختر سطحاً أعلاه أولاً.' : 'There is no surface under the dish, so there is nothing for a shadow to fall on. Pick a material above first.')}
+                    </span>
+                  </span>
+                  <input type="checkbox" disabled={!dpSurface} checked={!!dpSurface && !!form.contactShadow} onChange={(e) => set('contactShadow', e.target.checked)} style={{ width: 22, height: 22, flex: 'none' }} />
+                </label>
+                <label className="row-between" style={{ cursor: dpReflective ? 'pointer' : 'default', gap: 10, alignItems: 'flex-start', opacity: dpReflective ? 1 : 0.55 }}>
+                  <span className="stack" style={{ gap: 2 }}>
+                    <span className="xs bold">{lang === 'ar' ? 'انعكاس على السطح' : 'Reflection on the surface'}</span>
+                    <span className="xs faint">
+                      {dpReflective
+                        ? (lang === 'ar' ? 'لمعة ناعمة تحت الطبق، كما يعكس السطح المصقول ما يقف عليه. مطفأة إلا إذا طلبتها.' : 'A soft sheen under the dish, the way a polished material reflects what stands on it. Off unless you ask for it.')
+                        : (lang === 'ar' ? `السطح المختار «${dpSurface ? (lang === 'ar' ? dpSurface.labelAr : dpSurface.labelEn) : '—'}» غير عاكس، فلا انعكاس له. اختر الرخام الداكن أو الستيل المصقول أو طاولة الجوز.` : 'The chosen material does not reflect, so there is nothing to switch on. Pick dark marble, brushed steel or the walnut table.')}
+                    </span>
+                  </span>
+                  <input type="checkbox" disabled={!dpReflective} checked={dpReflective && !!form.reflect} onChange={(e) => set('reflect', e.target.checked)} style={{ width: 22, height: 22, flex: 'none' }} />
+                </label>
+              </div>
+
               <label className="row-between" style={{ cursor: 'pointer' }}>
                 <span className="xs bold">{lang === 'ar' ? 'زينة متناثرة حول الطبق' : 'Garnish scattered around the dish'}</span>
                 <input type="checkbox" checked={dpG.on} onChange={(e) => dpSetGarnish(e.target.checked)} style={{ width: 22, height: 22, flex: 'none' }} />
@@ -1476,7 +1525,15 @@ function ItemEditor({ tenantId, cats, currency, value, onClose, onSaved, onDelet
 
               <div className="field" style={{ marginBottom: 0 }}>
                 <label>{lang === 'ar' ? 'معاينة حية — كما سيراها العميل' : 'Live preview — what the guest sees'}</label>
-                <div className="dpx-stage">
+                {/* The preview opts in exactly the way styles/dishprops.css
+                    says a host does — the same two attributes the menu sets on
+                    the photo box — so the switches above cannot show one thing
+                    here and another on the customer's screen. */}
+                <div
+                  className="dpx-stage"
+                  data-dp-contact={dpSurface && form.contactShadow ? '1' : undefined}
+                  data-dp-reflect={dpReflective && form.reflect ? '1' : undefined}
+                >
                   <DishProps item={dpPreviewItem} active variant="stage" catName={dpCatName} />
                   {form.imageUrl
                     ? <img src={form.imageUrl} alt="" />
@@ -2449,10 +2506,16 @@ function LayersEditor({ lang, tenantId, tenant, form, canLibrary, layers, setLay
                 aria-label={`${l.name || (ar ? 'عنصر' : 'Element')} — ${depthLabel(l.depth)}`}
                 style={{
                   insetInlineStart: `${l.x}%`,
+                  // Mirrors layerStyle() exactly: horizontal centring is a
+                  // LOGICAL margin, not a physical transform. transform's X axis
+                  // ignores direction while inset-inline-start flips under RTL,
+                  // so pairing them put the handle a full width off the art on
+                  // the Arabic menu. If layerStyle changes, change this with it.
+                  marginInlineStart: `calc(${l.w}cqmin / -2)`,
                   top: `${l.y}%`,
                   width: `${l.w}cqmin`,
                   aspectRatio: String(ratios[l.url] || 1),
-                  transform: `translate(-50%, -50%) rotate(${l.rot}deg)`,
+                  transform: `translateY(-50%) rotate(${l.rot}deg)`,
                 }}
                 onPointerDown={beginDrag('move', l)}
                 onPointerMove={onDragMove}

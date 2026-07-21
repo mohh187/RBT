@@ -65,6 +65,25 @@
   height: 1px;
   background: linear-gradient(90deg, transparent, rgba(255, 255, 255, .10) 20%, rgba(255, 255, 255, .17) 50%, rgba(255, 255, 255, .10) 80%, transparent);
 }
+/* ---------------------------------------------------- OFF UNTIL ASKED FOR --
+   «ظل غبي يظهر تحت المنتج». The contact shadow and the reflection used to be
+   drawn under EVERY dish that had a surface, with no control anywhere that could
+   remove them. They are opt-in per dish now and hidden until the item asks:
+
+     item.contactShadow: true  -> the dish casts a contact shadow on its surface
+     item.reflect: true        -> a polished surface shows a reflection under it
+
+   The flag is read by the theme and lands as data-dp-contact / data-dp-reflect
+   on the photo box (.edt-photo in the list, .edt-stg-hero in the stage), which
+   is the nearest element BOTH layers of DishProps sit inside. Any other host —
+   the item editor's own preview stage — opts in the same way, on any ancestor.
+   Turning the SURFACE off removes both outright whatever these say: DishProps
+   never mounts either element without a surface to draw them on. */
+.dp-contact,
+.dp-reflect { display: none; }
+[data-dp-contact='1'] .dp-contact { display: block; }
+[data-dp-reflect='1'] .dp-reflect { display: block; }
+
 /* soft specular smear under the dish — the reflection a polished material owes
    the object standing on it. A mirrored copy of the photo was rejected: the
    dish already sits on the bottom edge of its box, so a real mirror image

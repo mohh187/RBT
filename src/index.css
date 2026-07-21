@@ -6909,10 +6909,6 @@ body:has(.sd2-root) .toast-wrap { z-index: 840; }
   /* the mortar bed the brick is laid into, and the shadow it throws */
   --edt-brick-bed: rgba(46, 18, 8, 0.34);
   --edt-brick-cast: rgba(46, 18, 8, 0.30);
-  /* room ornaments (lantern / clay pot / woven basket) */
-  --edt-orn-ink: #f7f2e9;
-  --edt-orn-warm: #f5b942;
-  --edt-orn-op: 0.18;
 }
 .edt-wrap {
   background-color: var(--edt-bg);
@@ -6922,6 +6918,13 @@ body:has(.sd2-root) .toast-wrap { z-index: 840; }
   color: var(--edt-ink);
   min-height: 100dvh;
   position: relative;
+  /* An isolated group, always — not only when a venue wall is configured. Two
+     things inside the menu are painted at z-index -1 (the wall itself, and any
+     decoration the venue hung BEHIND the menu), and a negative z-index only
+     stays above this element's own background while this element is a stacking
+     context. Without it the wall would leak out past the menu with its blend
+     mode, and a decoration behind the dishes would vanish under the canvas. */
+  isolation: isolate;
 }
 
 /* ---- THE VENUE'S OWN WALL (lib/dishComposition.js -> styles/menuwall.css) ----
@@ -6933,21 +6936,12 @@ body:has(.sd2-root) .toast-wrap { z-index: 840; }
    settings. Nothing here fires until that field exists, so a menu that is live
    today keeps the wall it has.
 
-   isolation: the wall's blend mode must act on the canvas colour and on nothing
-   else. Without an isolated group it would reach out past the menu, and the same
-   wall would then look different depending on what the app painted underneath. */
+   (The isolation the wall's blend mode needs is on .edt-wrap itself above, for
+   every venue rather than only for the ones that configured a wall.) */
 .edt-wrap[data-wall] {
   background-image: none;
-  isolation: isolate;
 }
 .edt-stg[data-wall] { background-image: none; }
-/* The venue's wall is allowed to show more of itself than the fallback tile did
-   — that is the whole point of having bought one — so the plaster closes later. */
-.edt-wrap[data-wall] .edt-sec::before {
-  background:
-    radial-gradient(74% 40% at 20% 3%, var(--edt-lamp), transparent 76%),
-    linear-gradient(180deg, transparent 30%, var(--edt-bg) 68%);
-}
 
 /* THE PLASTER THE WORDS SIT ON, and the reason the paragraph above is safe.
    A venue wall is not the theme's own quiet tile: it can be a whitewash, a
@@ -6964,9 +6958,17 @@ body:has(.sd2-root) .toast-wrap { z-index: 840; }
    soft-edged RECTANGLE — a radial gradient reaches its corners at over 1.0 of
    its own radius and leaves exactly the corners of a paragraph uncovered. The
    result is 100 per cent canvas under every glyph in every layout: body copy
-   stays at 7.3:1 dark and 7.1:1 light no matter what the venue paints behind it.
-   Where the canvas is already solid — the whole phone layout below the fade —
-   the panel is the same colour as what it sits on and cannot be seen at all. */
+   stays at 7.2:1 dark and 7.1:1 light no matter what the venue paints behind it.
+
+   THIS RULE WAS DEAD ON THE LIVE SITE. The comment above used to be closed here
+   and then carried on for five more lines before closing a second time, so the
+   CSS parser read that tail as a selector, failed, and threw away the whole rule
+   that follows it — the plaster panel has not been painted at all. That is why
+   it mattered so much: with the section fade now a dial the venue owns, and its
+   default zero, this panel is the ONLY thing holding text contrast up over a
+   wall the venue chose. Measured over a white wall without it: 2.7:1, which
+   fails; with it: 7.2:1.
+
    The feather is pushed DOWNWARD rather than spread evenly, because the thing
    directly above a paragraph is the dish: a symmetric halo would rise far enough
    to wash the bottom of the plate in canvas colour. Offset this way it dies out
@@ -7043,6 +7045,57 @@ body:has(.sd2-root) .toast-wrap { z-index: 840; }
    scroll under the hero, so there is no inner overflow container and no snap. */
 .edt-stage { position: relative; }
 
+/* ---- HOW ONE DISH IS JOINED TO THE NEXT (resolveSections -> sectionVars) ----
+   The venue's decision, four modes, and every one of them honest:
+
+     continuous  the room runs unbroken behind every dish. NOTHING is painted
+                 between two dishes — this is the mode that removes «الفاصل
+                 الاسود بين منتج ومنتج», and it is the default.
+     gap         a real measured space of `gap` px, with the room showing through
+                 it. A space, not a painted band.
+     divider     one hairline in `dividerColor` at the foot of every dish but the
+                 last, inset to the section's own padding.
+     card        each dish on its own panel: inset from the wall on both sides,
+                 `radius` corners, the canvas as its surface, a border and a lift
+                 shadow, `gap` px apart. Visibly a card at ANY radius and any gap,
+                 so picking the mode is never a no-op.
+
+   --edt-h    is the height of one dish screen (svh)
+   --edt-fade is how much the room dims behind the words, 0..1, DEFAULT ZERO.
+              It drives the OPACITY of the fade layer rather than being baked
+              into a gradient's colour stops, so at zero the layer is exactly
+              nothing and the wall is untouched from the top of the dish to the
+              bottom of the paragraph.
+   The lantern pool moves onto the section's own background so that dimming the
+   room does not also dim the light in it. Painting order is unchanged: element
+   background (the lamp), then the negative-z ::before (the fade), then content —
+   so a blend mode inside a dish still has the same thing underneath it. */
+.edt-stage[data-sec='gap'] .edt-sec + .edt-sec,
+.edt-stage[data-sec='divider'] .edt-sec + .edt-sec,
+.edt-stage[data-sec='card'] .edt-sec + .edt-sec {
+  margin-block-start: var(--edt-gap, 0px);
+}
+.edt-stage[data-sec='divider'] .edt-sec:not(:last-child)::after {
+  content: '';
+  position: absolute;
+  inset-inline: var(--edt-pad);
+  bottom: 0;
+  height: 1px;
+  z-index: 1;
+  pointer-events: none;
+  background: var(--edt-divider, var(--edt-line));
+}
+.edt-stage[data-sec='card'] .edt-sec {
+  /* the inset is what makes a card a card at radius 0 and gap 0 — the wall runs
+     down both sides of it — and it still respects the desktop measure above */
+  max-width: min(1240px, calc(100% - 2 * clamp(10px, 3vw, 30px)));
+  margin-inline: auto;
+  border-radius: var(--edt-radius, 0px);
+  background-color: var(--edt-bg);
+  border: 1px solid var(--edt-line);
+  box-shadow: 0 18px 40px -18px var(--edt-brick-cast);
+}
+
 /* PHOTO FIRST, then the price and everything that explains it — the venue's
    own reading order («الصور يجب ان تكون فوق السعر»). Row 1 hugs the picture,
    row 2 takes the rest, so the dish leads and the words follow it down. */
@@ -7051,63 +7104,35 @@ body:has(.sd2-root) .toast-wrap { z-index: 840; }
   position: relative;
   z-index: 0;
   isolation: isolate; /* nothing inside a dish can ever paint over the chip bar */
-  min-height: 92svh;
+  min-height: var(--edt-h, 92svh);
   display: grid;
   grid-template-rows: auto 1fr;
   gap: 14px;
   overflow: hidden;
   padding: 14px var(--edt-pad) 30px;
   scroll-margin-top: calc(var(--edt-top, 0px) + 62px);
+  /* the lantern pool that lights this dish. It is the ROOM's light, not the
+     dimming, so it lives here and the fade layer below cannot touch it. */
+  background-image: radial-gradient(74% 40% at 20% 3%, var(--edt-lamp), transparent 76%);
 }
-/* The room, per dish: a lantern pool over the brick at the top, then warm
-   plaster taking over exactly where the words start. The brick therefore
-   frames the FOOD and never sits under a paragraph. */
+/* The dimming the venue asked for, and nothing else. At --edt-fade: 0 (the
+   default) this layer is fully transparent, so the room runs unbroken from one
+   dish to the next; at 1 it closes to solid canvas exactly where the words
+   start, which is the band this theme used to force on every venue. */
 .edt-sec::before {
   content: '';
   position: absolute;
   inset: 0;
   z-index: -1;
   pointer-events: none;
-  background:
-    radial-gradient(74% 40% at 20% 3%, var(--edt-lamp), transparent 76%),
-    linear-gradient(180deg, transparent 26%, var(--edt-bg) 60%);
+  opacity: var(--edt-fade, 0);
+  background: linear-gradient(180deg, transparent 26%, var(--edt-bg) 60%);
 }
 .edt-sec.is-out { opacity: .82; }
 /* A panoramic cutout is only a shallow band, so the section is shortened and
    the text optically centred — otherwise the dish sits above a large gap. */
-.edt-sec[data-fit='wide'] { min-height: 78svh; }
+.edt-sec[data-fit='wide'] { min-height: calc(var(--edt-h, 92svh) * 0.85); }
 .edt-sec[data-fit='wide'] .edt-main { align-self: center; }
-
-/* Room ornaments — a hanging kerosene lantern, a painted clay pot, a woven
-   straw basket, rotating one per dish. They live in the photo band at the
-   inline-start edge, behind everything, at an opacity where they read as wall
-   objects and cannot move any text contrast measurably. */
-.edt-orn {
-  position: absolute;
-  top: 0;
-  inset-inline-start: 1%;
-  z-index: 0;
-  /* the vh half of each min() is what keeps an ornament inside the photo band
-     on a short landscape phone — it must never reach down under a paragraph,
-     because a stroke at this opacity would cost that text about a stop */
-  width: clamp(44px, min(11vw, 12vh), 78px);
-  opacity: var(--edt-orn-op, .16);
-  pointer-events: none;
-  user-select: none;
-}
-.edt-orn[data-orn='pot'] { top: 4%; width: clamp(50px, min(12vw, 15vh), 88px); }
-.edt-orn[data-orn='basket'] { top: 5%; width: clamp(52px, min(13vw, 20vh), 94px); }
-.edt-orn svg { display: block; width: 100%; height: auto; overflow: visible; }
-.edt-orn-ink {
-  fill: none;
-  stroke: var(--edt-orn-ink);
-  stroke-width: 2.4;
-  stroke-linecap: round;
-  stroke-linejoin: round;
-}
-.edt-orn-warm { fill: var(--edt-orn-warm); stroke: none; opacity: .6; }
-.edt-orn-glow { fill: var(--edt-orn-warm); opacity: .38; }
-.edt-orn[data-orn='basket'] .edt-orn-warm { fill: none; stroke: var(--edt-orn-warm); stroke-width: 3.4; opacity: .6; }
 
 /* huge low-opacity vertical category label hugging the side edge */
 .edt-side {
@@ -7437,8 +7462,10 @@ video.edt-backdrop { width: 100%; height: 100%; display: block; }
    phone layout left the text stranded against the far edge of a 1920 screen. */
 @media (min-width: 900px) {
   .edt-cats { padding-inline: clamp(28px, 5vw, 72px); }
+  /* the venue's own height still governs here; the cap is only there to stop a
+     dish screen growing taller than a desktop reader can take in at once */
   .edt-sec,
-  .edt-sec[data-fit='wide'] { min-height: min(88svh, 900px); }
+  .edt-sec[data-fit='wide'] { min-height: min(var(--edt-h, 92svh), 900px); }
   .edt-sec {
     --edt-pad: clamp(28px, 5vw, 72px);
     max-width: 1240px;
@@ -7466,11 +7493,14 @@ video.edt-backdrop { width: 100%; height: 100%; display: block; }
   /* modal level: at z-index 60 the venue's bottom nav (100) and bell FAB (120)
      painted straight over this stage and its add-to-cart bar */
   z-index: var(--z-sheet, 310);
-  /* the same room: brick behind the dish at the top, plaster under the record */
+  /* The same room. The plaster that used to be baked in here as a second
+     background layer is now the .edt-wall-fade ELEMENT (styles/menuwall.css),
+     because it is the venue's «تعتيم الخلفية خلف النص» dial and a background
+     layer cannot carry an opacity of its own. Default zero, like the list. */
   background-color: var(--edt-bg, #100c0a);
-  background-image: linear-gradient(180deg, transparent 0%, var(--edt-bg, #100c0a) 36%), var(--edt-wall);
-  background-repeat: no-repeat, repeat;
-  background-size: 100% 100%, 128px 64px;
+  background-image: var(--edt-wall);
+  background-repeat: repeat;
+  background-size: 128px 64px;
   color: var(--edt-ink, #f7f2e9);
   display: flex; flex-direction: column;
   animation: edtStgIn .25s ease-out;
@@ -7727,9 +7757,6 @@ button.edt-pair:active { transform: scale(.98); }
   --edt-alert: #b3341a;
   --edt-wall: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='128' height='64'%3E%3Cg opacity='.8'%3E%3Crect width='128' height='64' fill='%23f2eae0'/%3E%3Cg fill='%23e2d0bc'%3E%3Crect x='1.5' y='1.5' width='61' height='29' rx='1.5'/%3E%3Crect x='65.5' y='1.5' width='61' height='29' rx='1.5'/%3E%3Crect x='-30.5' y='33.5' width='61' height='29' rx='1.5'/%3E%3Crect x='33.5' y='33.5' width='61' height='29' rx='1.5'/%3E%3Crect x='97.5' y='33.5' width='61' height='29' rx='1.5'/%3E%3C/g%3E%3C/g%3E%3C/svg%3E");
   --edt-lamp: rgba(181, 115, 42, 0.10);
-  --edt-orn-ink: #6b4a2e;
-  --edt-orn-warm: #b5732a;
-  --edt-orn-op: 0.24;
   --edt-note-edge: rgba(125, 77, 16, 0.32);
   --edt-note-bg: rgba(125, 77, 16, 0.07);
   /* a brick throws a softer shadow on a lit plaster wall than in a dark room */
@@ -7751,6 +7778,53 @@ button.edt-pair:active { transform: scale(.98); }
 [data-theme='light'] .edt-progress { background: rgba(247, 240, 230, .90); }
 /* the brick itself is unchanged — it is the venue's identity, and its bed
    shadow already flips through --edt-brick-bed / --edt-brick-cast above */
+
+/* ---- THE BRICK HEADER («اتحكم في الهيدر والازرار لتكون طوب») ----
+   The app bar is a sibling of the whole menu, not a child of it, so this is the
+   one editorial rule that reaches outside .edt-wrap. It fires only while the
+   menu has put data-edt-head='brick' on the portal root (EditorialLayout), and
+   every value it paints comes from the venue's OWN wall: the same bond, the same
+   clay, the same mortar, the same joint, only with the unit scaled down to a
+   56px bar and the room's blur/blend/opacity dropped.
+
+   CONTRAST IS PROVEN, NOT HOPED FOR. A venue may paint its room any colour,
+   including a whitewash, so a fixed dark scrim is the top background layer:
+   every header pixel is then at most 0.38 of the venue's colour plus 0.62 of
+   rgba(46,18,8), which puts white ink at 4.98:1 against the lightest pixel the
+   header can produce at all (a pure-white wall) and at 9.76:1 over this venue's
+   own mortar and 12.69:1 over its brick face.
+   The two shorthand rules this overrides (.app-bar and .app-bar[data-header])
+   are earlier in this file and lose on both specificity and order. */
+[data-edt-head='brick'] .app-bar {
+  --chrome-text: #ffffff;
+  --chrome-icon: #ffffff;
+  --chrome-border: rgba(46, 18, 8, .62);
+  background-color: var(--edt-hd-color, #2e1208);
+  background-image: var(--edt-hd-img, none);
+  background-size: var(--edt-hd-size, auto);
+  background-repeat: var(--edt-hd-rep, repeat);
+  background-position: var(--edt-hd-pos, center);
+  color: #ffffff;
+  border-bottom: 1px solid rgba(46, 18, 8, .62);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 231, 205, .22),
+    inset 0 -2px 0 rgba(46, 18, 8, .45),
+    0 6px 16px -6px rgba(46, 18, 8, .5);
+  backdrop-filter: none;
+}
+[data-edt-head='brick'] .app-bar .db-brand strong { text-shadow: 0 1px 2px rgba(46, 18, 8, .55); }
+/* The icon buttons take a mortar-dark fill of their own, which is what lifts the
+   white glyph from 4.98:1 (bare header over a white wall) to 9.08:1 there, and
+   to 13-18:1 over any real clay. The light outline is shape, not meaning. */
+[data-edt-head='brick'] .app-bar .icon-btn {
+  color: #ffffff;
+  border: 1px solid rgba(255, 231, 205, .42);
+  background: rgba(46, 18, 8, .45);
+}
+[data-edt-head='brick'] .app-bar .db-brand .dot {
+  background: rgba(46, 18, 8, .45) !important;
+  color: #ffffff;
+}
 
 @media (prefers-reduced-motion: reduce) {
   .edt-ing li, .edt-stg-ing li { transition: none; animation: none; opacity: 1; transform: none; }

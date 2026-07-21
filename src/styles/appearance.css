@@ -9,10 +9,16 @@
                  plus the entrance-animation keyframes the preview replays,
      .dlx-*      the LAYER editor: a real placement canvas the venue drags its
                  own transparent cut-outs around on, plus the element library,
-                 the layer list, and the idle-motion keyframes.
+                 the layer list, and the idle-motion keyframes,
+     .msx-*      the SEAM preview: two stacked dishes with the join between them
+                 parked on the frame's centre line, so the venue judges the one
+                 thing the section controls actually change,
+     .mdx-*      the ROOM DECORATION manager: a schematic of the menu with one
+                 hanging box per DECOR_ANCHORS entry, the venue's own objects
+                 drawn inside them by decorStyle(), and the drag grips.
 
    Imported from routes/admin/Settings.jsx and routes/admin/Items.jsx. Nothing
-   here leaks: every rule is under one of the four prefixes above.
+   here leaks: every rule is under one of the six prefixes above.
 
    HARD RULES observed: no emoji, Latin digits only, and no visible scrollbars
    (the one scrollable strip below hides its bar in every engine). */
@@ -859,3 +865,489 @@
 .dlx-rowbtns { display: flex; align-items: center; gap: 1px; flex: none; }
 .dlx-rowbtns .icon-btn { width: 28px; height: 28px; }
 .dlx-rowbtns .icon-btn:disabled { opacity: .3; cursor: default; }
+
+/* ============================================ the seam between two dishes === */
+/* The editorial theme gives every dish its own screen, and the venue's whole
+   complaint was about the BAND that appeared between two of them. So this
+   preview shows TWO dishes and parks their join on the frame's own centre line:
+   a preview of one dish would show nothing about the thing being chosen.
+
+   Everything the frame draws comes from resolveSections() in
+   lib/dishComposition.js — the mode, the gap, the height, the dim and the
+   corner. The wall behind each dish is the venue's REAL wall, painted by the
+   theme's own generator, so the join is judged against the room it will
+   actually appear in. */
+
+.msx-frame {
+  position: relative;
+  width: 100%;
+  border-radius: var(--r-md, 12px);
+  /* the editorial theme's own canvas colour (--edt-bg in index.css): what shows
+     between two dishes IS this colour, so the preview must use exactly it or a
+     gap would look like a different gap */
+  background: #100c0a;
+  border: 1px solid var(--border);
+  overflow: hidden;
+  isolation: isolate;
+}
+/* the room, painted ONCE behind both dishes — the theme's wall is one surface
+   behind the whole menu, so a per-dish copy would invent a tiling seam in the
+   very mode whose promise is that there is no seam */
+.msx-wall {
+  position: absolute;
+  inset: 0;
+  z-index: 0;
+  background-color: #100c0a;
+  background-position: center;
+}
+.msx-col {
+  display: flex;
+  flex-direction: column;
+  position: relative;
+  z-index: 1;
+  will-change: transform;
+}
+.msx-dish {
+  position: relative;
+  flex: none;
+  overflow: hidden;
+  display: grid;
+  place-items: end center;
+}
+/* «بطاقات منفصلة»: inset from the wall on both sides, on the canvas, with a
+   border and a lift — which is what makes a card read as a card even at radius
+   zero and gap zero, so choosing the mode is never a no-op */
+.msx-dish[data-mode='card'] {
+  margin-inline: 10px;
+  background-color: #100c0a;
+  border: 1px solid rgba(247, 242, 233, .14);
+  box-shadow: 0 6px 14px -6px rgba(0, 0, 0, .8);
+}
+/* the dim the theme lays behind the dish text; `fade` is its opacity */
+.msx-fade {
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(180deg, transparent 34%, rgba(0, 0, 0, .9) 100%);
+}
+.msx-dishbody {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 1px;
+  padding-bottom: 8px;
+  max-width: 88%;
+}
+.msx-dishimg {
+  display: block;
+  width: 82px;
+  height: 54px;
+  object-fit: contain;
+}
+.msx-dishplate {
+  display: block;
+  width: 54px;
+  height: 54px;
+  border-radius: 50%;
+  background: radial-gradient(circle at 38% 32%, #efe6d6, #a8977f);
+  box-shadow: 0 6px 14px rgba(0, 0, 0, .5);
+}
+.msx-dishname {
+  font-size: 11px;
+  color: #fff;
+  text-shadow: 0 1px 3px rgba(0, 0, 0, .8);
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+  max-width: 100%;
+}
+.msx-dishprice {
+  font-size: 10px;
+  color: rgba(255, 255, 255, .78);
+  text-shadow: 0 1px 3px rgba(0, 0, 0, .8);
+}
+/* the hairline of «خط فاصل» mode: at the FOOT of the dish and inset to the
+   section's own padding, which is where the theme draws it */
+.msx-divider {
+  position: absolute;
+  inset-inline: 6px;
+  bottom: 0;
+  height: 1px;
+  z-index: 2;
+}
+
+/* ================================================== room decoration === */
+/* A SCHEMATIC of the menu, not a copy of it: a header strip and a page, with one
+   hanging box per DECOR_ANCHORS entry. x and y are stored as a percentage OF
+   THE BOX, so a piece keeps its place inside its box whatever that box measures
+   in the real menu — which is what lets a schematic be honest.
+
+   Each box is a size container, because decorStyle() sizes a piece in `cqmin`:
+   a lantern keeps its visual weight whether its box is wide or tall. Size
+   containment needs a DEFINITE height, which is why every box below is pinned
+   by opposite offsets rather than by a percentage height. */
+
+.mdx-frame {
+  display: flex;
+  justify-content: center;
+  padding: 10px;
+  border-radius: var(--r-md, 12px);
+  background: var(--surface-2);
+  border: 1px solid var(--border);
+}
+.mdx-screen {
+  position: relative;
+  width: 100%;
+  max-width: 300px;
+  height: 420px;
+  display: flex;
+  flex-direction: column;
+  border-radius: 14px;
+  background: #100c0a;
+  overflow: hidden;
+  isolation: isolate;
+  /* NO `touch-action: none` here: only the grab boxes and the grips take it, so
+     a finger can still scroll the settings column past this preview. Killing
+     the scroll over a 420px block is how a control becomes a trap on a phone. */
+}
+
+/* ---- the header strip ---- */
+.mdx-head {
+  position: relative;
+  flex: none;
+  height: 60px;
+  background: #17110d;
+  border-bottom: 1px solid rgba(255, 255, 255, .06);
+}
+/* the brick header, when «اجعل الهيدر من نفس الطوب» is on. The bond is painted
+   by the theme's own generator at the theme's own smaller unit; the ::after is
+   the dark scrim the theme lays over it so the venue name keeps its contrast
+   against clay. Both together are what the menu actually draws. */
+.mdx-headwall {
+  position: absolute;
+  inset: 0;
+  background-color: #100c0a;
+  background-position: center;
+}
+.mdx-headwall::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background: rgba(46, 18, 8, .62);
+}
+.mdx-headbar {
+  position: absolute;
+  inset: 0;
+  z-index: 2;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 7px;
+  pointer-events: none;
+}
+.mdx-logo {
+  display: block;
+  width: 26px;
+  height: 26px;
+  border-radius: 50%;
+  object-fit: cover;
+  flex: none;
+}
+.mdx-logo-blank { background: rgba(255, 255, 255, .16); }
+.mdx-venue {
+  font-size: 12px;
+  color: #fff;
+  text-shadow: 0 1px 3px rgba(0, 0, 0, .8);
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+  max-width: 55%;
+}
+
+/* ---- the page under it ---- */
+/* no overflow rule, on purpose: the theme clips nothing either, so a pot that
+   stands proud of its corner stands proud here too. The phone body clips. */
+.mdx-page {
+  position: relative;
+  flex: 1 1 auto;
+  min-height: 0;
+}
+.mdx-pagewall {
+  position: absolute;
+  inset: 0;
+  background-color: #100c0a;
+  background-position: center;
+}
+.mdx-pagebody {
+  position: absolute;
+  inset: 0;
+  z-index: 2;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  pointer-events: none;
+}
+.mdx-plate {
+  width: 96px;
+  height: 96px;
+  border-radius: 50%;
+  background: radial-gradient(circle at 38% 32%, #efe6d6, #a8977f);
+  box-shadow: 0 10px 24px rgba(0, 0, 0, .55);
+}
+.mdx-line {
+  height: 6px;
+  border-radius: 4px;
+  background: rgba(255, 255, 255, .3);
+}
+
+/* ---- one hanging ZONE ----
+   Deliberately the same shape as styles/menuwall.css's .edt-dec-zone: the zone
+   spans the FULL width and carries a definite height, and the -start / -center
+   / -end suffix decides which edge x counts from rather than which slice of the
+   strip the piece may occupy. Copying that geometry is the only way a preview
+   can place a lantern where the menu will place it.
+
+   The mock screen stands in for a 760px phone at 420px, so the theme's
+   `min(26svh, 200px)` zone becomes 110px here — the same share of the screen,
+   which keeps the `cqmin` size of every piece honest.
+
+   NOTHING IS CLIPPED, for the theme's own reason: a lantern hangs BELOW the bar
+   it is fixed to. Only the mock phone's own rounded body clips. */
+.mdx-box {
+  position: absolute;
+  inset-inline: 0;
+  height: 110px;
+  pointer-events: none;
+}
+.mdx-box[data-anchor^='header-'] { top: 0; }
+.mdx-box[data-anchor^='page-top-'] { top: 0; }
+.mdx-box[data-anchor^='page-bottom-'] { bottom: 0; }
+.mdx-box[data-layer='back'] { z-index: 1; }
+.mdx-box[data-layer='front'] { z-index: 3; }
+/* the zone only announces itself while something inside it is selected — seven
+   dashed rectangles at rest would read as damage, not as guidance */
+.mdx-box[data-sel='true'] {
+  outline: 1px dashed rgba(255, 255, 255, .4);
+  outline-offset: -1px;
+  border-radius: 6px;
+}
+
+/* ---- one hung piece ----
+   Three elements deep, exactly like the menu's:
+     .mdx-piece  the SIZE CONTAINER the cqmin width resolves against, and the
+                 only place a blend mode can live (containment would isolate a
+                 blend set further in and it would silently do nothing),
+     .mdx-place  the placement decorStyle() produced, mapped onto the physical
+                 edge this anchor counts from,
+     .mdx-art    the artwork, and the only thing that MOVES — swinging the
+                 placement element would orbit the piece around its anchor
+                 instead of pivoting it on its own top edge. */
+.mdx-piece {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  pointer-events: none;
+  container-type: size;
+}
+.mdx-place {
+  display: block;
+  pointer-events: none;
+}
+.mdx-art {
+  display: block;
+  width: 100%;
+  height: auto;
+  pointer-events: none;
+  user-select: none;
+}
+/* a .glb has no still frame to show and this preview does not run 3D — a
+   labelled placeholder is honest where a blank gap would look like a failed
+   upload */
+.mdx-model {
+  display: grid;
+  place-items: center;
+  width: 100%;
+  aspect-ratio: 1;
+  border-radius: 8px;
+  border: 1px dashed rgba(255, 255, 255, .5);
+  background: rgba(255, 255, 255, .1);
+  color: #fff;
+}
+/* the warm halo a lamp throws on what is behind it — behind the piece and wider
+   than it, at the theme's own proportion */
+.mdx-glow {
+  position: absolute;
+  inset: -46%;
+  z-index: -1;
+  pointer-events: none;
+}
+
+/* ---- idle motion ----
+   The same four families, the same pivots and the same 6s base as
+   styles/menuwall.css: decorStyle() expresses the venue's speed dial as exactly
+   `6 / speed` seconds and hands that to these elements, so any other base here
+   would make the dial jump the moment it left 1.0x. */
+.mdx-art[data-motion],
+.mdx-model[data-motion],
+.mdx-glow[data-motion] { animation-duration: 6s; }
+.mdx-art[data-motion='hang'],
+.mdx-model[data-motion='hang'] {
+  transform-origin: 50% 0;
+  animation-name: mdxHang;
+  animation-timing-function: cubic-bezier(.45, .05, .55, .95);
+  animation-iteration-count: infinite;
+}
+.mdx-art[data-motion='float'],
+.mdx-model[data-motion='float'] {
+  animation-name: mdxFloat;
+  animation-timing-function: ease-in-out;
+  animation-iteration-count: infinite;
+}
+.mdx-art[data-motion='spin'],
+.mdx-model[data-motion='spin'] {
+  animation-name: mdxSpin;
+  animation-timing-function: linear;
+  animation-iteration-count: infinite;
+}
+/* `glow` breathes the halo AND the piece, so the motion still reads on a piece
+   whose halo the venue left at zero */
+.mdx-glow[data-motion='glow'],
+.mdx-art[data-motion='glow'],
+.mdx-model[data-motion='glow'] {
+  animation-name: mdxGlow;
+  animation-timing-function: ease-in-out;
+  animation-iteration-count: infinite;
+}
+@keyframes mdxHang { 0%, 100% { rotate: -3.2deg; } 50% { rotate: 3.2deg; } }
+@keyframes mdxFloat { 0%, 100% { translate: 0 0; } 50% { translate: 0 -5%; } }
+@keyframes mdxSpin { from { rotate: 0deg; } to { rotate: 360deg; } }
+@keyframes mdxGlow { 0%, 100% { opacity: 1; } 50% { opacity: .74; } }
+
+/* ---- the grab layer ----
+   Its own size container, because the zone above is not one and the grab boxes
+   are sized in the very same cqmin the pieces are. */
+.mdx-hits {
+  position: absolute;
+  inset: 0;
+  z-index: 4;
+  width: 100%;
+  height: 100%;
+  pointer-events: none;
+  container-type: size;
+}
+.mdx-hit {
+  position: absolute;
+  min-width: 26px;
+  min-height: 26px;
+  border-radius: 5px;
+  pointer-events: auto;
+  cursor: grab;
+  touch-action: none;
+}
+.mdx-hit:hover { box-shadow: inset 0 0 0 1px rgba(255, 255, 255, .5); }
+.mdx-hit:focus-visible { box-shadow: inset 0 0 0 2px var(--brand), 0 0 0 2px rgba(0, 0, 0, .4); }
+.mdx-hit[data-sel='true'] {
+  box-shadow: inset 0 0 0 1px var(--brand), 0 0 0 1px rgba(0, 0, 0, .45);
+  cursor: move;
+}
+.mdx-grip {
+  position: absolute;
+  display: grid;
+  place-items: center;
+  width: 22px;
+  height: 22px;
+  border-radius: 50%;
+  background: var(--brand);
+  color: #fff;
+  box-shadow: 0 1px 4px rgba(0, 0, 0, .5);
+  cursor: pointer;
+  touch-action: none;
+}
+.mdx-grip-rot { top: -12px; left: 50%; transform: translateX(-50%); }
+.mdx-grip-size { bottom: -12px; inset-inline-end: -12px; }
+
+/* ---- the list of hung pieces ---- */
+.mdx-list { display: flex; flex-direction: column; gap: 6px; }
+.mdx-row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 5px;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  background: var(--surface);
+}
+.mdx-row[data-sel='true'] { border-color: var(--brand); }
+.mdx-pick {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex: 1 1 auto;
+  min-width: 0;
+  padding: 0;
+  border: none;
+  background: none;
+  cursor: pointer;
+  text-align: start;
+}
+.mdx-thumb {
+  display: grid;
+  place-items: center;
+  width: 40px;
+  height: 40px;
+  flex: none;
+  border-radius: 7px;
+  overflow: hidden;
+  color: var(--text-muted);
+  /* a chequerboard, because a pale cut-out on a pale card is an invisible
+     element and the owner would think the upload had failed */
+  background-color: #f3f3f5;
+  background-image:
+    linear-gradient(45deg, #d9d9df 25%, transparent 25%, transparent 75%, #d9d9df 75%),
+    linear-gradient(45deg, #d9d9df 25%, transparent 25%, transparent 75%, #d9d9df 75%);
+  background-size: 12px 12px;
+  background-position: 0 0, 6px 6px;
+}
+.mdx-thumb img {
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+}
+.mdx-rowtext {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  min-width: 0;
+}
+.mdx-rowtext b {
+  font-size: var(--fs-xs, 11px);
+  color: var(--text);
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+.mdx-rowbtns { display: flex; align-items: center; gap: 1px; flex: none; }
+.mdx-rowbtns .icon-btn { width: 28px; height: 28px; }
+.mdx-rowbtns .icon-btn:disabled { opacity: .3; cursor: default; }
+
+/* the controls for the one selected piece */
+.mdx-panel {
+  padding: 10px;
+  border: 1px solid var(--brand);
+  border-radius: var(--r-md, 12px);
+  background: var(--surface);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  /* still, and still VISIBLE: a hung object holds its settled position */
+  .mdx-art[data-motion],
+  .mdx-model[data-motion],
+  .mdx-glow[data-motion] {
+    animation: none;
+    rotate: none;
+    translate: none;
+  }
+}

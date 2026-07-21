@@ -35,10 +35,12 @@ import { offerForItem, discountedPrice, itemOfferLabel } from '../../lib/offers.
 // Surface + garnish scatter behind the dish cutout (see lib/dishProps.js).
 import DishProps from './DishProps.jsx'
 // The ONE contract for how a dish is composed: backdrop, photo, effect, entrance,
-// the venue's placed layers, and the wall the whole room is set against.
+// the venue's placed layers, the wall the whole room is set against, how one
+// dish is joined to the next, and the objects the venue hangs in its room.
 import {
   resolveComposition, bgStyle, imgStyle,
   resolveWall, wallStyle, layerStyle,
+  resolveSections, resolveDecor, decorStyle,
 } from '../../lib/dishComposition.js'
 import '../../styles/menuwall.css'
 
@@ -122,6 +124,7 @@ const shade = (c, amt) => (amt >= 0 ? mixRgb(c, WHITE, amt) : mixRgb(c, BLACK, -
 const hexOf = (c) => `#${c.map((v) => cl255(v).toString(16).padStart(2, '0')).join('')}`
 const rgbaOf = (c, a) => `rgba(${cl255(c[0])},${cl255(c[1])},${cl255(c[2])},${Math.round(a * 1000) / 1000})`
 const n2 = (v) => Math.round(v * 100) / 100
+const clampNum = (v, lo, hi) => Math.min(hi, Math.max(lo, v))
 
 // Deterministic noise. The wall must be IDENTICAL on every render and on every
 // diner's phone — a re-shuffling wall would flicker on each state change, so
@@ -602,6 +605,223 @@ function EdtWall({ wall }) {
   )
 }
 
+// ---- how one dish is joined to the next (resolveSections) ----
+//
+// Five numbers that were all hard-coded before, the worst of them a fade to
+// solid canvas over the bottom 40 per cent of EVERY dish — with one dish per
+// screen that is a black band between dishes that the venue never asked for and
+// could not remove. They become custom properties here and the .edt-* block of
+// index.css does the rest; the MODE lands as a data attribute on .edt-stage.
+// `dividerColor` falls back to the theme's own hairline rather than to nothing,
+// so choosing «خط فاصل» without choosing a colour still draws a line.
+const sectionVars = (s) => ({
+  '--edt-h': `${s.height}svh`,
+  '--edt-gap': `${s.gap}px`,
+  '--edt-fade': s.fade,
+  '--edt-radius': `${s.radius}px`,
+  '--edt-divider': s.dividerColor || 'var(--edt-line)',
+})
+
+// ===========================================================================
+// THE BRICK HEADER — «اتحكم في الهيدر والازرار لتكون طوب».
+//
+// The app bar is NOT inside this component (it is rendered by DinerBar, a
+// sibling of the whole menu), so the theme cannot reach it with a descendant
+// selector. It is dressed the way the app already dresses that bar from the
+// outside: the chrome custom properties, set on the portal root, plus one rule
+// in the .edt-* block of index.css keyed on [data-edt-head='brick'].
+//
+// THE HEADER IS THE SAME WALL, not a second brick. The bond, the clay, the
+// mortar, the joint and the finish all come from resolveWall(tenant); only three
+// things are changed, and each for a stated reason:
+//   * the unit is scaled DOWN, because a course sized for a whole room shows one
+//     brick face inside a 56px bar and stops reading as a wall,
+//   * blur / blend / opacity are dropped, because a header that inherits the
+//     room's blur is an unreadable smear,
+//   * a fixed dark scrim is laid over the top. That last one is what makes the
+//     contrast PROVABLE: whatever colour the venue paints its room, every pixel
+//     of the header is at most (1 - a) of that colour plus the scrim, so white
+//     ink is 4.98:1 against the lightest pixel the header can possibly produce
+//     (a pure-white wall) and 9.8-12.7:1 against this venue's own clay.
+// ===========================================================================
+
+const HEADER_SCRIM = 'rgba(46,18,8,.62)'
+// Goes through the contract like everything else — resolveWall() now carries
+// `header`, so the theme has no raw tenant reads left. resolveWall returns null
+// when the room wall is off, hence the fallback read for the "brick header with
+// no room wall" case, which the block below deliberately supports.
+const headerBrickOn = (tenant) => {
+  const w = resolveWall(tenant)
+  if (w) return w.header
+  return !!(tenant && tenant.menuWall && tenant.menuWall.header)
+}
+// A venue can ask for a brick header with the room wall switched OFF. The toggle
+// still has to do something, so it falls back to the contract's own default clay
+// rather than silently doing nothing.
+const HEADER_FALLBACK_WALL = {
+  pattern: 'running', url: '', finish: 'clean', color: '#8a4a2c', mortarColor: '#b9a893',
+  scale: 1, opacity: 1, blend: 'normal', filter: '', blur: 0, mortar: 0.5, grout: 3,
+  tint: '', tintAmount: 0,
+}
+
+function headerBrickVars(wall) {
+  const w = {
+    ...(wall || HEADER_FALLBACK_WALL),
+    scale: clampNum((wall ? wall.scale : 1) * 0.55, 0.3, 0.8),
+    opacity: 1, blur: 0, blend: 'normal', filter: '',
+  }
+  const p = wallPaint(w)
+  if (!p) return null
+  const scrim = `linear-gradient(0deg, ${HEADER_SCRIM}, ${HEADER_SCRIM})`
+  return {
+    '--edt-hd-img': `${scrim}, ${p.backgroundImage}`,
+    '--edt-hd-size': `auto, ${p.backgroundSize}`,
+    '--edt-hd-rep': `no-repeat, ${p.backgroundRepeat}`,
+    '--edt-hd-pos': `center, ${p.backgroundPosition}`,
+    '--edt-hd-color': p.backgroundColor,
+  }
+}
+
+// ---- the venue's OWN hung objects (resolveDecor / decorStyle) ----
+//
+// This replaces the drawn lantern / clay pot / woven basket entirely. A
+// photograph of the owner's own lantern beats any stroke I can author, and the
+// rings of the drawn basket are what he saw as a stupid shadow.
+//
+// GEOMETRY. decorStyle() places a piece at (x, y) as percentages of its ANCHOR
+// BOX and sizes it in `cqmin`, so every anchor box below has `container-type:
+// size` AND a definite height (styles/menuwall.css).
+//
+// x and y are read as distances from the corner the anchor NAMES. That is the
+// only reading under which «علّق نسخة مقابلة» — the same numbers on the opposite
+// anchor — puts the second lantern where the eye expects it:
+//   *-start  : x from the inline-start edge
+//   *-end    : x from the inline-end edge
+//   *-center : x is the OFFSET from the centre, so 0 is dead centre
+//   page-bottom-* : y from the bottom edge
+//
+// WHY THE OFFSETS ARE REWRITTEN INSTEAD OF USED AS THEY COME. decorStyle()
+// centres a piece on its anchor point with `transform: translate(-50%, -50%)`,
+// and `transform` is PHYSICAL — its X axis is left-to-right whatever the
+// document direction is. `inset-inline-start`, which decorStyle pairs it with,
+// is not: under <html dir="rtl"> — which is every Arabic diner reading this menu
+// — it resolves to `right`, so the translate pulls the piece a whole width away
+// from the point it was supposed to be centred on. The pairing only works when
+// the offset is a physical `left`/`top`, so every case below is solved into one:
+// the arithmetic is done here in plain percentages (no calc(), so a negative x
+// cannot produce `calc(100% - -20%)`), and the result is always the same corner
+// the venue named. The same mismatch exists in layerStyle() — see the report.
+const decorSide = (a) => (a.endsWith('-end') ? 'end' : a.endsWith('-center') ? 'center' : 'start')
+
+// Exported for the SETTINGS placement tool, which drags a piece around a
+// miniature of this room: it maps a stored (x, y) to a screen position with this
+// exact function rather than a copy, because a copy would drift and the owner
+// would be arranging lanterns against a diagram of a menu he is not getting.
+export function decorPlace(d, rtl) {
+  const st = decorStyle(d) || {}
+  const place = { ...st }
+  // The blend has to sit on the size container (it blends OUTWARD with the page
+  // behind it, while the container's own containment isolates its children), and
+  // the motion duration has to sit on the thing that actually moves — which is
+  // the artwork, never the placement element. Swinging the placement element
+  // would rotate its own centring offset and make the piece orbit its anchor
+  // instead of pivoting on its top edge.
+  const blend = place.mixBlendMode
+  const dur = place.animationDuration
+  delete place.mixBlendMode
+  delete place.animationDuration
+  delete place.insetInlineStart
+  const side = decorSide(d.anchor)
+  // does x count from the physical RIGHT edge? the inline-end anchor in an LTR
+  // page, and the inline-start one in an RTL page
+  const fromRight = (side === 'end') !== !!rtl
+  const left = side === 'center'
+    ? (rtl ? 50 - d.x : 50 + d.x)
+    : (fromRight ? 100 - d.x : d.x)
+  place.left = `${n2(left)}%`
+  place.top = `${n2(d.anchor.startsWith('page-bottom') ? 100 - d.y : d.y)}%`
+  // the same width for an engine that cannot resolve cqmin (see menuwall.css)
+  place['--edt-dec-w-n'] = n2(d.w)
+  return { place, blend, dur }
+}
+
+// The warm halo a lamp throws on the wall behind it. Drawn only when the venue
+// asked for one; `motion: 'glow'` makes it breathe, and also breathes the piece
+// itself so the motion is never invisible on a piece with no halo.
+// Exported for the same reason decorPlace() is: the settings preview paints the
+// halo with this function, not with a second one that could drift from it.
+export const glowPaint = (d) => `radial-gradient(50% 50% at 50% 50%, ${rgbaOf(toRgb(d.glowColor, [245, 185, 66]), 0.62 * d.glow)}, transparent 70%)`
+
+function EdtDecorPiece({ d, mv, rtl }) {
+  const { place, blend, dur } = decorPlace(d, rtl)
+  const outer = blend ? { mixBlendMode: blend } : undefined
+  const motion = d.motion || undefined
+  const art = dur ? { animationDuration: dur } : undefined
+  const is3d = d.kind === 'model'
+  return (
+    <span className="edt-dec" style={outer} aria-hidden="true">
+      <span className="edt-dec-p" style={place}>
+        {d.glow > 0 ? (
+          <span className="edt-dec-glow" data-motion={motion} style={{ background: glowPaint(d), ...(art || {}) }} />
+        ) : null}
+        {is3d
+          ? (mv ? (
+            <model-viewer
+              className="edt-dec-mv" data-motion={motion} style={art} src={d.url}
+              interaction-prompt="none" loading="eager" disable-zoom="" disable-tap=""
+            />
+          ) : null)
+          : <img className="edt-dec-img" data-motion={motion} style={art} src={d.url} alt="" decoding="async" />}
+      </span>
+    </span>
+  )
+}
+
+// One zone per anchor and per depth. Two zones rather than one because `front`
+// is per piece and the zone is what carries the stacking level: a lantern in
+// FRONT of the app bar and a pot BEHIND the menu cannot be children of the same
+// stacking context.
+function EdtDecorZones({ anchors, byAnchor, mv, rtl }) {
+  const out = []
+  anchors.forEach((a) => {
+    const list = byAnchor[a] || []
+    if (!list.length) return
+    ;[true, false].forEach((front) => {
+      const part = list.filter((d) => !!d.front === front)
+      if (!part.length) return
+      out.push(
+        <span
+          key={`${a}-${front ? 'f' : 'b'}`} className="edt-dec-zone"
+          data-anchor={a} data-front={front ? '1' : '0'} aria-hidden="true"
+        >
+          {part.map((d, i) => <EdtDecorPiece key={`${d.id}-${i}`} d={d} mv={mv} rtl={rtl} />)}
+        </span>,
+      )
+    })
+  })
+  return out.length ? out : null
+}
+
+const HEADER_ANCHORS = ['header-start', 'header-center', 'header-end']
+const PAGE_ANCHORS = ['page-top-start', 'page-top-end', 'page-bottom-start', 'page-bottom-end']
+
+// <model-viewer> is a custom element that has to be registered before it renders
+// anything at all, and it is heavy — so it is imported only when the venue has
+// actually hung a .glb, and the piece renders nothing until it is ready.
+function useModelViewer(needed) {
+  const [ready, setReady] = useState(false)
+  useEffect(() => {
+    if (!needed) return undefined
+    let alive = true
+    import('../../lib/ar3d.js')
+      .then((m) => m.loadModelViewer())
+      .then(() => { if (alive) setReady(true) })
+      .catch(() => { /* a viewer that will not load simply draws nothing */ })
+    return () => { alive = false }
+  }, [needed])
+  return ready
+}
+
 // resolveWall() answers null both when the venue turned the wall OFF and when it
 // has simply never opened the editor, and those two are not the same thing: a
 // menu that is live today would silently lose its brick. So the wall engine only
@@ -647,6 +867,22 @@ function EdtLayers({ list }) {
   if (!list || !list.length) return null
   return list.map((l, i) => <EdtLayer key={`${l.id}-${i}`} layer={l} />)
 }
+
+// ---- the shadow under the dish, and the reflection beside it ----
+//
+// «ظل غبي يظهر تحت المنتج». Both used to be drawn for EVERY dish that had a
+// surface, with no way to remove them; they are OPT-IN per dish now and OFF
+// until the venue asks, which is the default the owner is entitled to.
+//
+// The flag is read here and lands as a data attribute on the photo box, because
+// the elements themselves are drawn by DishProps (styles/dishprops.css hides
+// them unless one of these attributes is on an ancestor). Turning the SURFACE
+// off still removes both outright — DishProps never mounts them without one.
+//   item.contactShadow : true -> the dish casts a contact shadow on its surface
+//   item.reflect       : true -> a polished surface shows a reflection under it
+const truthy = (v) => v === true || v === 'true' || v === 1
+const dpShadow = (it) => (it && truthy(it.contactShadow) ? '1' : undefined)
+const dpReflect = (it) => (it && truthy(it.reflect) ? '1' : undefined)
 
 /**
  * The item as DishProps should see it. Unchanged unless the dish carries real
@@ -747,75 +983,22 @@ function EdtDish({ comp, src, anim = '', bind = null, onLoad = null, fallback = 
 // 'none' is the venue asking for stillness — neither mounts an animation.
 const animAttr = (comp) => (comp.anim && comp.anim !== 'none' ? comp.anim : '')
 
-// Room ornaments — the three objects the owner photographed on his walls,
-// drawn as thin inline-SVG strokes so they cost nothing and tint from two
-// tokens (--edt-orn-ink / --edt-orn-warm) that both themes redefine. They are
-// pure chrome: aria-hidden, pointer-events none, and they sit in the photo
-// band at the inline-start edge where no text ever lands.
-function OrnLantern() {
-  return (
-    <svg viewBox="0 0 64 128" focusable="false" aria-hidden="true">
-      <circle className="edt-orn-glow" cx="32" cy="54" r="27" />
-      <g className="edt-orn-ink">
-        <path d="M32 2v11" />
-        <path d="M27 17c0-6 10-6 10 0" />
-        <path d="M21 30h22l-5-11H26z" />
-        <path d="M22 30h20l3 45H19z" />
-        <path d="M20 45h24M20 60h24" />
-        <path d="M18 75h28l-3 9H21z" />
-        <path d="M32 84v7" />
-      </g>
-      <path className="edt-orn-warm" d="M30 46c0-5 4-7 4-11 3 3 5 6 5 10 0 5-4 8-5 8s-4-3-4-7z" />
-    </svg>
-  )
-}
-
-function OrnClayPot() {
-  return (
-    <svg viewBox="0 0 96 118" focusable="false" aria-hidden="true">
-      <g className="edt-orn-ink">
-        <path d="M37 10h22l-3 13H40z" />
-        <path d="M40 23c-16 5-26 21-26 40 0 24 15 42 34 42s34-18 34-42c0-19-10-35-26-40z" />
-        <path d="M17 52c19 7 43 7 62 0" />
-        <path d="M15 70c21 8 45 8 66 0" />
-        <path d="M22 88c16 6 36 6 52 0" />
-      </g>
-      <path className="edt-orn-warm" d="M17 56c19 7 43 7 62 0v8c-19 7-43 7-62 0z" />
-    </svg>
-  )
-}
-
-function OrnWovenBasket() {
-  return (
-    <svg viewBox="0 0 112 112" focusable="false" aria-hidden="true">
-      <g className="edt-orn-ink">
-        <circle cx="56" cy="56" r="51" />
-        <circle cx="56" cy="56" r="38" />
-        <circle cx="56" cy="56" r="25" />
-        <circle cx="56" cy="56" r="12" />
-        <path d="M56 5v102M5 56h102M20 20l72 72M92 20L20 92" />
-      </g>
-      <circle className="edt-orn-warm" cx="56" cy="56" r="31" />
-    </svg>
-  )
-}
-
-const ORNAMENTS = ['lantern', 'pot', 'basket']
-function EdtOrnament({ idx }) {
-  const kind = ORNAMENTS[idx % ORNAMENTS.length]
-  return (
-    <span className="edt-orn" data-orn={kind} aria-hidden="true">
-      {kind === 'lantern' ? <OrnLantern /> : kind === 'pot' ? <OrnClayPot /> : <OrnWovenBasket />}
-    </span>
-  )
-}
+// THE DRAWN ORNAMENTS ARE GONE. This is where a lantern, a clay pot and a woven
+// basket used to be hand-authored as SVG strokes and dropped behind every dish
+// by section index. They were rejected as crude («الايقونات والعلامات بايخة»),
+// and the basket's concentric rings were read as a stupid shadow under the food.
+// Nothing replaces them in code: the venue hangs its OWN photographs now
+// (resolveDecor / EdtDecorZones above), which is the only version of this that
+// can ever look like the room it is meant to be.
 
 // allItems / onQuickAdd are OPTIONAL — with them the venue's curated «يُطلب معه»
 // pairings become tappable straight from the LIST row; without them the list
 // still renders everything else, so an un-patched caller degrades quietly.
 export default function EditorialLayout({ tenant = null, cats, itemsByCat, visibleItems, filtered, activeCat, onPickCat, currency, offers, stickyTop, onOpen, allItems = [], onQuickAdd = null, showPairings = true }) {
-  const { t, lang } = useI18n()
+  const { t, lang, dir } = useI18n()
+  const rtl = dir === 'rtl'
   const stageRef = useRef(null)
+  const portalRoot = usePortalRoot()
   const [cur, setCur] = useState(0)
 
   // The venue's wall. Fingerprinted rather than watched by identity, so a new
@@ -824,6 +1007,32 @@ export default function EditorialLayout({ tenant = null, cats, itemsByCat, visib
   const wallKey = wallOn ? JSON.stringify(tenant.menuWall) : ''
   const wall = useMemo(() => (wallKey ? resolveWall(tenant) : null), [wallKey]) // eslint-disable-line react-hooks/exhaustive-deps
   const wallAttr = wallOn ? (wall ? wall.pattern : 'none') : undefined
+
+  // HOW ONE DISH IS JOINED TO THE NEXT. Every one of these five numbers used to
+  // be hard-coded, and the fade to solid canvas at the foot of every dish is
+  // what produced the black band the venue could not remove.
+  const sections = useMemo(() => resolveSections(tenant), [JSON.stringify(tenant && tenant.menuSections) || '']) // eslint-disable-line react-hooks/exhaustive-deps
+  const secVars = sectionVars(sections)
+
+  // The objects the venue has hung. Header pieces are portalled: the app bar is
+  // not inside this component and .edt-wrap is an isolated stacking context, so
+  // a piece rendered here could never sit in front of the bar.
+  const decor = useMemo(() => resolveDecor(tenant), [JSON.stringify(tenant && tenant.menuDecor) || '']) // eslint-disable-line react-hooks/exhaustive-deps
+  const mv = useModelViewer(decor.all.some((d) => d.kind === 'model'))
+
+  // THE BRICK HEADER, dressed from outside (see headerBrickVars above).
+  const headOn = headerBrickOn(tenant)
+  const headVars = useMemo(() => (headOn ? headerBrickVars(wall) : null), [headOn, wallKey]) // eslint-disable-line react-hooks/exhaustive-deps
+  useEffect(() => {
+    const node = portalRoot
+    if (!node || !headVars) return undefined
+    node.setAttribute('data-edt-head', 'brick')
+    Object.entries(headVars).forEach(([k, v]) => node.style.setProperty(k, v))
+    return () => {
+      node.removeAttribute('data-edt-head')
+      Object.keys(headVars).forEach((k) => node.style.removeProperty(k))
+    }
+  }, [portalRoot, headVars])
 
   const catName = (id) => {
     const c = (cats || []).find((x) => x.id === id)
@@ -853,8 +1062,12 @@ export default function EditorialLayout({ tenant = null, cats, itemsByCat, visib
   }, [flat])
 
   return (
-    <div className="edt-wrap" data-wall={wallAttr} style={{ '--edt-top': stickyTop }}>
+    <div className="edt-wrap" data-wall={wallAttr} style={{ '--edt-top': stickyTop, ...secVars }}>
       <EdtWall wall={wall} />
+      <EdtDecorZones anchors={PAGE_ANCHORS} byAnchor={decor.byAnchor} mv={mv} rtl={rtl} />
+      {portalRoot && decor.header.length
+        ? createPortal(<EdtDecorZones anchors={HEADER_ANCHORS} byAnchor={decor.byAnchor} mv={mv} rtl={rtl} />, portalRoot)
+        : null}
       {/* opaque sticky bar (outer) + its own scroller (inner): dish content can
           never bleed through the chips, and the fade lives outside the scroller */}
       <div className="edt-catbar">
@@ -869,7 +1082,7 @@ export default function EditorialLayout({ tenant = null, cats, itemsByCat, visib
         <div className="edt-empty"><Empty icon="menu" title={lang === 'ar' ? 'لا توجد أصناف' : 'No items'} /></div>
       ) : (
         <>
-          <div className="edt-stage" ref={stageRef}>
+          <div className="edt-stage" ref={stageRef} data-sec={sections.mode}>
             {flat.map((it, i) => (
               <EdtSection
                 key={it.id} it={it} idx={i} catLabel={catName(it.categoryId)}
@@ -948,9 +1161,8 @@ function EdtSection({ it, idx, catLabel, currency, offers, lang, t, onOpen, allI
 
   return (
     <section ref={ref} data-idx={idx} data-fit={fit || undefined} className={`edt-sec ${inview ? 'in' : ''} ${out ? 'is-out' : ''}`}>
-      <EdtOrnament idx={idx} />
       <span className="edt-side" aria-hidden="true">{catLabel}</span>
-      <div className="edt-photo" data-fit={fit || undefined}>
+      <div className="edt-photo" data-fit={fit || undefined} data-dp-contact={dpShadow(it)} data-dp-reflect={dpReflect(it)}>
         <span className="edt-glow" aria-hidden="true" />
         {/* the material the dish stands on + its garnish scatter: the behind
             layer paints under the photo, the front layer over it. Arrival is
@@ -1077,6 +1289,10 @@ export function EditorialItemStage({ item, tenant = null, currency, onClose, onA
   const wallKey = wallOn ? JSON.stringify(tenant.menuWall) : ''
   const wall = useMemo(() => (wallKey ? resolveWall(tenant) : null), [wallKey]) // eslint-disable-line react-hooks/exhaustive-deps
   const wallAttr = wallOn ? (wall ? wall.pattern : 'none') : undefined
+  // The same dial as the list: how much the room dims behind the record. The
+  // stage's own plaster fade was a fixed band, which is the same complaint one
+  // surface along, so it reads the venue's number too.
+  const secVars = sectionVars(resolveSections(tenant))
   // The FLIP is the stage's own entrance. When there is no origin rect (opened
   // from a pairing chip) there is no FLIP, so the dish plays the entrance the
   // venue chose for it instead of simply appearing.
@@ -1178,15 +1394,17 @@ export function EditorialItemStage({ item, tenant = null, currency, onClose, onA
 
   if (!portalRoot) return null
   return createPortal(
-    <div className={`edt-stg ${closing ? 'closing' : ''}`} data-wall={wallAttr} role="dialog" aria-modal="true" aria-label={name}>
+    <div className={`edt-stg ${closing ? 'closing' : ''}`} data-wall={wallAttr} style={secVars} role="dialog" aria-modal="true" aria-label={name}>
       <EdtWall wall={wall} />
-      {/* the stage paints its own plaster fade over the wall: the gradient used
-          to live in the element's background, which a wall CHILD would cover */}
-      {wall ? <span className="edt-wall-fade" aria-hidden="true" /> : null}
+      {/* the stage paints its own plaster fade over the room: it used to live in
+          the element's background, where a wall CHILD covered it and its
+          strength could not be a setting. Mounted for every venue now, wall or
+          fallback tile, because the dial that governs it is the same one. */}
+      <span className="edt-wall-fade" aria-hidden="true" />
       <button type="button" className="edt-stg-x" onClick={close} aria-label={t('close')}><Icon name="close" size={20} /></button>
       <div className="edt-stg-scroll">
         <div className="edt-stg-media">
-          <div className="edt-stg-hero" ref={heroRef} data-fit={fit || undefined}>
+          <div className="edt-stg-hero" ref={heroRef} data-fit={fit || undefined} data-dp-contact={dpShadow(item)} data-dp-reflect={dpReflect(item)}>
             <span className="edt-glow" aria-hidden="true" />
             {/* quieter here: the stage variant caps the scatter and shortens
                 the surface, so the full dish record stays the subject */}

@@ -45,12 +45,18 @@
 }
 /* The stage's plaster fade. It used to be part of .edt-stg's own background,
    which a wall child would paint straight over — so it becomes its own element,
-   directly after the wall and at the same depth. */
+   directly after the wall and at the same depth.
+   Its strength is the venue's own «تعتيم الخلفية خلف النص» dial, the same one
+   the list's sections read, because a fixed band here is the identical
+   complaint one surface along. At the default zero the room is unbroken behind
+   the whole record and the text keeps its contrast from the plaster panel under
+   .edt-stg-body instead. */
 .edt-wall-fade {
   position: absolute;
   inset: 0;
   z-index: -1;
   pointer-events: none;
+  opacity: var(--edt-fade, 0);
   background: linear-gradient(180deg, transparent 0%, var(--edt-bg, #100c0a) 36%);
 }
 /* A blurred wall softens at its own edges, because blur() has nothing beyond the
@@ -155,6 +161,163 @@
 @keyframes edtLyrSway { 0%, 100% { rotate: -2.2deg; } 50% { rotate: 2.2deg; } }
 @keyframes edtLyrSpin { from { rotate: 0deg; } to { rotate: 360deg; } }
 @keyframes edtLyrPulse { 0%, 100% { scale: 1; } 50% { scale: 1.045; } }
+
+/* ------------------------------------------------- the venue's own objects --
+   resolveDecor(tenant) -> the lanterns, pots and whatever else the venue has
+   actually photographed in its room. This replaces the drawn lantern / pot /
+   basket entirely; nothing here draws anything of its own.
+
+   THE ANCHOR BOX IS THE COORDINATE SYSTEM, and it has to satisfy two things at
+   once. decorStyle() sizes a piece in `cqmin` — a share of the box's SMALLER
+   side — so the box must be a size container; and `container-type: size` ZEROES
+   an element's intrinsic size, so a box whose height came from its content would
+   collapse to nothing and every piece would render at 0cqmin. Both zone levels
+   below therefore have a definite height by declaration:
+     .edt-dec-zone  fixed / absolutely positioned with an explicit height
+     .edt-dec       inset: 0 inside it, so its height is solved from the offsets
+   The zone is NOT the size container: several pieces share it, and a blend mode
+   has to sit on a per-piece element or containment would isolate it into a group
+   with nothing in it and the blend would silently do nothing.
+
+   NOTHING IS CLIPPED. There is no `overflow: hidden` anywhere in this block, on
+   purpose: a lantern hangs BELOW the bar it is fixed to, and size containment
+   does not clip painting.
+
+   NOTHING IS TOUCHABLE. pointer-events are off at every level, so a decoration
+   over the app bar can never take a tap meant for the language or theme button.
+   --edt-dec-h is a fixed px cap rather than a share of the viewport so a piece
+   is the same physical size on a phone and on a desktop; it is what `cqmin`
+   resolves to on any screen wider than it is. */
+.edt-dec-zone {
+  /* 170px is not arbitrary: it is what `cqmin` resolves to on every screen wider
+     than it is, so a piece keeps ONE physical size from a phone to a desktop —
+     and with the editor's own new-piece defaults (x 8, y 24, width 34) it puts a
+     lantern about 58px across hanging from the very top of the bar, clear of
+     both edges. A zone tall enough to hold the whole hang would instead make the
+     same piece twice as wide on a tall phone as on a short one. */
+  --edt-dec-h: min(24svh, 170px);
+  position: absolute;
+  inset-inline: 0;
+  height: var(--edt-dec-h);
+  pointer-events: none;
+  user-select: none;
+}
+/* HEADER pieces are fixed to the viewport, not to the page: the bar they hang
+   in does not scroll, so neither may they. They are portalled to the app's own
+   portal root because .edt-wrap is an isolated stacking context — a piece
+   rendered inside the menu could never sit in front of an app bar at z-index
+   100, whatever z-index it was given. */
+.edt-dec-zone[data-anchor^='header-'] { position: fixed; top: 0; }
+.edt-dec-zone[data-anchor^='header-'][data-front='1'] { z-index: 101; }
+.edt-dec-zone[data-anchor^='header-'][data-front='0'] { z-index: 99; }
+.edt-dec-zone[data-anchor^='page-top-'] { top: 0; }
+.edt-dec-zone[data-anchor^='page-bottom-'] { bottom: 0; }
+.edt-dec-zone[data-anchor^='page-'][data-front='1'] { z-index: 3; }
+.edt-dec-zone[data-anchor^='page-'][data-front='0'] { z-index: -1; }
+
+.edt-dec {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  pointer-events: none;
+  /* the size container decorStyle()'s cqmin width resolves against */
+  container-type: size;
+}
+.edt-dec-p {
+  /* everything else comes from decorStyle(): position, the offsets from this
+     anchor's own corner, the cqmin width, the centring transform, opacity and
+     the filter preset */
+  display: block;
+  pointer-events: none;
+}
+/* An engine with no size container queries (iOS below 16, and there are still
+   phones on it) resolves `cqmin` to nothing and would render every hung object
+   at zero width — the feature would look simply broken rather than absent.
+   1.7px per unit is not a guess either: it is one hundredth of the 170px the
+   zone is, which is exactly what `cqmin` resolves to on a modern engine for any
+   viewport taller than 709px, so the same piece comes out the same size. It
+   needs !important only because the value it replaces is an inline style. */
+@supports not (width: 1cqmin) {
+  .edt-dec-p { width: calc(var(--edt-dec-w-n, 16) * 1.7px) !important; }
+}
+.edt-dec-img,
+.edt-dec-mv {
+  display: block;
+  width: 100%;
+  pointer-events: none;
+}
+.edt-dec-img { height: auto; }
+/* A .glb has no intrinsic size to derive a height from, so the viewer is given a
+   square viewport and draws the model inside it, transparent to the corners. */
+.edt-dec-mv { aspect-ratio: 1 / 1; background: transparent; --poster-color: transparent; }
+/* the warm halo a lamp throws on the wall behind it — behind the piece, wider
+   than it, and only ever drawn when the venue asked for one */
+.edt-dec-glow {
+  position: absolute;
+  inset: -46%;
+  z-index: -1;
+  pointer-events: none;
+}
+
+/* ---- how a hung object MOVES ----
+   The motion is on the ARTWORK, never on the placement element: the placement
+   element carries decorStyle()'s centring translate inside its `transform`, and
+   the individual rotate/translate properties compose OUTSIDE that, so rotating
+   it would swing the centring offset and make the piece orbit its anchor point
+   instead of turning on the spot.
+   `hang` pivots on the artwork's TOP edge. That is the whole difference between
+   an object that is suspended and a sticker that wobbles.
+   Durations are 6s across the board because decorStyle() expresses the venue's
+   speed dial as exactly `6 / speed` seconds and hands it to the same element —
+   any other base here would make the dial jump the moment it left 1.0x. */
+.edt-dec-img[data-motion],
+.edt-dec-mv[data-motion],
+.edt-dec-glow[data-motion] { animation-duration: 6s; }
+.edt-dec-img[data-motion='hang'],
+.edt-dec-mv[data-motion='hang'] {
+  transform-origin: 50% 0;
+  animation-name: edtDecHang;
+  animation-timing-function: cubic-bezier(.45, .05, .55, .95);
+  animation-iteration-count: infinite;
+}
+.edt-dec-img[data-motion='float'],
+.edt-dec-mv[data-motion='float'] {
+  animation-name: edtDecFloat;
+  animation-timing-function: ease-in-out;
+  animation-iteration-count: infinite;
+}
+.edt-dec-img[data-motion='spin'],
+.edt-dec-mv[data-motion='spin'] {
+  animation-name: edtDecSpin;
+  animation-timing-function: linear;
+  animation-iteration-count: infinite;
+}
+/* `glow` breathes the halo AND the piece, so the motion is still visible on a
+   piece whose halo the venue left at zero */
+.edt-dec-glow[data-motion='glow'],
+.edt-dec-img[data-motion='glow'],
+.edt-dec-mv[data-motion='glow'] {
+  animation-name: edtDecGlow;
+  animation-timing-function: ease-in-out;
+  animation-iteration-count: infinite;
+}
+@keyframes edtDecHang { 0%, 100% { rotate: -3.2deg; } 50% { rotate: 3.2deg; } }
+@keyframes edtDecFloat { 0%, 100% { translate: 0 0; } 50% { translate: 0 -5%; } }
+@keyframes edtDecSpin { from { rotate: 0deg; } to { rotate: 360deg; } }
+@keyframes edtDecGlow { 0%, 100% { opacity: 1; } 50% { opacity: .74; } }
+
+@media (prefers-reduced-motion: reduce) {
+  /* still, and still VISIBLE: a hung object holds its settled position */
+  .edt-dec-img[data-motion],
+  .edt-dec-mv[data-motion],
+  .edt-dec-glow[data-motion] {
+    animation: none;
+    rotate: none;
+    translate: none;
+    opacity: 1;
+  }
+}
 
 @media (prefers-reduced-motion: reduce) {
   /* settled, visible and still — the start state of an entrance must never be

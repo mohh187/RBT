@@ -196,12 +196,20 @@ export function resolveLayers(item) {
  */
 export function layerStyle(l) {
   if (!l) return null
-  const t = [`translate(-50%, -50%)`]
+  const t = [`translateY(-50%)`]
   if (l.rot) t.push(`rotate(${l.rot}deg)`)
   if (l.flip) t.push('scaleX(-1)')
   const s = {
     position: 'absolute',
     insetInlineStart: `${l.x}%`,
+    // The HORIZONTAL half of the centring is a logical margin, never part of the
+    // transform. `transform` is physical — its X axis runs left-to-right no
+    // matter the document direction — while `inset-inline-start` resolves to
+    // `right` under dir="rtl". Pairing the two put every placed element a full
+    // element-width away from where the venue dropped it on the Arabic menu,
+    // which is to say always. The grab handles in the item editor mirror this
+    // exactly; the two must move together or the handle stops matching the art.
+    marginInlineStart: `calc(${l.w}cqmin / -2)`,
     top: `${l.y}%`,
     width: `${l.w}cqmin`,
     transform: t.join(' '),
@@ -411,6 +419,11 @@ export function resolveWall(tenant) {
     grout: num(t.grout, R.grout.dflt, R.grout.min, R.grout.max),
     tint: String(t.tint || ''),
     tintAmount: num(t.tintAmount, 0, 0, 1),
+    // Whether the menu HEADER is built from this same wall. It belongs here and
+    // not on a key of its own because it has no colours of its own: the theme
+    // takes this bond, this clay and this mortar, scales the unit down to the
+    // bar and lays a scrim over it. Storing it apart would store half a decision.
+    header: t.header === true,
   }
 }
 
@@ -428,6 +441,251 @@ export function wallStyle(w) {
   if (w.blur) filters.push(`blur(${w.blur}px)`)
   if (filters.length) s.filter = filters.join(' ')
   if (w.blend && w.blend !== 'normal') s.mixBlendMode = w.blend
+  return s
+}
+
+// ---------------------------------------------------- how dishes are joined --
+//
+// The editorial theme gives each dish its own screen. Whether those screens read
+// as ONE continuous room or as separate cards is a design decision that belongs
+// to the venue, not to me: the first version hard-coded a fade to solid canvas
+// at the bottom of every dish, which produced a black band between dishes that
+// the venue never asked for and could not remove.
+
+export const SECTION_MODES = [
+  { id: 'continuous', ar: 'متصل بلا فواصل', en: 'One continuous room' },
+  { id: 'gap', ar: 'مسافة بين الأصناف', en: 'Spaced apart' },
+  { id: 'divider', ar: 'خط فاصل', en: 'Thin divider' },
+  { id: 'card', ar: 'بطاقات منفصلة', en: 'Separate cards' },
+]
+export const SECTION_MODE_IDS = SECTION_MODES.map((s) => s.id)
+
+export const SECTION_RANGE = {
+  gap: { min: 0, max: 120, step: 2, dflt: 0 },        // px between dishes
+  height: { min: 50, max: 100, step: 1, dflt: 92 },   // svh per dish
+  fade: { min: 0, max: 1, step: 0.05, dflt: 0 },      // how much the room dims behind text
+  radius: { min: 0, max: 40, step: 1, dflt: 0 },      // card corner, 'card' mode only
+}
+
+export function resolveSections(tenant) {
+  const s = (tenant && tenant.menuSections) || {}
+  const R = SECTION_RANGE
+  return {
+    mode: str(s.mode, SECTION_MODE_IDS, 'continuous'),
+    gap: num(s.gap, R.gap.dflt, R.gap.min, R.gap.max),
+    height: num(s.height, R.height.dflt, R.height.min, R.height.max),
+    fade: num(s.fade, R.fade.dflt, 0, 1),
+    radius: num(s.radius, R.radius.dflt, R.radius.min, R.radius.max),
+    dividerColor: String(s.dividerColor || ''),
+  }
+}
+
+// ------------------------------------------------------------- the table ----
+//
+// The owner's idea, and a good one: the dark panel that carries the dish's name,
+// price and details is already a big rectangle directly under the photo — so make
+// it the TABLE. The dish then stands ON something instead of floating above an
+// anonymous black box, and the words sit on the table with it.
+//
+// The contract that matters: the dish's base must meet the table's top edge.
+// `lift` is the only number that controls that relationship — how far the photo
+// overlaps down onto the surface — so a venue can seat the plate exactly.
+
+export const TABLE_KINDS = [
+  { id: 'none', ar: 'بدون طاولة', en: 'No table' },
+  { id: 'material', ar: 'خامة جاهزة', en: 'Built-in material' },
+  { id: 'image', ar: 'صورتي', en: 'My own photo' },
+]
+export const TABLE_KIND_IDS = TABLE_KINDS.map((k) => k.id)
+
+// Materials share ids with the dish-surface library so a venue that already
+// picked a walnut table for its plates gets the same walnut here.
+export const TABLE_MATERIALS = [
+  { id: 'venueWalnut', ar: 'طاولة جوز داكنة', en: 'Dark walnut' },
+  { id: 'warmWood', ar: 'خشب دافئ', en: 'Warm wood' },
+  { id: 'brickLedge', ar: 'حافة طوب', en: 'Brick ledge' },
+  { id: 'rattanMat', ar: 'حصيرة خوص', en: 'Woven rattan' },
+  { id: 'darkMarble', ar: 'رخام داكن', en: 'Dark marble' },
+  { id: 'brushedSteel', ar: 'ستيل مصقول', en: 'Brushed steel' },
+  { id: 'slate', ar: 'حجر أردوازي', en: 'Slate' },
+  { id: 'linen', ar: 'قماش كتّان', en: 'Linen' },
+]
+export const TABLE_MATERIAL_IDS = TABLE_MATERIALS.map((m) => m.id)
+
+// The lip where the table's far edge catches the light. This is what sells it as
+// a horizontal surface seen from a low angle rather than a flat coloured block.
+export const TABLE_EDGES = [
+  { id: 'lit', ar: 'حافة مضاءة', en: 'Lit edge' },
+  { id: 'soft', ar: 'حافة ناعمة', en: 'Soft edge' },
+  { id: 'sharp', ar: 'حافة حادّة', en: 'Sharp edge' },
+  { id: 'none', ar: 'بدون حافة', en: 'No edge' },
+]
+export const TABLE_EDGE_IDS = TABLE_EDGES.map((e) => e.id)
+
+export const TABLE_RANGE = {
+  // how far the dish photo drops onto the surface, as a percent of the photo's
+  // own height. This is the "the dish must sit exactly on it" dial.
+  lift: { min: 0, max: 40, step: 0.5, dflt: 10 },
+  opacity: { min: 0, max: 1, step: 0.05, dflt: 1 },
+  shade: { min: 0, max: 1, step: 0.05, dflt: 0.35 }, // how far the surface darkens toward the front
+  radius: { min: 0, max: 40, step: 1, dflt: 0 },
+  blur: { min: 0, max: 20, step: 0.5, dflt: 0 },
+  scale: { min: 0.5, max: 3, step: 0.05, dflt: 1 },  // image tables only
+  contact: { min: 0, max: 1, step: 0.05, dflt: 0.5 }, // the shadow where dish meets table
+}
+
+/**
+ * The table under the dish details. Reads the TENANT document, because it is one
+ * room; a venue that wants a different table per dish can still override with the
+ * per-item surface library.
+ */
+export function resolveTable(tenant) {
+  const t = (tenant && tenant.menuTable) || {}
+  const kind = str(t.kind, TABLE_KIND_IDS, 'none')
+  if (kind === 'none') return null
+  const url = String(t.url || '')
+  if (kind === 'image' && !url) return null
+  const R = TABLE_RANGE
+  return {
+    kind,
+    url,
+    material: str(t.material, TABLE_MATERIAL_IDS, 'venueWalnut'),
+    edge: str(t.edge, TABLE_EDGE_IDS, 'lit'),
+    lift: num(t.lift, R.lift.dflt, R.lift.min, R.lift.max),
+    opacity: num(t.opacity, R.opacity.dflt, 0, 1),
+    shade: num(t.shade, R.shade.dflt, 0, 1),
+    radius: num(t.radius, R.radius.dflt, R.radius.min, R.radius.max),
+    blur: num(t.blur, 0, R.blur.min, R.blur.max),
+    scale: num(t.scale, R.scale.dflt, R.scale.min, R.scale.max),
+    contact: num(t.contact, R.contact.dflt, 0, 1),
+    blend: str(t.blend, BLEND_IDS, 'normal'),
+    filter: filterCss(t.filter),
+    tint: String(t.tint || ''),
+    tintAmount: num(t.tintAmount, 0, 0, 1),
+  }
+}
+
+/** Inline style for the table panel itself. */
+export function tableStyle(tb) {
+  if (!tb) return null
+  const s = { opacity: tb.opacity }
+  if (tb.kind === 'image' && tb.url) {
+    s.backgroundImage = `url(${tb.url})`
+    s.backgroundSize = tb.scale === 1 ? 'cover' : `${Math.round(tb.scale * 100)}%`
+    s.backgroundPosition = 'center'
+    s.backgroundRepeat = 'no-repeat'
+  }
+  if (tb.radius) { s.borderStartStartRadius = `${tb.radius}px`; s.borderStartEndRadius = `${tb.radius}px` }
+  const filters = []
+  if (tb.filter) filters.push(tb.filter)
+  if (tb.blur) filters.push(`blur(${tb.blur}px)`)
+  if (filters.length) s.filter = filters.join(' ')
+  if (tb.blend && tb.blend !== 'normal') s.mixBlendMode = tb.blend
+  return s
+}
+
+/**
+ * How far the dish photo must drop so its base meets the table. Returned as a
+ * negative margin in percent of the photo height — one number, one meaning, so
+ * the editor's "seat the plate" slider and the menu can never disagree.
+ */
+export const tableLift = (tb) => (tb ? -tb.lift : 0)
+
+// ---------------------------------------------------------- room decoration --
+//
+// The venue hangs its OWN objects in the menu — a pair of lanterns in the header,
+// a clay pot in a corner, whatever is actually in its room. This replaces the
+// drawn lantern/pot/basket ornaments, which the owner rightly called crude: a
+// photograph of his own lantern will always beat my drawing of one.
+//
+// `anchor` decides what the piece is fixed to. A header lantern must stay with
+// the header while the menu scrolls under it; a corner pot belongs to the page.
+export const DECOR_ANCHORS = [
+  { id: 'header-start', ar: 'الهيدر — بداية', en: 'Header start' },
+  { id: 'header-end', ar: 'الهيدر — نهاية', en: 'Header end' },
+  { id: 'header-center', ar: 'الهيدر — الوسط', en: 'Header centre' },
+  { id: 'page-top-start', ar: 'أعلى الصفحة — بداية', en: 'Page top start' },
+  { id: 'page-top-end', ar: 'أعلى الصفحة — نهاية', en: 'Page top end' },
+  { id: 'page-bottom-start', ar: 'أسفل الصفحة — بداية', en: 'Page bottom start' },
+  { id: 'page-bottom-end', ar: 'أسفل الصفحة — نهاية', en: 'Page bottom end' },
+]
+export const DECOR_ANCHOR_IDS = DECOR_ANCHORS.map((a) => a.id)
+
+// A hanging object should swing a little; a standing one should not. `hang`
+// swings from its TOP edge, which is what makes a lantern read as suspended
+// rather than as a sticker that happens to wobble.
+export const DECOR_MOTIONS = [
+  { id: '', ar: 'ثابت', en: 'Still' },
+  { id: 'hang', ar: 'تأرجح معلّق', en: 'Hanging sway' },
+  { id: 'float', ar: 'طفو', en: 'Float' },
+  { id: 'glow', ar: 'وهج نابض', en: 'Pulsing glow' },
+  { id: 'spin', ar: 'دوران بطيء', en: 'Slow spin' },
+]
+export const DECOR_MOTION_IDS = DECOR_MOTIONS.map((m) => m.id)
+
+export const DECOR_RANGE = {
+  x: { min: -20, max: 120, step: 0.5, dflt: 8 },   // percent across its anchor box
+  y: { min: -40, max: 140, step: 0.5, dflt: 0 },
+  w: { min: 3, max: 90, step: 0.5, dflt: 16 },     // percent of the anchor's smaller side
+  rot: { min: -180, max: 180, step: 1, dflt: 0 },
+  opacity: { min: 0, max: 1, step: 0.05, dflt: 1 },
+  glow: { min: 0, max: 1, step: 0.05, dflt: 0 },   // warm halo behind it, for lamps
+  speed: { min: 0.5, max: 3, step: 0.1, dflt: 1 }, // motion speed multiplier
+}
+
+export function normalizeDecor(raw) {
+  if (!raw || typeof raw !== 'object') return null
+  const url = String(raw.url || '')
+  if (!url) return null
+  const R = DECOR_RANGE
+  return {
+    id: String(raw.id || url).slice(0, 80),
+    url,
+    kind: raw.kind === 'model' ? 'model' : 'image',
+    anchor: str(raw.anchor, DECOR_ANCHOR_IDS, 'header-start'),
+    x: num(raw.x, R.x.dflt, R.x.min, R.x.max),
+    y: num(raw.y, R.y.dflt, R.y.min, R.y.max),
+    w: num(raw.w, R.w.dflt, R.w.min, R.w.max),
+    rot: num(raw.rot, R.rot.dflt, R.rot.min, R.rot.max),
+    opacity: num(raw.opacity, R.opacity.dflt, 0, 1),
+    blend: str(raw.blend, BLEND_IDS, 'normal'),
+    filter: filterCss(raw.filter),
+    motion: str(raw.motion, DECOR_MOTION_IDS, ''),
+    speed: num(raw.speed, R.speed.dflt, R.speed.min, R.speed.max),
+    glow: num(raw.glow, R.glow.dflt, 0, 1),
+    glowColor: String(raw.glowColor || '#f5b942'),
+    flip: !!raw.flip,
+    front: raw.front !== false, // above the menu by default; a lamp hangs in front
+  }
+}
+
+/** Every decoration the venue has hung, grouped by anchor. */
+export function resolveDecor(tenant) {
+  const raw = tenant && Array.isArray(tenant.menuDecor) ? tenant.menuDecor : []
+  const all = raw.map(normalizeDecor).filter(Boolean).slice(0, 16)
+  const byAnchor = {}
+  for (const d of all) (byAnchor[d.anchor] = byAnchor[d.anchor] || []).push(d)
+  return { all, byAnchor, header: all.filter((d) => d.anchor.startsWith('header-')) }
+}
+
+/** Inline style for one hung decoration. */
+export function decorStyle(d) {
+  if (!d) return null
+  const t = [`translate(-50%, -50%)`]
+  if (d.rot) t.push(`rotate(${d.rot}deg)`)
+  if (d.flip) t.push('scaleX(-1)')
+  const s = {
+    position: 'absolute',
+    insetInlineStart: `${d.x}%`,
+    top: `${d.y}%`,
+    width: `${d.w}cqmin`,
+    transform: t.join(' '),
+    opacity: d.opacity,
+    pointerEvents: 'none',
+  }
+  if (d.filter) s.filter = d.filter
+  if (d.blend && d.blend !== 'normal') s.mixBlendMode = d.blend
+  if (d.speed !== 1) s.animationDuration = `${(6 / d.speed).toFixed(2)}s`
   return s
 }
 

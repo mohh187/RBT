@@ -30,7 +30,11 @@ import { SYSTEM_THEMES, THEMEABLE_SECTIONS, sectionSystemTheme, systemThemeAttr,
 // against. This module is the ONE contract both this editor and the renderer
 // read, so a control here cannot mean something different from the pixel it
 // produces. Nothing about the wall is defined locally.
-import { WALL_PATTERNS, WALL_FINISHES, WALL_RANGE, BLEND_MODES, FILTERS, resolveWall, wallStyle } from '../../lib/dishComposition.js'
+import {
+  WALL_PATTERNS, WALL_FINISHES, WALL_RANGE, BLEND_MODES, FILTERS, resolveWall, wallStyle,
+  SECTION_MODES, SECTION_RANGE, resolveSections,
+  DECOR_ANCHORS, DECOR_MOTIONS, DECOR_RANGE, resolveDecor, decorStyle,
+} from '../../lib/dishComposition.js'
 import SocialLinks from '../../components/SocialLinks.jsx'
 import StaffPreview from '../../components/StaffPreview.jsx'
 import TemplateGallery from '../../components/TemplateGallery.jsx'
@@ -138,6 +142,11 @@ const WALL_DEFAULTS = {
   blend: 'normal', filter: '', blur: WALL_RANGE.blur.dflt,
   mortar: WALL_RANGE.mortar.dflt, grout: WALL_RANGE.grout.dflt,
   tint: '', tintAmount: 0,
+  // Whether the menu's HEADER is built out of the same wall. It lives on
+  // menuWall — not on its own top-level key — because it has no colours of its
+  // own: it takes the bond, the clay and the mortar chosen right above it, so
+  // storing it anywhere else would be storing half a decision.
+  header: false,
 }
 // A picker tile is deliberately painted with NO mood on it (no blur, no blend,
 // no tint, full opacity) and at a small unit size: the choice being made there
@@ -160,6 +169,228 @@ const CROP_KINDS = {
   logo: { aspect: 1, shape: 'round', output: { width: 512, height: 512 }, ar: 'قص الشعار', en: 'Crop logo', hintAr: 'المقاس المناسب 512 × 512', hintEn: 'Recommended 512 x 512' },
   cover: { aspect: 2.5, shape: 'rect', output: { width: 1500, height: 600 }, ar: 'قص الغلاف', en: 'Crop cover', hintAr: 'المقاس المناسب 1500 × 600', hintEn: 'Recommended 1500 x 600' },
   wall: { shape: 'rect', ar: 'قص صورة الجدار', en: 'Crop the wall image', hintAr: 'صورة جدار غرفتك — اختر النسبة «حر» لأي مقاس', hintEn: 'A photo of your own room — pick the “Free” ratio for any size' },
+  decor: { shape: 'rect', ar: 'قص قطعة الزينة', en: 'Crop the decoration', hintAr: 'اقتطع الفانوس وحده وتخلّص من الفراغ حوله — اختر النسبة «حر»', hintEn: 'Trim to the object itself and drop the empty margin — pick the “Free” ratio' },
+}
+
+// ==================== HOW ONE DISH IS JOINED TO THE NEXT ====================
+// The editorial theme gives every dish its own screen. Whether those screens
+// read as ONE room or as separate cards is the venue's decision, and it had no
+// control at all: the seam between two dishes is precisely what the owner
+// complained about. Stored as ONE object at `tenant.menuSections`; these
+// defaults are resolveSections()'s own fallbacks written out, so «إرجاع
+// الافتراضي» reproduces exactly what a venue that never opened the card sees.
+const SECTION_DEFAULTS = {
+  mode: 'continuous',
+  gap: SECTION_RANGE.gap.dflt,
+  height: SECTION_RANGE.height.dflt,
+  fade: SECTION_RANGE.fade.dflt,
+  radius: SECTION_RANGE.radius.dflt,
+  dividerColor: '',
+}
+// [key, ar, en, unit, modes] — `modes` is which SECTION_MODES the slider does
+// anything in. A slider that moves a saved number while changing nothing on
+// screen is worse than no slider, so each one is hidden outside its own modes.
+const SECTION_SLIDERS = [
+  ['height', 'ارتفاع شاشة الصنف الواحد', 'Height of one dish screen', 'svh', null],
+  ['gap', 'المسافة بين صنف وصنف', 'Space between two dishes', 'px', ['gap', 'divider', 'card']],
+  ['fade', 'تعتيم الخلفية خلف النص', 'Dim the room behind the text', 'pct', null],
+  ['radius', 'استدارة زوايا البطاقة', 'Card corner radius', 'px', ['card']],
+]
+const sectionSliderText = (unit, v) => (unit === 'pct' ? `${Math.round(v * 100)}%` : unit === 'svh' ? `${Math.round(v)}%` : `${Math.round(v)}px`)
+
+// ============================ ROOM DECORATION ==============================
+// The venue hangs its OWN objects in the menu — the owner's ask was literally
+// two lanterns in the header, uploaded by him and positioned by him. Stored as
+// an ARRAY at `tenant.menuDecor` in exactly the shape normalizeDecor() reads.
+//
+// The editor's row differs from the stored row in two deliberate ways, both the
+// same as the item layer editor's:
+//   * `filter` holds the PRESET ID. normalizeDecor() turns an id into a CSS
+//     string on the way out; feeding that string back in would match no preset
+//     and silently reset the choice, so the editor never round-trips through it.
+//   * `name` is a human label for the list. normalizeDecor() ignores it, so it
+//     can never reach a pixel.
+const DECOR_MAX = 16 // resolveDecor() slices at this — offering more would lie
+
+// Which anchor mirrors which, for «علّق نسخة مقابلة». The centre has no
+// opposite, which is why the button is disabled there rather than absent.
+const DECOR_OPPOSITE = {
+  'header-start': 'header-end',
+  'header-end': 'header-start',
+  'page-top-start': 'page-top-end',
+  'page-top-end': 'page-top-start',
+  'page-bottom-start': 'page-bottom-end',
+  'page-bottom-end': 'page-bottom-start',
+}
+
+// Clamp + snap to the contract's own bounds and step, so a value that reaches
+// the document is always one resolveDecor() will honour unchanged.
+function decNum(v, key) {
+  const R = DECOR_RANGE[key]
+  const n = Number(v)
+  if (!Number.isFinite(n)) return R.dflt
+  const stepped = Math.round(n / R.step) * R.step
+  return Number(Math.min(R.max, Math.max(R.min, stepped)).toFixed(3))
+}
+const decId = (v, catalogue, dflt) => (catalogue.some((c) => c.id === String(v || '')) ? String(v || '') : dflt)
+
+let decorSeq = 0
+const nextDecorId = () => `dc${Date.now().toString(36)}${(decorSeq++).toString(36)}`
+
+// A brand-new piece lands near the start of the header, hanging from its top
+// edge and in front of the menu — the owner just added it to SEE it. Every
+// field is written explicitly so nothing depends on a default.
+const makeDecor = (url, kind, name) => ({
+  id: nextDecorId(),
+  url: String(url || ''),
+  kind: kind === 'model' ? 'model' : 'image',
+  name: String(name || '').slice(0, 40),
+  anchor: 'header-start',
+  x: DECOR_RANGE.x.dflt,
+  y: 24,
+  w: 34,
+  rot: 0,
+  opacity: 1,
+  blend: 'normal',
+  filter: '',
+  motion: 'hang',
+  speed: DECOR_RANGE.speed.dflt,
+  glow: 0,
+  glowColor: '#f5b942',
+  flip: false,
+  front: true,
+})
+
+// One stored row -> the editor's shape. Mirrors normalizeDecor()'s own
+// coercions (including `front` defaulting to true) so what the editor shows is
+// what the menu already draws.
+function readDecorRow(raw, i) {
+  if (!raw || typeof raw !== 'object') return null
+  const url = String(raw.url || '')
+  if (!url) return null
+  return {
+    id: String(raw.id || `dc-${i}`).slice(0, 80),
+    url,
+    kind: raw.kind === 'model' ? 'model' : 'image',
+    name: String(raw.name || '').slice(0, 40),
+    anchor: decId(raw.anchor, DECOR_ANCHORS, 'header-start'),
+    x: decNum(raw.x, 'x'),
+    y: decNum(raw.y, 'y'),
+    w: decNum(raw.w, 'w'),
+    rot: decNum(raw.rot, 'rot'),
+    opacity: decNum(raw.opacity, 'opacity'),
+    blend: decId(raw.blend, BLEND_MODES, 'normal'),
+    filter: decId(raw.filter, FILTERS, ''),
+    motion: decId(raw.motion, DECOR_MOTIONS, ''),
+    speed: decNum(raw.speed, 'speed'),
+    glow: decNum(raw.glow, 'glow'),
+    glowColor: String(raw.glowColor || '#f5b942'),
+    flip: !!raw.flip,
+    front: raw.front !== false,
+  }
+}
+const readDecor = (tenantDoc) => (Array.isArray(tenantDoc?.menuDecor) ? tenantDoc.menuDecor : [])
+  .map(readDecorRow).filter(Boolean).slice(0, DECOR_MAX)
+
+// The editor's shape -> one stored row, every key spelled out. Firestore
+// rejects `undefined` outright, so nothing here may be conditional.
+const writeDecorRow = (d) => ({
+  id: String(d.id || nextDecorId()).slice(0, 80),
+  url: String(d.url || ''),
+  kind: d.kind === 'model' ? 'model' : 'image',
+  name: String(d.name || '').slice(0, 40),
+  anchor: decId(d.anchor, DECOR_ANCHORS, 'header-start'),
+  x: decNum(d.x, 'x'),
+  y: decNum(d.y, 'y'),
+  w: decNum(d.w, 'w'),
+  rot: decNum(d.rot, 'rot'),
+  opacity: decNum(d.opacity, 'opacity'),
+  blend: decId(d.blend, BLEND_MODES, 'normal'),
+  filter: decId(d.filter, FILTERS, ''),
+  motion: decId(d.motion, DECOR_MOTIONS, ''),
+  speed: decNum(d.speed, 'speed'),
+  glow: decNum(d.glow, 'glow'),
+  glowColor: String(d.glowColor || '#f5b942'),
+  flip: !!d.flip,
+  front: d.front !== false,
+})
+
+// ---- WHERE decorStyle() STOPS AND THE THEME TAKES OVER ---------------------
+//
+// decorStyle() emits `inset-inline-start: x%`, which reads x as a distance from
+// the anchor box's START edge. The editorial theme deliberately does NOT use it
+// that way: its zones span the full width, and the -start / -center / -end
+// suffix decides WHICH EDGE x counts from, so «الهيدر — نهاية» measures from the
+// far edge and the two lanterns of a pair mirror each other exactly.
+// EditorialLayout.decorPlace() is that mapping.
+//
+// The card below PREFERS the theme's own function, fetched at runtime beside
+// wallPaint(); the mirror here is only what it falls back to while the theme
+// does not export one. Reading x/y any other way would put a lantern in the
+// preview somewhere it never lands in the menu, which is the exact failure the
+// contract exists to prevent.
+const decorSideOf = (a) => (String(a).endsWith('-center') ? 'center' : String(a).endsWith('-end') ? 'end' : 'start')
+// x as a PHYSICAL left percentage, and the sign a drag has to divide by to get
+// back to the stored number
+const decorLeftPct = (d, rtl) => {
+  const side = decorSideOf(d.anchor)
+  const fromRight = (side === 'end') !== !!rtl
+  if (side === 'center') return rtl ? 50 - d.x : 50 + d.x
+  return fromRight ? 100 - d.x : d.x
+}
+const decorXSign = (anchor, rtl) => {
+  const side = decorSideOf(anchor)
+  if (side === 'center') return rtl ? -1 : 1
+  return ((side === 'end') !== !!rtl) ? -1 : 1
+}
+// a bottom-anchored piece measures y UP from the bottom edge
+const decorTopPct = (d) => (String(d.anchor).startsWith('page-bottom') ? 100 - d.y : d.y)
+const decorYSign = (anchor) => (String(anchor).startsWith('page-bottom') ? -1 : 1)
+
+// The fallback mirror of EditorialLayout.decorPlace(). The blend moves to the
+// size container and the motion duration to the artwork, for the reasons that
+// function documents: a blend inside a containment group blends with nothing,
+// and swinging the placement element would orbit the piece around its anchor
+// instead of pivoting it on its own top edge.
+function decorPlaceLocal(d, rtl) {
+  const st = decorStyle(d) || {}
+  const place = { ...st }
+  const blend = place.mixBlendMode
+  const dur = place.animationDuration
+  delete place.mixBlendMode
+  delete place.animationDuration
+  delete place.insetInlineStart
+  place.left = `${decorLeftPct(d, rtl)}%`
+  place.top = `${decorTopPct(d)}%`
+  return { place, blend, dur }
+}
+const decorHexRgba = (hex, a) => {
+  const h = String(hex || '').replace('#', '')
+  const full = h.length === 3 ? h.split('').map((c) => c + c).join('') : h
+  const n = parseInt(full, 16)
+  if (full.length !== 6 || !Number.isFinite(n)) return `rgba(245, 185, 66, ${a})`
+  return `rgba(${(n >> 16) & 255}, ${(n >> 8) & 255}, ${n & 255}, ${a})`
+}
+const decorGlowLocal = (d) => `radial-gradient(50% 50% at 50% 50%, ${decorHexRgba(d.glowColor, 0.62 * d.glow)}, transparent 70%)`
+
+// [key, ar, en, unit] — every slider bounded by DECOR_RANGE, never by a local
+// number, so the editor cannot offer a value normalizeDecor() would clamp away.
+const DECOR_SLIDERS = [
+  ['w', 'الحجم', 'Size', 'pct'],
+  // x and y are distances from the edges the ANCHOR names — not from a fixed
+  // corner of the screen. That is what makes «الهيدر — نهاية» the true mirror of
+  // «الهيدر — بداية» at the very same numbers.
+  ['x', 'المسافة أفقياً من حافة موضعه', 'Distance in from its own side', 'pct'],
+  ['y', 'المسافة رأسياً من حافة موضعه', 'Distance in from its own top or bottom', 'pct'],
+  ['rot', 'الدوران', 'Rotation', 'deg'],
+  ['opacity', 'الشفافية', 'Opacity', 'opacity'],
+  ['speed', 'سرعة الحركة', 'Motion speed', 'x'],
+]
+const decorSliderText = (unit, v) => {
+  if (unit === 'deg') return `${Math.round(v)}°`
+  if (unit === 'x') return `${Number(v).toFixed(1)}x`
+  if (unit === 'opacity') return `${Math.round(v * 100)}%`
+  return `${Number(v)}%`
 }
 
 /**
@@ -219,6 +450,9 @@ const SEARCH_INDEX = [
   { keys: ['البانر', 'بانر', 'banner'], tab: 'studio', aSec: 'media', ar: 'البانر العلوي', en: 'Top banner' },
   { keys: ['الفيديو', 'فيديو', 'خلفية', 'العلامة المائية', 'مائية', 'video', 'watermark', 'gradient'], tab: 'studio', aSec: 'media', ar: 'خلفيات المنيو والفيديو', en: 'Menu backgrounds & video' },
   { keys: ['الطوب', 'طوب', 'الجدار', 'جدار', 'الحائط', 'حائط', 'اللحام', 'لحام', 'المونة', 'مونة', 'حجر', 'بلاستر', 'خشب', 'brick', 'wall', 'mortar', 'grout', 'stone', 'plaster', 'wood'], tab: 'studio', aSec: 'media', at: 'set-menuwall', ar: 'جدار المنيو (الطوب والخلفية)', en: 'Menu wall (brick & backdrop)' },
+  { keys: ['هيدر الطوب', 'الهيدر الطوبي', 'شريط الطوب', 'brick header', 'header brick'], tab: 'studio', aSec: 'media', at: 'set-menuwall', ar: 'الهيدر من نفس الطوب', en: 'Brick header' },
+  { keys: ['الفاصل', 'فاصل', 'الفواصل', 'الفراغ بين الاصناف', 'الفراغ بين الأصناف', 'اتصال', 'متصل', 'بطاقات', 'خط فاصل', 'ارتفاع الصنف', 'seam', 'gap', 'divider', 'cards', 'continuity', 'sections'], tab: 'studio', aSec: 'media', at: 'set-menusections', ar: 'الفاصل بين صنف وصنف', en: 'The join between two dishes' },
+  { keys: ['الزينة', 'زينة', 'فانوس', 'فوانيس', 'زخرفة', 'زخارف', 'تعليق', 'معلقات', 'نجفة', 'لوحة', 'نبتة', 'decor', 'decoration', 'lantern', 'ornament', 'hang'], tab: 'studio', aSec: 'media', at: 'set-menudecor', ar: 'زينة الغرفة (فوانيس ومعلّقات)', en: 'Room decoration (lanterns & hung objects)' },
   { keys: ['الاندماج', 'اندماج', 'تدرج', 'fade', 'melt'], tab: 'studio', aSec: 'media', ar: 'اندماج البانر', en: 'Banner melt' },
   { keys: ['تفاصيل الصنف', 'شاشة الصنف', 'صورة الصنف', 'item details'], tab: 'studio', aSec: 'details', ar: 'شاشة تفاصيل الصنف', en: 'Item details screen' },
   { keys: ['الخلفية الفنية', 'فنية', 'لوحة', 'art'], tab: 'studio', aSec: 'details', ar: 'الخلفية الفنية', en: 'Art backdrop' },
@@ -620,6 +854,12 @@ export default function Settings() {
   // because it is only set once the import has actually answered.
   const [wallPainter, setWallPainter] = useState(null)
   const [wallPainterGone, setWallPainterGone] = useState(false)
+  // The theme's decoration placer, off the SAME import. It is optional on
+  // purpose: the decoration card falls back to the documented mirror above when
+  // the theme does not export one, so a rename over there degrades the preview
+  // by one generation instead of breaking the card.
+  const [decorPlacer, setDecorPlacer] = useState(null)
+  const [decorGlow, setDecorGlow] = useState(null)
   const wallCardLive = tab === 'studio' && aSec === 'media'
   useEffect(() => {
     if (!wallCardLive || wallPainter || wallPainterGone) return undefined
@@ -627,6 +867,8 @@ export default function Settings() {
     import('../../components/menuThemes/EditorialLayout.jsx')
       .then((m) => {
         if (!alive) return
+        if (typeof m.decorPlace === 'function') setDecorPlacer(() => m.decorPlace)
+        if (typeof m.glowPaint === 'function') setDecorGlow(() => m.glowPaint)
         if (typeof m.wallPaint === 'function') setWallPainter(() => m.wallPaint)
         else setWallPainterGone(true)
       })
@@ -673,11 +915,170 @@ export default function Settings() {
   }, [wallTileKey]) // eslint-disable-line react-hooks/exhaustive-deps
   const wallCfgKey = JSON.stringify(wallCfg)
   const wallLive = useMemo(() => wallFaceStyle(wallPainter, wallCfg), [wallPainter, wallCfgKey]) // eslint-disable-line react-hooks/exhaustive-deps
+  // The BRICK HEADER face. Not the room wall: the theme draws the header at a
+  // smaller unit and at full opacity with no blur, blend or filter, and lays a
+  // dark scrim over it so the venue name stays readable (headerBrickVars in
+  // EditorialLayout). Previewing the room wall here instead would show a header
+  // the menu never draws — and a venue with the wall off would see nothing at
+  // all, when the theme in fact falls back to the contract's default clay.
+  const headerWall = useMemo(() => {
+    const base = wallCfg.pattern === 'none' ? { ...WALL_DEFAULTS, header: wallCfg.header } : wallCfg
+    const scaled = Math.min(0.8, Math.max(0.3, (Number(base.scale) || 1) * 0.55))
+    return wallFaceStyle(wallPainter, { ...base, scale: scaled, opacity: 1, blur: 0, blend: 'normal', filter: '', tint: '', tintAmount: 0 })
+  }, [wallPainter, wallCfgKey]) // eslint-disable-line react-hooks/exhaustive-deps
   const wallFileRef = useRef(null)
   const onWallFile = (e) => { const file = e.target.files?.[0]; e.target.value = ''; if (file) setCropState({ file, kind: 'wall' }) }
   // The sample dish laid over the live preview is one of the venue's OWN items,
   // so readability is judged against a real photograph and a real name length.
   const wallSample = useMemo(() => allItems.find((it) => it.imageUrl) || allItems[0] || null, [allItems])
+
+  // ===== HOW DISHES ARE JOINED (tenant.menuSections) =====
+  // Same draft-free discipline as the wall: discrete picks save at once, the
+  // sliders go through the shared 400ms debounce.
+  const [secCfg, setSecCfg] = useState(() => ({ ...SECTION_DEFAULTS, ...(tenant?.menuSections || {}) }))
+  const secSavedKey = JSON.stringify(tenant?.menuSections || null)
+  useEffect(() => { setSecCfg({ ...SECTION_DEFAULTS, ...(tenant?.menuSections || {}) }) }, [secSavedKey]) // eslint-disable-line react-hooks/exhaustive-deps
+  const writeSections = async (patch, debounced) => {
+    const next = { ...secCfg, ...patch }
+    setSecCfg(next)
+    if (debounced) { commitPosBg({ menuSections: next }); return }
+    try { await saveNow({ menuSections: next }); updateTenantLocal({ menuSections: next }); toast.success(t('saved')) } catch (_) { toast.error(t('error')) }
+  }
+  const resetSections = async () => {
+    const next = { ...SECTION_DEFAULTS }
+    setSecCfg(next)
+    try { await saveNow({ menuSections: next }); updateTenantLocal({ menuSections: next }); toast.success(t('saved')) } catch (_) { toast.error(t('error')) }
+  }
+
+  // ===== ROOM DECORATION (tenant.menuDecor) =====
+  // An ARRAY, so every write is the whole list. Dragging a lantern fires many
+  // times a second, so a move goes through the shared debounce and only the
+  // discrete acts (add, delete, reorder, duplicate, pair) save immediately.
+  const [decor, setDecor] = useState(() => readDecor(tenant))
+  const [decorSel, setDecorSel] = useState('')
+  const [decorBusy, setDecorBusy] = useState('')
+  // THE LIST IS ALSO KEPT IN A REF, and every operation below reads the ref
+  // rather than the render's copy. A drag folds its moves into one update per
+  // animation frame and then, on release, writes the final position — and the
+  // handler that does the release still holds the state from BEFORE the last
+  // frame, because a React state update is not synchronous. Reading the ref is
+  // what stops that last frame being silently thrown away.
+  const decorRef = useRef(decor)
+  const decorSavedKey = JSON.stringify(tenant?.menuDecor || null)
+  useEffect(() => {
+    const list = readDecor(tenant)
+    decorRef.current = list
+    setDecor(list)
+  }, [decorSavedKey]) // eslint-disable-line react-hooks/exhaustive-deps
+  // ONE writer for every decoration change: it takes the next list, shows it
+  // immediately and persists it. `rows` is always the complete array — a
+  // half-written decoration array is how a venue loses a lantern.
+  const writeDecor = (rows, debounced) => {
+    const list = rows.slice(0, DECOR_MAX)
+    decorRef.current = list
+    setDecor(list)
+    const payload = list.map(writeDecorRow)
+    if (debounced) { commitPosBg({ menuDecor: payload }); return }
+    saveNow({ menuDecor: payload })
+      .then(() => updateTenantLocal({ menuDecor: payload }))
+      .catch(() => toast.error(t('error')))
+  }
+  const patchDecor = (id, o, debounced) => writeDecor(decorRef.current.map((d) => (d.id === id ? { ...d, ...o } : d)), debounced)
+  const addDecor = (url, kind, name) => {
+    if (!url) return
+    if (decorRef.current.length >= DECOR_MAX) { toast.error(ar ? `الحد ${DECOR_MAX} قطعة زينة` : `Limit is ${DECOR_MAX} pieces`); return }
+    const piece = makeDecor(url, kind, name)
+    writeDecor([...decorRef.current, piece])
+    setDecorSel(piece.id)
+  }
+  const delDecor = (id) => {
+    writeDecor(decorRef.current.filter((d) => d.id !== id))
+    setDecorSel((s) => (s === id ? '' : s))
+  }
+  const dupDecor = (id) => {
+    const cur = decorRef.current
+    const src = cur.find((d) => d.id === id)
+    if (!src || cur.length >= DECOR_MAX) return
+    const copy = { ...src, id: nextDecorId(), x: decNum(src.x + 6, 'x'), y: decNum(src.y + 6, 'y') }
+    const i = cur.findIndex((d) => d.id === id)
+    const out = cur.slice()
+    out.splice(i < 0 ? out.length : i + 1, 0, copy)
+    writeDecor(out)
+    setDecorSel(copy.id)
+  }
+  // «علّق نسخة مقابلة» — the two-lantern move. The copy goes to the mirrored
+  // anchor at the mirrored distance from the outer edge (x is measured from the
+  // box's own start edge, so the mirror of x is 100 - x), flipped and
+  // counter-rotated, which is what makes a PAIR rather than two clones.
+  const pairDecor = (id) => {
+    const cur = decorRef.current
+    const src = cur.find((d) => d.id === id)
+    const opposite = src && DECOR_OPPOSITE[src.anchor]
+    if (!src || !opposite) return
+    if (cur.length >= DECOR_MAX) { toast.error(ar ? `الحد ${DECOR_MAX} قطعة زينة` : `Limit is ${DECOR_MAX} pieces`); return }
+    // x is a distance from the anchor's OWN edge, and the opposite anchor counts
+    // from the opposite edge — so the mirror of a piece is the SAME x, not
+    // `100 - x`. Only the facing and the lean have to turn over.
+    const twin = {
+      ...src,
+      id: nextDecorId(),
+      anchor: opposite,
+      rot: decNum(-src.rot, 'rot'),
+      flip: !src.flip,
+    }
+    const i = cur.findIndex((d) => d.id === id)
+    const out = cur.slice()
+    out.splice(i < 0 ? out.length : i + 1, 0, twin)
+    writeDecor(out)
+    setDecorSel(twin.id)
+    toast.success(ar ? 'عُلّقت النسخة المقابلة' : 'Matching piece hung')
+  }
+  const moveDecor = (id, dir) => {
+    const cur = decorRef.current
+    const i = cur.findIndex((d) => d.id === id)
+    const j = i + dir
+    if (i < 0 || j < 0 || j >= cur.length) return
+    const out = cur.slice()
+    const [row] = out.splice(i, 1)
+    out.splice(j, 0, row)
+    writeDecor(out)
+  }
+  // Uploaded AS-IS on purpose: a hanging lantern's entire value is its alpha
+  // channel, and the venue can still trim it afterwards with «قص» — which runs
+  // the same cropper every other image on this screen goes through.
+  const onDecorImage = async (e) => {
+    const files = Array.from(e.target.files || []).slice(0, DECOR_MAX)
+    e.target.value = ''
+    if (!files.length) return
+    setDecorBusy('image')
+    try {
+      const made = []
+      for (let i = 0; i < files.length; i += 1) {
+        const url = await uploadImage(tenantId, files[i], 'decor')
+        made.push(makeDecor(url, 'image', String(files[i].name || '').replace(/\.[a-z0-9]+$/i, '')))
+      }
+      if (made.length) {
+        const out = [...decorRef.current, ...made].slice(0, DECOR_MAX)
+        writeDecor(out)
+        setDecorSel(out[out.length - 1].id)
+      }
+    } catch (err) {
+      toast.error(err?.message || (ar ? 'تعذّر رفع الصورة (فعّل Storage)' : 'Upload failed (enable Storage)'))
+    } finally { setDecorBusy('') }
+  }
+  // The SAME 3D path the item editor uses for a dish model: uploadFile into a
+  // library folder, no re-encoding, extension checked before a byte is sent.
+  const onDecorModel = async (e) => {
+    const f = e.target.files?.[0]
+    e.target.value = ''
+    if (!f) return
+    if (!/\.glb$/i.test(f.name)) { toast.error(ar ? 'الملف يجب أن يكون .glb' : 'The file must be a .glb'); return }
+    setDecorBusy('model')
+    try {
+      const url = await uploadFile(tenantId, f, 'library/ar')
+      addDecor(url, 'model', String(f.name || '').replace(/\.[a-z0-9]+$/i, ''))
+    } catch (_) { toast.error(t('error')) } finally { setDecorBusy('') }
+  }
 
   // Receipt Settings states
   const [receiptHeader, setReceiptHeader] = useState(tenant?.receiptHeader || '')
@@ -727,14 +1128,18 @@ export default function Settings() {
   }
 
   const onPick = (e, kind) => { const file = e.target.files?.[0]; e.target.value = ''; if (file) setCropState({ file, kind }) }
-  const onCropped = async (blob, kind) => {
+  const onCropped = async (blob, kind, meta) => {
     setCropState(null); setUploading(kind)
     try {
       const fileObj = new File([blob], `${kind}.webp`, { type: 'image/webp' })
-      const url = await uploadImage(tenantId, fileObj, 'branding')
+      const url = await uploadImage(tenantId, fileObj, kind === 'decor' ? 'decor' : 'branding')
       // the wall is a NESTED object on the tenant, not a top-level url field, and
       // the upload is also what switches the bond over to «صورتي»
       if (kind === 'wall') { await writeWall({ url, pattern: 'image' }); return }
+      // a decoration is one row of an ARRAY: the crop replaces that row's photo
+      // and leaves its placement, size, motion and glow exactly as hung. WebP
+      // off a canvas keeps the alpha channel, so a trimmed lantern stays cut out.
+      if (kind === 'decor') { if (meta?.decorId) patchDecor(meta.decorId, { url }); return }
       if (kind === 'logo') setLogoUrl(url); else setCoverUrl(url)
       const patch = kind === 'logo' ? { logoUrl: url } : { coverUrl: url }
       await saveNow(patch); updateTenantLocal(patch); toast.success(t('saved'))
@@ -997,9 +1402,9 @@ export default function Settings() {
         // new kind — the menu wall — is a row rather than a fourth nested branch
         const ck = CROP_KINDS[cropState.kind] || CROP_KINDS.cover
         return (
-          <ImageCropper file={cropState.file} aspect={ck.aspect} shape={ck.shape} output={ck.output}
+          <ImageCropper file={cropState.file} imageSrc={cropState.src} aspect={ck.aspect} shape={ck.shape} output={ck.output}
             title={ar ? ck.ar : ck.en} hint={ar ? ck.hintAr : ck.hintEn}
-            onClose={() => setCropState(null)} onCropped={(blob) => onCropped(blob, cropState.kind)} />
+            onClose={() => setCropState(null)} onCropped={(blob) => onCropped(blob, cropState.kind, cropState)} />
         )
       })()}
 
@@ -2485,6 +2890,32 @@ export default function Settings() {
                     </div>
                   )}
 
+                  {/* THE BRICK HEADER. Stored at menuWall.header rather than on
+                      a key of its own because it has no colours: it inherits the
+                      bond, the clay and the mortar picked in this very card. It
+                      sits OUTSIDE the «الجدار مطفأ» branch on purpose — the theme
+                      falls back to the contract's own clay when the room wall is
+                      off, so the switch still does something and must still be
+                      reachable. */}
+                  <label className="row-between" style={{ gap: 10, alignItems: 'flex-start', cursor: 'pointer', borderTop: '1px solid var(--border)', paddingTop: 10 }}>
+                    <span className="stack" style={{ gap: 2 }}>
+                      <strong className="xs">{ar ? 'اجعل الهيدر من نفس الطوب' : 'Build the header out of the same brick'}</strong>
+                      <span className="xs faint">
+                        {ar
+                          ? 'الشريط العلوي للمنيو (اسم المنشأة وأزراره) يُبنى من الجدار نفسه ويأخذ رصفه ولون طينه ولحامه من الاختيارات أعلاه — لا لون منفصل له، ووحدة الطوب فيه أصغر ليبقى الاسم مقروءاً. أطفئه ليعود الهيدر داكناً سادة.'
+                          : 'The menu’s top bar (venue name and its buttons) is built from this same wall and takes its bond, clay and mortar from the choices above — it has no colour of its own, and its brick unit is drawn smaller so the name stays readable. Switch it off and the header goes back to plain dark.'}
+                      </span>
+                      {wallCfg.pattern === 'none' && (
+                        <span className="xs faint">
+                          {ar
+                            ? 'الجدار مطفأ الآن، فالهيدر سيستعمل الطوب الافتراضي (طوب عادي بلون الطين الأساسي) حتى تشغّل جداراً وتختار ألوانه.'
+                            : 'The wall is off right now, so the header falls back to the default brick (running bond in the base clay) until you switch a wall on and pick its colours.'}
+                        </span>
+                      )}
+                    </span>
+                    <input type="checkbox" checked={wallCfg.header === true} onChange={(e) => writeWall({ header: e.target.checked })} style={{ width: 22, height: 22, flex: 'none' }} />
+                  </label>
+
                   {wallCfg.pattern === 'none' ? (
                     <p className="xs faint" style={{ margin: 0 }}>{ar ? 'الجدار مطفأ — يعرض الثيم لوحته الداكنة السادة خلف الأطباق.' : 'The wall is off — the theme shows its plain dark canvas behind the dishes.'}</p>
                   ) : (
@@ -2577,6 +3008,99 @@ export default function Settings() {
                       </div>
                     </>
                   )}
+                </div>
+
+                {/* 6c. HOW ONE DISH IS JOINED TO THE NEXT (tenant.menuSections).
+                    The editorial theme gives every dish its own screen, and the
+                    SEAM between two of them is what the owner complained about —
+                    so the preview shows TWO stacked dishes with the join in the
+                    middle of the frame. One dish would show nothing worth
+                    judging. Every number is bounded by SECTION_RANGE and the
+                    preview is driven by resolveSections(), so what is previewed
+                    is what the contract resolves. */}
+                <div id="set-menusections" className="card card-pad stack" style={{ gap: 12 }}>
+                  <div className="row-between wrap" style={{ gap: 8, alignItems: 'center' }}>
+                    <strong className="small"><Icon name="list" size={14} style={{ verticalAlign: 'middle' }} /> {ar ? 'اتصال الأصناف — الفاصل بين طبق وطبق' : 'Dish continuity — the join between two dishes'}</strong>
+                    <button type="button" className="btn-link xs" onClick={resetSections}><Icon name="reload" size={12} /> {ar ? 'إرجاع الافتراضي' : 'Reset to default'}</button>
+                  </div>
+                  <p className="xs faint" style={{ margin: 0 }}>
+                    {ar
+                      ? 'في ثيم «المجلة الداكنة» يأخذ كل صنف شاشة كاملة. هنا تقرّر أنت هل تبدو الشاشات غرفة واحدة متصلة، أم أصنافاً متباعدة، أم بطاقات منفصلة. كل تغيير يُحفظ فوراً.'
+                      : 'In the “Dark Editorial” theme every dish gets its own screen. Here you decide whether those screens read as one continuous room, as spaced-apart dishes, or as separate cards. Everything saves instantly.'}
+                  </p>
+                  {ovLayout !== 'editorial' && (
+                    <p className="xs" style={{ margin: 0, color: 'var(--warning)' }}>
+                      {ar ? 'هذه الإعدادات تخص ثيم «المجلة الداكنة»، وتخطيط المنيو الحالي غيره. ' : 'These settings belong to the “Dark Editorial” theme, and your menu layout is currently a different one. '}
+                      <button type="button" className="btn-link" style={{ fontSize: 'inherit', fontWeight: 700 }} onClick={() => setASec('elements')}>{ar ? 'تغيير التخطيط' : 'Change the layout'}</button>
+                    </p>
+                  )}
+
+                  <div className="stack" style={{ gap: 6 }}>
+                    <span className="xs faint bold">{ar ? 'طريقة الوصل' : 'How the screens are joined'}</span>
+                    <div className="row wrap" style={{ gap: 6 }}>
+                      {SECTION_MODES.map((m) => (
+                        <button key={m.id} type="button" className={`chip ${secCfg.mode === m.id ? 'active' : ''}`} aria-pressed={secCfg.mode === m.id}
+                          onClick={() => writeSections({ mode: m.id })}>{ar ? m.ar : m.en}</button>
+                      ))}
+                    </div>
+                  </div>
+
+                  <div className="stack" style={{ gap: 8 }}>
+                    {SECTION_SLIDERS.map(([key, la, le, unit, modes]) => {
+                      if (modes && !modes.includes(secCfg.mode)) return null
+                      const R = SECTION_RANGE[key]
+                      const v = Number(secCfg[key] != null ? secCfg[key] : R.dflt)
+                      return (
+                        <div key={key} className="field" style={{ gap: 2 }}>
+                          <label>{ar ? la : le} · <span className="num">{sectionSliderText(unit, v)}</span></label>
+                          <input type="range" min={R.min} max={R.max} step={R.step} value={v} onChange={(e) => writeSections({ [key]: Number(e.target.value) }, true)} style={{ width: '100%' }} />
+                        </div>
+                      )
+                    })}
+                  </div>
+
+                  {secCfg.mode === 'divider' && (
+                    <div className="row wrap" style={{ gap: 16, alignItems: 'center' }}>
+                      <label className="row" style={{ gap: 6, cursor: 'pointer', alignItems: 'center' }}>
+                        <span className="xs faint">{ar ? 'لون الخط الفاصل' : 'Divider colour'}</span>
+                        <input type="color" value={secCfg.dividerColor || '#c8a15a'} onChange={(e) => writeSections({ dividerColor: e.target.value }, true)} style={{ width: 42, height: 32, border: '1px solid var(--border)', borderRadius: 8, background: 'none', cursor: 'pointer' }} aria-label={ar ? 'لون الخط الفاصل' : 'Divider colour'} />
+                        <span className="xs bold num">{String(secCfg.dividerColor || '#c8a15a').toUpperCase()}</span>
+                      </label>
+                      {secCfg.dividerColor && (
+                        <button type="button" className="btn-link xs" onClick={() => writeSections({ dividerColor: '' })}>{ar ? 'اترك الثيم يختار' : 'Let the theme choose'}</button>
+                      )}
+                    </div>
+                  )}
+
+                  <div className="stack" style={{ gap: 6, borderTop: '1px solid var(--border)', paddingTop: 10 }}>
+                    <span className="xs faint bold">{ar ? 'المعاينة الحية — صنفان فوق بعضهما والفاصل بينهما' : 'Live preview — two stacked dishes and the join between them'}</span>
+                    <SectionSeamPreview ar={ar} cfg={secCfg} wallLive={wallLive} sample={wallSample} lang={lang} currency={currency} />
+                    <span className="xs faint">
+                      {ar
+                        ? 'الفاصل في منتصف الإطار عمداً — هو ما تحكم عليه. «متصل بلا فواصل» يعني ألّا يظهر أي شريط بين الطبقين.'
+                        : 'The join sits in the middle of the frame on purpose — it is the thing you are judging. “One continuous room” means no band of any kind appears between the two dishes.'}
+                    </span>
+                  </div>
+                </div>
+
+                {/* 6d. ROOM DECORATION (tenant.menuDecor) — the venue hangs its
+                    OWN objects: a pair of lanterns in the header, a clay pot in a
+                    corner. Everything drawn in the preview goes through
+                    resolveDecor() + decorStyle(), the very functions the menu
+                    uses, so the preview cannot disagree with the menu. */}
+                <div id="set-menudecor">
+                  <DecorCard
+                    ar={ar} rtl={ar} rows={decor} selected={decorSel} setSelected={setDecorSel} busy={decorBusy}
+                    place={decorPlacer || decorPlaceLocal} glowPaint={decorGlow || decorGlowLocal}
+                    wallLive={wallLive} headerWall={headerWall} headerBrick={wallCfg.header === true}
+                    venueName={name || tenant?.name || ''} logoUrl={logoUrl}
+                    editorial={ovLayout === 'editorial'} onGoLayout={() => setASec('elements')}
+                    onPatch={patchDecor} onDelete={delDecor} onDuplicate={dupDecor}
+                    onPair={pairDecor} onMove={moveDecor}
+                    onUploadImage={onDecorImage} onUploadModel={onDecorModel}
+                    onCrop={(d) => setCropState({ src: d.url, kind: 'decor', decorId: d.id })}
+                    onLibrary={() => setLibPick({ kind: 'image', apply: (url, item) => addDecor(url, 'image', item?.name || '') })}
+                  />
                 </div>
 
                 {/* 7. Custom gradient builders */}
@@ -3883,5 +4407,550 @@ function VenueTypeCard({ ar, tenant, saveNow, updateTenantLocal, toast, t }) {
         </div>
       )}
     </div>
+  )
+}
+
+// ============================================================================
+// THE SEAM BETWEEN TWO DISHES
+// ============================================================================
+// Driven entirely by resolveSections(), so the preview cannot disagree with the
+// contract: whatever the editor stores, the RESOLVED values are what is drawn.
+// TWO dishes, never one — the thing being judged is the join, and a preview of
+// a single dish shows nothing about it. The join is parked in the middle of the
+// frame for the same reason.
+const MSX_VH = 240        // the preview's own screen height, in px
+const MSX_REAL = 760      // a real phone screen, in px — the two give the scale
+                          // that keeps a 40px gap looking like 40px on a phone
+                          // rather than like a canyon
+
+function SectionSeamPreview({ ar, cfg, wallLive, sample, lang, currency }) {
+  const s = resolveSections({ menuSections: cfg })
+  const k = MSX_VH / MSX_REAL
+  const dishH = Math.max(24, Math.round((s.height / 100) * MSX_VH))
+  const gapPx = Math.round(s.gap * k)
+  const radius = s.mode === 'card' ? Math.round(s.radius * k) : 0
+  // lift the column so the join lands on the frame's own centre line
+  const shift = Math.round(MSX_VH / 2 - dishH - gapPx / 2)
+  const name = sample ? pickLang(sample, 'name', lang) : (ar ? 'اسم الطبق' : 'Dish name')
+  const price = `${Number(sample?.price || 0).toFixed(2)} ${currency}`
+
+  const dish = (i) => (
+    <div key={i} className="msx-dish" data-mode={s.mode} style={{ height: dishH, borderRadius: radius || undefined }}>
+      {s.fade > 0 && <span className="msx-fade" style={{ opacity: s.fade }} aria-hidden="true" />}
+      {/* the theme draws the hairline at the FOOT of every dish but the last,
+          inset to the section's own padding — not floating in the middle of the
+          space, which is a different thing entirely */}
+      {s.mode === 'divider' && i === 0 && (
+        <span className="msx-divider" aria-hidden="true" style={{ background: s.dividerColor || 'rgba(247, 242, 233, .14)' }} />
+      )}
+      <div className="msx-dishbody">
+        {sample?.imageUrl
+          ? <img src={sample.imageUrl} alt="" className="msx-dishimg" />
+          : <span className="msx-dishplate" aria-hidden="true" />}
+        <b className="msx-dishname">{name}</b>
+        <span className="msx-dishprice num">{price}</span>
+      </div>
+    </div>
+  )
+
+  return (
+    <div className="msx-frame" style={{ height: MSX_VH }}>
+      {/* ONE wall behind BOTH dishes, exactly as the theme paints it: it is the
+          room, not a backdrop per dish. That is what makes «متصل بلا فواصل»
+          genuinely seamless here, and what lets the room show through a gap. */}
+      <span className="msx-wall" style={wallLive || undefined} aria-hidden="true" />
+      <div className="msx-col" style={{ transform: `translateY(${shift}px)`, gap: `${gapPx}px` }}>
+        {dish(0)}
+        {dish(1)}
+      </div>
+    </div>
+  )
+}
+
+// ============================================================================
+// THE ROOM DECORATION MANAGER
+// ============================================================================
+// The venue hangs its OWN objects: the ask that started this was two lanterns in
+// the header, uploaded by the owner and positioned by the owner.
+//
+// EVERY PIECE IS DRAWN BY resolveDecor() + decorStyle() — the very functions the
+// menu calls. The preview therefore cannot drift from the menu, which is the
+// whole reason the contract exports them.
+//
+// Two things decorStyle() deliberately does NOT express, because neither is an
+// inline style: the idle MOTION (keyframes) and the warm GLOW behind a lamp.
+// Both are drawn here from the same resolved numbers — and the motion takes the
+// duration decorStyle() itself computed from `speed`, so the speed slider moves
+// exactly what the contract says it moves.
+//
+// The anchor boxes are a SCHEMATIC of the menu, not a copy of it: x and y are
+// stored as a percentage OF THE BOX, so a piece keeps its place inside its box
+// whatever that box turns out to measure in the real menu.
+const DECOR_BOXES = [
+  ['header-start', 'head'],
+  ['header-center', 'head'],
+  ['header-end', 'head'],
+  ['page-top-start', 'page'],
+  ['page-top-end', 'page'],
+  ['page-bottom-start', 'page'],
+  ['page-bottom-end', 'page'],
+]
+const decorAnchorLabel = (id, ar) => {
+  const a = DECOR_ANCHORS.find((x) => x.id === id) || DECOR_ANCHORS[0]
+  return ar ? a.ar : a.en
+}
+
+function DecorCard({
+  ar, rtl, rows, selected, setSelected, busy, wallLive, headerWall, headerBrick, venueName, logoUrl,
+  editorial, onGoLayout, onPatch, onDelete, onDuplicate, onPair, onMove,
+  onUploadImage, onUploadModel, onCrop, onLibrary, place, glowPaint,
+}) {
+  const imgRef = useRef(null)
+  const glbRef = useRef(null)
+  const boxRefs = useRef({})
+  const dragRef = useRef(null)
+  const rafRef = useRef(0)
+  const pendRef = useRef(null)
+  // natural aspect per URL, learned from the picture the preview already drew —
+  // it is what puts the invisible grab-box exactly over the lantern instead of
+  // over a guessed square
+  const [ratios, setRatios] = useState({})
+
+  // THE CONTRACT'S OWN RESOLVER. Anything it drops (a row with no url, a
+  // seventeenth piece) is dropped here too, so the editor can never show a piece
+  // the menu will not draw.
+  const resolved = useMemo(() => resolveDecor({ menuDecor: rows.map(writeDecorRow) }), [rows])
+  const sel = rows.find((d) => d.id === selected) || null
+
+  // A drag fires far faster than the screen refreshes; the moves are folded into
+  // one update per frame and the debounced writer persists the result.
+  const flushDrag = () => {
+    rafRef.current = 0
+    const p = pendRef.current
+    pendRef.current = null
+    if (p) onPatch(p.id, p.o, true)
+  }
+  const queuePatch = (id, o) => {
+    const prev = pendRef.current && pendRef.current.id === id ? pendRef.current.o : null
+    pendRef.current = { id, o: { ...prev, ...o } }
+    if (!rafRef.current) rafRef.current = window.requestAnimationFrame(flushDrag)
+  }
+  useEffect(() => () => { if (rafRef.current) window.cancelAnimationFrame(rafRef.current) }, [])
+
+  const noteRatio = (url) => (e) => {
+    const im = e.currentTarget
+    if (!im || !im.naturalWidth || !im.naturalHeight) return
+    const r = im.naturalWidth / im.naturalHeight
+    setRatios((prev) => (prev[url] ? prev : { ...prev, [url]: r }))
+  }
+
+  // The box is measured on every gesture start, never cached: this card lives in
+  // a column that scrolls, and a stale rect drops the lantern somewhere else.
+  const geom = (anchor) => {
+    const el = boxRefs.current[anchor]
+    if (!el) return null
+    const rect = el.getBoundingClientRect()
+    if (!rect.width || !rect.height) return null
+    const rtl = window.getComputedStyle(el).direction === 'rtl'
+    return { rect, rtl }
+  }
+  // The piece's centre in screen pixels. It is derived from the PHYSICAL
+  // left/top the theme places it at, never from the raw x/y, because x counts
+  // from a different edge on an end-anchored piece and y counts upward on a
+  // bottom-anchored one.
+  const centreOf = (d, g) => ({
+    ox: g.rect.left + (decorLeftPct(d, rtl) / 100) * g.rect.width,
+    oy: g.rect.top + (decorTopPct(d) / 100) * g.rect.height,
+  })
+
+  const beginDrag = (mode, d) => (e) => {
+    if (e.pointerType === 'mouse' && e.button !== 0) return
+    const g = geom(d.anchor)
+    if (!g) return
+    e.preventDefault()
+    e.stopPropagation()
+    setSelected(d.id)
+    const c = centreOf(d, g)
+    dragRef.current = {
+      mode, id: d.id, anchor: d.anchor, g,
+      px: e.clientX, py: e.clientY,
+      x0: d.x, y0: d.y, w0: d.w, rot0: d.rot,
+      ox: c.ox, oy: c.oy,
+      d0: Math.hypot(e.clientX - c.ox, e.clientY - c.oy),
+      a0: (Math.atan2(e.clientY - c.oy, e.clientX - c.ox) * 180) / Math.PI,
+    }
+    try { e.currentTarget.setPointerCapture(e.pointerId) } catch (_) { /* capture is a convenience; the gesture still tracks under the pointer */ }
+  }
+  const onDragMove = (e) => {
+    const d = dragRef.current
+    if (!d) return
+    e.preventDefault()
+    if (d.mode === 'move') {
+      const mx = e.clientX - d.px
+      const my = e.clientY - d.py
+      // Screen pixels back into the STORED numbers. The signs are the whole
+      // point: on «الهيدر — نهاية» x grows toward the far edge, and on a bottom
+      // corner y grows upward, so a raw delta would drag half the pieces the
+      // wrong way — which is exactly what an earlier placement tool did.
+      const dx = ((mx / d.g.rect.width) * 100) / decorXSign(d.anchor, rtl)
+      const dy = ((my / d.g.rect.height) * 100) / decorYSign(d.anchor)
+      queuePatch(d.id, { x: decNum(d.x0 + dx, 'x'), y: decNum(d.y0 + dy, 'y') })
+      return
+    }
+    if (d.mode === 'size') {
+      const dist = Math.hypot(e.clientX - d.ox, e.clientY - d.oy)
+      queuePatch(d.id, { w: decNum(d.d0 > 6 ? d.w0 * (dist / d.d0) : d.w0, 'w') })
+      return
+    }
+    const a = (Math.atan2(e.clientY - d.oy, e.clientX - d.ox) * 180) / Math.PI
+    const raw = d.rot0 + (a - d.a0)
+    queuePatch(d.id, { rot: decNum((((raw + 180) % 360) + 360) % 360 - 180, 'rot') })
+  }
+  const endDrag = (e) => {
+    if (!dragRef.current) return
+    const id = dragRef.current.id
+    dragRef.current = null
+    // the last frame of a gesture must not be dropped, or letting go mid-flick
+    // leaves the lantern a few pixels behind the finger
+    if (rafRef.current) { window.cancelAnimationFrame(rafRef.current); flushDrag() }
+    // an empty immediate patch flushes the debounce, so the arrangement is on
+    // the document the moment the finger lifts rather than 400ms later
+    onPatch(id, {}, false)
+    try {
+      if (e.currentTarget.hasPointerCapture && e.currentTarget.hasPointerCapture(e.pointerId)) {
+        e.currentTarget.releasePointerCapture(e.pointerId)
+      }
+    } catch (_) { /* the gesture is already over; releasing is best-effort */ }
+  }
+  // Arrow keys nudge the piece the way it MOVES ON SCREEN, not the way the
+  // number happens to run: pressing Left always walks the lantern left.
+  const onHitKey = (d) => (e) => {
+    const mul = e.shiftKey ? 10 : 1
+    const sx = DECOR_RANGE.x.step * mul / decorXSign(d.anchor, rtl)
+    const sy = DECOR_RANGE.y.step * mul / decorYSign(d.anchor)
+    let o = null
+    if (e.key === 'ArrowUp') o = { y: decNum(d.y - sy, 'y') }
+    else if (e.key === 'ArrowDown') o = { y: decNum(d.y + sy, 'y') }
+    else if (e.key === 'ArrowLeft') o = { x: decNum(d.x - sx, 'x') }
+    else if (e.key === 'ArrowRight') o = { x: decNum(d.x + sx, 'x') }
+    else if (e.key === 'Delete' || e.key === 'Backspace') { e.preventDefault(); onDelete(d.id); return }
+    if (!o) return
+    e.preventDefault()
+    onPatch(d.id, o, false)
+  }
+
+  // One resolved piece, exactly as the menu paints it. Three elements deep for
+  // the same reason the menu's layers are: the size container, the placement
+  // (decorStyle) and the idle motion cannot share one element without the
+  // motion overwriting the venue's own rotation and flip.
+  const piece = (d) => {
+    const { place: st, blend, dur } = place(d, rtl)
+    const motion = d.motion || undefined
+    const art = dur ? { animationDuration: dur } : undefined
+    return (
+      <span key={d.id} className="mdx-piece" style={blend ? { mixBlendMode: blend } : undefined}>
+        <span className="mdx-place" style={st}>
+          {d.glow > 0 && (
+            <span className="mdx-glow" data-motion={motion} aria-hidden="true" style={{ background: glowPaint(d), ...(art || {}) }} />
+          )}
+          {d.kind === 'model'
+            ? <span className="mdx-model" data-motion={motion} style={art} aria-hidden="true"><Icon name="shapes" size={14} /></span>
+            : <img className="mdx-art" data-motion={motion} style={art} src={d.url} alt="" draggable={false} onLoad={noteRatio(d.url)} />}
+        </span>
+      </span>
+    )
+  }
+
+  // Grab-boxes are drawn after everything else and the SELECTED one last, so a
+  // piece can never become unreachable: whatever is selected is on top, and the
+  // list below can select anything.
+  const hitsFor = (anchor) => {
+    const list = resolved.byAnchor[anchor] || []
+    return [...list.filter((d) => d.id !== selected), ...list.filter((d) => d.id === selected)]
+  }
+
+  const boxesFor = (region, front) => DECOR_BOXES.filter(([, r]) => r === region).map(([anchor]) => {
+    const list = (resolved.byAnchor[anchor] || []).filter((d) => d.front === front)
+    const isSel = !!(sel && sel.anchor === anchor)
+    return (
+      <div
+        key={`${anchor}-${front ? 'f' : 'b'}`}
+        className="mdx-box"
+        data-anchor={anchor}
+        data-layer={front ? 'front' : 'back'}
+        data-sel={front && isSel ? 'true' : undefined}
+        ref={front ? (el) => { boxRefs.current[anchor] = el } : undefined}
+      >
+        {list.map(piece)}
+        {front && (
+          <div className="mdx-hits">
+            {hitsFor(anchor).map((d) => (
+              <div
+                key={d.id}
+                className="mdx-hit" role="button" tabIndex={0}
+                data-sel={d.id === selected ? 'true' : 'false'}
+                aria-label={`${(rows.find((r) => r.id === d.id) || {}).name || (ar ? 'قطعة زينة' : 'Decoration')} — ${decorAnchorLabel(anchor, ar)}`}
+                style={{
+                  left: `${decorLeftPct(d, rtl)}%`,
+                  top: `${decorTopPct(d)}%`,
+                  width: `${d.w}cqmin`,
+                  aspectRatio: String(ratios[d.url] || 1),
+                  transform: `translate(-50%, -50%) rotate(${d.rot}deg)`,
+                }}
+                onPointerDown={beginDrag('move', d)}
+                onPointerMove={onDragMove}
+                onPointerUp={endDrag}
+                onPointerCancel={endDrag}
+                onKeyDown={onHitKey(d)}
+              >
+                {d.id === selected && (
+                  <span className="mdx-grip mdx-grip-rot" aria-hidden="true"
+                    onPointerDown={beginDrag('rot', d)} onPointerMove={onDragMove}
+                    onPointerUp={endDrag} onPointerCancel={endDrag}>
+                    <Icon name="reload" size={11} />
+                  </span>
+                )}
+                {d.id === selected && (
+                  <span className="mdx-grip mdx-grip-size" aria-hidden="true"
+                    onPointerDown={beginDrag('size', d)} onPointerMove={onDragMove}
+                    onPointerUp={endDrag} onPointerCancel={endDrag}>
+                    <Icon name="arrowUpDown" size={11} style={{ transform: 'rotate(45deg)' }} />
+                  </span>
+                )}
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
+    )
+  })
+
+  return (
+    <div className="card card-pad stack" style={{ gap: 12 }}>
+      <div className="row-between wrap" style={{ gap: 8, alignItems: 'center' }}>
+        <strong className="small"><Icon name="shapes" size={14} style={{ verticalAlign: 'middle' }} /> {ar ? 'زينة الغرفة — علّق أشياءك في المنيو' : 'Room decoration — hang your own objects'}</strong>
+        <span className="xs faint num">{rows.length}/{DECOR_MAX}</span>
+      </div>
+      <p className="xs faint" style={{ margin: 0 }}>
+        {ar
+          ? 'ارفع صورة الشيء نفسه — فانوس، نبتة، لوحة — بخلفية شفافة (PNG)، ثم اسحبه بإصبعك إلى مكانه. لكل قطعة موضعها وحجمها ودورانها وحركتها ووهجها، وتستطيع تعليق نسخة مقابلة لها في الطرف الآخر بضغطة واحدة. لا رسومات جاهزة هنا: ما ترفعه هو ما يظهر.'
+          : 'Upload the object itself as a transparent PNG — a lantern, a plant, a painting — then drag it into place. Every piece has its own position, size, rotation, motion and glow, and one tap hangs a matching piece at the opposite side. Nothing is drawn for you: what you upload is what appears.'}
+      </p>
+      {!editorial && (
+        <p className="xs" style={{ margin: 0, color: 'var(--warning)' }}>
+          {ar ? 'الزينة تظهر في ثيم «المجلة الداكنة»، وتخطيط المنيو الحالي غيره. ' : 'Decorations show in the “Dark Editorial” theme, and your menu layout is currently a different one. '}
+          <button type="button" className="btn-link" style={{ fontSize: 'inherit', fontWeight: 700 }} onClick={onGoLayout}>{ar ? 'تغيير التخطيط' : 'Change the layout'}</button>
+        </p>
+      )}
+
+      <div className="row wrap" style={{ gap: 8, alignItems: 'center' }}>
+        <input ref={imgRef} type="file" accept="image/png,image/webp,image/*" multiple hidden onChange={onUploadImage} />
+        <input ref={glbRef} type="file" accept=".glb" hidden onChange={onUploadModel} />
+        <button type="button" className="btn btn-sm btn-outline" disabled={!!busy || rows.length >= DECOR_MAX} onClick={() => imgRef.current?.click()}>
+          {busy === 'image' ? <span className="spinner" /> : <Icon name="upload" size={13} />} {ar ? 'ارفع صورة قطعة' : 'Upload an object'}
+        </button>
+        <button type="button" className="btn btn-sm btn-outline" disabled={!!busy || rows.length >= DECOR_MAX} onClick={() => glbRef.current?.click()}>
+          {busy === 'model' ? <span className="spinner" /> : <Icon name="shapes" size={13} />} {ar ? 'ارفع مجسم glb.' : 'Upload a .glb'}
+        </button>
+        <button type="button" className="btn-link xs" disabled={rows.length >= DECOR_MAX} onClick={onLibrary}>{ar ? 'من المكتبة' : 'From library'}</button>
+      </div>
+      <p className="xs faint" style={{ margin: 0 }}>
+        {ar
+          ? 'الصورة تُرفع كما هي بلا إعادة ترميز حتى لا تفقد شفافيتها، وتستطيع قصّها بعد ذلك من زر «قص الصورة» على القطعة المحدّدة. المجسم glb. يُعرض هنا كمربّع بديل لأن هذه المعاينة لا تشغّل المجسمات.'
+          : 'Images are uploaded untouched so nothing eats the transparency; trim afterwards with “Crop” on the selected piece. A .glb shows here as a placeholder tile, because this preview does not run 3D models.'}
+      </p>
+
+      <div className="stack" style={{ gap: 6, borderTop: '1px solid var(--border)', paddingTop: 10 }}>
+        <span className="xs faint bold">{ar ? 'المعاينة — اسحب القطعة إلى مكانها' : 'Preview — drag each piece into place'}</span>
+        <div className="mdx-frame">
+          <div className="mdx-screen" onPointerDown={() => setSelected('')}>
+            <div className="mdx-head">
+              {headerBrick && <span className="mdx-headwall" style={headerWall || undefined} aria-hidden="true" />}
+              {boxesFor('head', false)}
+              <div className="mdx-headbar">
+                {logoUrl ? <img src={logoUrl} alt="" className="mdx-logo" /> : <span className="mdx-logo mdx-logo-blank" aria-hidden="true" />}
+                <b className="mdx-venue">{venueName || (ar ? 'اسم المنشأة' : 'Venue name')}</b>
+              </div>
+              {boxesFor('head', true)}
+            </div>
+            <div className="mdx-page">
+              <span className="mdx-pagewall" style={wallLive || undefined} aria-hidden="true" />
+              {boxesFor('page', false)}
+              <div className="mdx-pagebody" aria-hidden="true">
+                <span className="mdx-plate" />
+                <span className="mdx-line" style={{ width: '52%' }} />
+                <span className="mdx-line" style={{ width: '30%' }} />
+              </div>
+              {boxesFor('page', true)}
+            </div>
+          </div>
+        </div>
+        <span className="xs faint">
+          {ar
+            ? 'اسحب القطعة بإصبعك أو بالفأرة؛ المقبض السفلي يكبّرها والعلوي يدوّرها، والأسهم تحرّكها خطوة خطوة (Shift للخطوة الكبيرة). الإطار المنقّط يظهر عند اختيار قطعة ليريك مساحة موضعها. الموضع محفوظ كنسبة من حافة الموضع نفسه، ولهذا تكون «نهاية» المرآة الصحيحة لـ«بداية» بالأرقام ذاتها، وينعكس كل شيء صحيحاً في العربية والإنجليزية.'
+            : 'Drag with finger or mouse; the lower grip resizes and the upper one rotates, and arrow keys nudge (Shift for a big step). The dashed frame appears while a piece is selected, to show you its hanging area. A position is stored as a share of its own edge, which is why “end” is the true mirror of “start” at the very same numbers, and why everything mirrors correctly in Arabic and English.'}
+        </span>
+      </div>
+
+      <div className="stack" style={{ gap: 6 }}>
+        <span className="xs faint bold">{ar ? 'القطع المعلّقة' : 'Hung pieces'}</span>
+        {rows.length === 0 ? (
+          <p className="xs faint" style={{ margin: 0 }}>
+            {ar
+              ? 'لا زينة بعد. ارفع صورة فانوسك مقصوصةً بخلفية شفافة، ضعه في «الهيدر — بداية»، ثم اضغط «علّق نسخة مقابلة» فتصير فانوسين في الهيدر.'
+              : 'Nothing hung yet. Upload your lantern as a transparent cut-out, put it at “Header start”, then tap “Hang a matching piece” to get the pair.'}
+          </p>
+        ) : (
+          <div className="mdx-list">
+            {rows.map((d, i) => (
+              <div key={d.id} className="mdx-row" data-sel={d.id === selected ? 'true' : 'false'}>
+                <button type="button" className="mdx-pick" onClick={() => setSelected(d.id === selected ? '' : d.id)}>
+                  <span className="mdx-thumb">
+                    {d.kind === 'model' ? <Icon name="shapes" size={16} /> : <img src={d.url} alt="" loading="lazy" />}
+                  </span>
+                  <span className="mdx-rowtext">
+                    <b>{d.name || (ar ? 'قطعة زينة' : 'Decoration')}</b>
+                    <span className="xs faint num">
+                      {decorAnchorLabel(d.anchor, ar)} · {d.w}% · {d.rot}°{d.front ? '' : (ar ? ' · خلف المنيو' : ' · behind')}
+                    </span>
+                  </span>
+                </button>
+                <span className="mdx-rowbtns">
+                  <button type="button" className="icon-btn" disabled={!DECOR_OPPOSITE[d.anchor] || rows.length >= DECOR_MAX}
+                    aria-label={ar ? 'علّق نسخة مقابلة' : 'Hang a matching piece'}
+                    title={DECOR_OPPOSITE[d.anchor] ? '' : (ar ? 'الوسط ليس له طرف مقابل' : 'The centre has no opposite side')}
+                    onClick={() => onPair(d.id)}>
+                    <Icon name="arrowLeftRight" size={14} />
+                  </button>
+                  <button type="button" className="icon-btn" disabled={i === 0} aria-label={ar ? 'إلى الخلف' : 'Send back'} onClick={() => onMove(d.id, -1)}>
+                    <Icon name="arrowUp" size={14} />
+                  </button>
+                  <button type="button" className="icon-btn" disabled={i === rows.length - 1} aria-label={ar ? 'إلى الأمام' : 'Bring forward'} onClick={() => onMove(d.id, 1)}>
+                    <Icon name="arrowUp" size={14} style={{ transform: 'rotate(180deg)' }} />
+                  </button>
+                  <button type="button" className="icon-btn" aria-label={ar ? 'تكرار' : 'Duplicate'} onClick={() => onDuplicate(d.id)}>
+                    <Icon name="copy" size={14} />
+                  </button>
+                  <button type="button" className="icon-btn" style={{ color: 'var(--danger)' }} aria-label={ar ? 'حذف' : 'Delete'} onClick={() => onDelete(d.id)}>
+                    <Icon name="delete" size={14} />
+                  </button>
+                </span>
+              </div>
+            ))}
+          </div>
+        )}
+        {rows.length > 1 && (
+          <span className="xs faint">
+            {ar ? 'الترتيب هنا هو ترتيب الرسم: الأعلى يُرسم أولاً فيظهر تحت ما بعده عند التقاطع.' : 'Order here is paint order: the top row is drawn first and sits under the ones after it where they overlap.'}
+          </span>
+        )}
+      </div>
+
+      {sel && <DecorControls key={sel.id} ar={ar} d={sel} onChange={(o, debounced) => onPatch(sel.id, o, debounced)} onCrop={() => onCrop(sel)} />}
+    </div>
+  )
+}
+
+// Every control for the ONE selected piece. Each option comes from a
+// dishComposition.js catalogue and each slider is bounded by DECOR_RANGE, so the
+// editor cannot offer a setting normalizeDecor() would clamp away.
+function DecorControls({ ar, d, onChange, onCrop }) {
+  return (
+    <section className="mdx-panel stack" style={{ gap: 10 }}>
+      <div className="row-between wrap" style={{ gap: 8, alignItems: 'center' }}>
+        <strong className="xs">
+          <Icon name="penLine" size={13} style={{ verticalAlign: 'middle' }} /> {ar ? 'ضبط القطعة المحدّدة' : 'Selected piece'}
+          {d.name ? <span className="faint"> — {d.name}</span> : null}
+        </strong>
+        {d.kind !== 'model' && (
+          <button type="button" className="btn-link xs" onClick={onCrop}><Icon name="edit" size={12} /> {ar ? 'قص الصورة' : 'Crop'}</button>
+        )}
+      </div>
+
+      <div className="field" style={{ marginBottom: 0 }}>
+        <label>{ar ? 'اسم القطعة (لك وحدك — لا يظهر للعميل)' : 'Label (yours only — never shown to a guest)'}</label>
+        <input className="input input-sm" value={d.name} maxLength={40} onChange={(e) => onChange({ name: e.target.value }, true)} />
+      </div>
+
+      <div className="stack" style={{ gap: 6 }}>
+        <span className="xs faint bold">{ar ? 'مكان التعليق' : 'Where it hangs'}</span>
+        <div className="row wrap" style={{ gap: 6 }}>
+          {DECOR_ANCHORS.map((a) => (
+            <button key={a.id} type="button" className={`chip ${d.anchor === a.id ? 'active' : ''}`} aria-pressed={d.anchor === a.id}
+              onClick={() => onChange({ anchor: a.id })}>{ar ? a.ar : a.en}</button>
+          ))}
+        </div>
+      </div>
+
+      <div className="stack" style={{ gap: 8 }}>
+        {DECOR_SLIDERS.map(([key, la, le, unit]) => {
+          if (key === 'speed' && !d.motion) return null
+          const R = DECOR_RANGE[key]
+          const v = Number(d[key] != null ? d[key] : R.dflt)
+          return (
+            <div key={key} className="field" style={{ gap: 2 }}>
+              <label>{ar ? la : le} · <span className="num">{decorSliderText(unit, v)}</span></label>
+              <input type="range" min={R.min} max={R.max} step={R.step} value={v} onChange={(e) => onChange({ [key]: Number(e.target.value) }, true)} style={{ width: '100%' }} />
+            </div>
+          )
+        })}
+      </div>
+
+      <div className="row wrap" style={{ gap: 16, alignItems: 'center' }}>
+        <label className="row" style={{ gap: 6, cursor: 'pointer', alignItems: 'center' }}>
+          <input type="checkbox" checked={!!d.flip} onChange={(e) => onChange({ flip: e.target.checked })} style={{ width: 20, height: 20 }} />
+          <span className="xs">{ar ? 'اقلبها أفقياً' : 'Flip horizontally'}</span>
+        </label>
+        <label className="row" style={{ gap: 6, cursor: 'pointer', alignItems: 'center' }}>
+          <input type="checkbox" checked={d.front !== false} onChange={(e) => onChange({ front: e.target.checked })} style={{ width: 20, height: 20 }} />
+          <span className="xs">{ar ? 'أمام المنيو (أطفئه لتصير خلفه)' : 'In front of the menu (off = behind it)'}</span>
+        </label>
+      </div>
+
+      <div className="stack" style={{ gap: 6 }}>
+        <span className="xs faint bold">{ar ? 'الحركة' : 'Idle motion'}</span>
+        <div className="row wrap" style={{ gap: 6 }}>
+          {DECOR_MOTIONS.map((m) => (
+            <button key={m.id || 'still'} type="button" className={`chip ${d.motion === m.id ? 'active' : ''}`} aria-pressed={d.motion === m.id}
+              onClick={() => onChange({ motion: m.id })}>{ar ? m.ar : m.en}</button>
+          ))}
+        </div>
+        <span className="xs faint">
+          {ar
+            ? '«تأرجح معلّق» يتأرجح من حافته العليا كالفانوس المعلّق فعلاً. كل الحركات تتوقف تلقائياً لمن فعّل «تقليل الحركة» في جهازه.'
+            : '“Hanging sway” swings from the top edge, the way a suspended lantern actually moves. Every motion stops for a guest whose device asks for reduced motion.'}
+        </span>
+      </div>
+
+      <div className="row wrap" style={{ gap: 16, alignItems: 'center', borderTop: '1px solid var(--border)', paddingTop: 10 }}>
+        <div className="field grow" style={{ minWidth: 170, marginBottom: 0 }}>
+          <label>{ar ? 'وهج دافئ حولها (للمصابيح)' : 'Warm halo around it (for lamps)'} · <span className="num">{Math.round(d.glow * 100)}%</span></label>
+          <input type="range" min={DECOR_RANGE.glow.min} max={DECOR_RANGE.glow.max} step={DECOR_RANGE.glow.step} value={d.glow}
+            onChange={(e) => onChange({ glow: Number(e.target.value) }, true)} style={{ width: '100%' }} />
+        </div>
+        {d.glow > 0 && (
+          <label className="row" style={{ gap: 6, cursor: 'pointer', alignItems: 'center' }}>
+            <span className="xs faint">{ar ? 'لون الوهج' : 'Halo colour'}</span>
+            <input type="color" value={d.glowColor || '#f5b942'} onChange={(e) => onChange({ glowColor: e.target.value }, true)} style={{ width: 42, height: 32, border: '1px solid var(--border)', borderRadius: 8, background: 'none', cursor: 'pointer' }} aria-label={ar ? 'لون الوهج' : 'Halo colour'} />
+            <span className="xs bold num">{String(d.glowColor || '#f5b942').toUpperCase()}</span>
+          </label>
+        )}
+      </div>
+
+      <div className="row wrap" style={{ gap: 8 }}>
+        <div className="field grow" style={{ minWidth: 170, marginBottom: 0 }}>
+          <label>{ar ? 'المزج مع ما خلفها' : 'Blend with what is behind it'}</label>
+          <select className="select" value={d.blend} onChange={(e) => onChange({ blend: e.target.value })}>
+            {BLEND_MODES.map((b) => <option key={b.id} value={b.id}>{ar ? b.ar : b.en}</option>)}
+          </select>
+        </div>
+        <div className="field grow" style={{ minWidth: 170, marginBottom: 0 }}>
+          <label>{ar ? 'فلتر الصورة' : 'Image filter'}</label>
+          <select className="select" value={d.filter} onChange={(e) => onChange({ filter: e.target.value })}>
+            {FILTERS.map((f) => <option key={f.id || 'none'} value={f.id}>{ar ? f.ar : f.en}</option>)}
+          </select>
+        </div>
+      </div>
+    </section>
   )
 }
