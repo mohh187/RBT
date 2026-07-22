@@ -277,6 +277,17 @@
 /* A .glb has no intrinsic size to derive a height from, so the viewer is given a
    square viewport and draws the model inside it, transparent to the corners. */
 .edt-dec-mv { aspect-ratio: 1 / 1; background: transparent; --poster-color: transparent; }
+/* belt over braces: the viewer must obey the wrapper even if its class is ever
+   lost again (React custom-element plumbing wrote `classname` once and the
+   viewer fell back to its shadow 300x150 — every dial looked dead) */
+.edt-dec-p model-viewer {
+  display: block;
+  width: 100%;
+  aspect-ratio: 1 / 1;
+  pointer-events: none;
+  background: transparent;
+  --poster-color: transparent;
+}
 /* the warm halo a lamp throws on the wall behind it — behind the piece, wider
    than it, and only ever drawn when the venue asked for one */
 .edt-dec-glow {

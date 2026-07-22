@@ -1180,6 +1180,16 @@
   background: rgba(255, 255, 255, .1);
   color: #fff;
 }
+/* the LIVE viewer replacing the placeholder once model-viewer has loaded —
+   the card preview now runs the model exactly as the menu does */
+.mdx-mv {
+  display: block;
+  width: 100%;
+  aspect-ratio: 1;
+  pointer-events: none;
+  background: transparent;
+  --poster-color: transparent;
+}
 /* the warm halo a lamp throws on what is behind it — behind the piece and wider
    than it, at the theme's own proportion */
 .mdx-glow {
@@ -1196,22 +1206,26 @@
    would make the dial jump the moment it left 1.0x. */
 .mdx-art[data-motion],
 .mdx-model[data-motion],
+.mdx-mv[data-motion],
 .mdx-glow[data-motion] { animation-duration: 6s; }
 .mdx-art[data-motion='hang'],
-.mdx-model[data-motion='hang'] {
+.mdx-model[data-motion='hang'],
+.mdx-mv[data-motion='hang'] {
   transform-origin: 50% 0;
   animation-name: mdxHang;
   animation-timing-function: cubic-bezier(.45, .05, .55, .95);
   animation-iteration-count: infinite;
 }
 .mdx-art[data-motion='float'],
-.mdx-model[data-motion='float'] {
+.mdx-model[data-motion='float'],
+.mdx-mv[data-motion='float'] {
   animation-name: mdxFloat;
   animation-timing-function: ease-in-out;
   animation-iteration-count: infinite;
 }
 .mdx-art[data-motion='spin'],
-.mdx-model[data-motion='spin'] {
+.mdx-model[data-motion='spin'],
+.mdx-mv[data-motion='spin'] {
   animation-name: mdxSpin;
   animation-timing-function: linear;
   animation-iteration-count: infinite;
@@ -1220,7 +1234,8 @@
    whose halo the venue left at zero */
 .mdx-glow[data-motion='glow'],
 .mdx-art[data-motion='glow'],
-.mdx-model[data-motion='glow'] {
+.mdx-model[data-motion='glow'],
+.mdx-mv[data-motion='glow'] {
   animation-name: mdxGlow;
   animation-timing-function: ease-in-out;
   animation-iteration-count: infinite;
@@ -1349,6 +1364,7 @@
   /* still, and still VISIBLE: a hung object holds its settled position */
   .mdx-art[data-motion],
   .mdx-model[data-motion],
+  .mdx-mv[data-motion],
   .mdx-glow[data-motion] {
     animation: none;
     rotate: none;
@@ -1393,15 +1409,12 @@
   flex-direction: column;
   gap: 4px;
 }
-/* same melt as the menu, with the canvas colour written out because the admin
-   shell does not define --edt-bg */
-.mtbl-melt {
-  position: absolute;
-  inset: 0;
-  background: linear-gradient(180deg, transparent var(--tbl-a, 16%), #100c0a var(--tbl-b, 52%));
-}
-.mtbl-name { position: relative; color: #f7f2e9; font-size: 15px; font-weight: 800; }
-.mtbl-price { position: relative; color: #f5b942; font-size: 13px; font-weight: 800; }
+/* the card mounts the REAL TablePaint stack now (.edt-table + its layers from
+   index.css); the old local .mtbl-melt approximation is gone — the engine's
+   var(--edt-bg, #100c0a) fallback covers the admin shell, which defines no
+   --edt-bg on purpose (do not add one). */
+.mtbl-name { position: relative; z-index: 2; color: #f7f2e9; font-size: 15px; font-weight: 800; }
+.mtbl-price { position: relative; z-index: 2; color: #f5b942; font-size: 13px; font-weight: 800; }
 
 /* ================================== the tilt projection in the editors === */
 

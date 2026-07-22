@@ -8074,6 +8074,13 @@ button.edt-pair:active { transform: scale(.98); }
 .edt-sec[data-table] .edt-photo { position: relative; z-index: 2; }
 .edt-sec[data-table] .edt-main { position: relative; z-index: 1; }
 .edt-stg-body[data-table] { position: relative; }
+/* «شكل ثابت للطاولة» (menuTable.stage.minBody -> --edt-stg-bodymin, dvh): a
+   floor under the details panel so the table box — and every %-of-it dial:
+   free w/h, the melt stops — paints the same on a bare item as on an
+   option-rich one. Fallback MUST stay `auto` (the literal current computed
+   value): the body is a flex item under extend and a grid item on desktop,
+   and flipping min-size to 0px there is a real layout change. */
+.edt-stg-body[data-table] { min-height: var(--edt-stg-bodymin, auto); }
 
 /* ---- extend-to-bottom («مدّ الطاولة حتى أسفل النافذة»، menuTable.stage.extend)
    The stage stamps data-tbl-extend: the scroller becomes a flex column, the
@@ -8098,6 +8105,37 @@ button.edt-pair:active { transform: scale(.98); }
   border-end-start-radius: 0;
   border-end-end-radius: 0;
 }
+
+/* ---- per-block placement in the item window (tenant.menuStage ->
+   stageBlockProps: data-blk / data-blk-align / --sblk-dx / --sblk-dy).
+   dx is a LOGICAL inline margin and dy a block-start margin: bounded flow
+   shifts, never transforms — RTL-safe by construction, and a shifted block
+   pushes its neighbours instead of stacking glyphs. Attributes exist only on
+   configured blocks, so untouched venues carry zero of this. ---- */
+.edt-stg [data-blk] {
+  margin-inline-start: var(--sblk-dx, 0%);
+  margin-block-start: var(--sblk-dy, 0px);
+}
+.edt-stg [data-blk-align='start'] { text-align: start; }
+.edt-stg [data-blk-align='center'] { text-align: center; }
+.edt-stg [data-blk-align='end'] { text-align: end; }
+.edt-stg [data-blk-align='center'].edt-stg-tags,
+.edt-stg [data-blk-align='center'].edt-stg-price,
+.edt-stg [data-blk-align='center'].edt-facts { justify-content: center; }
+.edt-stg [data-blk-align='end'].edt-stg-tags,
+.edt-stg [data-blk-align='end'].edt-stg-price,
+.edt-stg [data-blk-align='end'].edt-facts { justify-content: flex-end; }
+.edt-stg [data-blk-align='center'] .edt-opts,
+.edt-stg [data-blk-align='center'] .edt-pair-row { justify-content: center; }
+.edt-stg [data-blk-align='end'] .edt-opts,
+.edt-stg [data-blk-align='end'] .edt-pair-row { justify-content: flex-end; }
+/* the capped-width paragraph carries its box with the alignment (out-cascades
+   the dx margin by source order at equal specificity — stated in the card) */
+.edt-stg [data-blk-align='center'].edt-stg-desc { margin-inline: auto; }
+.edt-stg [data-blk-align='end'].edt-stg-desc { margin-inline-start: auto; }
+/* the AR button centres via margin auto today; release it per align */
+.edt-stg [data-blk-align='start'].edt-stg-ar { margin-inline-start: var(--sblk-dx, 0%); margin-inline-end: auto; }
+.edt-stg [data-blk-align='end'].edt-stg-ar { margin-inline-start: auto; margin-inline-end: 0; }
 
 /* ---- 3D / AR ---- */
 /* IN FLOW under the hero, never floated over it: absolute placement parked

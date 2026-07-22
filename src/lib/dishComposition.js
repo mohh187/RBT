@@ -636,6 +636,11 @@ export const TABLE_RANGE = {
   // dish before the first text row, so a deep lift never buries the item's
   // name under the plate. 0 = exactly today's layout.
   textPad: { min: 0, max: 200, step: 2, dflt: 0 },   // px
+  // «شكل ثابت للطاولة»: a floor under the details panel, in dvh, so the table
+  // box — and every percent-of-it dial (free w/h, the melt stops) — reads the
+  // same on a bare item as on an option-rich one. 0 = today: height from
+  // content alone.
+  minBody: { min: 0, max: 90, step: 1, dflt: 0 },    // dvh
 }
 
 // The keys a venue may override FOR THE OPENED-ITEM WINDOW alone
@@ -644,7 +649,7 @@ export const TABLE_RANGE = {
 // cannot fit both: the owner reported the table «لا تظهر بشكل مناسب عند فتح
 // الصنف». Geometry and strength may differ per place; the material may not —
 // it is one room with one table.
-export const TABLE_STAGE_KEYS = ['x', 'y', 'w', 'h', 'lift', 'opacity', 'shade', 'dim', 'melt', 'meltBottom', 'veil', 'extend', 'heroPad', 'heroMax', 'textPad', 'contact', 'scale']
+export const TABLE_STAGE_KEYS = ['x', 'y', 'w', 'h', 'lift', 'opacity', 'shade', 'dim', 'melt', 'meltBottom', 'veil', 'extend', 'heroPad', 'heroMax', 'textPad', 'minBody', 'contact', 'scale']
 
 /**
  * The table under the dish details. Reads the TENANT document, because it is one
@@ -702,6 +707,7 @@ export function resolveTable(tenant, options) {
     heroPad: num(t.heroPad, R.heroPad.dflt, R.heroPad.min, R.heroPad.max),
     heroMax: num(t.heroMax, R.heroMax.dflt, R.heroMax.min, R.heroMax.max),
     textPad: num(t.textPad, R.textPad.dflt, R.textPad.min, R.textPad.max),
+    minBody: num(t.minBody, R.minBody.dflt, R.minBody.min, R.minBody.max),
   }
 }
 
@@ -737,7 +743,11 @@ export function tableMeltStops(tb) {
   if (!tb) return { a: 16, b: 52 }
   const bright = tb.kind === 'image' || TABLE_BRIGHT_IDS.includes(tb.material)
   const a0 = bright ? 6 : 16
-  const b0 = bright ? 30 : Math.round(34 + tb.shade * 36)
+  // shade was DEAD on bright/photo tables (the live venue's case): the bright
+  // branch froze b0 at 30 and nothing else reads shade. Coupled now, with the
+  // coefficients chosen so the DEFAULT shade (0.35) reproduces exactly 30 —
+  // untouched venues byte-identical, the dial spans ~22-46.
+  const b0 = bright ? Math.round(21.6 + tb.shade * 24) : Math.round(34 + tb.shade * 36)
   const shift = (0.5 - tb.melt) * 130
   const a = Math.max(0, Math.min(140, a0 + shift))
   const b = Math.max(a + 6, Math.min(190, b0 + shift))
@@ -764,6 +774,7 @@ export function tableStageVars(tb) {
   if (!tb) return null
   const v = {}
   if (tb.textPad) v['--tbl-textpad'] = `${tb.textPad}px`
+  if (tb.minBody) v['--edt-stg-bodymin'] = `${tb.minBody}dvh`
   if (tb.heroPad !== TABLE_RANGE.heroPad.dflt) v['--edt-stg-padtop'] = `min(${tb.heroPad}px, 14vw)`
   if (tb.heroMax !== TABLE_RANGE.heroMax.dflt) {
     v['--edt-stg-heromax'] = `min(${tb.heroMax}dvh, ${tb.heroMax * 10}px)`
@@ -783,13 +794,24 @@ export function tableStyle(tb) {
     s.backgroundPosition = 'center'
     s.backgroundRepeat = 'no-repeat'
   }
-  if (tb.radius) { s.borderStartStartRadius = `${tb.radius}px`; s.borderStartEndRadius = `${tb.radius}px` }
   const filters = []
   if (tb.filter) filters.push(tb.filter)
   if (tb.blur) filters.push(`blur(${tb.blur}px)`)
   if (filters.length) s.filter = filters.join(' ')
   if (tb.blend && tb.blend !== 'normal') s.mixBlendMode = tb.blend
   return s
+}
+
+/**
+ * Top-corner radii for the .edt-table BOX (the overflow clip), not the art:
+ * a radius painted on the art below the box's 18px clip was invisible (nearly
+ * half the dial did nothing), and a non-uniform free scale warped it
+ * elliptically. Null at the 0 default — the CSS 18px keeps governing untouched
+ * venues. Bottom corners are the extend dial's business.
+ */
+export function tableBoxStyle(tb) {
+  if (!tb || !tb.radius) return null
+  return { borderStartStartRadius: `${tb.radius}px`, borderStartEndRadius: `${tb.radius}px` }
 }
 
 /**
@@ -926,6 +948,12 @@ export function decorStyle(d) {
   if (d.speed !== 1) s.animationDuration = `${(6 / d.speed).toFixed(2)}s`
   return s
 }
+
+// A 3D piece must not pinwheel as a flat sticker: engines hand motion 'spin'
+// to model-viewer's native auto-rotate instead of the CSS keyframe. 360deg
+// over the same 6/speed seconds the edtDecSpin keyframe takes, so the speed
+// dial means one thing on a photo and on a model.
+export const decorSpinRate = (d) => `${(60 * d.speed).toFixed(1)}deg`
 
 /** True when the item has any composition worth rendering a backdrop layer for. */
 export const hasBackdrop = (comp) => !!(comp && comp.bg)
@@ -1315,6 +1343,30 @@ export const HOME_BLOCK_IDS = HOME_BLOCKS.map((b) => b.id)
  * ids are dropped; ids missing from a saved order (features added later) are
  * inserted at their DEFAULT position, not appended blindly.
  */
+// A block this build knows but a saved order predates is inserted at its
+// DEFAULT position (after the nearest saved predecessor), not appended — new
+// features must not pile up at the page's foot for older venues. Shared by the
+// home page and the item-window orders; one algorithm, one behaviour.
+const mergeOrder = (saved, ids) => {
+  const out = [...saved]
+  ids.forEach((id, idx) => {
+    if (out.includes(id)) return
+    let at = -1
+    for (let j = idx - 1; j >= 0 && at < 0; j--) {
+      const p = out.indexOf(ids[j])
+      if (p >= 0) at = p + 1
+    }
+    if (at < 0) {
+      for (let j = idx + 1; j < ids.length && at < 0; j++) {
+        const p = out.indexOf(ids[j])
+        if (p >= 0) at = p
+      }
+    }
+    out.splice(at < 0 ? out.length : at, 0, id)
+  })
+  return out
+}
+
 export function resolveHomeOrder(tenant) {
   const raw = tenant && tenant.menuHome && Array.isArray(tenant.menuHome.order) ? tenant.menuHome.order : []
   const saved = raw
@@ -1322,23 +1374,83 @@ export function resolveHomeOrder(tenant) {
     .filter((k, i, a) => HOME_BLOCK_IDS.includes(k) && a.indexOf(k) === i)
     .slice(0, 16)
   if (!saved.length) return [...HOME_BLOCK_IDS]
-  const out = [...saved]
-  HOME_BLOCK_IDS.forEach((id, idx) => {
-    if (out.includes(id)) return
-    let at = -1
-    for (let j = idx - 1; j >= 0 && at < 0; j--) {
-      const p = out.indexOf(HOME_BLOCK_IDS[j])
-      if (p >= 0) at = p + 1
-    }
-    if (at < 0) {
-      for (let j = idx + 1; j < HOME_BLOCK_IDS.length && at < 0; j++) {
-        const p = out.indexOf(HOME_BLOCK_IDS[j])
-        if (p >= 0) at = p
-      }
-    }
-    out.splice(at < 0 ? out.length : at, 0, id)
+  return mergeOrder(saved, HOME_BLOCK_IDS)
+}
+
+// ------------------------------------------- the item window's text blocks --
+//
+// «أضف تخصيص وضع مكان اسم الصنف أو حتى الخيارات الأخرى والنصوص»: the opened
+// dish's panel blocks — name, price, facts, description, sizes, modifiers,
+// pairings… — take an order and a bounded per-block placement (align + a
+// logical-inline nudge + a vertical nudge). Flow shifts, never transforms, so
+// the RTL translate trap cannot occur and a shifted block pushes its
+// neighbours instead of stacking glyphs. All defaults = today's exact DOM.
+
+export const STAGE_BLOCKS = [
+  { id: 'tags', ar: 'الشارات (عرض/مميز/نفد)', en: 'Badges' },
+  { id: 'name', ar: 'اسم الصنف', en: 'Item name' },
+  { id: 'price', ar: 'السعر', en: 'Price' },
+  { id: 'facts', ar: 'الحقائق (سعرات/تحضير/يكفي)', en: 'Facts' },
+  { id: 'desc', ar: 'الوصف', en: 'Description' },
+  { id: 'note', ar: 'تنبيه الحساسية', en: 'Allergen note' },
+  { id: 'ing', ar: 'المكونات', en: 'Ingredients' },
+  { id: 'story', ar: 'قصة الطبق', en: 'Dish story' },
+  { id: 'variants', ar: 'المقاسات', en: 'Sizes' },
+  { id: 'options', ar: 'الإضافات', en: 'Modifiers' },
+  { id: 'pairs', ar: 'يُطلب معه', en: 'Pairings' },
+]
+export const STAGE_BLOCK_IDS = STAGE_BLOCKS.map((b) => b.id)
+// Placeable but NOT orderable: the AR button lives in the media column under
+// the photo, outside the panel's flow.
+export const STAGE_PLACE_ONLY_IDS = ['ar']
+export const STAGE_ALIGN_IDS = ['', 'start', 'center', 'end'] // '' = today's alignment
+
+export const STAGE_TEXT_RANGE = {
+  dx: { min: -40, max: 40, step: 0.5, dflt: 0 }, // % of panel width, LOGICAL inline
+  dy: { min: -60, max: 60, step: 1, dflt: 0 },   // px, block-start
+}
+
+/**
+ * Null when menuStage is absent or entirely default, so the untouched path
+ * renders today's exact DOM — attribute-free.
+ */
+export function resolveStageBlocks(tenant) {
+  const s = tenant && tenant.menuStage
+  if (!s || typeof s !== 'object') return null
+  const R = STAGE_TEXT_RANGE
+  const src = s.blocks && typeof s.blocks === 'object' ? s.blocks : {}
+  const blocks = {}
+  STAGE_BLOCK_IDS.concat(STAGE_PLACE_ONLY_IDS).forEach((id) => {
+    const b = src[id]
+    if (!b || typeof b !== 'object') return
+    const align = str(b.align, STAGE_ALIGN_IDS, '')
+    const dx = num(b.dx, R.dx.dflt, R.dx.min, R.dx.max)
+    const dy = num(b.dy, R.dy.dflt, R.dy.min, R.dy.max)
+    if (!align && !dx && !dy) return
+    blocks[id] = { align, dx, dy }
   })
-  return out
+  const raw = Array.isArray(s.order) ? s.order : []
+  const saved = raw
+    .map((k) => String(k || ''))
+    .filter((k, i, a) => STAGE_BLOCK_IDS.includes(k) && a.indexOf(k) === i)
+    .slice(0, 16)
+  const order = saved.length ? mergeOrder(saved, STAGE_BLOCK_IDS) : [...STAGE_BLOCK_IDS]
+  const moved = order.some((id, i) => id !== STAGE_BLOCK_IDS[i])
+  if (!Object.keys(blocks).length && !moved) return null
+  return { blocks, order }
+}
+
+/** Spreadable props for one block's root element. Null when unconfigured. */
+export function stageBlockProps(sb, id) {
+  const b = sb && sb.blocks ? sb.blocks[id] : null
+  if (!b) return null
+  const p = { 'data-blk': id }
+  if (b.align) p['data-blk-align'] = b.align
+  const st = {}
+  if (b.dx) st['--sblk-dx'] = `${b.dx}%`
+  if (b.dy) st['--sblk-dy'] = `${b.dy}px`
+  if (Object.keys(st).length) p.style = st
+  return p
 }
 
 // -------------------------------------------------------- the menu chrome --

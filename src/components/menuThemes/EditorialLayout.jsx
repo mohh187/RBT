@@ -22,7 +22,7 @@
 // blend, filter, blur, tint and opacity over the top. See "THE WALL" below and
 // styles/menuwall.css. The stylesheet's own --edt-wall tile survives only as the
 // fallback for a venue that has never opened the editor.
-import { lazy, Suspense, useEffect, useMemo, useRef, useState } from 'react'
+import { Fragment, lazy, Suspense, useEffect, useMemo, useRef, useState } from 'react'
 import { createPortal } from 'react-dom'
 import { useI18n, pickLang } from '../../lib/i18n.jsx'
 import Icon from '../Icon.jsx'
@@ -41,11 +41,13 @@ import {
   resolveComposition, bgStyle, imgStyle, imgTiltBoxStyle,
   resolveWall, wallStyle, layerStyle,
   resolveSections, resolveDecor, decorStyle,
-  resolveTable, tableStyle, tableFreeStyle, tableMeltStops, tableMeltBottom, tableStageVars,
+  resolveTable, tableStageVars,
   resolveMenuHeader, resolveButtons,
   resolveShadows, shadowVars, scaleDishShadow,
   resolveInk, inkVars, inkModeFor,
+  decorSpinRate, resolveStageBlocks, stageBlockProps, STAGE_BLOCK_IDS,
 } from '../../lib/dishComposition.js'
+import TablePaint from './TablePaint.jsx'
 // One shared trim engine for every uploaded video (lib/useVideoTrim.js): seeks
 // to the venue's chosen start second and loops the chosen window, leaving the
 // muted/autoplay/loop attributes untouched so iOS autoplay survives.
@@ -876,12 +878,25 @@ export function decorPlace(d, rtl) {
 // halo with this function, not with a second one that could drift from it.
 export const glowPaint = (d) => `radial-gradient(50% 50% at 50% 50%, ${rgbaOf(toRgb(d.glowColor, [245, 185, 66]), 0.62 * d.glow)}, transparent 70%)`
 
+// model-viewer does not honor prefers-reduced-motion by itself, and the CSS
+// reduced-motion block cannot reach behavior inside its shadow DOM — sampled
+// at render time, same precedent as AdPopup.
+const prefersStill = () => { try { return window.matchMedia('(prefers-reduced-motion: reduce)').matches } catch (_) { return false } }
+
 function EdtDecorPiece({ d, mv, rtl }) {
   const { place, blend, dur } = decorPlace(d, rtl)
   const outer = blend ? { mixBlendMode: blend } : undefined
   const motion = d.motion || undefined
   const art = dur ? { animationDuration: dur } : undefined
   const is3d = d.kind === 'model'
+  // On a CUSTOM ELEMENT React 18 writes prop names verbatim as attributes, so
+  // className produced a dead `classname` attribute: every .edt-dec-mv rule
+  // (sizing, motion, reduced-motion) was silent and the viewer fell back to
+  // its shadow default 300x150 canvas that ignored every dial — the owner's
+  // «الحجم 3% والقطعة ضخمة». `class=` is the correct React 18 idiom here.
+  // 'spin' on a model maps to native auto-rotate (the CSS keyframe would
+  // pinwheel the flat canvas like a sticker, not turn the model on its axis).
+  const spin3d = is3d && d.motion === 'spin'
   return (
     <span className="edt-dec" style={outer} aria-hidden="true">
       <span className="edt-dec-p" style={place}>
@@ -891,8 +906,9 @@ function EdtDecorPiece({ d, mv, rtl }) {
         {is3d
           ? (mv ? (
             <model-viewer
-              className="edt-dec-mv" data-motion={motion} style={art} src={d.url}
+              class="edt-dec-mv" data-motion={spin3d ? undefined : motion} style={art} src={d.url}
               interaction-prompt="none" loading="eager" disable-zoom="" disable-tap=""
+              {...(spin3d && !prefersStill() ? { 'auto-rotate': '', 'rotation-per-second': decorSpinRate(d) } : {})}
             />
           ) : null)
           : <img className="edt-dec-img" data-motion={motion} style={art} src={d.url} alt="" decoding="async" />}
@@ -1176,54 +1192,11 @@ function EdtDish({ comp, src, anim = '', bind = null, onLoad = null, fallback = 
 // melt: light wood under light text cannot pass contrast any other way, so on
 // those the table shows as a rim at the top rather than a full backdrop. That is
 // a readability decision, recorded here on purpose.
+// The paint stack itself lives in TablePaint.jsx — ONE component for this
+// engine and the settings card mock, so the two halves can never diverge on
+// which layer rides the free transform and which stays pinned.
 function EdtTable({ tb }) {
-  if (!tb) return null
-  // The melt stops come from the contract now (tableMeltStops): the settings
-  // preview paints with the same function, and `melt` is the venue's dial.
-  const { a, b } = tableMeltStops(tb)
-  // Bottom-edge melt (meltBottom): dissolves the raw sawn-off cut at the box
-  // bottom into the canvas. Null while off, so the element never mounts and the
-  // untouched path stays byte-identical. The reading veil (veil) is a canvas
-  // layer ABOVE the material but under the lit edge and the contact pool, so
-  // readability stops being hostage to the melt dial alone. Paint order is
-  // load-bearing: art → tint → dim → melt → melt-b → veil → edge → contact.
-  const mb = tableMeltBottom(tb)
-  const art = tableStyle(tb) || {}
-  // Free placement: translate/scale against the bolted box, origin at the top
-  // centre so the seat (the top edge the dish drops onto) never drifts.
-  //
-  // THE TRANSFORM CARRIES ONLY THE FURNITURE, NEVER THE READING LAYERS. When
-  // the whole box scaled (the live venue stretched h to 250), the melt's stops
-  // scaled with it and slid out of the visible panel — the words sat on a huge
-  // undissolved slab of material, which the owner reported as «الظل». So the
-  // art+tint ride the free transform in one wrapper, the edge+contact ride an
-  // identical second wrapper (they hug the table's PHYSICAL top lip), and the
-  // melt/melt-b/veil/dim stay PINNED to the panel box: readability geometry is
-  // the panel's, whatever the furniture does. With no free transform the
-  // wrappers are inert inset:0 spans and the paint is byte-identical.
-  const free = tableFreeStyle(tb)
-  return (
-    <span
-      className="edt-table"
-      aria-hidden="true"
-      style={{ '--tbl-a': `${a}%`, '--tbl-b': `${b}%`, '--tbl-contact': tb.contact }}
-    >
-      <span className="edt-table-free" style={free || undefined}>
-        <span className="edt-table-art" data-m={tb.kind === 'material' ? tb.material : undefined} style={art} />
-        {tb.tint && tb.tintAmount > 0
-          ? <span className="edt-table-tint" style={{ background: tb.tint, opacity: tb.tintAmount }} />
-          : null}
-      </span>
-      {tb.dim > 0 ? <span className="edt-table-dim" style={{ opacity: tb.dim }} /> : null}
-      <span className="edt-table-melt" />
-      {mb ? <span className="edt-table-melt-b" style={{ '--tbl-mba': `${mb.a}%`, '--tbl-mbb': `${mb.b}%` }} /> : null}
-      {tb.veil > 0 ? <span className="edt-table-veil" style={{ opacity: tb.veil }} /> : null}
-      <span className="edt-table-free" style={free || undefined}>
-        <span className="edt-table-edge" data-e={tb.edge} />
-        {tb.contact > 0 ? <span className="edt-table-contact" /> : null}
-      </span>
-    </span>
-  )
+  return <TablePaint tb={tb} />
 }
 
 // '' is the theme's own default (no photo entrance, exactly as before) and
@@ -1600,6 +1573,13 @@ export function EditorialItemStage({ item, tenant = null, currency, onClose, onA
   // The stage variant: the same table, but the venue may have re-seated it for
   // this far taller panel (menuTable.stage — see TABLE_STAGE_KEYS).
   const table = useMemo(() => resolveTable(tenant, { variant: 'stage' }), [JSON.stringify(tenant && tenant.menuTable) || '']) // eslint-disable-line react-hooks/exhaustive-deps
+  // The venue's ordering + placement of the panel's text blocks (menuStage).
+  // Null for untouched venues -> stageBlockProps returns null for every id and
+  // the order IS the source sequence: today's exact DOM, attribute-free.
+  const sbKey = JSON.stringify(tenant && tenant.menuStage) || ''
+  const sb = useMemo(() => resolveStageBlocks(tenant), [sbKey]) // eslint-disable-line react-hooks/exhaustive-deps
+  const blk = (id) => stageBlockProps(sb, id) || {}
+  const blkOrder = sb ? sb.order : STAGE_BLOCK_IDS
   // the same button skin as the list — the stage is a portal, so the wrap's
   // custom properties cannot cascade into it and are stamped again here
   const btnKey = JSON.stringify(tenant && tenant.menuButtons) || ''
@@ -1725,6 +1705,130 @@ export function EditorialItemStage({ item, tenant = null, currency, onClose, onA
     addedTimer.current = setTimeout(() => setAdded(''), 1500)
   }
 
+  // THE PANEL'S BLOCKS AS A KEYED MAP, rendered through blkOrder. With no
+  // menuStage the order is exactly this source sequence and blk() adds no
+  // props, so the DOM is byte-identical to the old literal JSX. Every block
+  // keeps its original conditional; the modifier groups ride ONE keyed
+  // Fragment (a div would change the .edt-stg-field descendant cascade). The
+  // price note: the headline tracks the selected size, so it can never
+  // contradict the add bar.
+  const stageNodes = {
+    tags: (offerTag || out || low || item.featured) ? (
+      <div key="tags" className="edt-stg-tags" {...blk('tags')}>
+        {offerTag && <span className="edt-tag edt-tag-offer">{offerTag}</span>}
+        {out && <span className="edt-tag edt-tag-out">{t('soldOut')}</span>}
+        {!out && low ? <span className="edt-tag edt-tag-low">{ar ? `آخر ${low}` : `Only ${low} left`}</span> : null}
+        {item.featured && <span className="edt-tag edt-tag-star"><Icon name="star" size={11} /> {ar ? 'مميّز' : 'Featured'}</span>}
+      </div>
+    ) : null,
+    name: <h2 key="name" className="edt-stg-name" {...blk('name')}>{name}</h2>,
+    price: (
+      <div key="price" className="edt-stg-price" {...blk('price')}>
+        <Price value={offer ? discountedPrice(base, offer) : base} currency={currency} lang={lang} />
+        {offer && <span className="edt-was"><Price value={base} currency={currency} lang={lang} /></span>}
+      </div>
+    ),
+    facts: (
+      <div key="facts" className="edt-facts" {...blk('facts')}>
+        {item.calories ? <span className="edt-fact"><i>{ar ? 'سعرات' : 'Calories'}</i><b>{item.calories}</b></span> : null}
+        {item.prepTime ? <span className="edt-fact"><i>{ar ? 'التحضير' : 'Prep'}</i><b>{item.prepTime} {t('minutesShort')}</b></span> : null}
+        {item.serves ? <span className="edt-fact"><i>{ar ? 'يكفي' : 'Serves'}</i><b>{item.serves}</b></span> : null}
+        {item.rating ? <span className="edt-fact"><i>{ar ? 'التقييم' : 'Rating'}</i><b>{item.rating}{item.reviewsCount ? ` (${item.reviewsCount})` : ''}</b></span> : null}
+      </div>
+    ),
+    desc: desc ? <p key="desc" className="edt-stg-desc" {...blk('desc')}>{desc}</p> : null,
+    note: item.allergens ? (
+      <p key="note" className="edt-note" {...blk('note')}><Icon name="warning" size={14} /> <span>{ar ? 'قد يحتوي: ' : 'May contain: '}{item.allergens}</span></p>
+    ) : null,
+    ing: ings.length > 0 ? (
+      <div key="ing" className="edt-ing edt-stg-ing" {...blk('ing')}>
+        <span className="edt-ing-title">{ar ? 'المكونات' : 'Ingredients'}</span>
+        <ul>
+          {ings.map((g, i) => (
+            <li key={i} style={{ animationDelay: `${(0.3 + i * 0.05).toFixed(2)}s` }}><AmberAmounts text={pickLang(g, 'name', lang)} /></li>
+          ))}
+        </ul>
+      </div>
+    ) : null,
+    story: story ? (
+      <div key="story" className="edt-story" {...blk('story')}>
+        <span className="edt-ing-title">{ar ? 'قصة الطبق' : 'The dish story'}</span>
+        {story.title && <h3 className="edt-story-t">{story.title}</h3>}
+        {(storyOpen ? storyParas : storyParas.slice(0, 1)).map((p, i) => <p key={i} className="edt-story-p">{p}</p>)}
+        {storyParas.length > 1 && (
+          <button type="button" className="edt-more" onClick={() => setStoryOpen((v) => !v)}>
+            {storyOpen ? (ar ? 'إخفاء' : 'Show less') : (ar ? 'اقرأ المزيد' : 'Read more')}
+          </button>
+        )}
+        {story.sourceLine && <p className="edt-story-line"><Icon name="pin" size={13} /> <span>{story.sourceLine}</span></p>}
+        {story.chefLine && <p className="edt-story-line"><Icon name="kitchen" size={13} /> <span>{story.chefLine}</span></p>}
+      </div>
+    ) : null,
+    variants: variants.length > 0 ? (
+      <div key="variants" className="edt-stg-field" {...blk('variants')}>
+        <span className="edt-stg-lbl">{t('variants')}</span>
+        <div className="edt-opts">
+          {variants.map((v) => (
+            <button key={v.key} type="button" className={`edt-opt ${variant?.key === v.key ? 'on' : ''}`} onClick={() => { setVariant(v); setErr('') }}>
+              {pickLang(v, 'name', lang)} · <Price value={v.price} currency={currency} lang={lang} />
+            </button>
+          ))}
+        </div>
+      </div>
+    ) : null,
+    options: groups.length > 0 ? (
+      <Fragment key="options">
+        {groups.map((g, gi) => (
+          <div key={gi} className="edt-stg-field" {...blk('options')}>
+            <span className="edt-stg-lbl">
+              {pickLang(g, 'name', lang)}
+              {(g.required || Number(g.min) > 0) ? <b className="edt-req"> *</b> : <span className="edt-opt-note"> ({t('optional')})</span>}
+            </span>
+            <div className="edt-opts">
+              {(g.options || []).map((o, oi) => {
+                const on = (selected[gi] || []).some((x) => x.nameAr === o.nameAr && x.nameEn === o.nameEn)
+                return (
+                  <button key={oi} type="button" className={`edt-opt ${on ? 'on' : ''}`} onClick={() => toggle(gi, o)}>
+                    {pickLang(o, 'name', lang)}{Number(o.price) ? <> +<Price value={o.price} currency={currency} lang={lang} /></> : ''}
+                  </button>
+                )
+              })}
+            </div>
+          </div>
+        ))}
+      </Fragment>
+    ) : null,
+    pairs: pairs.length > 0 ? (
+      <div key="pairs" className="edt-stg-field" {...blk('pairs')}>
+        <span className="edt-stg-lbl">{ar ? 'يُطلب معه' : 'Goes well with'}</span>
+        <div className="edt-pair-row">
+          {pairs.map((p) => {
+            const pOut = isOut(p)
+            const pOffer = offerForItem(p, offers)
+            const tappable = !!onQuickAdd && !pOut
+            const Tag = tappable ? 'button' : 'div'
+            const done = added === p.id
+            return (
+              <Tag key={p.id} className={`edt-pair ${done ? 'done' : ''} ${pOut ? 'is-out' : ''}`}
+                {...(tappable ? { type: 'button', onClick: () => quickAdd(p), 'aria-label': `${t('addToCart')} ${pickLang(p, 'name', lang)}` } : {})}>
+                <span className="edt-pair-media">
+                  {p.imageUrl ? <img src={p.imageUrl} alt="" loading="lazy" decoding="async" /> : <Icon name="coffee" size={18} />}
+                </span>
+                <span className="edt-pair-txt">
+                  <b>{pickLang(p, 'name', lang)}</b>
+                  <i>{pOut ? t('soldOut') : <Price value={pOffer ? discountedPrice(p.price, pOffer) : p.price} currency={currency} lang={lang} />}</i>
+                </span>
+                {tappable && (
+                  <span className="edt-pair-add" aria-hidden="true"><Icon name={done ? 'check' : 'add'} size={14} /></span>
+                )}
+              </Tag>
+            )
+          })}
+        </div>
+      </div>
+    ) : null,
+  }
+
   if (!portalRoot) return null
   return createPortal(
     <div
@@ -1761,7 +1865,7 @@ export function EditorialItemStage({ item, tenant = null, currency, onClose, onA
               position put it on the dish itself (mid-left in RTL), covering
               the food it offers to show; here it can never overlap anything. */}
           {arOk && (
-            <button type="button" className="edt-stg-ar edt-brick" onClick={() => setArOpen(true)}>
+            <button type="button" className="edt-stg-ar edt-brick" {...blk('ar')} onClick={() => setArOpen(true)}>
               <Icon name="shapes" size={15} /> {ar ? 'شاهده ثلاثي الأبعاد' : 'View in 3D'}
             </button>
           )}
@@ -1778,113 +1882,7 @@ export function EditorialItemStage({ item, tenant = null, currency, onClose, onA
         </div>
         <div className="edt-stg-body" data-table={table ? '1' : undefined}>
           <EdtTable tb={table} />
-          {(offerTag || out || low || item.featured) && (
-            <div className="edt-stg-tags">
-              {offerTag && <span className="edt-tag edt-tag-offer">{offerTag}</span>}
-              {out && <span className="edt-tag edt-tag-out">{t('soldOut')}</span>}
-              {!out && low ? <span className="edt-tag edt-tag-low">{ar ? `آخر ${low}` : `Only ${low} left`}</span> : null}
-              {item.featured && <span className="edt-tag edt-tag-star"><Icon name="star" size={11} /> {ar ? 'مميّز' : 'Featured'}</span>}
-            </div>
-          )}
-          <h2 className="edt-stg-name">{name}</h2>
-          {/* tracks the selected size, so the headline price never contradicts the bar */}
-          <div className="edt-stg-price">
-            <Price value={offer ? discountedPrice(base, offer) : base} currency={currency} lang={lang} />
-            {offer && <span className="edt-was"><Price value={base} currency={currency} lang={lang} /></span>}
-          </div>
-          <div className="edt-facts">
-            {item.calories ? <span className="edt-fact"><i>{ar ? 'سعرات' : 'Calories'}</i><b>{item.calories}</b></span> : null}
-            {item.prepTime ? <span className="edt-fact"><i>{ar ? 'التحضير' : 'Prep'}</i><b>{item.prepTime} {t('minutesShort')}</b></span> : null}
-            {item.serves ? <span className="edt-fact"><i>{ar ? 'يكفي' : 'Serves'}</i><b>{item.serves}</b></span> : null}
-            {item.rating ? <span className="edt-fact"><i>{ar ? 'التقييم' : 'Rating'}</i><b>{item.rating}{item.reviewsCount ? ` (${item.reviewsCount})` : ''}</b></span> : null}
-          </div>
-          {desc && <p className="edt-stg-desc">{desc}</p>}
-          {item.allergens && (
-            <p className="edt-note"><Icon name="warning" size={14} /> <span>{ar ? 'قد يحتوي: ' : 'May contain: '}{item.allergens}</span></p>
-          )}
-          {ings.length > 0 && (
-            <div className="edt-ing edt-stg-ing">
-              <span className="edt-ing-title">{ar ? 'المكونات' : 'Ingredients'}</span>
-              <ul>
-                {ings.map((g, i) => (
-                  <li key={i} style={{ animationDelay: `${(0.3 + i * 0.05).toFixed(2)}s` }}><AmberAmounts text={pickLang(g, 'name', lang)} /></li>
-                ))}
-              </ul>
-            </div>
-          )}
-          {story && (
-            <div className="edt-story">
-              <span className="edt-ing-title">{ar ? 'قصة الطبق' : 'The dish story'}</span>
-              {story.title && <h3 className="edt-story-t">{story.title}</h3>}
-              {(storyOpen ? storyParas : storyParas.slice(0, 1)).map((p, i) => <p key={i} className="edt-story-p">{p}</p>)}
-              {storyParas.length > 1 && (
-                <button type="button" className="edt-more" onClick={() => setStoryOpen((v) => !v)}>
-                  {storyOpen ? (ar ? 'إخفاء' : 'Show less') : (ar ? 'اقرأ المزيد' : 'Read more')}
-                </button>
-              )}
-              {story.sourceLine && <p className="edt-story-line"><Icon name="pin" size={13} /> <span>{story.sourceLine}</span></p>}
-              {story.chefLine && <p className="edt-story-line"><Icon name="kitchen" size={13} /> <span>{story.chefLine}</span></p>}
-            </div>
-          )}
-          {variants.length > 0 && (
-            <div className="edt-stg-field">
-              <span className="edt-stg-lbl">{t('variants')}</span>
-              <div className="edt-opts">
-                {variants.map((v) => (
-                  <button key={v.key} type="button" className={`edt-opt ${variant?.key === v.key ? 'on' : ''}`} onClick={() => { setVariant(v); setErr('') }}>
-                    {pickLang(v, 'name', lang)} · <Price value={v.price} currency={currency} lang={lang} />
-                  </button>
-                ))}
-              </div>
-            </div>
-          )}
-          {groups.map((g, gi) => (
-            <div key={gi} className="edt-stg-field">
-              <span className="edt-stg-lbl">
-                {pickLang(g, 'name', lang)}
-                {(g.required || Number(g.min) > 0) ? <b className="edt-req"> *</b> : <span className="edt-opt-note"> ({t('optional')})</span>}
-              </span>
-              <div className="edt-opts">
-                {(g.options || []).map((o, oi) => {
-                  const on = (selected[gi] || []).some((x) => x.nameAr === o.nameAr && x.nameEn === o.nameEn)
-                  return (
-                    <button key={oi} type="button" className={`edt-opt ${on ? 'on' : ''}`} onClick={() => toggle(gi, o)}>
-                      {pickLang(o, 'name', lang)}{Number(o.price) ? <> +<Price value={o.price} currency={currency} lang={lang} /></> : ''}
-                    </button>
-                  )
-                })}
-              </div>
-            </div>
-          ))}
-          {pairs.length > 0 && (
-            <div className="edt-stg-field">
-              <span className="edt-stg-lbl">{ar ? 'يُطلب معه' : 'Goes well with'}</span>
-              <div className="edt-pair-row">
-                {pairs.map((p) => {
-                  const pOut = isOut(p)
-                  const pOffer = offerForItem(p, offers)
-                  const tappable = !!onQuickAdd && !pOut
-                  const Tag = tappable ? 'button' : 'div'
-                  const done = added === p.id
-                  return (
-                    <Tag key={p.id} className={`edt-pair ${done ? 'done' : ''} ${pOut ? 'is-out' : ''}`}
-                      {...(tappable ? { type: 'button', onClick: () => quickAdd(p), 'aria-label': `${t('addToCart')} ${pickLang(p, 'name', lang)}` } : {})}>
-                      <span className="edt-pair-media">
-                        {p.imageUrl ? <img src={p.imageUrl} alt="" loading="lazy" decoding="async" /> : <Icon name="coffee" size={18} />}
-                      </span>
-                      <span className="edt-pair-txt">
-                        <b>{pickLang(p, 'name', lang)}</b>
-                        <i>{pOut ? t('soldOut') : <Price value={pOffer ? discountedPrice(p.price, pOffer) : p.price} currency={currency} lang={lang} />}</i>
-                      </span>
-                      {tappable && (
-                        <span className="edt-pair-add" aria-hidden="true"><Icon name={done ? 'check' : 'add'} size={14} /></span>
-                      )}
-                    </Tag>
-                  )
-                })}
-              </div>
-            </div>
-          )}
+          {blkOrder.map((id) => stageNodes[id])}
           {err && <p className="edt-stg-err" role="alert">{err}</p>}
         </div>
       </div>
@@ -1907,7 +1905,7 @@ export function EditorialItemStage({ item, tenant = null, currency, onClose, onA
           </button>
           {arReady ? (
             <model-viewer
-              className="edt-ar-viewer"
+              class="edt-ar-viewer"
               src={glbSrc || undefined}
               ios-src={usdzSrc || undefined}
               alt={name}

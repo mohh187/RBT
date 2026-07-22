@@ -19,6 +19,7 @@ import ImageCropper from '../../components/ImageCropper.jsx'
 import CustomDomainCard from '../../components/CustomDomainCard.jsx'
 import SubscriptionCard from '../../components/SubscriptionCard.jsx'
 import MenuPreview from '../../components/MenuPreview.jsx'
+import TablePaint from '../../components/menuThemes/TablePaint.jsx'
 import MediaLibrary from '../../components/MediaLibrary.jsx'
 import BgPanPad from '../../components/BgPanPad.jsx'
 import { THEMES, applyTheme } from '../../lib/themes.js'
@@ -34,7 +35,8 @@ import {
   WALL_PATTERNS, WALL_FINISHES, WALL_RANGE, BLEND_MODES, FILTERS, resolveWall, wallStyle,
   SECTION_MODES, SECTION_RANGE, resolveSections,
   DECOR_ANCHORS, DECOR_MOTIONS, DECOR_RANGE, DECOR_DEPTHS, resolveDecor, decorStyle,
-  TABLE_KINDS, TABLE_MATERIALS, TABLE_EDGES, TABLE_RANGE, TABLE_STAGE_KEYS, resolveTable, tableStyle, tableMeltStops, tableFreeStyle, tableMeltBottom,
+  TABLE_KINDS, TABLE_MATERIALS, TABLE_EDGES, TABLE_RANGE, TABLE_STAGE_KEYS, resolveTable,
+  STAGE_BLOCKS, STAGE_BLOCK_IDS, STAGE_ALIGN_IDS, STAGE_TEXT_RANGE, resolveStageBlocks, decorSpinRate,
   HEADER_MODES, HEADER_RANGE, resolveMenuHeader,
   BUTTON_SKINS, BUTTON_SCOPES, BUTTON_SHAPES, BUTTON_RANGE, resolveButtons,
   SHADOW_RANGE,
@@ -183,6 +185,7 @@ const TABLE_DEFAULTS = {
   meltBottom: TABLE_RANGE.meltBottom.dflt, veil: TABLE_RANGE.veil.dflt,
   // stage-window cohesion: extend-to-bottom + the space/height of the hero photo
   extend: false, heroPad: TABLE_RANGE.heroPad.dflt, heroMax: TABLE_RANGE.heroMax.dflt,
+  textPad: TABLE_RANGE.textPad.dflt, minBody: TABLE_RANGE.minBody.dflt,
   // per-place overrides for the opened-item window (TABLE_STAGE_KEYS only)
   stage: {},
 }
@@ -314,6 +317,20 @@ function HomeOrderRow({ id, label, hideable, hidden, onToggleHide, hint, ar }) {
           <Icon name={hidden ? 'eyeOff' : 'eye'} size={12} /> {hidden ? (ar ? 'مخفي' : 'Hidden') : (ar ? 'ظاهر' : 'Shown')}
         </button>
       )}
+    </div>
+  )
+}
+
+// One draggable row of the item-window text card. Module scope like
+// HomeOrderRow: useSortable is only ever mounted inside a SortableContext.
+// The amber dot marks a block the venue has tuned (align or a nudge).
+function StageOrderRow({ id, label, active, tuned, onPick, ar }) {
+  const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({ id })
+  return (
+    <div ref={setNodeRef} className="row" style={{ gap: 8, alignItems: 'center', padding: '8px 10px', border: active ? '1px solid var(--brand)' : '1px solid var(--border)', borderRadius: 10, background: 'var(--surface-1)', transform: CSS.Transform.toString(transform), transition, opacity: isDragging ? 0.5 : 1, cursor: 'pointer' }} onClick={onPick}>
+      <button type="button" className="icon-btn" style={{ width: 28, height: 28, cursor: 'grab', touchAction: 'none', flex: 'none' }} aria-label={ar ? 'اسحب لإعادة الترتيب' : 'Drag to reorder'} {...attributes} {...listeners}><Icon name="drag" size={14} /></button>
+      <span className="small grow">{label}</span>
+      {tuned && <span style={{ width: 8, height: 8, borderRadius: 99, background: 'var(--brand)', flex: 'none' }} aria-hidden="true" />}
     </div>
   )
 }
@@ -618,6 +635,7 @@ const SEARCH_INDEX = [
   { keys: ['الفاصل', 'فاصل', 'الفواصل', 'الفراغ بين الاصناف', 'الفراغ بين الأصناف', 'اتصال', 'متصل', 'بطاقات', 'خط فاصل', 'ارتفاع الصنف', 'seam', 'gap', 'divider', 'cards', 'continuity', 'sections'], tab: 'studio', aSec: 'room', at: 'set-menusections', ar: 'الفاصل بين صنف وصنف', en: 'The join between two dishes' },
   { keys: ['الزينة', 'زينة', 'فانوس', 'فوانيس', 'زخرفة', 'زخارف', 'تعليق', 'معلقات', 'نجفة', 'لوحة', 'نبتة', 'decor', 'decoration', 'lantern', 'ornament', 'hang'], tab: 'studio', aSec: 'room', at: 'set-menudecor', ar: 'زينة الغرفة (فوانيس ومعلّقات)', en: 'Room decoration (lanterns & hung objects)' },
   { keys: ['الظل', 'الظلال', 'ظل', 'ظلال', 'خط داكن', 'الخط الداكن', 'shadow', 'shadows', 'dark line'], tab: 'studio', aSec: 'room', at: 'set-menushadows', ar: 'الظلال والخطوط الداكنة', en: 'Shadows & dark lines' },
+  { keys: ['نصوص النافذة', 'مكان الاسم', 'موضع الاسم', 'ترتيب النصوص', 'محاذاة النصوص', 'stage text', 'item window text', 'name position', 'text order'], tab: 'studio', aSec: 'room', at: 'set-menustage', ar: 'نصوص نافذة الصنف — الموضع والترتيب', en: 'Item-window text layout' },
   { keys: ['الوان الخطوط', 'ألوان الخطوط', 'لون الخط', 'الفاتح والداكن', 'حبر', 'الحبر', 'ink', 'light mode', 'dark mode'], tab: 'studio', aSec: 'room', at: 'set-menuink', ar: 'ألوان الخطوط — فاتح وداكن', en: 'Menu inks — light & dark' },
   { keys: ['ترتيب العناصر', 'ترتيب الصفحة', 'ترتيب المنيو', 'اسحب', 'reorder', 'home order'], tab: 'studio', aSec: 'room', at: 'set-menuhome', ar: 'ترتيب عناصر صفحة المنيو', en: 'Menu home order' },
   { keys: ['كساء الكروم', 'ازرار التواصل', 'أزرار التواصل', 'زر اللغة', 'زر الوضع', 'القائمة السفلية', 'زر السلة العائم', 'جرس الاشعارات', 'جرس الإشعارات', 'chrome skin', 'fab'], tab: 'studio', aSec: 'room', at: 'set-menuchrome', ar: 'كساء الكروم — الأزرار والقوائم', en: 'Chrome skin — buttons & bars' },
@@ -1352,6 +1370,33 @@ export default function Settings() {
     writeHome(arrayMove(homeOrder, from, to))
   }
 
+  // ===== ITEM-WINDOW TEXT BLOCKS (tenant.menuStage) =====
+  // «تخصيص وضع مكان اسم الصنف والنصوص»: order by drag + per-block align/nudge.
+  // Same draft-free instant-save discipline as the home order; the resolver's
+  // null (absent/default field) means today's exact DOM.
+  const [stgCfg, setStgCfg] = useState(() => ({ ...(tenant?.menuStage || {}) }))
+  const stgSavedKey = JSON.stringify(tenant?.menuStage || null)
+  useEffect(() => { setStgCfg({ ...(tenant?.menuStage || {}) }) }, [stgSavedKey]) // eslint-disable-line react-hooks/exhaustive-deps
+  const writeStage = async (patch) => {
+    const next = { ...stgCfg, ...patch }
+    setStgCfg(next)
+    try { await saveNow({ menuStage: next }); updateTenantLocal({ menuStage: next }); toast.success(t('saved')) } catch (_) { toast.error(t('error')) }
+  }
+  const writeStageBlock = (id, patch) => writeStage({ blocks: { ...(stgCfg.blocks || {}), [id]: { ...((stgCfg.blocks || {})[id] || {}), ...patch } } })
+  const resetStage = async () => {
+    setStgCfg({})
+    try { await saveNow({ menuStage: null }); updateTenantLocal({ menuStage: null }); toast.success(t('saved')) } catch (_) { toast.error(t('error')) }
+  }
+  const stgOrder = useMemo(() => (resolveStageBlocks({ menuStage: stgCfg })?.order) || [...STAGE_BLOCK_IDS], [stgCfg])
+  const [stgBlockId, setStgBlockId] = useState('name')
+  const onStageDragEnd = ({ active, over }) => {
+    if (!over || active.id === over.id) return
+    const from = stgOrder.indexOf(active.id)
+    const to = stgOrder.indexOf(over.id)
+    if (from < 0 || to < 0) return
+    writeStage({ order: arrayMove(stgOrder, from, to) })
+  }
+
   // ===== THE MENU CHROME (tenant.menuChrome) =====
   // One identity system for the bars, fabs, language/theme buttons, social
   // buttons, the sheets and the subpage backgrounds. Whole feature is opt-in:
@@ -1616,6 +1661,7 @@ export default function Settings() {
     ...(tenant?.menuShadows ? { menuShadows: shCfg } : {}),
     ...(tenant?.menuInk ? { menuInk: inkCfg } : {}),
     ...(tenant?.menuHome ? { menuHome: { order: homeOrder } } : {}),
+    ...(tenant?.menuStage ? { menuStage: stgCfg } : {}),
     ...(tenant?.menuChrome ? { menuChrome: chromeCfg } : {}),
     // instant-saved singles the frame should also follow without a reload
     socialStyle: tenant?.socialStyle, welcomeStyle: tenant?.welcomeStyle, catNavStyle: tenant?.catNavStyle,
@@ -4336,8 +4382,8 @@ export default function Settings() {
 
                 {/* 6c-2. THE TABLE (tenant.menuTable) — the owner's own idea:
                     the dark panel carrying the dish's details IS a table the
-                    dish sits on. Preview is resolveTable() + tableStyle() + the
-                    shared material CSS — the same paint the menu uses. */}
+                    dish sits on. Preview is resolveTable() + TablePaint — the
+                    IDENTICAL component the menu paints with. */}
                 <div id="set-menutable" className="card card-pad stack" style={{ gap: 12 }}>
                   <div className="row-between" style={{ gap: 10, alignItems: 'flex-start' }}>
                     <div className="stack" style={{ gap: 2 }}>
@@ -4486,7 +4532,7 @@ export default function Settings() {
                             <input type="checkbox" checked={tblValueAt('extend') === true} onChange={(e3) => writeTableAt({ extend: e3.target.checked === true })} style={{ width: 20, height: 20, flex: 'none' }} />
                             <span className="xs">{ar ? 'مدّ الطاولة حتى أسفل النافذة (تلتحم بشريط الإضافة)' : 'Extend the table to the window bottom (meets the add bar)'}</span>
                           </label>
-                          {[['heroPad', 'المساحة فوق الطبق', 'Space above the dish', 'px'], ['heroMax', 'أقصى ارتفاع لصورة الطبق', 'Dish photo max height', 'dvh'], ['textPad', 'مسافة النص تحت الطبق — كي لا يغطي الطبقُ الاسم', 'Text clearance under the dish', 'px']].map(([key, la, le, unit]) => {
+                          {[['heroPad', 'المساحة فوق الطبق', 'Space above the dish', 'px'], ['heroMax', 'أقصى ارتفاع لصورة الطبق', 'Dish photo max height', 'dvh'], ['textPad', 'مسافة النص تحت الطبق — كي لا يغطي الطبقُ الاسم', 'Text clearance under the dish', 'px'], ['minBody', 'أدنى ارتفاع للوح النص — شكل ثابت للطاولة في كل الأصناف', 'Minimum panel height — a consistent table on every item', 'dvh']].map(([key, la, le, unit]) => {
                             const R = TABLE_RANGE[key]
                             const v = Number(tblValueAt(key))
                             const overridden = tblStageOver[key] != null
@@ -4499,8 +4545,8 @@ export default function Settings() {
                           })}
                           <span className="xs faint">
                             {ar
-                              ? 'معاينة البطاقة هنا لا تُظهر هذه الثلاثة (لا يوجد فيها محاكاة لنافذة الصنف) — احكم عليها من المعاينة الكبيرة أو من المنيو نفسه.'
-                              : 'The small card preview cannot show these three (it has no item-window mock) — judge them in the big preview or the live menu.'}
+                              ? 'معاينة البطاقة هنا لا تُظهر مفاتيح النافذة هذه (لا يوجد فيها محاكاة لنافذة الصنف) — احكم عليها من المعاينة الكبيرة أو من المنيو نفسه. «أدنى ارتفاع للوح» يوحّد شكل الطاولة بين صنف بلا خيارات وصنف مليء بها — اضبطه قرب أطول لوح شائع؛ ومع «مدّ الطاولة» يفوز الأطول.'
+                              : 'The small card preview cannot show these window keys (it has no item-window mock) — judge them in the big preview or the live menu. The minimum panel height makes the table read the same on bare and option-rich items — set it near your tallest common panel; with extend on, the taller wins.'}
                           </span>
                         </div>
                       )}
@@ -4537,26 +4583,11 @@ export default function Settings() {
                             ? <img className="mtbl-dish" src={wallSample.imageUrl} alt="" style={{ transform: `translateY(${tblResolved ? tblResolved.lift : 0}%)` }} />
                             : <span className="mtbl-nodish">{ar ? 'أضف صورة لأي صنف لترى الجلوس' : 'Add a dish photo to see the seating'}</span>}
                           <div className="mtbl-panel">
-                            {tblResolved && (() => {
-                              const stops = tableMeltStops(tblResolved)
-                              const free = tableFreeStyle(tblResolved)
-                              return (
-                                <span className="edt-table" aria-hidden="true" style={{ '--tbl-a': `${stops.a}%`, '--tbl-b': `${stops.b}%`, '--tbl-contact': tblResolved.contact, ...(free || {}) }}>
-                                  <span className="edt-table-art" data-m={tblResolved.kind === 'material' ? tblResolved.material : undefined} style={tableStyle(tblResolved) || undefined} />
-                                  {tblResolved.dim > 0 ? <span className="edt-table-dim" style={{ opacity: tblResolved.dim }} /> : null}
-                                  <span className="mtbl-melt" />
-                                  {(() => {
-                                    // contract layers in the engine's own paint order:
-                                    // melt → melt-b → veil → edge → contact
-                                    const mb2 = tableMeltBottom(tblResolved)
-                                    return mb2 ? <span className="edt-table-melt-b" style={{ '--tbl-mba': `${mb2.a}%`, '--tbl-mbb': `${mb2.b}%` }} /> : null
-                                  })()}
-                                  {tblResolved.veil > 0 ? <span className="edt-table-veil" style={{ opacity: tblResolved.veil }} /> : null}
-                                  <span className="edt-table-edge" data-e={tblResolved.edge} />
-                                  {tblResolved.contact > 0 ? <span className="edt-table-contact" /> : null}
-                                </span>
-                              )
-                            })()}
+                            {/* the SAME component the menu paints with — the
+                                hand-rolled mock applied the free transform to
+                                the whole box (clip + melt rode along), so the
+                                card disagreed with the menu on every dial */}
+                            {tblResolved && <TablePaint tb={tblResolved} />}
                             <strong className="mtbl-name">{wallSample ? pickLang(wallSample, 'name', lang) : (ar ? 'اسم الصنف' : 'Dish name')}</strong>
                             <span className="mtbl-price num">{wallSample?.price || 46}</span>
                           </div>
@@ -4564,6 +4595,64 @@ export default function Settings() {
                       </div>
                     </>
                   )}
+                </div>
+
+                {/* 6c-2b. ITEM-WINDOW TEXT BLOCKS (tenant.menuStage) — drag the
+                    panel's blocks into any order, and give each an alignment
+                    and a bounded nudge. Editorial stage only (like menuTable);
+                    defaults are today's exact DOM. */}
+                <div id="set-menustage" className="card card-pad stack" style={{ gap: 12 }}>
+                  <div className="row-between wrap" style={{ gap: 8, alignItems: 'center' }}>
+                    <strong className="small"><Icon name="edit" size={14} style={{ verticalAlign: 'middle' }} /> {ar ? 'نصوص نافذة الصنف — الموضع والترتيب' : 'Item-window text — placement & order'}</strong>
+                    <button type="button" className="btn-link xs" onClick={resetStage}><Icon name="reload" size={12} /> {ar ? 'إرجاع الافتراضي' : 'Reset to default'}</button>
+                  </div>
+                  <p className="xs faint" style={{ margin: 0 }}>
+                    {ar
+                      ? 'اسحب لترتيب كتل النافذة، واختر كتلة لضبط محاذاتها وإزاحتها — كل شيء يُحفظ فوراً ويظهر في المعاينة الكبيرة. يعمل في نافذة الصنف على ثيم editorial (مثل الطاولة تماماً).'
+                      : 'Drag to order the window blocks; pick one to align and nudge it — everything saves instantly and streams to the big preview. Editorial item window only (like the table).'}
+                  </p>
+                  <DndContext sensors={homeSensors} collisionDetection={closestCenter} onDragEnd={onStageDragEnd}>
+                    <SortableContext items={stgOrder} strategy={verticalListSortingStrategy}>
+                      <div className="stack" style={{ gap: 6 }}>
+                        {stgOrder.map((id) => {
+                          const b = STAGE_BLOCKS.find((x) => x.id === id)
+                          return (
+                            <StageOrderRow key={id} id={id} ar={ar} label={b ? (ar ? b.ar : b.en) : id}
+                              active={stgBlockId === id} tuned={!!(stgCfg.blocks || {})[id]} onPick={() => setStgBlockId(id)} />
+                          )
+                        })}
+                      </div>
+                    </SortableContext>
+                  </DndContext>
+                  <div className="stack" style={{ gap: 8, borderTop: '1px solid var(--border)', paddingTop: 10 }}>
+                    <div className="row wrap" style={{ gap: 6, alignItems: 'center' }}>
+                      <span className="xs faint bold">{ar ? 'الكتلة المحددة' : 'Selected block'}</span>
+                      {STAGE_BLOCKS.concat([{ id: 'ar', ar: 'زر ثلاثي الأبعاد', en: '3D button' }]).map((b) => (
+                        <button key={b.id} type="button" className={`chip${stgBlockId === b.id ? ' active' : ''}`} onClick={() => setStgBlockId(b.id)}>{ar ? b.ar : b.en}</button>
+                      ))}
+                    </div>
+                    <div className="row wrap" style={{ gap: 8, alignItems: 'center' }}>
+                      <span className="xs faint bold">{ar ? 'المحاذاة' : 'Align'}</span>
+                      {[['', 'كما هي', 'Default'], ['start', 'البداية', 'Start'], ['center', 'الوسط', 'Center'], ['end', 'النهاية', 'End']].map(([v, la, le]) => (
+                        <button key={v || 'dflt'} type="button" className={`chip${(((stgCfg.blocks || {})[stgBlockId]?.align) || '') === v ? ' active' : ''}`} onClick={() => writeStageBlock(stgBlockId, { align: v })}>{ar ? la : le}</button>
+                      ))}
+                    </div>
+                    {[['dx', 'إزاحة أفقية — موجبها جهة بداية القراءة', 'Inline shift (logical)', '%'], ['dy', 'إزاحة رأسية', 'Vertical shift', 'px']].map(([key, la, le, unit]) => {
+                      const R = STAGE_TEXT_RANGE[key]
+                      const v = Number((stgCfg.blocks || {})[stgBlockId]?.[key] ?? R.dflt)
+                      return (
+                        <div key={key} className="field" style={{ gap: 2 }}>
+                          <label>{ar ? la : le} · <span className="num">{v}{unit}</span></label>
+                          <input type="range" min={R.min} max={R.max} step={R.step} value={v} onChange={(e3) => writeStageBlock(stgBlockId, { [key]: Number(e3.target.value) })} style={{ width: '100%' }} />
+                        </div>
+                      )
+                    })}
+                    <span className="xs faint">
+                      {ar
+                        ? 'الوصف الموسّط أو المنتهي يتجاهل الإزاحة الأفقية (المحاذاة تملك صندوقه). زر ثلاثي الأبعاد يُضبط موضعه فقط ولا يدخل الترتيب — مكانه تحت الصورة. الإزاحة الرأسية السالبة قد تراكب الكتلة السابقة — وضوح النص مسؤوليتك كما في الذوبان.'
+                        : 'A centred/end-aligned description ignores dx (alignment owns its box). The 3D button is place-only, outside the order. Negative dy may overlap the previous block — readability stays yours, as with the melt.'}
+                    </span>
+                  </div>
                 </div>
 
                 {/* 6c-3. THE SHADOWS (tenant.menuShadows) — every fixed dark
@@ -6116,6 +6205,23 @@ const decorAnchorLabel = (id, ar) => {
   return ar ? a.ar : a.en
 }
 
+// model-viewer ignores prefers-reduced-motion by itself; sampled at render
+// time, same precedent as the theme engine.
+const decorStill = () => { try { return window.matchMedia('(prefers-reduced-motion: reduce)').matches } catch (_) { return false } }
+
+// Loads the model-viewer library only when the venue actually hung a model,
+// so the placeholder square is a loading state now, not a permanent stand-in.
+function useMiniModelViewer(needed) {
+  const [ready, setReady] = useState(false)
+  useEffect(() => {
+    if (!needed || ready) return undefined
+    let alive = true
+    import('../../lib/ar3d.js').then((m) => m.loadModelViewer()).then(() => { if (alive) setReady(true) }).catch(() => {})
+    return () => { alive = false }
+  }, [needed, ready])
+  return ready
+}
+
 function DecorCard({
   ar, rtl, rows, selected, setSelected, busy, wallLive, headerWall, headerBrick, venueName, logoUrl,
   editorial, onGoLayout, onPatch, onDelete, onDuplicate, onPair, onMove,
@@ -6123,6 +6229,7 @@ function DecorCard({
 }) {
   const imgRef = useRef(null)
   const glbRef = useRef(null)
+  const mv3d = useMiniModelViewer(rows.some((r) => r.kind === 'model'))
   const boxRefs = useRef({})
   const dragRef = useRef(null)
   const rafRef = useRef(0)
@@ -6270,7 +6377,13 @@ function DecorCard({
             <span className="mdx-glow" data-motion={motion} aria-hidden="true" style={{ background: glowPaint(d), ...(art || {}) }} />
           )}
           {d.kind === 'model'
-            ? <span className="mdx-model" data-motion={motion} style={art} aria-hidden="true"><Icon name="shapes" size={14} /></span>
+            ? (mv3d ? (
+              <model-viewer
+                class="mdx-mv" data-motion={d.motion === 'spin' ? undefined : motion} style={art} src={d.url}
+                interaction-prompt="none" loading="eager" disable-zoom="" disable-tap="" aria-hidden="true"
+                {...(d.motion === 'spin' && !decorStill() ? { 'auto-rotate': '', 'rotation-per-second': decorSpinRate(d) } : {})}
+              />
+            ) : <span className="mdx-model" data-motion={motion} style={art} aria-hidden="true"><Icon name="shapes" size={14} /></span>)
             : <img className="mdx-art" data-motion={motion} style={art} src={d.url} alt="" draggable={false} onLoad={noteRatio(d.url)} />}
         </span>
       </span>
@@ -6372,8 +6485,8 @@ function DecorCard({
       </div>
       <p className="xs faint" style={{ margin: 0 }}>
         {ar
-          ? 'الصورة تُرفع كما هي بلا إعادة ترميز حتى لا تفقد شفافيتها، وتستطيع قصّها بعد ذلك من زر «قص الصورة» على القطعة المحدّدة. المجسم glb. يُعرض هنا كمربّع بديل لأن هذه المعاينة لا تشغّل المجسمات.'
-          : 'Images are uploaded untouched so nothing eats the transparency; trim afterwards with “Crop” on the selected piece. A .glb shows here as a placeholder tile, because this preview does not run 3D models.'}
+          ? 'الصورة تُرفع كما هي بلا إعادة ترميز حتى لا تفقد شفافيتها، وتستطيع قصّها بعد ذلك من زر «قص الصورة» على القطعة المحدّدة. المجسم glb. يظهر هنا حياً كما سيظهر في المنيو تماماً — اسحبه وكبّره ودوّره كأي قطعة.'
+          : 'Images are uploaded untouched so nothing eats the transparency; trim afterwards with “Crop” on the selected piece. A .glb runs live in this preview, exactly as it will in the menu — drag, size and rotate it like any piece.'}
       </p>
 
       <div className="stack" style={{ gap: 6, borderTop: '1px solid var(--border)', paddingTop: 10 }}>
