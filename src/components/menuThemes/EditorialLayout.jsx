@@ -41,7 +41,9 @@ import {
   resolveComposition, bgStyle, imgStyle,
   resolveWall, wallStyle, layerStyle,
   resolveSections, resolveDecor, decorStyle,
+  resolveTable, tableStyle,
 } from '../../lib/dishComposition.js'
+import { loadModelViewer } from '../../lib/ar3d.js'
 import '../../styles/menuwall.css'
 
 // Built by a parallel agent — lazy + catch so a missing module never crashes
@@ -963,18 +965,63 @@ function EdtBackdrop({ bg }) {
 // `anim` is the entrance the venue chose. The stylesheet plays it with the
 // individual translate / scale / rotate properties, which COMPOSE with the
 // composition's own inline transform instead of overwriting it.
-function EdtDish({ comp, src, anim = '', bind = null, onLoad = null, fallback = 64 }) {
-  const photo = imgStyle(comp.img, comp.shadow)
+// `lift` is the table contract's seat-the-plate number: how far the dish drops
+// down onto the details panel, as a percent of the photo's OWN height — which is
+// exactly what translateY(%) resolves against, so the drop scales with the photo
+// on every screen. It is merged into the composition transform rather than
+// applied to a wrapper: a transform on .edt-comp would open a stacking context
+// and cut the photo's blend mode off from the room.
+function EdtDish({ comp, src, anim = '', bind = null, onLoad = null, fallback = 64, lift = 0 }) {
+  const photo = imgStyle(comp.img, comp.shadow) || {}
+  const style = { ...photo }
+  if (lift) style.transform = `${photo.transform || ''} translateY(${lift}%)`.trim()
+  const has = Object.keys(style).length > 0
   return (
     <span className="edt-comp" data-anim={anim || undefined}>
       {src
-        ? <img className="edt-dish" ref={bind} onLoad={onLoad} src={src} alt="" decoding="async" style={photo || undefined} />
+        ? <img className="edt-dish" ref={bind} onLoad={onLoad} src={src} alt="" decoding="async" style={has ? style : undefined} />
         : <span className="edt-noimg"><Icon name="coffee" size={fallback} /></span>}
       {comp.fx ? (
-        <span className="edt-fx" aria-hidden="true" style={photo && photo.transform ? { transform: photo.transform } : undefined}>
+        <span className="edt-fx" aria-hidden="true" style={style.transform ? { transform: style.transform } : undefined}>
           <ItemFx kind={comp.fx} />
         </span>
       ) : null}
+    </span>
+  )
+}
+
+// The owner's own idea: the dark panel that carries the dish's name and price IS
+// a table, so paint it as one. The art layer reuses the same material paint the
+// dish surfaces use (shared selectors in dishprops.css — one walnut, not two);
+// the melt dissolves the material into the canvas exactly where the TEXT lives,
+// which is what keeps every glyph readable whatever material or photo is chosen;
+// the edge is the lit lip that makes it read as a horizontal surface; and the
+// contact pool is the shadow the plate presses into the wood.
+//
+// Bright materials (linen, rattan) and uploaded photos get an earlier, stronger
+// melt: light wood under light text cannot pass contrast any other way, so on
+// those the table shows as a rim at the top rather than a full backdrop. That is
+// a readability decision, recorded here on purpose.
+const TABLE_BRIGHT = new Set(['linen', 'rattanMat'])
+function EdtTable({ tb }) {
+  if (!tb) return null
+  const bright = tb.kind === 'image' || TABLE_BRIGHT.has(tb.material)
+  const a = bright ? 6 : 16
+  const b = bright ? 30 : Math.round(34 + tb.shade * 36)
+  const art = tableStyle(tb) || {}
+  return (
+    <span
+      className="edt-table"
+      aria-hidden="true"
+      style={{ '--tbl-a': `${a}%`, '--tbl-b': `${b}%`, '--tbl-contact': tb.contact }}
+    >
+      <span className="edt-table-art" data-m={tb.kind === 'material' ? tb.material : undefined} style={art} />
+      {tb.tint && tb.tintAmount > 0
+        ? <span className="edt-table-tint" style={{ background: tb.tint, opacity: tb.tintAmount }} />
+        : null}
+      <span className="edt-table-melt" />
+      <span className="edt-table-edge" data-e={tb.edge} />
+      {tb.contact > 0 ? <span className="edt-table-contact" /> : null}
     </span>
   )
 }
@@ -1012,6 +1059,7 @@ export default function EditorialLayout({ tenant = null, cats, itemsByCat, visib
   // be hard-coded, and the fade to solid canvas at the foot of every dish is
   // what produced the black band the venue could not remove.
   const sections = useMemo(() => resolveSections(tenant), [JSON.stringify(tenant && tenant.menuSections) || '']) // eslint-disable-line react-hooks/exhaustive-deps
+  const table = useMemo(() => resolveTable(tenant), [JSON.stringify(tenant && tenant.menuTable) || '']) // eslint-disable-line react-hooks/exhaustive-deps
   const secVars = sectionVars(sections)
 
   // The objects the venue has hung. Header pieces are portalled: the app bar is
@@ -1088,6 +1136,7 @@ export default function EditorialLayout({ tenant = null, cats, itemsByCat, visib
                 key={it.id} it={it} idx={i} catLabel={catName(it.categoryId)}
                 currency={currency} offers={offers} lang={lang} t={t} onOpen={onOpen}
                 allItems={allItems} onQuickAdd={onQuickAdd} showPairings={showPairings}
+                table={table}
               />
             ))}
           </div>
@@ -1098,7 +1147,7 @@ export default function EditorialLayout({ tenant = null, cats, itemsByCat, visib
   )
 }
 
-function EdtSection({ it, idx, catLabel, currency, offers, lang, t, onOpen, allItems = [], onQuickAdd = null, showPairings = true }) {
+function EdtSection({ it, idx, catLabel, currency, offers, lang, t, onOpen, allItems = [], onQuickAdd = null, showPairings = true, table = null }) {
   const ref = useRef(null)
   const { fit, bind, nodeRef, onLoad } = useImgFit()
   const [inview, setInview] = useState(false)
@@ -1160,7 +1209,7 @@ function EdtSection({ it, idx, catLabel, currency, offers, lang, t, onOpen, allI
   }
 
   return (
-    <section ref={ref} data-idx={idx} data-fit={fit || undefined} className={`edt-sec ${inview ? 'in' : ''} ${out ? 'is-out' : ''}`}>
+    <section ref={ref} data-idx={idx} data-fit={fit || undefined} data-table={table ? '1' : undefined} className={`edt-sec ${inview ? 'in' : ''} ${out ? 'is-out' : ''}`}>
       <span className="edt-side" aria-hidden="true">{catLabel}</span>
       <div className="edt-photo" data-fit={fit || undefined} data-dp-contact={dpShadow(it)} data-dp-reflect={dpReflect(it)}>
         <span className="edt-glow" aria-hidden="true" />
@@ -1170,13 +1219,14 @@ function EdtSection({ it, idx, catLabel, currency, offers, lang, t, onOpen, allI
         <DishProps item={dpItem} active={inview} catName={catLabel} />
         <EdtBackdrop bg={comp.bg} />
         <EdtLayers list={comp.layers.behind} />
-        <EdtDish comp={comp} src={it.imageUrl} anim={animAttr(comp)} bind={bind} onLoad={onLoad} fallback={64} />
+        <EdtDish comp={comp} src={it.imageUrl} anim={animAttr(comp)} bind={bind} onLoad={onLoad} fallback={64} lift={table ? table.lift : 0} />
         <EdtLayers list={comp.layers.front} />
         <span className="edt-vignette" aria-hidden="true" />
         <button type="button" className="edt-photo-open" onClick={open} aria-label={name} tabIndex={-1} disabled={out} />
         {it.hotspots?.length ? <Suspense fallback={null}><DishHotspots hotspots={it.hotspots} /></Suspense> : null}
       </div>
       <div className="edt-main">
+        <EdtTable tb={table} />
         <h2 className="edt-name">{name}</h2>
         <div className="edt-price">
           <Price value={price} currency={currency} lang={lang} />
@@ -1293,6 +1343,21 @@ export function EditorialItemStage({ item, tenant = null, currency, onClose, onA
   // stage's own plaster fade was a fixed band, which is the same complaint one
   // surface along, so it reads the venue's number too.
   const secVars = sectionVars(resolveSections(tenant))
+  const table = useMemo(() => resolveTable(tenant), [JSON.stringify(tenant && tenant.menuTable) || '']) // eslint-disable-line react-hooks/exhaustive-deps
+  // 3D / AR: the whole reason an enterprise venue generates models — and this
+  // stage never offered them, so from this theme they were unreachable. The
+  // viewer library is loaded only when the guest actually asks for it.
+  const [arOpen, setArOpen] = useState(false)
+  const [arReady, setArReady] = useState(false)
+  const glbSrc = item.model3dUrl && !/\.usdz(\?|$)/i.test(item.model3dUrl) ? item.model3dUrl : (item.arStandeeUrl || '')
+  const usdzSrc = item.model3dUsdzUrl || (/\.usdz(\?|$)/i.test(item.model3dUrl || '') ? item.model3dUrl : '')
+  const arOk = (tenant ? tenant.ar?.enabled !== false : true) && !!(glbSrc || usdzSrc)
+  useEffect(() => {
+    if (!arOpen) return undefined
+    let alive = true
+    loadModelViewer().then(() => { if (alive) setArReady(true) }).catch(() => {})
+    return () => { alive = false }
+  }, [arOpen])
   // The FLIP is the stage's own entrance. When there is no origin rect (opened
   // from a pairing chip) there is no FLIP, so the dish plays the entrance the
   // venue chose for it instead of simply appearing.
@@ -1411,9 +1476,14 @@ export function EditorialItemStage({ item, tenant = null, currency, onClose, onA
             <DishProps item={dpItem} active variant="stage" />
             <EdtBackdrop bg={comp.bg} />
             <EdtLayers list={comp.layers.behind} />
-            <EdtDish comp={comp} src={heroSrc} anim={stageAnim} bind={bind} onLoad={onLoad} fallback={72} />
+            <EdtDish comp={comp} src={heroSrc} anim={stageAnim} bind={bind} onLoad={onLoad} fallback={72} lift={table ? table.lift : 0} />
             <EdtLayers list={comp.layers.front} />
             {item.hotspots?.length ? <Suspense fallback={null}><DishHotspots hotspots={item.hotspots} /></Suspense> : null}
+            {arOk && (
+              <button type="button" className="edt-stg-ar edt-brick" onClick={() => setArOpen(true)}>
+                <Icon name="shapes" size={15} /> {ar ? 'شاهده ثلاثي الأبعاد' : 'View in 3D'}
+              </button>
+            )}
           </div>
           {gallery.length > 1 && (
             <div className="edt-thumbs scroll-x">
@@ -1426,7 +1496,8 @@ export function EditorialItemStage({ item, tenant = null, currency, onClose, onA
             </div>
           )}
         </div>
-        <div className="edt-stg-body">
+        <div className="edt-stg-body" data-table={table ? '1' : undefined}>
+          <EdtTable tb={table} />
           {(offerTag || out || low || item.featured) && (
             <div className="edt-stg-tags">
               {offerTag && <span className="edt-tag edt-tag-offer">{offerTag}</span>}
@@ -1547,6 +1618,35 @@ export function EditorialItemStage({ item, tenant = null, currency, onClose, onA
           <button type="button" className="edt-stg-add" onClick={add} disabled={out}>
             <Icon name={out ? 'no' : 'add'} size={18} /> {out ? t('soldOut') : t('addToCart')}
           </button>
+        </div>
+      )}
+      {arOpen && (
+        <div className="edt-ar" role="dialog" aria-modal="true" aria-label={ar ? 'عرض ثلاثي الأبعاد' : '3D view'}>
+          <button type="button" className="edt-stg-x edt-ar-x" onClick={() => setArOpen(false)} aria-label={t('close')}>
+            <Icon name="close" size={20} />
+          </button>
+          {arReady ? (
+            <model-viewer
+              className="edt-ar-viewer"
+              src={glbSrc || undefined}
+              ios-src={usdzSrc || undefined}
+              alt={name}
+              ar=""
+              ar-modes="scene-viewer webxr quick-look"
+              ar-scale="auto"
+              camera-controls=""
+              auto-rotate=""
+              exposure="1"
+              loading="eager"
+            />
+          ) : (
+            <div className="edt-ar-wait">{ar ? 'جارٍ تحميل المجسّم…' : 'Loading the model…'}</div>
+          )}
+          <p className="edt-ar-hint">
+            {ar
+              ? 'حرّك بإصبعك لتدويره — وزر AR داخل العارض يضعه على طاولتك إن دعم جهازك ذلك.'
+              : 'Drag to rotate — the AR button inside places it on your table where the device supports it.'}
+          </p>
         </div>
       )}
     </div>,

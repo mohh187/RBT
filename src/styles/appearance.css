@@ -1351,3 +1351,50 @@
     translate: none;
   }
 }
+
+/* ================================================= the dish table preview === */
+/* .mtbl-* — the «طاولة الصنف» card's live preview: a dark stage, the venue's own
+   dish photo seated by the SAME lift number the menu uses, over the SAME
+   .edt-table paint (those classes live in index.css and are global). */
+.mtbl-stage {
+  position: relative;
+  height: 240px;
+  border-radius: var(--r-md, 12px);
+  overflow: hidden;
+  background: radial-gradient(120% 88% at 50% 8%, #1b1512 0%, #100c0a 62%, #0a0705 100%);
+  display: flex;
+  flex-direction: column;
+  justify-content: flex-end;
+}
+.mtbl-dish {
+  position: relative;
+  z-index: 2;
+  align-self: center;
+  max-width: 72%;
+  max-height: 46%;
+  object-fit: contain;
+}
+.mtbl-nodish {
+  align-self: center;
+  margin-bottom: 12px;
+  color: rgba(255, 255, 255, .5);
+  font-size: var(--fs-xs, 11px);
+}
+.mtbl-panel {
+  position: relative;
+  z-index: 1;
+  min-height: 46%;
+  padding: 18px 16px 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+/* same melt as the menu, with the canvas colour written out because the admin
+   shell does not define --edt-bg */
+.mtbl-melt {
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(180deg, transparent var(--tbl-a, 16%), #100c0a var(--tbl-b, 52%));
+}
+.mtbl-name { position: relative; color: #f7f2e9; font-size: 15px; font-weight: 800; }
+.mtbl-price { position: relative; color: #f5b942; font-size: 13px; font-weight: 800; }

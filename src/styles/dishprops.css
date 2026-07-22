@@ -106,7 +106,8 @@
 /* dark walnut table — the real thing: a deep red-brown board with wide plank
    seams, close grain from the wood SVG overlay, and the SATIN sheen a waxed
    solid-wood top has (a broad, soft specular band, not a mirror). */
-.dp-root[data-surface='venueWalnut'] .dp-plane {
+.dp-root[data-surface='venueWalnut'] .dp-plane,
+.edt-table-art[data-m='venueWalnut'] {
   background:
     /* the room light landing on the far edge of the board */
     radial-gradient(116% 82% at 50% 3%, rgba(226, 158, 92, .26), transparent 62%),
@@ -132,7 +133,8 @@
    bed, then one row of brick fronts. Running bond is unnecessary for a single
    visible course, so the joints are one repeating layer pinned to the bottom
    band; every part of it is a gradient, nothing is downloaded. */
-.dp-root[data-surface='brickLedge'] .dp-plane {
+.dp-root[data-surface='brickLedge'] .dp-plane,
+.edt-table-art[data-m='brickLedge'] {
   background-color: rgba(58, 30, 17, 1);
   background-image:
     /* vertical mortar joints — only across the front course */
@@ -158,7 +160,8 @@
 
 /* woven rattan mat — cream straw over a dark table, the weave running both
    ways with the light catching only the top of each strand */
-.dp-root[data-surface='rattanMat'] .dp-plane {
+.dp-root[data-surface='rattanMat'] .dp-plane,
+.edt-table-art[data-m='rattanMat'] {
   background:
     repeating-linear-gradient(90deg, rgba(255, 236, 200, .10) 0 4px, rgba(60, 38, 20, .16) 4px 9px),
     repeating-linear-gradient(0deg, rgba(255, 236, 200, .07) 0 4px, rgba(60, 38, 20, .13) 4px 9px),
@@ -168,13 +171,15 @@
 .dp-root[data-surface='rattanMat'] .dp-horizon { opacity: .55; }
 
 /* dark marble — cool stone, faint warm veining, a real sheen */
-.dp-root[data-surface='darkMarble'] .dp-plane {
+.dp-root[data-surface='darkMarble'] .dp-plane,
+.edt-table-art[data-m='darkMarble'] {
   background:
     radial-gradient(120% 84% at 50% 6%, rgba(168, 168, 186, .13), transparent 62%),
     linear-gradient(180deg, rgba(40, 39, 44, 0) 0%, rgba(40, 39, 44, .58) 15%, rgba(31, 30, 35, .93) 44%, rgba(19, 18, 21, 1) 100%);
 }
 /* warm wood — plank grain plus the venue copper bouncing off it */
-.dp-root[data-surface='warmWood'] .dp-plane {
+.dp-root[data-surface='warmWood'] .dp-plane,
+.edt-table-art[data-m='warmWood'] {
   background:
     radial-gradient(110% 78% at 50% 4%, rgba(201, 119, 58, .20), transparent 64%),
     repeating-linear-gradient(91deg, rgba(0, 0, 0, .07) 0 7px, rgba(255, 255, 255, .018) 7px 15px),
@@ -185,7 +190,8 @@
   background: linear-gradient(90deg, transparent, rgba(232, 176, 110, .16) 22%, rgba(240, 190, 128, .24) 50%, rgba(232, 176, 110, .16) 78%, transparent);
 }
 /* brushed steel — a fine horizontal brush pass and an off-axis specular band */
-.dp-root[data-surface='brushedSteel'] .dp-plane {
+.dp-root[data-surface='brushedSteel'] .dp-plane,
+.edt-table-art[data-m='brushedSteel'] {
   background:
     linear-gradient(104deg, transparent 34%, rgba(255, 255, 255, .06) 50%, transparent 64%),
     repeating-linear-gradient(180deg, rgba(255, 255, 255, .035) 0 1px, transparent 1px 3px),
@@ -198,7 +204,8 @@
     radial-gradient(72% 58% at 50% 100%, rgba(255, 255, 255, .09), transparent 70%);
 }
 /* slate — matte, uneven, no sheen at all */
-.dp-root[data-surface='slate'] .dp-plane {
+.dp-root[data-surface='slate'] .dp-plane,
+.edt-table-art[data-m='slate'] {
   background:
     radial-gradient(72% 58% at 76% 34%, rgba(0, 0, 0, .38), transparent 66%),
     radial-gradient(82% 62% at 28% 16%, rgba(255, 255, 255, .055), transparent 62%),
@@ -206,7 +213,8 @@
 }
 .dp-root[data-surface='slate'] .dp-horizon { opacity: .5; }
 /* linen — woven thread, soft folds, warm and light-swallowing */
-.dp-root[data-surface='linen'] .dp-plane {
+.dp-root[data-surface='linen'] .dp-plane,
+.edt-table-art[data-m='linen'] {
   background:
     repeating-linear-gradient(90deg, rgba(255, 255, 255, .026) 0 2px, transparent 2px 4px),
     repeating-linear-gradient(0deg, rgba(0, 0, 0, .05) 0 2px, transparent 2px 4px),

@@ -34,6 +34,7 @@ import {
   WALL_PATTERNS, WALL_FINISHES, WALL_RANGE, BLEND_MODES, FILTERS, resolveWall, wallStyle,
   SECTION_MODES, SECTION_RANGE, resolveSections,
   DECOR_ANCHORS, DECOR_MOTIONS, DECOR_RANGE, resolveDecor, decorStyle,
+  TABLE_KINDS, TABLE_MATERIALS, TABLE_EDGES, TABLE_RANGE, resolveTable, tableStyle,
 } from '../../lib/dishComposition.js'
 import SocialLinks from '../../components/SocialLinks.jsx'
 import StaffPreview from '../../components/StaffPreview.jsx'
@@ -148,6 +149,27 @@ const WALL_DEFAULTS = {
   // storing it anywhere else would be storing half a decision.
   header: false,
 }
+// Stored as ONE object at `tenant.menuTable` — the owner's own idea: the dark
+// panel that carries the dish's name and price IS a table the dish stands on.
+// Defaults mirror resolveTable()'s fallbacks so reset reproduces exactly the
+// contract's own behaviour.
+const TABLE_DEFAULTS = {
+  kind: 'none', url: '', material: 'venueWalnut', edge: 'lit',
+  lift: TABLE_RANGE.lift.dflt, opacity: TABLE_RANGE.opacity.dflt,
+  shade: TABLE_RANGE.shade.dflt, radius: TABLE_RANGE.radius.dflt,
+  blur: 0, scale: TABLE_RANGE.scale.dflt, contact: TABLE_RANGE.contact.dflt,
+  blend: 'normal', filter: '', tint: '', tintAmount: 0,
+}
+// [key, ar, en, unit] — bounded by TABLE_RANGE only. `lift` leads because it is
+// the dial the owner named: how far the dish sits down onto the table.
+const TABLE_SLIDERS = [
+  ['lift', 'جلوس الطبق على الطاولة (مقدار النزول)', 'Seat the dish (drop onto the table)', 'pct'],
+  ['shade', 'تعتيم الطاولة نحو الأسفل', 'Darkening toward the front', 'pct'],
+  ['contact', 'ظل التماس تحت الطبق', 'Contact shadow under the plate', 'pct'],
+  ['radius', 'انحناء الحافة', 'Corner radius', 'px'],
+  ['opacity', 'شفافية الطاولة', 'Table opacity', 'pct'],
+  ['blur', 'تمويه', 'Blur', 'px'],
+]
 // A picker tile is deliberately painted with NO mood on it (no blur, no blend,
 // no tint, full opacity) and at a small unit size: the choice being made there
 // is the GEOMETRY, and a blur the venue set an hour ago would hide it.
@@ -170,6 +192,7 @@ const CROP_KINDS = {
   cover: { aspect: 2.5, shape: 'rect', output: { width: 1500, height: 600 }, ar: 'قص الغلاف', en: 'Crop cover', hintAr: 'المقاس المناسب 1500 × 600', hintEn: 'Recommended 1500 x 600' },
   wall: { shape: 'rect', ar: 'قص صورة الجدار', en: 'Crop the wall image', hintAr: 'صورة جدار غرفتك — اختر النسبة «حر» لأي مقاس', hintEn: 'A photo of your own room — pick the “Free” ratio for any size' },
   decor: { shape: 'rect', ar: 'قص قطعة الزينة', en: 'Crop the decoration', hintAr: 'اقتطع الفانوس وحده وتخلّص من الفراغ حوله — اختر النسبة «حر»', hintEn: 'Trim to the object itself and drop the empty margin — pick the “Free” ratio' },
+  table: { shape: 'rect', ar: 'قص صورة الطاولة', en: 'Crop the table photo', hintAr: 'صورة سطح طاولتك الحقيقية — اختر النسبة «حر» لأي مقاس', hintEn: 'A photo of your real tabletop — pick the “Free” ratio for any size' },
 }
 
 // ==================== HOW ONE DISH IS JOINED TO THE NEXT ====================
@@ -451,6 +474,7 @@ const SEARCH_INDEX = [
   { keys: ['الفيديو', 'فيديو', 'خلفية', 'العلامة المائية', 'مائية', 'video', 'watermark', 'gradient'], tab: 'studio', aSec: 'media', ar: 'خلفيات المنيو والفيديو', en: 'Menu backgrounds & video' },
   { keys: ['الطوب', 'طوب', 'الجدار', 'جدار', 'الحائط', 'حائط', 'اللحام', 'لحام', 'المونة', 'مونة', 'حجر', 'بلاستر', 'خشب', 'brick', 'wall', 'mortar', 'grout', 'stone', 'plaster', 'wood'], tab: 'studio', aSec: 'media', at: 'set-menuwall', ar: 'جدار المنيو (الطوب والخلفية)', en: 'Menu wall (brick & backdrop)' },
   { keys: ['هيدر الطوب', 'الهيدر الطوبي', 'شريط الطوب', 'brick header', 'header brick'], tab: 'studio', aSec: 'media', at: 'set-menuwall', ar: 'الهيدر من نفس الطوب', en: 'Brick header' },
+  { keys: ['الطاولة', 'طاولة', 'طاولة الصنف', 'سطح الطبق', 'table', 'tabletop', 'dish table'], tab: 'studio', aSec: 'media', at: 'set-menutable', ar: 'طاولة الصنف (تحت الطبق)', en: 'Dish table (under the plate)' },
   { keys: ['الفاصل', 'فاصل', 'الفواصل', 'الفراغ بين الاصناف', 'الفراغ بين الأصناف', 'اتصال', 'متصل', 'بطاقات', 'خط فاصل', 'ارتفاع الصنف', 'seam', 'gap', 'divider', 'cards', 'continuity', 'sections'], tab: 'studio', aSec: 'media', at: 'set-menusections', ar: 'الفاصل بين صنف وصنف', en: 'The join between two dishes' },
   { keys: ['الزينة', 'زينة', 'فانوس', 'فوانيس', 'زخرفة', 'زخارف', 'تعليق', 'معلقات', 'نجفة', 'لوحة', 'نبتة', 'decor', 'decoration', 'lantern', 'ornament', 'hang'], tab: 'studio', aSec: 'media', at: 'set-menudecor', ar: 'زينة الغرفة (فوانيس ومعلّقات)', en: 'Room decoration (lanterns & hung objects)' },
   { keys: ['الاندماج', 'اندماج', 'تدرج', 'fade', 'melt'], tab: 'studio', aSec: 'media', ar: 'اندماج البانر', en: 'Banner melt' },
@@ -932,6 +956,27 @@ export default function Settings() {
   // so readability is judged against a real photograph and a real name length.
   const wallSample = useMemo(() => allItems.find((it) => it.imageUrl) || allItems[0] || null, [allItems])
 
+  const onTableFile = (e) => { const file = e.target.files?.[0]; e.target.value = ''; if (file) setCropState({ file, kind: 'table' }) }
+
+  // ===== THE TABLE UNDER THE DISH DETAILS (tenant.menuTable) =====
+  // The owner's own idea. Same draft-free discipline as the wall.
+  const [tblCfg, setTblCfg] = useState(() => ({ ...TABLE_DEFAULTS, ...(tenant?.menuTable || {}) }))
+  const tblSavedKey = JSON.stringify(tenant?.menuTable || null)
+  useEffect(() => { setTblCfg({ ...TABLE_DEFAULTS, ...(tenant?.menuTable || {}) }) }, [tblSavedKey]) // eslint-disable-line react-hooks/exhaustive-deps
+  const writeTable = async (patch, debounced) => {
+    const next = { ...tblCfg, ...patch }
+    setTblCfg(next)
+    if (debounced) { commitPosBg({ menuTable: next }); return }
+    try { await saveNow({ menuTable: next }); updateTenantLocal({ menuTable: next }); toast.success(t('saved')) } catch (_) { toast.error(t('error')) }
+  }
+  const resetTable = async () => {
+    const next = { ...TABLE_DEFAULTS }
+    setTblCfg(next)
+    try { await saveNow({ menuTable: next }); updateTenantLocal({ menuTable: next }); toast.success(t('saved')) } catch (_) { toast.error(t('error')) }
+  }
+  // The preview is the contract's own output — never a local approximation.
+  const tblResolved = useMemo(() => resolveTable({ menuTable: tblCfg }), [tblCfg])
+
   // ===== HOW DISHES ARE JOINED (tenant.menuSections) =====
   // Same draft-free discipline as the wall: discrete picks save at once, the
   // sliders go through the shared 400ms debounce.
@@ -1136,6 +1181,9 @@ export default function Settings() {
       // the wall is a NESTED object on the tenant, not a top-level url field, and
       // the upload is also what switches the bond over to «صورتي»
       if (kind === 'wall') { await writeWall({ url, pattern: 'image' }); return }
+      // the table mirrors the wall: nested object, and the upload IS the switch
+      // over to «صورتي»
+      if (kind === 'table') { await writeTable({ url, kind: 'image' }); return }
       // a decoration is one row of an ARRAY: the crop replaces that row's photo
       // and leaves its placement, size, motion and glow exactly as hung. WebP
       // off a canvas keeps the alpha channel, so a trimmed lantern stays cut out.
@@ -3081,6 +3129,135 @@ export default function Settings() {
                         : 'The join sits in the middle of the frame on purpose — it is the thing you are judging. “One continuous room” means no band of any kind appears between the two dishes.'}
                     </span>
                   </div>
+                </div>
+
+                {/* 6c-2. THE TABLE (tenant.menuTable) — the owner's own idea:
+                    the dark panel carrying the dish's details IS a table the
+                    dish sits on. Preview is resolveTable() + tableStyle() + the
+                    shared material CSS — the same paint the menu uses. */}
+                <div id="set-menutable" className="card card-pad stack" style={{ gap: 12 }}>
+                  <div className="row-between" style={{ gap: 10, alignItems: 'flex-start' }}>
+                    <div className="stack" style={{ gap: 2 }}>
+                      <strong>{ar ? 'طاولة الصنف — اللوحة تحت الطبق' : 'The dish table — the panel under the plate'}</strong>
+                      <span className="xs faint">
+                        {ar
+                          ? 'اللوحة التي تحمل اسم الصنف وسعره تُرسم كسطح طاولة يجلس الطبق عليه. تعمل في ثيم «المجلة الداكنة».'
+                          : 'The panel that carries the dish name and price is painted as a tabletop the plate sits on. Works in the dark editorial theme.'}
+                      </span>
+                    </div>
+                    <button type="button" className="btn btn-sm btn-outline" onClick={resetTable}>{ar ? 'إرجاع الافتراضي' : 'Reset'}</button>
+                  </div>
+
+                  <div className="row wrap" style={{ gap: 6 }}>
+                    {TABLE_KINDS.map((k) => (
+                      <button key={k.id} type="button" className={`chip${tblCfg.kind === k.id ? ' on' : ''}`} aria-pressed={tblCfg.kind === k.id}
+                        onClick={() => writeTable({ kind: k.id })}>
+                        {ar ? k.ar : k.en}
+                      </button>
+                    ))}
+                    {tblCfg.kind === 'image' && (
+                      <label className={`chip${uploading === 'table' ? ' on' : ''}`} style={{ cursor: 'pointer' }}>
+                        {uploading === 'table' ? (ar ? 'يرفع…' : 'Uploading…') : (ar ? 'ارفع صورة طاولتك' : 'Upload your tabletop')}
+                        <input type="file" accept="image/*" hidden onChange={onTableFile} />
+                      </label>
+                    )}
+                  </div>
+
+                  {tblCfg.kind === 'none' ? (
+                    <p className="xs faint" style={{ margin: 0 }}>{ar ? 'بدون طاولة — اللوحة تبقى داكنة سادة كما كانت.' : 'No table — the panel stays plain dark as before.'}</p>
+                  ) : (
+                    <>
+                      {tblCfg.kind === 'material' && (
+                        <div className="row wrap" style={{ gap: 6 }}>
+                          {TABLE_MATERIALS.map((m) => {
+                            const on = tblCfg.material === m.id
+                            return (
+                              <button key={m.id} type="button" className="dpx-surface" data-on={on ? 'true' : 'false'} aria-pressed={on}
+                                onClick={() => writeTable({ material: m.id })}>
+                                <span className="dpx-chip" data-s={m.id} />
+                                <span className="dpx-surface-name">{ar ? m.ar : m.en}</span>
+                              </button>
+                            )
+                          })}
+                        </div>
+                      )}
+
+                      <div className="row wrap" style={{ gap: 6, alignItems: 'center' }}>
+                        <span className="xs faint bold">{ar ? 'حافة الطاولة' : 'Table edge'}</span>
+                        {TABLE_EDGES.map((e2) => (
+                          <button key={e2.id} type="button" className={`chip${tblCfg.edge === e2.id ? ' on' : ''}`} aria-pressed={tblCfg.edge === e2.id}
+                            onClick={() => writeTable({ edge: e2.id })}>
+                            {ar ? e2.ar : e2.en}
+                          </button>
+                        ))}
+                      </div>
+
+                      <div className="stack" style={{ gap: 8 }}>
+                        {TABLE_SLIDERS.map(([key, la, le, unit]) => {
+                          const R = TABLE_RANGE[key]
+                          const v = Number(tblCfg[key] != null ? tblCfg[key] : R.dflt)
+                          return (
+                            <div key={key} className="field" style={{ gap: 2 }}>
+                              <label>{ar ? la : le} · <span className="num">{wallSliderText(unit, v)}</span></label>
+                              <input type="range" min={R.min} max={R.max} step={R.step} value={v} onChange={(e3) => writeTable({ [key]: Number(e3.target.value) }, true)} style={{ width: '100%' }} />
+                            </div>
+                          )
+                        })}
+                        {tblCfg.kind === 'image' && (
+                          <div className="field" style={{ gap: 2 }}>
+                            <label>{ar ? 'حجم صورة الطاولة' : 'Photo scale'} · <span className="num">{wallSliderText('x', Number(tblCfg.scale) || 1)}</span></label>
+                            <input type="range" min={TABLE_RANGE.scale.min} max={TABLE_RANGE.scale.max} step={TABLE_RANGE.scale.step} value={Number(tblCfg.scale) || 1} onChange={(e3) => writeTable({ scale: Number(e3.target.value) }, true)} style={{ width: '100%' }} />
+                          </div>
+                        )}
+                      </div>
+
+                      <div className="row wrap" style={{ gap: 10 }}>
+                        <div className="field grow" style={{ minWidth: 150 }}>
+                          <label>{ar ? 'الدمج' : 'Blend'}</label>
+                          <select className="input" value={tblCfg.blend} onChange={(e3) => writeTable({ blend: e3.target.value })}>
+                            {BLEND_MODES.map((b) => <option key={b.id} value={b.id}>{ar ? b.ar : b.en}</option>)}
+                          </select>
+                        </div>
+                        <div className="field grow" style={{ minWidth: 150 }}>
+                          <label>{ar ? 'فلتر' : 'Filter'}</label>
+                          <select className="input" value={tblCfg.filter} onChange={(e3) => writeTable({ filter: e3.target.value })}>
+                            {FILTERS.map((f) => <option key={f.id || 'none'} value={f.id}>{ar ? f.ar : f.en}</option>)}
+                          </select>
+                        </div>
+                        <label className="row" style={{ gap: 6, cursor: 'pointer', alignItems: 'center' }}>
+                          <span className="xs faint">{ar ? 'صبغة' : 'Tint'}</span>
+                          <input type="color" value={tblCfg.tint || '#000000'} onChange={(e3) => writeTable({ tint: e3.target.value, tintAmount: tblCfg.tintAmount > 0 ? tblCfg.tintAmount : 0.2 }, true)} style={{ width: 42, height: 32, border: '1px solid var(--border)', borderRadius: 8, background: 'none', cursor: 'pointer' }} aria-label={ar ? 'لون الصبغة' : 'Tint colour'} />
+                          {Number(tblCfg.tintAmount) > 0 && (
+                            <button type="button" className="btn btn-sm btn-outline" onClick={() => writeTable({ tint: '', tintAmount: 0 })}>{ar ? 'إزالة' : 'Remove'}</button>
+                          )}
+                        </label>
+                      </div>
+
+                      {/* the live preview: the contract's own output over a dark
+                          stage, with one of the venue's real dishes seated on it
+                          by the same lift number the menu uses */}
+                      <div className="stack" style={{ gap: 6 }}>
+                        <span className="xs faint bold">{ar ? 'المعاينة — الطبق جالس على الطاولة' : 'Preview — the dish seated on the table'}</span>
+                        <div className="mtbl-stage">
+                          {wallSample?.imageUrl
+                            ? <img className="mtbl-dish" src={wallSample.imageUrl} alt="" style={{ transform: `translateY(${tblResolved ? tblResolved.lift : 0}%)` }} />
+                            : <span className="mtbl-nodish">{ar ? 'أضف صورة لأي صنف لترى الجلوس' : 'Add a dish photo to see the seating'}</span>}
+                          <div className="mtbl-panel">
+                            {tblResolved && (
+                              <span className="edt-table" aria-hidden="true" style={{ '--tbl-a': '16%', '--tbl-b': `${Math.round(34 + (tblResolved.shade || 0) * 36)}%`, '--tbl-contact': tblResolved.contact }}>
+                                <span className="edt-table-art" data-m={tblResolved.kind === 'material' ? tblResolved.material : undefined} style={tableStyle(tblResolved) || undefined} />
+                                <span className="mtbl-melt" />
+                                <span className="edt-table-edge" data-e={tblResolved.edge} />
+                                {tblResolved.contact > 0 ? <span className="edt-table-contact" /> : null}
+                              </span>
+                            )}
+                            <strong className="mtbl-name">{wallSample ? pickLang(wallSample, 'name', lang) : (ar ? 'اسم الصنف' : 'Dish name')}</strong>
+                            <span className="mtbl-price num">{wallSample?.price || 46}</span>
+                          </div>
+                        </div>
+                      </div>
+                    </>
+                  )}
                 </div>
 
                 {/* 6d. ROOM DECORATION (tenant.menuDecor) — the venue hangs its
