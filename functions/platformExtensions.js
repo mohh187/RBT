@@ -930,13 +930,18 @@ const imageTo3d = onCall({ timeoutSeconds: 540, memory: '1GiB' }, async (request
   // restoring the caps is a data flip, no deploy). The Meshy provider-balance
   // guard below stays live either way; that wallet is still the real wall.
   const uncapped = td.ar3dUnlimited === true
+  // cap/monthUsed live OUTSIDE the guard: the success payload at the end of
+  // this function reports `remaining`, and block-scoping them here once threw
+  // a ReferenceError on every call (the 500 INTERNAL the owner hit).
+  const cap = Math.max(0, Number(td.ar3dMonthly) || AR3D_DEFAULT_MONTHLY)
+  let monthUsed = 0
   if (!uncapped) {
-    const cap = Math.max(0, Number(td.ar3dMonthly) || AR3D_DEFAULT_MONTHLY)
     const monthStart = new Date()
     monthStart.setDate(1); monthStart.setHours(0, 0, 0, 0)
     const jobsSnap = await db.collection(`tenants/${tenantId}/ar3dJobs`)
       .where('createdAt', '>=', monthStart).get().catch(() => null)
     const monthJobs = jobsSnap ? jobsSnap.docs.map((d) => d.data()).filter((j) => j.status === 'done' || j.status === 'running') : []
+    monthUsed = monthJobs.length
     if (monthJobs.length >= cap) {
       throw new HttpsError('resource-exhausted',
         `اكتمل حد التحويلات الواقعية لهذا الشهر (${cap} تحويلاً). يتجدد الحد مطلع الشهر، أو تواصل مع المنصة لرفعه.`)
@@ -1041,7 +1046,7 @@ const imageTo3d = onCall({ timeoutSeconds: 540, memory: '1GiB' }, async (request
   }
   if (itemId) await db.doc(`tenants/${tenantId}/items/${itemId}`).set({ model3dUrl: url, model3dUsdzUrl: usdzStoredUrl }, { merge: true }).catch(() => {})
   await db.collection(`tenants/${tenantId}/ar3dJobs`).doc(String(taskId)).set({ status: 'done', url, usdzUrl: usdzStoredUrl }, { merge: true }).catch(() => {})
-  return { url, usdzUrl: usdzStoredUrl, remaining: Math.max(0, cap - monthJobs.length - 1), cap }
+  return { url, usdzUrl: usdzStoredUrl, remaining: uncapped ? cap : Math.max(0, cap - monthUsed - 1), cap }
 })
 
 // ============ AI tabletop for the menu room (Gemini image) ============
