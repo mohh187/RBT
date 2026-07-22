@@ -5,7 +5,8 @@ import { randomToken } from './format.js'
 // Size ceilings MUST mirror storage.rules — checked BEFORE uploading so a
 // too-big file fails instantly with a clear Arabic message instead of
 // uploading for minutes and then being rejected by the rules at finalize.
-export const UPLOAD_LIMITS_MB = { image: 10, video: 100, audio: 30 }
+// (model = 3D .glb/.usdz files, allowed only under tenants/{tid}/library/.)
+export const UPLOAD_LIMITS_MB = { image: 10, video: 100, audio: 30, model: 60 }
 
 // Some audio/video files arrive with an EMPTY file.type (browser couldn't sniff
 // it), which previously mis-classified them as images (10MB) and uploaded them
@@ -13,8 +14,13 @@ export const UPLOAD_LIMITS_MB = { image: 10, video: 100, audio: 30 }
 // extension so kind + content-type are correct regardless of file.type.
 const AUDIO_EXT = ['mp3', 'm4a', 'aac', 'wav', 'ogg', 'oga', 'opus', 'flac', 'weba', 'wma']
 const VIDEO_EXT = ['mp4', 'webm', 'mov', 'mkv', 'avi', 'ogv', 'm4v', '3gp']
+// 3D models: Windows reports an EMPTY file.type for .glb/.usdz, which used to
+// misclassify them as images (10MB cap → «حدث خطأ» for any real model) and
+// upload them as octet-stream. Recognize them as their own kind instead.
+const MODEL_EXT = ['glb', 'usdz']
 const AUDIO_CT = { mp3: 'audio/mpeg', m4a: 'audio/mp4', aac: 'audio/aac', wav: 'audio/wav', ogg: 'audio/ogg', oga: 'audio/ogg', opus: 'audio/opus', flac: 'audio/flac', weba: 'audio/webm', wma: 'audio/x-ms-wma' }
 const VIDEO_CT = { mp4: 'video/mp4', webm: 'video/webm', mov: 'video/quicktime', mkv: 'video/x-matroska', avi: 'video/x-msvideo', ogv: 'video/ogg', m4v: 'video/mp4', '3gp': 'video/3gpp' }
+const MODEL_CT = { glb: 'model/gltf-binary', usdz: 'model/vnd.usdz+zip' }
 const extOf = (file) => (file.name.split('.').pop() || '').toLowerCase()
 
 function fileKind(file) {
@@ -22,18 +28,20 @@ function fileKind(file) {
   if (t.startsWith('video/')) return 'video'
   if (t.startsWith('audio/')) return 'audio'
   if (t.startsWith('image/')) return 'image'
+  if (t.startsWith('model/')) return 'model'
   const ext = extOf(file)
   if (VIDEO_EXT.includes(ext)) return 'video'
   if (AUDIO_EXT.includes(ext)) return 'audio'
+  if (MODEL_EXT.includes(ext)) return 'model'
   return 'image'
 }
 // Best content-type: trust the browser when it declared a real media type,
 // otherwise derive it from the extension (never octet-stream for known media).
 function bestContentType(file) {
   const t = file.type || ''
-  if (/^(audio|video|image)\//.test(t)) return t
+  if (/^(audio|video|image|model)\//.test(t)) return t
   const ext = extOf(file)
-  return VIDEO_CT[ext] || AUDIO_CT[ext] || t || 'application/octet-stream'
+  return VIDEO_CT[ext] || AUDIO_CT[ext] || MODEL_CT[ext] || t || 'application/octet-stream'
 }
 
 function guardSize(file) {

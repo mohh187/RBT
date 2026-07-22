@@ -7878,7 +7878,9 @@ video.edt-backdrop { width: 100%; height: 100%; display: block; }
 .edt-thumb.on { border-color: var(--edt-amber, #f5b942); }
 .edt-thumb img { width: 100%; height: 100%; object-fit: cover; display: block; }
 
-.edt-stg-body { padding: 18px 22px 26px; max-width: 720px; margin-inline: auto; }
+/* --tbl-textpad («مسافة النص تحت الطبق», menuTable.textPad): extra top space
+   so a deeply-lifted dish never buries the item's name. 0px = today. */
+.edt-stg-body { padding: calc(18px + var(--tbl-textpad, 0px)) 22px 26px; max-width: 720px; margin-inline: auto; }
 .edt-stg-tags { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 10px; }
 .edt-stg-name { font-size: clamp(24px, 6vw, 38px); font-weight: 900; letter-spacing: -.02em; margin: 0 0 8px; text-wrap: balance; }
 .edt-stg-price {
@@ -7988,6 +7990,11 @@ button.edt-pair:active { transform: scale(.98); }
   border-radius: 18px;
   pointer-events: none;
 }
+/* the free-transform carrier: furniture (art+tint) and the physical lip
+   (edge+contact) ride it in two identical wrappers, while the reading layers
+   (melt/melt-b/veil/dim) stay pinned to the panel box — a stretched table can
+   no longer drag the melt out of the visible panel. Inert span at defaults. */
+.edt-table-free { position: absolute; inset: 0; transform-origin: 50% 0%; }
 .edt-table-art { position: absolute; inset: 0; }
 /* «ذوبان أعلى الطاولة في الجدار» (--edt-sh-ttop, tenant.menuShadows.tableTop):
    a top feather melting a PHOTO table's hard first row up into the wall.

@@ -1191,23 +1191,37 @@ function EdtTable({ tb }) {
   const art = tableStyle(tb) || {}
   // Free placement: translate/scale against the bolted box, origin at the top
   // centre so the seat (the top edge the dish drops onto) never drifts.
+  //
+  // THE TRANSFORM CARRIES ONLY THE FURNITURE, NEVER THE READING LAYERS. When
+  // the whole box scaled (the live venue stretched h to 250), the melt's stops
+  // scaled with it and slid out of the visible panel — the words sat on a huge
+  // undissolved slab of material, which the owner reported as «الظل». So the
+  // art+tint ride the free transform in one wrapper, the edge+contact ride an
+  // identical second wrapper (they hug the table's PHYSICAL top lip), and the
+  // melt/melt-b/veil/dim stay PINNED to the panel box: readability geometry is
+  // the panel's, whatever the furniture does. With no free transform the
+  // wrappers are inert inset:0 spans and the paint is byte-identical.
   const free = tableFreeStyle(tb)
   return (
     <span
       className="edt-table"
       aria-hidden="true"
-      style={{ '--tbl-a': `${a}%`, '--tbl-b': `${b}%`, '--tbl-contact': tb.contact, ...(free || {}) }}
+      style={{ '--tbl-a': `${a}%`, '--tbl-b': `${b}%`, '--tbl-contact': tb.contact }}
     >
-      <span className="edt-table-art" data-m={tb.kind === 'material' ? tb.material : undefined} style={art} />
-      {tb.tint && tb.tintAmount > 0
-        ? <span className="edt-table-tint" style={{ background: tb.tint, opacity: tb.tintAmount }} />
-        : null}
+      <span className="edt-table-free" style={free || undefined}>
+        <span className="edt-table-art" data-m={tb.kind === 'material' ? tb.material : undefined} style={art} />
+        {tb.tint && tb.tintAmount > 0
+          ? <span className="edt-table-tint" style={{ background: tb.tint, opacity: tb.tintAmount }} />
+          : null}
+      </span>
       {tb.dim > 0 ? <span className="edt-table-dim" style={{ opacity: tb.dim }} /> : null}
       <span className="edt-table-melt" />
       {mb ? <span className="edt-table-melt-b" style={{ '--tbl-mba': `${mb.a}%`, '--tbl-mbb': `${mb.b}%` }} /> : null}
       {tb.veil > 0 ? <span className="edt-table-veil" style={{ opacity: tb.veil }} /> : null}
-      <span className="edt-table-edge" data-e={tb.edge} />
-      {tb.contact > 0 ? <span className="edt-table-contact" /> : null}
+      <span className="edt-table-free" style={free || undefined}>
+        <span className="edt-table-edge" data-e={tb.edge} />
+        {tb.contact > 0 ? <span className="edt-table-contact" /> : null}
+      </span>
     </span>
   )
 }

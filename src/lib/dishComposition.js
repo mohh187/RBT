@@ -632,6 +632,10 @@ export const TABLE_RANGE = {
   // button (.edt-stg-x, top:12px + 44px tall).
   heroPad: { min: 20, max: 80, step: 2, dflt: 56 },  // px, capped by 14vw in CSS
   heroMax: { min: 20, max: 60, step: 1, dflt: 42 },  // dvh; px cap = value*10
+  // «بحيث لا يتداخل مع النص أو الاسم»: extra space pushed under the dropped
+  // dish before the first text row, so a deep lift never buries the item's
+  // name under the plate. 0 = exactly today's layout.
+  textPad: { min: 0, max: 200, step: 2, dflt: 0 },   // px
 }
 
 // The keys a venue may override FOR THE OPENED-ITEM WINDOW alone
@@ -640,7 +644,7 @@ export const TABLE_RANGE = {
 // cannot fit both: the owner reported the table «لا تظهر بشكل مناسب عند فتح
 // الصنف». Geometry and strength may differ per place; the material may not —
 // it is one room with one table.
-export const TABLE_STAGE_KEYS = ['x', 'y', 'w', 'h', 'lift', 'opacity', 'shade', 'dim', 'melt', 'meltBottom', 'veil', 'extend', 'heroPad', 'heroMax', 'contact', 'scale']
+export const TABLE_STAGE_KEYS = ['x', 'y', 'w', 'h', 'lift', 'opacity', 'shade', 'dim', 'melt', 'meltBottom', 'veil', 'extend', 'heroPad', 'heroMax', 'textPad', 'contact', 'scale']
 
 /**
  * The table under the dish details. Reads the TENANT document, because it is one
@@ -697,6 +701,7 @@ export function resolveTable(tenant, options) {
     extend: t.extend === true,
     heroPad: num(t.heroPad, R.heroPad.dflt, R.heroPad.min, R.heroPad.max),
     heroMax: num(t.heroMax, R.heroMax.dflt, R.heroMax.min, R.heroMax.max),
+    textPad: num(t.textPad, R.textPad.dflt, R.textPad.min, R.textPad.max),
   }
 }
 
@@ -758,6 +763,7 @@ export function tableMeltBottom(tb) {
 export function tableStageVars(tb) {
   if (!tb) return null
   const v = {}
+  if (tb.textPad) v['--tbl-textpad'] = `${tb.textPad}px`
   if (tb.heroPad !== TABLE_RANGE.heroPad.dflt) v['--edt-stg-padtop'] = `min(${tb.heroPad}px, 14vw)`
   if (tb.heroMax !== TABLE_RANGE.heroMax.dflt) {
     v['--edt-stg-heromax'] = `min(${tb.heroMax}dvh, ${tb.heroMax * 10}px)`

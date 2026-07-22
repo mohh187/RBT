@@ -1277,9 +1277,26 @@ export default function Settings() {
     try { await saveNow({ menuShadows: next }); updateTenantLocal({ menuShadows: next }); toast.success(t('saved')) } catch (_) { toast.error(t('error')) }
   }
   const resetShadows = () => writeShadows({ ...SHADOW_DEFAULTS })
-  // «أزل كل الظلال والخطوط» — every key to 0 in ONE patch, EXCEPT tableTop:
-  // that dial is a feather the venue ADDS (opt-in, dflt 0), not a shadow.
-  const killShadows = () => writeShadows(Object.fromEntries(Object.keys(SHADOW_RANGE).filter((k) => k !== 'tableTop').map((k) => [k, 0])))
+  // «أزل كل الظلال والخطوط» — every key to 0 in ONE save, EXCEPT tableTop
+  // (that dial is a feather the venue ADDS, not a shadow). TOTAL on purpose:
+  // the owner pressed this with dish=0 and still saw darkness, because the
+  // other three dark sources live on sibling fields — the photo-foot vignette
+  // (menuWall), the table contact pool (menuTable, both places) and the room
+  // fade behind text (menuSections). One button now silences all of them; the
+  // melt/panel readability dials stay untouched deliberately.
+  const killShadows = async () => {
+    const sh = { ...shCfg, ...Object.fromEntries(Object.keys(SHADOW_RANGE).filter((k) => k !== 'tableTop').map((k) => [k, 0])) }
+    const wallNext = { ...wallCfg, vignette: 0 }
+    const stage = tblCfg.stage && typeof tblCfg.stage === 'object' ? { ...tblCfg.stage, contact: 0 } : null
+    const tblNext = { ...tblCfg, contact: 0, ...(stage ? { stage } : {}) }
+    const secNext = { ...secCfg, fade: 0 }
+    setShCfg(sh); setWallCfg(wallNext); setTblCfg(tblNext); setSecCfg(secNext)
+    try {
+      await saveNow({ menuShadows: sh, menuWall: wallNext, menuTable: tblNext, menuSections: secNext })
+      updateTenantLocal({ menuShadows: sh, menuWall: wallNext, menuTable: tblNext, menuSections: secNext })
+      toast.success(t('saved'))
+    } catch (_) { toast.error(t('error')) }
+  }
 
   // ===== PER-MODE MENU INKS (tenant.menuInk) =====
   // The venue's own text colours per light/dark mode. Structure is
@@ -1524,7 +1541,14 @@ export default function Settings() {
     try {
       const url = await uploadFile(tenantId, f, 'library/ar')
       addDecor(url, 'model', String(f.name || '').replace(/\.[a-z0-9]+$/i, ''))
-    } catch (_) { toast.error(t('error')) } finally { setDecorBusy('') }
+    } catch (err) {
+      // The size guard throws a readable Arabic message; Firebase failures
+      // carry a code (storage/unauthorized…) worth surfacing — either beats
+      // the blind «حدث خطأ» that used to hide the real cause.
+      toast.error(err?.code
+        ? `${ar ? 'تعذّر رفع المجسم' : 'Model upload failed'} (${err.code})`
+        : (err?.message || t('error')))
+    } finally { setDecorBusy('') }
   }
 
   // Receipt Settings states
@@ -4462,7 +4486,7 @@ export default function Settings() {
                             <input type="checkbox" checked={tblValueAt('extend') === true} onChange={(e3) => writeTableAt({ extend: e3.target.checked === true })} style={{ width: 20, height: 20, flex: 'none' }} />
                             <span className="xs">{ar ? 'مدّ الطاولة حتى أسفل النافذة (تلتحم بشريط الإضافة)' : 'Extend the table to the window bottom (meets the add bar)'}</span>
                           </label>
-                          {[['heroPad', 'المساحة فوق الطبق', 'Space above the dish', 'px'], ['heroMax', 'أقصى ارتفاع لصورة الطبق', 'Dish photo max height', 'dvh']].map(([key, la, le, unit]) => {
+                          {[['heroPad', 'المساحة فوق الطبق', 'Space above the dish', 'px'], ['heroMax', 'أقصى ارتفاع لصورة الطبق', 'Dish photo max height', 'dvh'], ['textPad', 'مسافة النص تحت الطبق — كي لا يغطي الطبقُ الاسم', 'Text clearance under the dish', 'px']].map(([key, la, le, unit]) => {
                             const R = TABLE_RANGE[key]
                             const v = Number(tblValueAt(key))
                             const overridden = tblStageOver[key] != null
@@ -4570,8 +4594,8 @@ export default function Settings() {
                   </div>
                   <span className="xs faint">
                     {ar
-                      ? 'إزالة «ظلال الأطباق» لا تحذف عمل موظفيك على الأصناف — تُخفّضه فقط، ويعود كاملاً برفع المنزلق. ظل الشريط العلوي الافتراضي (خارج أوضاع الصورة والطوب) ثابت عمداً — يتبع «لون الشريط».'
-                      : 'Killing the dish shadows never deletes the per-item work — it scales it, and raising the dial restores it. The default app-bar shadow (outside the image/brick modes) is deliberately fixed — it follows the bar-colour preset.'}
+                      ? 'زر الإزالة يصفّر كل ما في هذه البطاقة، ومعه المصادر الداكنة الثلاثة بالأسفل (ذوبان قدم الصورة + ظل التماس + تعتيم الأقسام). إزالة «ظلال الأطباق» لا تحذف عمل موظفيك على الأصناف — تُخفّضه فقط، ويعود كاملاً برفع المنزلق. ظل الشريط العلوي الافتراضي ثابت عمداً — يتبع «لون الشريط».'
+                      : 'The kill button zeroes everything on this card plus the three dark sources below (photo-foot melt + contact pool + section dim). Killing the dish shadows never deletes the per-item work — it scales it. The default app-bar shadow is deliberately fixed — it follows the bar-colour preset.'}
                   </span>
                   <div className="stack" style={{ gap: 8 }}>
                     {SHADOW_SLIDERS.map(([key, la, le]) => {
@@ -4585,19 +4609,28 @@ export default function Settings() {
                       )
                     })}
                   </div>
-                  {/* the OTHER half of the table band lives in two existing dials —
-                      these deep links are load-bearing, not polish: clearing the
-                      band needs tableEdge + contact + vignette together. */}
-                  <span className="xs faint">
-                    {ar ? 'نصفا «الشريط الداكن» الباقيان في بطاقتين أخريين: ' : 'The other half of the dark band lives in two other cards: '}
-                    <button type="button" className="btn-link" style={{ fontSize: 'inherit' }} onClick={() => document.getElementById('set-menuwall')?.scrollIntoView({ behavior: 'smooth', block: 'start' })}>
-                      {ar ? '«ذوبان أسفل صورة الطبق» في بطاقة الجدار' : '“Melt under the dish photo” in the wall card'}
-                    </button>
-                    {' · '}
-                    <button type="button" className="btn-link" style={{ fontSize: 'inherit' }} onClick={() => document.getElementById('set-menutable')?.scrollIntoView({ behavior: 'smooth', block: 'start' })}>
-                      {ar ? '«ظل التماس تحت الطبق» في بطاقة الطاولة' : '“Contact shadow” in the table card'}
-                    </button>
-                  </span>
+                  {/* THE OTHER DARK SOURCES, EDITED RIGHT HERE. The owner
+                      pressed the kill-switch and still saw darkness because
+                      these three live on sibling fields (menuWall.vignette,
+                      menuTable.contact, menuSections.fade). They stay stored
+                      where they always were — these sliders are guest handles
+                      on the same writers their home cards use, so the two
+                      surfaces can never disagree. */}
+                  <div className="stack" style={{ gap: 8, borderTop: '1px solid var(--border)', paddingTop: 10 }}>
+                    <span className="xs faint bold">{ar ? 'مصادر داكنة أخرى — من بطاقات الجدار والطاولة والأقسام، تُضبط من هنا أيضاً' : 'Other dark sources — wall/table/sections dials, adjustable from here too'}</span>
+                    <div className="field" style={{ gap: 2 }}>
+                      <label>{ar ? 'ذوبان أسفل صورة الطبق (الحزام عند قدم الصورة)' : 'Melt under the dish photo (the foot band)'} · <span className="num">{wallSliderText('pct', Number(wallCfg.vignette != null ? wallCfg.vignette : WALL_RANGE.vignette.dflt))}</span></label>
+                      <input type="range" min={WALL_RANGE.vignette.min} max={WALL_RANGE.vignette.max} step={WALL_RANGE.vignette.step} value={Number(wallCfg.vignette != null ? wallCfg.vignette : WALL_RANGE.vignette.dflt)} onChange={(e3) => writeWall({ vignette: Number(e3.target.value) }, true)} style={{ width: '100%' }} />
+                    </div>
+                    <div className="field" style={{ gap: 2 }}>
+                      <label>{ar ? 'ظل التماس تحت الطبق (الطاولة)' : 'Contact pool under the dish (table)'} · <span className="num">{wallSliderText('pct', Number(tblCfg.contact != null ? tblCfg.contact : TABLE_RANGE.contact.dflt))}</span></label>
+                      <input type="range" min={TABLE_RANGE.contact.min} max={TABLE_RANGE.contact.max} step={TABLE_RANGE.contact.step} value={Number(tblCfg.contact != null ? tblCfg.contact : TABLE_RANGE.contact.dflt)} onChange={(e3) => writeTable({ contact: Number(e3.target.value) }, true)} style={{ width: '100%' }} />
+                    </div>
+                    <div className="field" style={{ gap: 2 }}>
+                      <label>{ar ? 'تعتيم الغرفة خلف النص (الأقسام)' : 'Room dim behind text (sections)'} · <span className="num">{wallSliderText('pct', Number(secCfg.fade != null ? secCfg.fade : SECTION_RANGE.fade.dflt))}</span></label>
+                      <input type="range" min={SECTION_RANGE.fade.min} max={SECTION_RANGE.fade.max} step={SECTION_RANGE.fade.step} value={Number(secCfg.fade != null ? secCfg.fade : SECTION_RANGE.fade.dflt)} onChange={(e3) => writeSections({ fade: Number(e3.target.value) }, true)} style={{ width: '100%' }} />
+                    </div>
+                  </div>
                 </div>
 
                 {/* 6d. ROOM DECORATION (tenant.menuDecor) — the venue hangs its

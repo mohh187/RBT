@@ -19,6 +19,12 @@ service firebase.storage {
     function isAudio() {
       return request.resource.contentType.matches('audio/.*');
     }
+    // 3D models (.glb/.usdz) — the client always sets model/gltf-binary or
+    // model/vnd.usdz+zip explicitly (src/lib/storage.js), so contentType is
+    // reliable here even though Windows browsers sniff .glb as empty.
+    function isModel() {
+      return request.resource.contentType.matches('model/.*');
+    }
     function underLimit(mb) {
       return request.resource.size < mb * 1024 * 1024;
     }
@@ -52,6 +58,7 @@ service firebase.storage {
         (isImage() && underLimit(10)) ||
         (isVideo() && underLimit(150)) ||
         (isAudio() && underLimit(40)) ||
+        (isModel() && underLimit(60)) ||
         (!isImage() && !isVideo() && !isAudio() && underLimit(25))
       );
       allow delete: if isTenantStaff(tid) || isPlatformAdmin();
