@@ -8,6 +8,9 @@ import { distanceMeters } from '../../lib/geo.js'
 import { useToast } from '../../components/Toast.jsx'
 import { FullSpinner, Empty } from '../../components/ui.jsx'
 import DinerBar from '../../components/DinerBar.jsx'
+import ChromeSkin from '../../components/ChromeSkin.jsx'
+import PageBackground from '../../components/PageBackground.jsx'
+import { resolveChrome, resolveChromePage } from '../../lib/dishComposition.js'
 import Icon from '../../components/Icon.jsx'
 import { orderNumber } from '../../lib/format.js'
 import { Price } from '../../components/Riyal.jsx'
@@ -213,11 +216,21 @@ export default function OrderStatus() {
     }
   }
 
+  // The REAL venue feeds the bar once loaded (it was already fetched at line
+  // ~78 — no second read); until then today's synthetic title renders. The
+  // tracking label stays in the page heading below either way. The room
+  // wrapper mounts only when the venue configured a page background
+  // (menuChrome.pages.order / follow) — at >=980px .venue-above locks the page
+  // into a 100vh flex shell, so it must never appear un-opted-in.
+  const pageBgOn = !!(venue && resolveChromePage(venue, 'order'))
+
   return (
-    <div style={{ minHeight: '100dvh' }}>
+    <div className={pageBgOn ? 'venue-above' : undefined} style={{ minHeight: '100dvh' }}>
+      <ChromeSkin tenant={venue} />
+      <PageBackground tenant={venue} page="order" />
       <DinerBar
-        tenant={{ name: order.tableLabel || t('trackOrder') }}
-        right={<button className="icon-btn" onClick={() => { setNotifMounted(true); setNotifOpen(true) }} title={t('notifSettings')}><Icon name={notifOn ? 'bell' : 'bellOff'} size={20} /></button>}
+        tenant={venue || { name: order.tableLabel || t('trackOrder') }}
+        right={<button className="icon-btn db-chrome" onClick={() => { setNotifMounted(true); setNotifOpen(true) }} title={t('notifSettings')}><Icon name={notifOn ? 'bell' : 'bellOff'} size={20} /></button>}
       />
       <div className="container page stack" style={{ gap: 'var(--sp-5)' }}>
         <div className="text-center stack" style={{ gap: 10, alignItems: 'center' }}>
@@ -445,7 +458,7 @@ export default function OrderStatus() {
         )}
 
         {/* venue social profiles (only the configured ones) */}
-        <SocialLinks social={venue?.social} appearance={venue?.socialStyle} style={{ paddingBlock: 4 }} />
+        <SocialLinks social={venue?.social} appearance={venue?.socialStyle} icons={resolveChrome(venue)?.socialIcons} style={{ paddingBlock: 4 }} />
 
         <Link to={`/m/${slug}`} className="btn btn-outline btn-block">{lang === 'ar' ? 'العودة للمنيو' : 'Back to menu'}</Link>
         <button className="btn btn-ghost btn-block" style={{ color: 'var(--text-muted)' }} onClick={() => setComplaintOpen(true)}>

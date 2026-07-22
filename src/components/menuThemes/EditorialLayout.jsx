@@ -38,12 +38,18 @@ import DishProps from './DishProps.jsx'
 // the venue's placed layers, the wall the whole room is set against, how one
 // dish is joined to the next, and the objects the venue hangs in its room.
 import {
-  resolveComposition, bgStyle, imgStyle,
+  resolveComposition, bgStyle, imgStyle, imgTiltBoxStyle,
   resolveWall, wallStyle, layerStyle,
   resolveSections, resolveDecor, decorStyle,
-  resolveTable, tableStyle, tableFreeStyle, tableMeltStops,
+  resolveTable, tableStyle, tableFreeStyle, tableMeltStops, tableMeltBottom, tableStageVars,
   resolveMenuHeader, resolveButtons,
+  resolveShadows, shadowVars, scaleDishShadow,
+  resolveInk, inkVars, inkModeFor,
 } from '../../lib/dishComposition.js'
+// One shared trim engine for every uploaded video (lib/useVideoTrim.js): seeks
+// to the venue's chosen start second and loops the chosen window, leaving the
+// muted/autoplay/loop attributes untouched so iOS autoplay survives.
+import { useVideoTrim } from '../../lib/useVideoTrim.js'
 import { loadModelViewer } from '../../lib/ar3d.js'
 import '../../styles/menuwall.css'
 
@@ -669,7 +675,14 @@ const HEADER_FALLBACK_WALL = {
   tint: '', tintAmount: 0,
 }
 
-function headerBrickVars(wall) {
+// Two venue dials reach the brick bar now (merged options argument):
+//   scrim  — resolveMenuHeader(tenant).scrim, clamped 0.35–0.9 so the bar can
+//            never lose the veil that makes its ink provable. Passed as null
+//            while tenant.menuHeader.scrim is unsaved, which keeps the original
+//            fixed scrim string byte-identical for untouched venues.
+//   shadow — the menuShadows.header dial, emitted as --edt-hd-sh for the
+//            border/cast rules in index.css (default 1 = today's look).
+function headerBrickVars(wall, { scrim = null, shadow = 1 } = {}) {
   const w = {
     ...(wall || HEADER_FALLBACK_WALL),
     scale: clampNum((wall ? wall.scale : 1) * 0.55, 0.3, 0.8),
@@ -677,28 +690,59 @@ function headerBrickVars(wall) {
   }
   const p = wallPaint(w)
   if (!p) return null
-  const scrim = `linear-gradient(0deg, ${HEADER_SCRIM}, ${HEADER_SCRIM})`
+  const s = scrim != null ? `rgba(46,18,8,${n2(clampNum(scrim, 0.35, 0.9))})` : HEADER_SCRIM
+  const veil = `linear-gradient(0deg, ${s}, ${s})`
   return {
-    '--edt-hd-img': `${scrim}, ${p.backgroundImage}`,
+    '--edt-hd-img': `${veil}, ${p.backgroundImage}`,
     '--edt-hd-size': `auto, ${p.backgroundSize}`,
     '--edt-hd-rep': `no-repeat, ${p.backgroundRepeat}`,
     '--edt-hd-pos': `center, ${p.backgroundPosition}`,
     '--edt-hd-color': p.backgroundColor,
+    '--edt-hd-sh': shadow == null ? 1 : shadow,
   }
 }
 
-// ---- the venue's BUTTON SKIN (resolveButtons) ----
+// ---- the venue's BUTTON SKIN (resolveButtons) + every chrome face ----
 // «اتحكم في الازرار لتكون طوب او صورة». The face is painted exactly the way the
 // brick header is: the venue's OWN wall paint scaled to button size — or the
 // venue's own photo — under a veil that keeps the label readable. The vars land
 // on .edt-wrap / .edt-stg and the .edt-* block of index.css dresses the actual
 // buttons; the two halves of the feature meet only through these properties.
-function buttonSkinVars(btn, wall) {
-  if (!btn) return null
-  const veil = `linear-gradient(0deg, rgba(14,9,6,${n2(btn.scrim)}), rgba(14,9,6,${n2(btn.scrim)}))`
+//
+// GENERALISED as chromeFaceVars: the same painter now dresses chrome surfaces
+// OUTSIDE the wrap too (the exp-bar chips in MenuView, the nav/fab/sheet faces
+// in ChromeSkin) under other var prefixes. For prefix 'edt-btn' the output is
+// byte-identical to the original buttonSkinVars — resolveButtons never carries
+// filter/blend/tint and its skin is always truthy, so every new field below is
+// a no-op on the button path and saved venues cannot move. Chrome's 'room'
+// skin falls through to the same wall branch 'brick' always used; 'none' is a
+// new transparent face buttons never reach.
+export function chromeFaceVars(el, wall, prefix = 'edt-btn') {
+  if (!el || !el.skin) return null
+  const P = (k) => `--${prefix}-${k}`
+  const veil = `linear-gradient(0deg, rgba(14,9,6,${n2(el.scrim)}), rgba(14,9,6,${n2(el.scrim)}))`
   const out = {
-    '--edt-btn-r': `${btn.radius}px`,
-    '--edt-btn-ink': btn.ink === 'dark' ? '#24170e' : '#ffffff',
+    [P('r')]: `${el.radius}px`,
+    [P('ink')]: el.ink === 'dark' ? '#24170e' : '#ffffff',
+  }
+  // filter rides its own var — the CSS applies it to an isolated ::before image
+  // layer, never to the element, so icons and labels stay unfiltered. blend
+  // lands as background-blend-mode on the face. Buttons carry neither field.
+  if (el.filter) out[P('filter')] = el.filter
+  if (el.blend && el.blend !== 'normal') out[P('blend')] = el.blend
+  // The chrome tint layer sits between the veil and the face image, exactly
+  // where wallPaint puts its own tint; absent (every button) it adds nothing
+  // and the emitted strings match the original byte for byte.
+  const tRgb = el.tint && el.tintAmount > 0 ? toRgb(el.tint, null) : null
+  const tintL = tRgb ? `, linear-gradient(0deg, ${rgbaOf(tRgb, el.tintAmount)}, ${rgbaOf(tRgb, el.tintAmount)})` : ''
+  const tintS = tRgb ? ', auto' : ''
+  const tintR = tRgb ? ', no-repeat' : ''
+  const tintP = tRgb ? ', center' : ''
+  // 'none': a transparent face — the element keeps only its radius and ink.
+  if (el.skin === 'none') {
+    out[P('img')] = 'none'
+    out[P('color')] = 'transparent'
+    return out
   }
   // «طوبة واحدة» (shape 'slab') on the brick skin: the face is ONE laid brick
   // fired from the wall's own clay — the theme's default brick gradient plus
@@ -706,54 +750,60 @@ function buttonSkinVars(btn, wall) {
   // the units blur. The mortar arris/bed shadows come from the CSS side
   // ([data-btnshape='slab']). An image skin keeps its photo; only the geometry
   // changes there.
-  if (btn.shape === 'slab' && btn.skin === 'brick') {
+  if (el.shape === 'slab' && el.skin === 'brick') {
     const base = toRgb((wall || HEADER_FALLBACK_WALL).color, [138, 74, 44])
     const top = hexOf(shade(base, 0.14))
     const mid = hexOf(base)
     const bot = hexOf(shade(base, -0.12))
-    out['--edt-btn-img'] = `${veil}, repeating-linear-gradient(101deg, rgba(255,255,255,.022) 0 3px, rgba(46,18,8,.03) 3px 7px), linear-gradient(180deg, ${top} 0%, ${mid} 48%, ${bot} 100%)`
-    out['--edt-btn-size'] = 'auto, auto, auto'
-    out['--edt-btn-rep'] = 'no-repeat, repeat, no-repeat'
-    out['--edt-btn-pos'] = 'center, center, center'
-    out['--edt-btn-color'] = mid
+    out[P('img')] = `${veil}${tintL}, repeating-linear-gradient(101deg, rgba(255,255,255,.022) 0 3px, rgba(46,18,8,.03) 3px 7px), linear-gradient(180deg, ${top} 0%, ${mid} 48%, ${bot} 100%)`
+    out[P('size')] = `auto${tintS}, auto, auto`
+    out[P('rep')] = `no-repeat${tintR}, repeat, no-repeat`
+    out[P('pos')] = `center${tintP}, center, center`
+    out[P('color')] = mid
     return out
   }
-  if (btn.skin === 'image') {
+  if (el.skin === 'image') {
     // «تكبير وتصغير الصورة داخل الزر»: 1 = cover; any other value is a real
     // background-size, tiling when the picture no longer fills the face. The
     // offsets pick WHICH part of the photo shows.
-    out['--edt-btn-img'] = `${veil}, url("${String(btn.url).replace(/["\\]/g, '')}")`
-    out['--edt-btn-size'] = btn.imgScale === 1 ? 'auto, cover' : `auto, ${Math.round(btn.imgScale * 100)}%`
-    out['--edt-btn-rep'] = `no-repeat, ${btn.imgScale === 1 ? 'no-repeat' : 'repeat'}`
-    out['--edt-btn-pos'] = `center, ${btn.imgX}% ${btn.imgY}%`
+    out[P('img')] = `${veil}${tintL}, url("${String(el.url).replace(/["\\]/g, '')}")`
+    out[P('size')] = el.imgScale === 1 ? `auto${tintS}, cover` : `auto${tintS}, ${Math.round(el.imgScale * 100)}%`
+    out[P('rep')] = `no-repeat${tintR}, ${el.imgScale === 1 ? 'no-repeat' : 'repeat'}`
+    out[P('pos')] = `center${tintP}, ${el.imgX}% ${el.imgY}%`
     return out
   }
-  // brick: a photo wall covers the face whole; a drawn bond scales its unit
-  // down, else one brick fills the whole button and stops reading as brick.
-  // The imgScale dial multiplies either: the unit size on a drawn bond, the
-  // zoom of the photograph on a photo wall. Tint is stripped from the face —
-  // the veil is the button's own mood, and a second tint layer would make the
-  // zoom arithmetic below blind to which layer is the picture.
+  // brick / room: a photo wall covers the face whole; a drawn bond scales its
+  // unit down, else one brick fills the whole button and stops reading as
+  // brick. The imgScale dial multiplies either: the unit size on a drawn bond,
+  // the zoom of the photograph on a photo wall. The WALL's tint is stripped
+  // from the face — the veil is the face's own mood, and a second tint layer
+  // would make the zoom arithmetic below blind to which layer is the picture.
   const src = wall || HEADER_FALLBACK_WALL
   const isPhoto = src.pattern === 'image'
   const p = wallPaint({
     ...src,
-    scale: isPhoto ? 1 : clampNum(src.scale * 0.3 * btn.imgScale, 0.1, 1.6),
+    scale: isPhoto ? 1 : clampNum(src.scale * 0.3 * el.imgScale, 0.1, 1.6),
     opacity: 1, blur: 0, blend: 'normal', filter: '', tint: '', tintAmount: 0,
   })
   if (!p) return null
-  out['--edt-btn-img'] = `${veil}, ${p.backgroundImage}`
+  out[P('img')] = `${veil}${tintL}, ${p.backgroundImage}`
   if (isPhoto) {
-    out['--edt-btn-size'] = btn.imgScale === 1 ? 'auto, cover' : `auto, ${Math.round(btn.imgScale * 100)}%`
-    out['--edt-btn-rep'] = `no-repeat, ${btn.imgScale === 1 ? 'no-repeat' : 'repeat'}`
-    out['--edt-btn-pos'] = `center, ${btn.imgX}% ${btn.imgY}%`
+    out[P('size')] = el.imgScale === 1 ? `auto${tintS}, cover` : `auto${tintS}, ${Math.round(el.imgScale * 100)}%`
+    out[P('rep')] = `no-repeat${tintR}, ${el.imgScale === 1 ? 'no-repeat' : 'repeat'}`
+    out[P('pos')] = `center${tintP}, ${el.imgX}% ${el.imgY}%`
   } else {
-    out['--edt-btn-size'] = `auto, ${p.backgroundSize}`
-    out['--edt-btn-rep'] = `no-repeat, ${p.backgroundRepeat}`
-    out['--edt-btn-pos'] = `center, ${p.backgroundPosition}`
+    out[P('size')] = `auto${tintS}, ${p.backgroundSize}`
+    out[P('rep')] = `no-repeat${tintR}, ${p.backgroundRepeat}`
+    out[P('pos')] = `center${tintP}, ${p.backgroundPosition}`
   }
-  out['--edt-btn-color'] = p.backgroundColor
+  out[P('color')] = p.backgroundColor
   return out
+}
+
+// The original name, kept as the wrap/stage entry point — and exported now for
+// MenuView's exp-bar, so both faces come from ONE painter and cannot drift.
+export function buttonSkinVars(btn, wall) {
+  return chromeFaceVars(btn, wall, 'edt-btn')
 }
 
 // ---- the venue's OWN hung objects (resolveDecor / decorStyle) ----
@@ -907,6 +957,24 @@ function useModelViewer(needed) {
 // stylesheet's own --edt-wall tile stays exactly as it always was.
 const wallConfigured = (tenant) => !!(tenant && tenant.menuWall && tenant.menuWall.pattern)
 
+// THE ROOM (menuWall.room): the venue's ONE wall, mounted by MenuView as a
+// fixed full-viewport layer behind the entire page — header, banner, featured
+// strip and the menu itself stand in the same room, replacing the pre-menu
+// grey zone. Opt-in; while it is on, .edt-wrap stamps data-roombg and SKIPS
+// its own inner EdtWall (painting the same wall twice would darken any wall
+// with opacity < 1 or a blend mode). The stage (.edt-stg) KEEPS its own wall
+// unconditionally — it is a fixed overlay drawn above the room.
+export function EditorialRoomBg({ tenant }) {
+  const wallKey = wallConfigured(tenant) ? JSON.stringify(tenant.menuWall) : ''
+  const wall = useMemo(() => (wallKey ? resolveWall(tenant) : null), [wallKey]) // eslint-disable-line react-hooks/exhaustive-deps
+  if (!wall || !wall.room) return null
+  return (
+    <div className="edt-roombg" aria-hidden="true">
+      <EdtWall wall={wall} />
+    </div>
+  )
+}
+
 // ---- the venue's PLACED LAYERS (its own cut-out photographs) ----
 //
 // Three nested elements per layer, and each level exists for one reason:
@@ -1018,6 +1086,12 @@ function bgVideoStyle(bg) {
 // hero band (stage) so it fills that whole area, always behind the dish, always
 // transparent to touch, and never anywhere near a line of text.
 function EdtBackdrop({ bg }) {
+  // The hook runs unconditionally (Rules of Hooks — the early returns come
+  // after it). bg.trim arrives resolved from the contract (resolveComposition
+  // reads item.bgVideoTrim); the theme adds no parsing of its own. Under
+  // prefers-reduced-motion the trim still applies: loadedmetadata seeks to the
+  // start second, so the held first frame is the TRIMMED first frame.
+  const trimRef = useVideoTrim(bg && bg.kind === 'video' ? bg.trim : null)
   if (!bg) return null
   if (bg.kind === 'video') {
     // A moving backdrop is motion like any other: under prefers-reduced-motion
@@ -1025,6 +1099,7 @@ function EdtBackdrop({ bg }) {
     const still = prefersReduced()
     return (
       <video
+        ref={trimRef}
         className="edt-backdrop" style={bgVideoStyle(bg)} src={bg.url} aria-hidden="true"
         autoPlay={!still} loop={!still} preload={still ? 'metadata' : 'auto'}
         muted playsInline
@@ -1047,21 +1122,44 @@ function EdtBackdrop({ bg }) {
 // on every screen. It is merged into the composition transform rather than
 // applied to a wrapper: a transform on .edt-comp would open a stacking context
 // and cut the photo's blend mode off from the room.
+//
+// THE TILT WRAPPER (imgTiltBoxStyle). With item tilt set, the 3D projection no
+// longer lives on the <img>: the photo is rasterised at its full 2D size first
+// and the wrapper's perspective+rotateX resamples it exactly once — which is
+// the blur fix — pivoting about the BASE so the plate keeps its contact edge.
+// While the box mounts:
+//   * lift moves ONTO the box (prepended = pure screen-space drop) and is NOT
+//     appended to the img — the box carries the whole seat contract,
+//   * the fx overlay (steam/fire) moves INSIDE the box carrying only the img's
+//     remaining 2D transform: concatenating the box transform would rotate the
+//     plume about the fx element's own centre and detach it from the plate,
+//   * the opt-in contact ellipse (comp.img.tiltContact) paints under the box in
+//     tree order and follows the same lift translate, so the squashed ground
+//     shadow stays glued to the plate base a table has seated lower.
+// With tilt 0 the box is null and this renders byte-identically to before.
 function EdtDish({ comp, src, anim = '', bind = null, onLoad = null, fallback = 64, lift = 0 }) {
+  const box = imgTiltBoxStyle(comp.img, lift)
   const photo = imgStyle(comp.img, comp.shadow) || {}
   const style = { ...photo }
-  if (lift) style.transform = `${photo.transform || ''} translateY(${lift}%)`.trim()
+  if (!box && lift) style.transform = `${photo.transform || ''} translateY(${lift}%)`.trim()
   const has = Object.keys(style).length > 0
+  const dish = src
+    ? <img className="edt-dish" ref={bind} onLoad={onLoad} src={src} alt="" decoding="async" style={has ? style : undefined} />
+    : <span className="edt-noimg"><Icon name="coffee" size={fallback} /></span>
+  const fx = comp.fx ? (
+    <span className="edt-fx" aria-hidden="true" style={style.transform ? { transform: style.transform } : undefined}>
+      <ItemFx kind={comp.fx} />
+    </span>
+  ) : null
   return (
     <span className="edt-comp" data-anim={anim || undefined}>
-      {src
-        ? <img className="edt-dish" ref={bind} onLoad={onLoad} src={src} alt="" decoding="async" style={has ? style : undefined} />
-        : <span className="edt-noimg"><Icon name="coffee" size={fallback} /></span>}
-      {comp.fx ? (
-        <span className="edt-fx" aria-hidden="true" style={style.transform ? { transform: style.transform } : undefined}>
-          <ItemFx kind={comp.fx} />
-        </span>
+      {box && comp.img.tiltContact > 0 ? (
+        <span
+          className="edt-tilt-contact" aria-hidden="true"
+          style={{ opacity: comp.img.tiltContact, ...(lift ? { transform: `translateY(${lift}%)` } : {}) }}
+        />
       ) : null}
+      {box ? <span className="edt-tiltbox" style={box}>{dish}{fx}</span> : <>{dish}{fx}</>}
     </span>
   )
 }
@@ -1083,6 +1181,13 @@ function EdtTable({ tb }) {
   // The melt stops come from the contract now (tableMeltStops): the settings
   // preview paints with the same function, and `melt` is the venue's dial.
   const { a, b } = tableMeltStops(tb)
+  // Bottom-edge melt (meltBottom): dissolves the raw sawn-off cut at the box
+  // bottom into the canvas. Null while off, so the element never mounts and the
+  // untouched path stays byte-identical. The reading veil (veil) is a canvas
+  // layer ABOVE the material but under the lit edge and the contact pool, so
+  // readability stops being hostage to the melt dial alone. Paint order is
+  // load-bearing: art → tint → dim → melt → melt-b → veil → edge → contact.
+  const mb = tableMeltBottom(tb)
   const art = tableStyle(tb) || {}
   // Free placement: translate/scale against the bolted box, origin at the top
   // centre so the seat (the top edge the dish drops onto) never drifts.
@@ -1099,6 +1204,8 @@ function EdtTable({ tb }) {
         : null}
       {tb.dim > 0 ? <span className="edt-table-dim" style={{ opacity: tb.dim }} /> : null}
       <span className="edt-table-melt" />
+      {mb ? <span className="edt-table-melt-b" style={{ '--tbl-mba': `${mb.a}%`, '--tbl-mbb': `${mb.b}%` }} /> : null}
+      {tb.veil > 0 ? <span className="edt-table-veil" style={{ opacity: tb.veil }} /> : null}
       <span className="edt-table-edge" data-e={tb.edge} />
       {tb.contact > 0 ? <span className="edt-table-contact" /> : null}
     </span>
@@ -1121,7 +1228,7 @@ const animAttr = (comp) => (comp.anim && comp.anim !== 'none' ? comp.anim : '')
 // pairings become tappable straight from the LIST row; without them the list
 // still renders everything else, so an un-patched caller degrades quietly.
 export default function EditorialLayout({ tenant = null, cats, itemsByCat, visibleItems, filtered, activeCat, onPickCat, currency, offers, stickyTop, onOpen, allItems = [], onQuickAdd = null, showPairings = true }) {
-  const { t, lang, dir } = useI18n()
+  const { t, lang, dir, theme } = useI18n()
   const rtl = dir === 'rtl'
   const stageRef = useRef(null)
   const portalRoot = usePortalRoot()
@@ -1141,6 +1248,28 @@ export default function EditorialLayout({ tenant = null, cats, itemsByCat, visib
   const table = useMemo(() => resolveTable(tenant), [JSON.stringify(tenant && tenant.menuTable) || '']) // eslint-disable-line react-hooks/exhaustive-deps
   const secVars = sectionVars(sections)
 
+  // The venue's shadow dials (menuShadows): fingerprint-memoized like every
+  // sibling resolver, vars spread on the wrap root; the dish master travels
+  // down as a SCALAR (shadows.dish) so the comp memos never rebuild on an
+  // identical dial. Null when untouched — nothing is stamped, today's pixels.
+  const shKey = JSON.stringify(tenant && tenant.menuShadows) || ''
+  const shadows = useMemo(() => resolveShadows(tenant), [shKey]) // eslint-disable-line react-hooks/exhaustive-deps
+
+  // Per-mode inks (menuInk) + the automatic dark lock: a configured wall is
+  // the same picture in both modes, so while the theme is light and the venue
+  // has not decided its light inks the engine pins the dark token set via
+  // data-edt-dark (index.css guards its light block with :not([data-edt-dark])).
+  const inkKey = JSON.stringify(tenant && tenant.menuInk) || ''
+  const ink = useMemo(() => resolveInk(tenant), [inkKey]) // eslint-disable-line react-hooks/exhaustive-deps
+  const inkM = inkModeFor(tenant, theme)
+  const edtDark = theme !== 'dark' && inkM === 'dark'
+  const inkStyle = useMemo(() => (ink ? inkVars(ink[inkM]) : null), [ink, inkM])
+
+  // Room mode (menuWall.room): MenuView mounts EditorialRoomBg as a fixed
+  // layer behind the whole page, so the wrap must not paint the same wall a
+  // second time — data-roombg also drops its opaque canvas in CSS.
+  const roomOn = !!(wall && wall.room)
+
   // The objects the venue has hung. Header pieces are portalled: the app bar is
   // not inside this component and .edt-wrap is an isolated stacking context, so
   // a piece rendered here could never sit in front of the bar. Screen-pinned
@@ -1155,9 +1284,15 @@ export default function EditorialLayout({ tenant = null, cats, itemsByCat, visib
   const btn = useMemo(() => resolveButtons(tenant), [btnKey]) // eslint-disable-line react-hooks/exhaustive-deps
   const btnVars = useMemo(() => buttonSkinVars(btn, wall), [btn, wallKey]) // eslint-disable-line react-hooks/exhaustive-deps
 
-  // THE BRICK HEADER, dressed from outside (see headerBrickVars above).
+  // THE BRICK HEADER, dressed from outside (see headerBrickVars above). The
+  // venue's menuHeader.scrim reaches the brick veil only once it is actually
+  // saved (null keeps the fixed original — untouched venues byte-identical),
+  // and the menuShadows.header dial rides along as --edt-hd-sh. The memo key
+  // carries the wall AND both new inputs, or the dials lag until a reload.
   const headOn = headerBrickOn(tenant)
-  const headVars = useMemo(() => (headOn ? headerBrickVars(wall) : null), [headOn, wallKey]) // eslint-disable-line react-hooks/exhaustive-deps
+  const hdScrim = tenant && tenant.menuHeader && tenant.menuHeader.scrim != null ? resolveMenuHeader(tenant).scrim : null
+  const headKey = `${wallKey}|${JSON.stringify(tenant && tenant.menuHeader) || ''}|${shadows ? shadows.header : 1}`
+  const headVars = useMemo(() => (headOn ? headerBrickVars(wall, { scrim: hdScrim, shadow: shadows ? shadows.header : 1 }) : null), [headOn, headKey]) // eslint-disable-line react-hooks/exhaustive-deps
   useEffect(() => {
     const node = portalRoot
     if (!node || !headVars) return undefined
@@ -1201,9 +1336,11 @@ export default function EditorialLayout({ tenant = null, cats, itemsByCat, visib
       className="edt-wrap" data-wall={wallAttr} data-btnskin={btn ? btn.skin : undefined}
       data-btnscope={btn && btn.scope === 'all' ? 'all' : undefined}
       data-btnshape={btn && btn.shape ? btn.shape : undefined}
-      style={{ '--edt-top': stickyTop, ...secVars, ...(wall ? { '--edt-panel': wall.panel, '--edt-vig': wall.vignette } : {}), ...(btnVars || {}) }}
+      data-roombg={roomOn ? '1' : undefined}
+      data-edt-dark={edtDark ? '1' : undefined}
+      style={{ '--edt-top': stickyTop, ...secVars, ...(wall ? { '--edt-panel': wall.panel, '--edt-vig': wall.vignette } : {}), ...(btnVars || {}), ...(shadowVars(shadows) || {}), ...(inkStyle || {}) }}
     >
-      <EdtWall wall={wall} />
+      {roomOn ? null : <EdtWall wall={wall} />}
       <EdtDecorZones anchors={PAGE_ANCHORS} byAnchor={decor.byAnchor} mv={mv} rtl={rtl} />
       {portalRoot && decor.header.length
         ? createPortal(<EdtDecorZones anchors={HEADER_ANCHORS} byAnchor={decor.byAnchor} mv={mv} rtl={rtl} />, portalRoot)
@@ -1231,7 +1368,7 @@ export default function EditorialLayout({ tenant = null, cats, itemsByCat, visib
                 key={it.id} it={it} idx={i} catLabel={catName(it.categoryId)}
                 currency={currency} offers={offers} lang={lang} t={t} onOpen={onOpen}
                 allItems={allItems} onQuickAdd={onQuickAdd} showPairings={showPairings}
-                table={table}
+                table={table} dishShadow={shadows ? shadows.dish : 1}
               />
             ))}
           </div>
@@ -1242,7 +1379,7 @@ export default function EditorialLayout({ tenant = null, cats, itemsByCat, visib
   )
 }
 
-function EdtSection({ it, idx, catLabel, currency, offers, lang, t, onOpen, allItems = [], onQuickAdd = null, showPairings = true, table = null }) {
+function EdtSection({ it, idx, catLabel, currency, offers, lang, t, onOpen, allItems = [], onQuickAdd = null, showPairings = true, table = null, dishShadow = 1 }) {
   const ref = useRef(null)
   const { fit, bind, nodeRef, onLoad } = useImgFit()
   const [inview, setInview] = useState(false)
@@ -1270,7 +1407,9 @@ function EdtSection({ it, idx, catLabel, currency, offers, lang, t, onOpen, allI
   const ings = it.ingredients || []
   // the venue's art direction for THIS dish, at list size (item.listScale and
   // friends, falling back to the stage values for items saved before the split)
-  const comp = useMemo(() => resolveComposition(it, { variant: 'list' }), [it])
+  // — under the tenant's shadow master (menuShadows.dish), which SCALES the
+  // per-item drop-shadow rather than deleting the staff's work.
+  const comp = useMemo(() => scaleDishShadow(resolveComposition(it, { variant: 'list' }), dishShadow), [it, dishShadow])
   // REAL PHOTOGRAPHS BEAT DRAWINGS. The hand-drawn SVG garnish was rejected as
   // primitive, so once a dish carries the venue's OWN cut-out layers the theme
   // stops scattering vector props on top of them — two decoration systems on one
@@ -1304,7 +1443,7 @@ function EdtSection({ it, idx, catLabel, currency, offers, lang, t, onOpen, allI
   }
 
   return (
-    <section ref={ref} data-idx={idx} data-fit={fit || undefined} data-table={table ? '1' : undefined} className={`edt-sec ${inview ? 'in' : ''} ${out ? 'is-out' : ''}`}>
+    <section ref={ref} data-idx={idx} data-item-id={it.id} data-fit={fit || undefined} data-table={table ? '1' : undefined} className={`edt-sec ${inview ? 'in' : ''} ${out ? 'is-out' : ''}`}>
       <span className="edt-side" aria-hidden="true">{catLabel}</span>
       <div className="edt-photo" data-fit={fit || undefined} data-dp-contact={dpShadow(it)} data-dp-reflect={dpReflect(it)}>
         <span className="edt-glow" aria-hidden="true" />
@@ -1396,7 +1535,7 @@ function EdtSection({ it, idx, catLabel, currency, offers, lang, t, onOpen, allI
 // pairings become tappable; without them the stage still renders everything
 // else, so an un-patched caller degrades instead of crashing.
 export function EditorialItemStage({ item, tenant = null, currency, onClose, onAdd, originRect = null, allItems = [], offers = null, onQuickAdd = null }) {
-  const { t, lang } = useI18n()
+  const { t, lang, theme } = useI18n()
   const ar = lang === 'ar'
   const portalRoot = usePortalRoot()
   const heroRef = useRef(null)
@@ -1423,11 +1562,17 @@ export function EditorialItemStage({ item, tenant = null, currency, onClose, onA
   const offerTag = offer ? itemOfferLabel(item, offers, currency) : ''
   const story = hasStory(item) ? item.story : null
   const storyParas = story ? paragraphsOf(story.body) : []
+  // The venue's shadow dials again: the stage is portalled to body and inherits
+  // NOTHING from the wrap, so it resolves and stamps its own set (same reason
+  // btnVars are stamped twice). The dish master is depped as a scalar.
+  const shKey = JSON.stringify(tenant && tenant.menuShadows) || ''
+  const shadows = useMemo(() => resolveShadows(tenant), [shKey]) // eslint-disable-line react-hooks/exhaustive-deps
+  const dishSh = shadows ? shadows.dish : 1
   // The venue's art direction for this dish at STAGE size. item.imageScale used
   // to move only a max-height cap here, which does nothing at all when the photo
   // is already shorter than the cap («الخيار الحالي لايعمل في هذا الثيم»); the
   // module turns it into a real transform, and the list has its own listScale.
-  const comp = useMemo(() => resolveComposition(item, { variant: 'stage' }), [item])
+  const comp = useMemo(() => scaleDishShadow(resolveComposition(item, { variant: 'stage' }), dishSh), [item, dishSh])
   const dpItem = useMemo(() => dishPropsItem(item, comp), [item, comp])
   // the same room as the list, drawn from the same tenant contract
   const wallOn = wallConfigured(tenant)
@@ -1446,6 +1591,13 @@ export function EditorialItemStage({ item, tenant = null, currency, onClose, onA
   const btnKey = JSON.stringify(tenant && tenant.menuButtons) || ''
   const btn = useMemo(() => resolveButtons(tenant), [btnKey]) // eslint-disable-line react-hooks/exhaustive-deps
   const btnVars = useMemo(() => buttonSkinVars(btn, wall), [btn, wallKey]) // eslint-disable-line react-hooks/exhaustive-deps
+  // Per-mode inks + the dark lock, stamped again for the same portal reason:
+  // the wrap's data-edt-dark and inline ink vars can never reach this root.
+  const inkKey = JSON.stringify(tenant && tenant.menuInk) || ''
+  const ink = useMemo(() => resolveInk(tenant), [inkKey]) // eslint-disable-line react-hooks/exhaustive-deps
+  const inkM = inkModeFor(tenant, theme)
+  const edtDark = theme !== 'dark' && inkM === 'dark'
+  const inkStyle = useMemo(() => (ink ? inkVars(ink[inkM]) : null), [ink, inkM])
   // 3D / AR: the whole reason an enterprise venue generates models — and this
   // stage never offered them, so from this theme they were unreachable. The
   // viewer library is loaded only when the guest actually asks for it.
@@ -1566,7 +1718,9 @@ export function EditorialItemStage({ item, tenant = null, currency, onClose, onA
       data-btnscope={btn && btn.scope === 'all' ? 'all' : undefined}
       data-btnshape={btn && btn.shape ? btn.shape : undefined}
       data-table={table ? '1' : undefined}
-      style={{ ...secVars, ...(wall ? { '--edt-panel': wall.panel, '--edt-vig': wall.vignette } : {}), ...(btnVars || {}) }}
+      data-tbl-extend={table && table.extend ? '1' : undefined}
+      data-edt-dark={edtDark ? '1' : undefined}
+      style={{ ...secVars, ...(tableStageVars(table) || {}), ...(wall ? { '--edt-panel': wall.panel, '--edt-vig': wall.vignette } : {}), ...(btnVars || {}), ...(shadowVars(shadows) || {}), ...(inkStyle || {}) }}
       role="dialog" aria-modal="true" aria-label={name}
     >
       <EdtWall wall={wall} />

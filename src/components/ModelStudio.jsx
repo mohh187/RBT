@@ -8,6 +8,7 @@ import Icon from './Icon.jsx'
 import { Spinner } from './ui.jsx'
 import { loadModelViewer } from '../lib/ar3d.js'
 import { uploadFile } from '../lib/storage.js'
+import { GEN3D_RANGE } from '../lib/dishComposition.js'
 import ItemFx from './ItemFx.jsx'
 
 // Full-screen studio for ONE item's 3D model: inspect it (orbit, exposure,
@@ -29,6 +30,13 @@ export default function ModelStudio({ open, onClose, tenantId, item, onChange })
   const [resetKey, setResetKey] = useState(0) // remounts the viewer => camera reset
   const [uploadBusy, setUploadBusy] = useState(false)
   const [regenSec, setRegenSec] = useState(-1) // -1 idle, >=0 running (elapsed s)
+  // Generation options. realism (default ON) textures from the photo alone and
+  // keeps the raw reconstruction detail; OFF = the stylized smooth mode.
+  // picked = gallery shots the manager EXPLICITLY ticked as same-plating views
+  // (multi-view is opt-in — feeding the whole swipe gallery fused mismatched
+  // shots into cartoon blobs).
+  const [realism, setRealism] = useState(true)
+  const [picked, setPicked] = useState([])
   // Surfaced honestly instead of a silently-blank stage: model-viewer emits an
   // 'error' CustomEvent when the GLB fails to fetch/parse (bad URL, CORS, …).
   const [modelErr, setModelErr] = useState(false)
@@ -61,6 +69,10 @@ export default function ModelStudio({ open, onClose, tenantId, item, onChange })
   // New model / camera reset -> fresh load cycle for the progress overlay.
   useEffect(() => { setLoadPct(0); setModelErr(false) }, [item?.model3dUrl, item?.arStandeeUrl, resetKey])
 
+  // Another item's picks/mode must never leak into this one (effect stays
+  // ABOVE the early return — Rules of Hooks).
+  useEffect(() => { setPicked([]); setRealism(true) }, [item?.id])
+
   if (!open || !item) return null
 
   // model-viewer renders GLB inline; a .usdz main model goes to ios-src (Quick
@@ -76,10 +88,15 @@ export default function ModelStudio({ open, onClose, tenantId, item, onChange })
   const regen = async () => {
     if (busy) return
     if (!item.imageUrl) { toast.error(ar ? 'لا توجد صورة للصنف — أضف صورة أولاً' : 'Add a photo to the item first'); return }
-    if (!window.confirm(ar ? 'إعادة التوليد ستستبدل المجسم الحالي، وقد تستغرق من 1 إلى 8 دقائق. متابعة؟' : 'Regenerating replaces the current model and can take 1-8 minutes. Continue?')) return
+    const modeAr = `${picked.length ? `من ${picked.length + 1} لقطات` : 'من صورة واحدة'} — ${realism ? 'وضع الواقعية' : 'وضع التنعيم المنمق'}`
+    const modeEn = `${picked.length ? `from ${picked.length + 1} shots` : 'from one photo'} — ${realism ? 'realism mode' : 'stylized smooth mode'}`
+    if (!window.confirm(ar
+      ? `إعادة التوليد (${modeAr}) ستستبدل المجسم الحالي، وقد تستغرق من 1 إلى 8 دقائق. متابعة؟`
+      : `Regenerating (${modeEn}) replaces the current model and can take 1-8 minutes. Continue?`)) return
     setRegenSec(0)
     try {
-      const res = await httpsCallable(functions, 'imageTo3d', { timeout: 540000 })({ tenantId, itemId: item.id || '', imageUrl: item.imageUrl, imageUrls: item.images || [], itemName: item.nameEn || item.nameAr || '' })
+      // multiView is opt-in: the server ignores imageUrls unless it is true.
+      const res = await httpsCallable(functions, 'imageTo3d', { timeout: 540000 })({ tenantId, itemId: item.id || '', imageUrl: item.imageUrl, imageUrls: picked, multiView: picked.length > 0, itemName: item.nameEn || item.nameAr || '', smooth: !realism })
       const url = res?.data?.url
       if (!url) throw new Error(ar ? 'لم يصل رابط المجسم' : 'No model URL returned')
       onChange?.({ model3dUrl: url, model3dUsdzUrl: res?.data?.usdzUrl || '' })
@@ -201,6 +218,43 @@ export default function ModelStudio({ open, onClose, tenantId, item, onChange })
               ? 'زر AR داخل العارض يعمل من الجوال، أما العرض على الطاولة فيفتحه العميل من المنيو مباشرة عبر «اعرضه على طاولتك».'
               : 'The AR button works on mobile — on-table AR opens from the customer menu itself.'}
           </p>
+
+          {(item.images || []).filter((u) => u && u !== item.imageUrl).length > 0 && (
+            <div className="stack" style={{ gap: 6 }}>
+              <strong className="xs">{ar ? 'لقطات إضافية للتوليد (اختياري)' : 'Extra shots for generation (optional)'}</strong>
+              <p className="xs faint" style={{ margin: 0, lineHeight: 1.7 }}>
+                {ar
+                  ? 'اختر لقطات لنفس الطبق بنفس التقديم من زوايا مختلفة فقط. لقطات بطبق أو تقديم مختلف تشوه المجسم بدل أن تحسنه.'
+                  : 'Pick only shots of the SAME plating from other angles — different platings distort the model.'}
+              </p>
+              {/* thumbnails WRAP, never scroll (hard rule) */}
+              <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
+                {(item.images || []).filter((u) => u && u !== item.imageUrl).map((u) => {
+                  const on = picked.includes(u)
+                  const full = !on && picked.length >= GEN3D_RANGE.maxExtraViews
+                  return (
+                    <label key={u} style={{ position: 'relative', cursor: full ? 'default' : 'pointer', opacity: full ? 0.45 : 1 }}>
+                      <img src={u} alt="" style={{ width: 64, height: 64, objectFit: 'cover', borderRadius: 8, border: on ? '2px solid var(--accent)' : '2px solid transparent', display: 'block' }} />
+                      <input
+                        type="checkbox" checked={on} disabled={full || busy}
+                        onChange={() => setPicked((p) => (on ? p.filter((x) => x !== u) : [...p, u]))}
+                        style={{ position: 'absolute', insetBlockStart: 4, insetInlineStart: 4 }}
+                      />
+                    </label>
+                  )
+                })}
+              </div>
+            </div>
+          )}
+          <button
+            type="button" className={`chip ${realism ? 'active' : ''}`} disabled={busy}
+            onClick={() => setRealism((v) => !v)}
+            title={ar
+              ? 'الوضع الواقعي يبني الملمس من صورتك وحدها ويحفظ تفاصيل الشبكة. أطفئه لتنعيم منمق (قد يبدو كرتونياً).'
+              : 'Realism textures from your photo only and keeps raw detail. Off = stylized smoothing.'}
+          >
+            <Icon name="sparkles" size={13} /> {ar ? 'وضع الواقعية' : 'Realism mode'}
+          </button>
 
           <div className="stack" style={{ gap: 8 }}>
             <button type="button" className="btn btn-sm btn-outline" disabled={busy || !item.imageUrl} onClick={regen}

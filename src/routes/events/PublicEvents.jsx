@@ -7,6 +7,9 @@ import { FullSpinner, Empty } from '../../components/ui.jsx'
 import Icon from '../../components/Icon.jsx'
 import DinerBar from '../../components/DinerBar.jsx'
 import DinerNav from '../../components/DinerNav.jsx'
+import ChromeSkin from '../../components/ChromeSkin.jsx'
+import PageBackground from '../../components/PageBackground.jsx'
+import { resolveChromePage } from '../../lib/dishComposition.js'
 import Sheet from '../../components/Sheet.jsx'
 import { watchEvents, createTicket } from '../../lib/db.js'
 import { Price } from '../../components/Riyal.jsx'
@@ -40,9 +43,18 @@ export default function PublicEvents() {
   if (venue.notFound || venue.error) return <div className="auth-shell"><Empty icon="search" title={venue.notFound ? (lang === 'ar' ? 'المنشأة غير موجودة' : 'Venue not found') : (lang === 'ar' ? 'تعذّر تحميل الصفحة، حدّث الصفحة' : 'Could not load — please refresh')} /></div>
   if (venue.tenantId && events === null) return <FullSpinner />
 
+  // The room follows in only when configured (menuChrome.pages.events /
+  // follow): the .venue-above stacking wrapper mounts over the fixed
+  // PageBackground layer. Untouched venues keep today's DOM — at >=980px
+  // .venue-above locks the page into a 100vh flex shell, so it must never
+  // appear un-opted-in.
+  const pageBgOn = !!resolveChromePage(venue.tenant, 'events')
+
   return (
-    <div style={{ minHeight: '100dvh', paddingBottom: 'calc(var(--bottomnav-h) + var(--safe-b) + 8px)' }}>
-      <DinerBar tenant={venue.tenant} right={<Link to={`/m/${slug}`} className="icon-btn" title={t('menu')}><Icon name="menu" /></Link>} />
+    <div className={pageBgOn ? 'venue-above' : undefined} style={{ minHeight: '100dvh', paddingBottom: 'calc(var(--bottomnav-h) + var(--safe-b) + 8px)' }}>
+      <ChromeSkin tenant={venue.tenant} />
+      <PageBackground tenant={venue.tenant} page="events" />
+      <DinerBar tenant={venue.tenant} right={<Link to={`/m/${slug}`} className="icon-btn db-chrome" title={t('menu')}><Icon name="menu" /></Link>} />
       <div className="container page stack">
         <div className="row-between">
           <h2 className="page-title row" style={{ gap: 8 }}><Icon name="events" size={22} /> {t('events')}</h2>

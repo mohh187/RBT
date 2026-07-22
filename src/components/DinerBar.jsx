@@ -1,6 +1,6 @@
 import { useI18n } from '../lib/i18n.jsx'
 import { resolveSkin } from '../lib/skins.js'
-import { resolveMenuHeader } from '../lib/dishComposition.js'
+import { resolveMenuHeader, resolveShadows, resolveChrome } from '../lib/dishComposition.js'
 import Icon from './Icon.jsx'
 
 // Top app bar for diner-facing pages (venue name + language/theme toggles).
@@ -19,11 +19,19 @@ export default function DinerBar({ tenant, right }) {
   // Over a custom background/banner the header controls need a readable backing.
   const overBg = !!(tenant?.bgImageUrl || tenant?.bgVideoUrl || tenant?.bgGradient || tenant?.bannerUrl)
 
+  // menuChrome reaches the bar here only for its custom uploaded ICONS — the
+  // button FACES ride body-level --mch-* vars stamped by ChromeSkin, and the
+  // .db-lang / .db-theme classes below are the hooks its CSS half targets
+  // (body[data-mch-lang] .icon-btn.db-lang, same in the floating variant).
+  const mch = resolveChrome(tenant)
+  const langIcon = mch?.elements?.langBtn?.icon || ''
+  const themeIcon = mch?.elements?.themeBtn?.icon || ''
+
   const langBtn = hd.show.lang
-    ? <button className="icon-btn" onClick={toggleLang} aria-label="language" style={{ fontWeight: 800, fontSize: 13 }}>{lang === 'ar' ? 'EN' : 'ع'}</button>
+    ? <button className="icon-btn db-lang" onClick={toggleLang} aria-label="language" style={{ fontWeight: 800, fontSize: 13 }}>{langIcon ? <img className="mch-icon" src={langIcon} alt="" /> : (lang === 'ar' ? 'EN' : 'ع')}</button>
     : null
   const themeBtn = hd.show.theme
-    ? <button className="icon-btn" onClick={toggleTheme} aria-label="theme"><Icon name={theme === 'dark' ? 'sun' : 'moon'} /></button>
+    ? <button className="icon-btn db-theme" onClick={toggleTheme} aria-label="theme">{themeIcon ? <img className="mch-icon" src={themeIcon} alt="" /> : <Icon name={theme === 'dark' ? 'sun' : 'moon'} />}</button>
     : null
 
   // No-header style: drop the bar, keep floating controls so language/theme still work.
@@ -38,11 +46,16 @@ export default function DinerBar({ tenant, right }) {
   }
 
   const img = hd.mode === 'image'
+  // The header shadow dial rides the bar (--hd-sh) because .app-bar-img exists
+  // for every theme; the resolver runs only when the image face is actually on
+  // (dead work on every other header render otherwise).
+  const sh = img ? resolveShadows(tenant) : null
   const imgVars = img ? {
     '--hd-img': `url("${hd.url.replace(/["\\]/g, '')}")`,
     '--hd-scrim': hd.scrim,
     '--hd-blur': `${hd.blur}px`,
     '--hd-pos': hd.pos,
+    '--hd-sh': sh ? sh.header : 1,
   } : undefined
 
   return (

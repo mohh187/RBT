@@ -4,13 +4,23 @@ import { useEffect, useRef } from 'react'
 // Supports mobile (iPhone 12 Pro view scaled), tablet (iPad view scaled), and desktop views.
 // We scale using CSS transform to keep standard viewport resolutions (390px and 768px)
 // rendering beautifully, while fitting nicely in the editor column without cutoff.
-export default function MenuPreview({ slug, override, mode = 'mobile' }) {
+//
+// postMessage envelope (transport contract with PreviewMenu.jsx — keep both headers in sync):
+//   { __rbt360Preview: true, appearance, draftItem, focus, previewTheme }
+//   - appearance:   tenant-shaped appearance override merged over the saved tenant (may be {}).
+//   - draftItem:    optional item-shaped draft; id '__draft__' marks an unsaved item.
+//   - focus:        optional { itemId, view: 'list'|'stage', replay } steering directive.
+//   - previewTheme: optional 'light'|'dark' pin for the frame's data-theme. TOP-LEVEL
+//     sibling by contract — never smuggled inside appearance (it is not a tenant field).
+//   Consumers that post only { appearance } (the studio cards) keep working unchanged.
+export default function MenuPreview({ slug, override, mode = 'mobile', draftItem = null, focus = null, previewTheme = null }) {
   const iframeRef = useRef(null)
   const readyRef = useRef(false)
 
   const post = () => {
     try {
-      iframeRef.current?.contentWindow?.postMessage({ __rbt360Preview: true, appearance: override }, '*')
+      iframeRef.current?.contentWindow?.postMessage(
+        { __rbt360Preview: true, appearance: override, draftItem, focus, previewTheme }, '*')
     } catch (_) { /* ignore */ }
   }
 

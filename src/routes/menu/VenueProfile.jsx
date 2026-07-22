@@ -5,6 +5,10 @@ import { useI18n } from '../../lib/i18n.jsx'
 import { FullSpinner, Empty } from '../../components/ui.jsx'
 import Icon from '../../components/Icon.jsx'
 import SocialLinks from '../../components/SocialLinks.jsx'
+import DinerBar from '../../components/DinerBar.jsx'
+import ChromeSkin from '../../components/ChromeSkin.jsx'
+import PageBackground from '../../components/PageBackground.jsx'
+import { resolveChrome, resolveChromePage } from '../../lib/dishComposition.js'
 import { timeAgo } from '../../lib/format.js'
 
 const TYPES = [
@@ -75,19 +79,25 @@ export default function VenueProfile() {
 
   if (posts === null) return <FullSpinner />
 
+  // The room follows into the subpage ONLY when the venue configured it
+  // (menuChrome.pages.profile / follow): then the .venue-above stacking
+  // wrapper mounts over the fixed PageBackground layer and the page's own
+  // solid backing steps aside. Untouched venues keep today's DOM: at >=980px
+  // .venue-above locks the page into a 100vh flex shell, so it must never
+  // appear un-opted-in.
+  const pageBgOn = !!resolveChromePage(venue, 'profile')
+
   return (
-    <div style={{ minHeight: '100dvh', background: 'var(--bg)' }}>
-      <header className="app-bar">
-        <Link to={`/m/${slug}`} className="icon-btn"><Icon name="back" /></Link>
-        {venue?.logoUrl && <img src={venue.logoUrl} alt="" style={{ width: 30, height: 30, borderRadius: '50%', objectFit: 'cover' }} />}
-        <strong style={{ fontSize: 'var(--fs-md)' }}>{venue?.name || ''}</strong>
-      </header>
+    <div className={pageBgOn ? 'venue-above' : undefined} style={{ minHeight: '100dvh', ...(pageBgOn ? null : { background: 'var(--bg)' }) }}>
+      <ChromeSkin tenant={venue} />
+      <PageBackground tenant={venue} page="profile" />
+      <DinerBar tenant={venue} right={<Link to={`/m/${slug}`} className="icon-btn db-chrome" aria-label={ar ? 'رجوع' : 'Back'}><Icon name="back" /></Link>} />
 
       <div className="container page stack" style={{ gap: 'var(--sp-3)', maxWidth: 680 }}>
         <div className="stack center" style={{ gap: 6, textAlign: 'center', paddingTop: 'var(--sp-2)' }}>
           <h2 style={{ margin: 0 }}>{ar ? 'قصتنا وأخبارنا' : 'Our story & news'}</h2>
           {venue?.descAr && <p className="muted small" style={{ margin: 0 }}>{venue.descAr}</p>}
-          <SocialLinks social={venue?.social} appearance={venue?.socialStyle} />
+          <SocialLinks social={venue?.social} appearance={venue?.socialStyle} icons={resolveChrome(venue)?.socialIcons} />
         </div>
 
         <div className="row" style={{ gap: 6, overflowX: 'auto', paddingBottom: 2 }}>

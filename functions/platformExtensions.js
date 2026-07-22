@@ -880,18 +880,32 @@ const { getStorage } = require('firebase-admin/storage')
 const nodeCrypto = require('crypto')
 const sleepMs = (ms) => new Promise((res) => setTimeout(res, ms))
 
+// Hand-synced mirror of GEN3D_RANGE in src/lib/dishComposition.js — this
+// package is CommonJS and cannot import the ESM contract, and the inline
+// drift scanner does not cover functions/. Change BOTH sides together.
+const GEN3D = {
+  maxViews: 4,             // Meshy hard cap: primary photo + up to 3 picked shots
+  smoothPolycount: 150000, // only used by the opt-in smooth (stylized) mode
+}
+
 const imageTo3d = onCall({ timeoutSeconds: 540, memory: '1GiB' }, async (request) => {
   const key = process.env.MESHY_API_KEY
   if (!key) {
     throw new HttpsError('failed-precondition',
       'خدمة المجسمات الواقعية تحتاج تفعيلاً: أنشئ حساباً في meshy.ai وضع MESHY_API_KEY في functions/.env ثم أعد نشر الدوال.')
   }
-  const { tenantId, itemId, imageUrl, imageUrls, itemName } = request.data || {}
+  const { tenantId, itemId, imageUrl, imageUrls, itemName, multiView, smooth } = request.data || {}
   if (!tenantId || !imageUrl) throw new HttpsError('invalid-argument', 'tenantId + imageUrl required')
-  // Every gallery shot the item has (deduped, capped at Meshy's 4): more views
-  // = real geometry instead of a guessed back side, which is half of why the
-  // old models read as toys.
-  const views = [...new Set([imageUrl, ...(Array.isArray(imageUrls) ? imageUrls : [])].filter((u) => typeof u === 'string' && /^https?:\/\//.test(u)))].slice(0, 4)
+  // Multi-view is OPT-IN: only shots the manager explicitly ticked in the
+  // studio arrive with multiView:true. Un-flagged imageUrls (stale deployed
+  // SPA bundles still send the whole swipe gallery) are IGNORED — feeding
+  // arbitrary gallery shots to multi-image-to-3d fused mismatched platings
+  // into averaged cartoon-blob geometry.
+  const extra = multiView === true && Array.isArray(imageUrls)
+    ? imageUrls.filter((u) => typeof u === 'string' && /^https?:\/\//.test(u))
+    : []
+  // Deduped, capped at GEN3D.maxViews (mirrors GEN3D_RANGE.maxViews).
+  const views = [...new Set([imageUrl, ...extra].filter((u) => typeof u === 'string' && /^https?:\/\//.test(u)))].slice(0, GEN3D.maxViews)
   const uid = request.auth && request.auth.uid
   if (!uid) throw new HttpsError('unauthenticated', 'sign in')
   const db = getFirestore()
@@ -936,27 +950,27 @@ const imageTo3d = onCall({ timeoutSeconds: 540, memory: '1GiB' }, async (request
   } catch (e) { if (e instanceof HttpsError) throw e }
 
   // 1) create the conversion task.
-  // QUALITY PARAMETERS, each for a stated reason — the defaults produced
-  // game-piece models the owner rejected («ظاهرة انها لعبة»):
-  //   * ai_model meshy-5     — the account default was an older generation;
-  //   * topology quad + should_remesh — clean shading instead of faceted lumps;
-  //   * target_polycount     — the default is far too coarse for food close-ups;
-  //   * symmetry_mode off    — food is never symmetric; forcing symmetry is
-  //     exactly what stamps that toy look onto a plated dish;
-  //   * texture_prompt       — steers the texturing model toward photographic
-  //     food surfaces rather than stylized art.
-  // With more than one gallery shot the multi-image endpoint is used, so the
-  // model's far side is built from a real photo instead of invented.
-  const quality = {
-    ai_model: 'meshy-5',
-    topology: 'quad',
-    target_polycount: 150000,
-    symmetry_mode: 'off',
-    should_remesh: true,
-    should_texture: true,
-    enable_pbr: true,
-    texture_prompt: `photorealistic restaurant dish${itemName ? `: ${String(itemName).slice(0, 80)}` : ''}, real food photography surface detail, natural appetizing colors, glossy sauce and oil highlights, 4k`,
-  }
+  // REALISM DEFAULT: texture derives from the photograph alone — no
+  // texture_prompt repainting it toward a prompt-imagined generic dish, and
+  // no remesh — Meshy's raw reconstruction keeps drips, wobble edges and rim
+  // detail instead of smoothing them into rounded lumps. Keepers in BOTH
+  // modes: ai_model meshy-5, enable_pbr, and symmetry_mode off (food is never
+  // symmetric; forced symmetry is what stamps the toy look onto a plate).
+  // smooth:true opts back into the session-2 stylized set VERBATIM (quad
+  // topology + remesh + 150k polys + food texture_prompt) for owners who
+  // prefer that clean-shaded look.
+  const base = { ai_model: 'meshy-5', symmetry_mode: 'off', should_texture: true, enable_pbr: true }
+  const quality = smooth === true
+    ? {
+        ...base,
+        topology: 'quad',
+        target_polycount: GEN3D.smoothPolycount,
+        should_remesh: true,
+        texture_prompt: `photorealistic restaurant dish${itemName ? `: ${String(itemName).slice(0, 80)}` : ''}, real food photography surface detail, natural appetizing colors, glossy sauce and oil highlights, 4k`,
+      }
+    : { ...base, should_remesh: false }
+  // Multi-image only when the studio explicitly picked extra views (above) —
+  // then the model's far side is built from a real photo instead of invented.
   const multi = views.length > 1
   const endpoint = multi ? 'https://api.meshy.ai/openapi/v1/multi-image-to-3d' : 'https://api.meshy.ai/openapi/v1/image-to-3d'
   const payload = multi ? { image_urls: views, ...quality } : { image_url: imageUrl, ...quality }
@@ -967,8 +981,12 @@ const imageTo3d = onCall({ timeoutSeconds: 540, memory: '1GiB' }, async (request
   }).then((r) => r.json()).catch((e) => ({ _err: String(e && e.message) }))
   const taskId = create && create.result
   if (!taskId) throw new HttpsError('internal', 'تعذر بدء التحويل: ' + JSON.stringify(create || {}).slice(0, 160))
+  // mode + views are diagnostics only — lets a later audit tell which mode
+  // produced which model; no client reads them.
   await db.collection(`tenants/${tenantId}/ar3dJobs`).doc(String(taskId)).set({
-    itemId: itemId || '', imageUrl, status: 'running', by: uid, createdAt: FieldValue.serverTimestamp(),
+    itemId: itemId || '', imageUrl, status: 'running', by: uid,
+    mode: smooth === true ? 'smooth' : 'real', views: views.length,
+    createdAt: FieldValue.serverTimestamp(),
   }).catch(() => {})
 
   // 2) poll (up to ~8 min inside the callable window)
@@ -1108,12 +1126,213 @@ const generateTableImage = onCall({ timeoutSeconds: 120, memory: '512MiB' }, asy
   return { url, remaining: Math.max(0, CAP - used - 1), cap: CAP }
 })
 
+// ============ Diner AI ordering — photo + voice (guest-facing) ============
+// Unauthenticated ON PURPOSE (createPayIntent precedent, line ~456): diners
+// on /m/:slug carry no Firebase auth at all. What stands between this
+// endpoint and the platform Gemini bill: server-side feature gates read from
+// the tenant doc, a transactional monthly + per-minute quota, and hard
+// payload caps. Anti-hallucination contract: the model only ever answers
+// with INDICES into a server-built catalog; the server maps them back to
+// real item ids, so a made-up dish can never become orderable.
+//
+// Hand-synced mirror of AI_ORDER_RANGE in src/lib/dishComposition.js (this
+// package is CommonJS and cannot import the ESM contract; the inline drift
+// scanner does not cover functions/). Same numbers, same names — change
+// BOTH sides together. photoMaxB64 6.5MB of base64 ≈ 4.5MB raw
+// (= AI_ORDER_RANGE.photoMaxBytes after the client canvas downscale).
+const DINER_AI = {
+  photoMaxB64: 6.5 * 1024 * 1024,
+  audioMaxB64: 2.5 * 1024 * 1024,
+  monthlyDflt: 2000, // calls/month, photo + audio combined (tenant.dinerAiMonthly overrides)
+  perMinute: 20,     // fixed burst wall
+  catalogMax: 200,   // menu entries offered to the model
+}
+
+// Take one credit off tenants/{tid}/counters/dinerAi-YYYY-MM
+// { count, minute, minuteCount } — Admin-SDK-only doc family (rules
+// default-deny it, like aiImageJobs). Transactional so parallel guests
+// cannot slip past the caps. Explicit tenant.dinerAiMonthly = 0 DISABLES
+// the feature entirely (Number.isFinite guard at the callsite — 0 is falsy,
+// the `|| default` idiom would silently re-enable it).
+async function takeDinerAiCredit(db, tenantId, cap) {
+  const ym = new Date().toISOString().slice(0, 7)
+  const ref = db.doc(`tenants/${tenantId}/counters/dinerAi-${ym}`)
+  await db.runTransaction(async (tx) => {
+    const s = await tx.get(ref)
+    const d = s.exists ? (s.data() || {}) : {}
+    if ((d.count || 0) >= cap) {
+      throw new HttpsError('resource-exhausted', 'quota')
+    }
+    const nowMin = new Date().toISOString().slice(0, 16)
+    const minuteCount = d.minute === nowMin ? (d.minuteCount || 0) + 1 : 1
+    if (minuteCount > DINER_AI.perMinute) {
+      throw new HttpsError('resource-exhausted', 'burst')
+    }
+    tx.set(ref, { count: (d.count || 0) + 1, minute: nowMin, minuteCount }, { merge: true })
+  })
+}
+
+// Request: { tenantId, kind: 'photo'|'audio', inlineData: { mimeType, data },
+// lang } — `mode`/`media` accepted as aliases so neither client-wrapper
+// naming splits the contract. Response: { lines: [{ id, qty, variantKey,
+// note, confidence?, why? }], reply, transcript?, language?, unmatched?,
+// matches? } — ids are real catalog ids; clients re-validate against their
+// own item list before adding.
+const dinerOrderAi = onCall({ timeoutSeconds: 60, memory: '512MiB' }, async (request) => {
+  const key = process.env.GEMINI_API_KEY || process.env.VITE_GEMINI_API_KEY
+  if (!key) {
+    throw new HttpsError('failed-precondition', 'GEMINI_API_KEY مفقود في functions/.env — أضِفه ثم أعد نشر الدوال.')
+  }
+  const data = request.data || {}
+  const tenantId = data.tenantId
+  const kind = data.kind || data.mode
+  const inline = data.inlineData || data.media
+  const lang = data.lang === 'en' ? 'en' : 'ar'
+  if (!tenantId || !['photo', 'audio'].includes(kind) || !inline || !inline.data || !inline.mimeType) {
+    throw new HttpsError('invalid-argument', 'tenantId + kind + inlineData{mimeType,data} required')
+  }
+  const maxB64 = kind === 'photo' ? DINER_AI.photoMaxB64 : DINER_AI.audioMaxB64
+  if (String(inline.data).length > maxB64) throw new HttpsError('invalid-argument', 'media too large')
+
+  const db = getFirestore()
+  const tSnap = await db.doc(`tenants/${tenantId}`).get()
+  if (!tSnap.exists) throw new HttpsError('not-found', 'tenant')
+  const td = tSnap.data() || {}
+  // Server-side feature gates — the client toggle alone must never open the
+  // wallet. photo follows the experiences-matrix default-ON convention
+  // (!== false); audio AI is opt-in default OFF (=== true), per the contract.
+  if (kind === 'photo' && td.photoOrderEnabled === false) throw new HttpsError('permission-denied', 'disabled')
+  if (kind === 'audio' && td.voiceAiEnabled !== true) throw new HttpsError('permission-denied', 'disabled')
+  const cap = Number.isFinite(td.dinerAiMonthly) ? Math.max(0, td.dinerAiMonthly) : DINER_AI.monthlyDflt
+  await takeDinerAiCredit(db, tenantId, cap)
+
+  // Catalog straight from Firestore — never trusts client-supplied names.
+  // Same conventions the menu client itself uses (MenuView allActive +
+  // soldOut): active !== false = not archived, available === false = sold
+  // out, trackStock && stock <= 0 = out of stock. Filtering here is what
+  // keeps a sold-out item from becoming addable by voice.
+  const itemsSnap = await db.collection(`tenants/${tenantId}/items`).get()
+  const catalog = itemsSnap.docs
+    .map((d) => ({ id: d.id, ...(d.data() || {}) }))
+    .filter((i) => (i.nameAr || i.nameEn)
+      && i.active !== false
+      && i.available !== false
+      && !(i.trackStock && (i.stock || 0) <= 0))
+    .slice(0, DINER_AI.catalogMax)
+  if (!catalog.length) throw new HttpsError('failed-precondition', 'empty menu')
+
+  // INDEX-ONLY numbered list: the model returns row numbers (and variant
+  // indices), never free text we would have to fuzzy-match back.
+  const catalogLines = catalog.map((i, n) => {
+    const vs = (i.variants || [])
+      .map((v, k) => (v && (v.nameAr || v.nameEn) ? `${k}:${String(v.nameAr || v.nameEn).slice(0, 30)}` : null))
+      .filter(Boolean).join(', ')
+    return `${n}. ${String(i.nameAr || '').slice(0, 60)}${i.nameEn ? ` / ${String(i.nameEn).slice(0, 60)}` : ''}${vs ? ` | sizes ${vs}` : ''}`
+  }).join('\n')
+
+  const venueName = String(td.name || '').replace(/[\r\n"]+/g, ' ').slice(0, 60)
+  const replyLang = lang === 'en' ? 'English' : 'Arabic'
+  const prompt = kind === 'audio'
+    ? [
+        `You are the ordering assistant for the restaurant "${venueName}".`,
+        'The attached audio is a guest ordering, possibly in ANY language or ANY Arabic dialect (Gulf, Najdi, Hijazi, Egyptian, Levantine, Maghrebi, Sudanese) or English, Urdu, Hindi, Tagalog, French, etc.',
+        'STEP 1: transcribe the audio faithfully. STEP 2: map every requested dish or drink to the MENU below, choosing entries by INDEX ONLY.',
+        'MENU:\n' + catalogLines,
+        'Rules: never invent an index; one line per distinct requested item; qty per line (default 1); variantIndex only when the guest clearly names that size; anything you could not map goes into "unmatched".',
+        `Return STRICT JSON only: {"transcript":"...","language":"<bcp47-or-dialect>","lines":[{"index":0,"qty":2,"variantIndex":1,"note":""}],"unmatched":["..."],"reply":"<one short ${replyLang} sentence confirming the order, Latin digits only, no emojis>"}`,
+      ].join('\n')
+    : [
+        `You identify food and drinks for the restaurant "${venueName}".`,
+        'Look at the attached photo, identify the dish or drink, then pick up to 4 closest MENU entries by INDEX ONLY, best match first. If nothing plausibly matches return an empty array — never force a match.',
+        'MENU:\n' + catalogLines,
+        `Return STRICT JSON only: {"lines":[{"index":0,"qty":1,"confidence":85,"why":"<short ${replyLang}, Latin digits, no emojis>"}],"reply":"<one short ${replyLang} sentence>"}`,
+      ].join('\n')
+
+  // Same Gemini fetch pattern as generateTableImage (key in query, plain
+  // fetch); gemini-2.5-flash is the live model geminiProxy uses (trap 8).
+  const endpoint = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${key}`
+  const callModel = (mime) => fetch(endpoint, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      contents: [{ role: 'user', parts: [{ inlineData: { mimeType: mime, data: inline.data } }, { text: prompt }] }],
+      generationConfig: { responseMimeType: 'application/json', temperature: 0.1, thinkingConfig: { thinkingBudget: 0 } },
+    }),
+  })
+  let res = await callModel(inline.mimeType)
+  // Some serving stacks 400 on the audio/webm label while accepting the very
+  // same opus payload relabeled audio/ogg — one retry, audio only.
+  if (!res.ok && res.status === 400 && kind === 'audio' && /webm/i.test(String(inline.mimeType))) {
+    res = await callModel('audio/ogg')
+  }
+  if (!res.ok) {
+    const errText = await res.text().catch(() => '')
+    console.error('dinerOrderAi provider error', { tenantId, kind, status: res.status, body: String(errText).slice(0, 300) })
+    throw new HttpsError('internal', 'ai: ' + res.status)
+  }
+  const body = await res.json().catch(() => null)
+  const rawText = (((body && body.candidates && body.candidates[0] && body.candidates[0].content
+    && body.candidates[0].content.parts) || []).map((p) => p.text).filter(Boolean).join(''))
+  let obj = {}
+  try { obj = JSON.parse(rawText) } catch (_) {
+    const m = /\{[\s\S]*\}/.exec(rawText || '')
+    if (m) { try { obj = JSON.parse(m[0]) } catch (_) { obj = {} } }
+  }
+
+  // Map indices back to real ids. Out-of-range / non-integer indices are
+  // dropped here and can never become orderable. qty clamp mirrors
+  // AI_ORDER_RANGE.qty (1..20).
+  const pickCat = (n) => (Number.isInteger(n) && n >= 0 && n < catalog.length ? catalog[n] : null)
+  const rawLines = Array.isArray(obj.lines) ? obj.lines
+    : (Array.isArray(obj.items) ? obj.items : (Array.isArray(obj.matches) ? obj.matches : []))
+  const seen = new Set()
+  const lines = rawLines.map((l) => {
+    const c = pickCat(Number(l && l.index))
+    if (!c) return null
+    if (kind === 'photo') {
+      if (seen.has(c.id)) return null
+      seen.add(c.id)
+    }
+    const v = (c.variants || [])[Number(l.variantIndex)]
+    const out = {
+      id: c.id,
+      qty: Math.max(1, Math.min(20, Math.round(Number(l.qty) || 1))),
+      variantKey: (v && v.key) || '',
+      note: String(l.note || l.notes || '').slice(0, 120),
+    }
+    if (kind === 'photo') {
+      out.confidence = Math.max(0, Math.min(100, Math.round(Number(l.confidence) || 0)))
+      out.why = String(l.why || '').slice(0, 140)
+    }
+    return out
+  }).filter(Boolean).slice(0, kind === 'photo' ? 4 : 10)
+
+  const reply = String(obj.reply || '').slice(0, 200)
+  if (kind === 'audio') {
+    return {
+      lines,
+      transcript: String(obj.transcript || '').slice(0, 500),
+      language: String(obj.language || '').slice(0, 24),
+      unmatched: (Array.isArray(obj.unmatched) ? obj.unmatched : []).map((s) => String(s).slice(0, 60)).slice(0, 5),
+      reply,
+    }
+  }
+  // photo: `matches` kept as an alias carrying confidence/why for the
+  // PhotoOrder results UI, same ids as `lines`.
+  return {
+    lines,
+    matches: lines.map((l) => ({ id: l.id, confidence: l.confidence || 0, why: l.why || '' })),
+    reply,
+  }
+})
+
 module.exports = {
   generateMonthlyInvoices,
   setPlatformRole,
   startPlanSubscription,
   imageTo3d,
   generateTableImage,
+  dinerOrderAi,
   requestVenueExport,
   createPayIntent,
   issueFreeTicket,

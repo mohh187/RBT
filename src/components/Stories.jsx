@@ -1,5 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { watchStories, activeStories, bumpStory, addStoryReply } from '../lib/db.js'
+import { normalizeVideoTrim } from '../lib/dishComposition.js'
+import { useVideoTrim } from '../lib/useVideoTrim.js'
 import Icon from './Icon.jsx'
 
 // Instagram-style stories on the diner menu: a circle strip under the hero,
@@ -89,6 +91,13 @@ function StoryViewer({ stories, start, tenantId, ar, onClose }) {
   const next = () => setIdx((i) => (i + 1 < stories.length ? i + 1 : (onClose(), i)))
   const prev = () => setIdx((i) => Math.max(0, i - 1))
 
+  // Video trim window (story.trim): at the trim end the reel ADVANCES instead
+  // of looping. The hook's onEnd carries a fired-once guard; the native
+  // onEnded prop is kept ONLY for untrimmed stories, or the two together
+  // would double-advance and skip a story. Hook before the early return.
+  const sTrim = s && s.kind === 'video' ? normalizeVideoTrim(s.trim) : null
+  const storyTrimRef = useVideoTrim(sTrim, next)
+
   // auto-advance (images only; videos advance on end)
   useEffect(() => {
     if (!s || paused || s.kind === 'video') return
@@ -126,7 +135,7 @@ function StoryViewer({ stories, start, tenantId, ar, onClose }) {
       <audio ref={audioRef} style={{ display: 'none' }} />
       <div key={s.id} className="story-media-wrap">
         {s.kind === 'video'
-          ? <video className="story-media" src={s.url} autoPlay playsInline muted={!!s.audioUrl} onEnded={next} style={{ filter: s.filterCss || undefined }} />
+          ? <video ref={storyTrimRef} className="story-media" src={s.url} autoPlay playsInline muted={!!s.audioUrl} onEnded={sTrim ? undefined : next} style={{ filter: s.filterCss || undefined }} />
           : <img className="story-media" src={s.url} alt="" style={{ filter: s.filterCss || undefined }} />}
         {Array.isArray(s.overlays) && s.overlays.length > 0 && (
           <div className="story-ov-layer" aria-hidden="true">

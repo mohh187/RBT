@@ -1,5 +1,9 @@
+import { AI_ORDER_RANGE } from './dishComposition.js'
+
 // Voice ordering primitives: Web Speech recognition + synthesis wrappers and a
 // PURELY LOCAL Arabic-aware item matcher (no AI call — instant and free).
+// The MediaRecorder capture at the bottom is the raw-audio half of the CLOUD
+// engine (dinerAi.js) — the local matcher above stays the instant fallback.
 //
 // Browser reality we handle honestly instead of pretending:
 //  • SpeechRecognition is Chrome/Edge/Safari-only (webkit-prefixed). Firefox has
@@ -365,4 +369,143 @@ export function priceSpeech(value, currency = 'SAR', lang = 'ar') {
   const num = n.toLocaleString('en-US', { minimumFractionDigits: Number.isInteger(n) ? 0 : 2, maximumFractionDigits: 2 })
   if (currency === 'SAR') return lang === 'en' ? `${num} riyals` : `${num} ريال`
   return lang === 'en' ? `${num} ${currency}` : `${num} ${currency}`
+}
+
+// ---------------------------------------------------------------------------
+// Raw audio capture (MediaRecorder) — the cloud engine's microphone half
+// ---------------------------------------------------------------------------
+//
+// listenOnce() above transcribes locally via SpeechRecognition; recordOnce()
+// instead captures a compressed opus/aac clip for the dinerOrderAi callable,
+// which understands ANY language or dialect. The two engines must NEVER run
+// on the same attempt (Android grabs the mic exclusively) — callers pick one.
+// All timing bounds ride AI_ORDER_RANGE (dishComposition.js contract).
+
+export function recorderSupported() {
+  return typeof window !== 'undefined'
+    && !!(navigator.mediaDevices && navigator.mediaDevices.getUserMedia)
+    && typeof window.MediaRecorder === 'function'
+}
+
+// Best supported container, best first; '' lets the browser choose (Safari
+// records audio/mp4 AAC, which the server accepts as-is).
+export function pickAudioMime() {
+  const list = ['audio/webm;codecs=opus', 'audio/webm', 'audio/mp4', 'audio/ogg;codecs=opus']
+  for (const m of list) {
+    try { if (window.MediaRecorder.isTypeSupported(m)) return m } catch (_) { /* next */ }
+  }
+  return ''
+}
+
+let activeRecStop = null
+
+// Stop the in-flight capture early (user pressed the mic again / unmount).
+// The recordOnce promise still resolves with whatever was captured.
+export function stopRecording() {
+  const s = activeRecStop
+  activeRecStop = null
+  if (s) { try { s() } catch (_) { /* already dead */ } }
+}
+
+/**
+ * One capture session -> Promise<{ blob, mimeType, mime, durationMs }>.
+ * 32kbps mono — a full 15s take is ~60KB, small enough to inline-base64.
+ * Auto-stops on sustained silence (after speech was heard) or at the max
+ * length; streams a 0..1 level to onLevel for a live meter ring.
+ * Rejects with e.code 'denied' | 'unsupported' | 'nomatch' (silence only).
+ */
+export function recordOnce({ onLevel, maxMs, silenceMs, silenceStopMs } = {}) {
+  const R = AI_ORDER_RANGE
+  const capMs = Math.min(R.recordMaxMs.max, Math.max(R.recordMaxMs.min, Number(maxMs) || R.recordMaxMs.dflt))
+  const quietRaw = silenceMs != null ? silenceMs : silenceStopMs
+  const quietMs = Math.min(R.silenceStopMs.max, Math.max(R.silenceStopMs.min, Number(quietRaw) || R.silenceStopMs.dflt))
+  return new Promise((resolve, reject) => {
+    if (!recorderSupported()) { reject(codedError('unsupported')); return }
+    stopRecording()
+    navigator.mediaDevices.getUserMedia({ audio: { echoCancellation: true, noiseSuppression: true, channelCount: 1 } }).then((stream) => {
+      const mime = pickAudioMime()
+      let rec
+      try {
+        rec = mime
+          ? new MediaRecorder(stream, { mimeType: mime, audioBitsPerSecond: 32000 })
+          : new MediaRecorder(stream, { audioBitsPerSecond: 32000 })
+      } catch (_) {
+        stream.getTracks().forEach((tr) => tr.stop())
+        reject(codedError('unsupported'))
+        return
+      }
+
+      const chunks = []
+      const t0 = Date.now()
+      let spoke = false
+      let quietSince = 0
+      let settled = false
+      let meter = null
+
+      // AnalyserNode level metering — optional: without it (old WebKit) the
+      // take simply runs to the cap instead of auto-stopping on silence.
+      let ctx = null
+      let an = null
+      let buf = null
+      try {
+        const Ctx = window.AudioContext || window.webkitAudioContext
+        if (Ctx) {
+          ctx = new Ctx()
+          const src = ctx.createMediaStreamSource(stream)
+          an = ctx.createAnalyser()
+          an.fftSize = 512
+          src.connect(an)
+          buf = new Uint8Array(an.frequencyBinCount)
+        }
+      } catch (_) { an = null }
+
+      const finish = () => {
+        if (settled) return
+        settled = true
+        if (meter) clearInterval(meter)
+        if (ctx) { try { ctx.close() } catch (_) { /* fine */ } }
+        stream.getTracks().forEach((tr) => tr.stop())
+        if (activeRecStop === stop) activeRecStop = null
+        if (!spoke || !chunks.length) { reject(codedError('nomatch')); return }
+        const type = rec.mimeType || mime || 'audio/webm'
+        const blob = new Blob(chunks, { type })
+        const outMime = blob.type || type
+        resolve({ blob, mimeType: outMime, mime: outMime, durationMs: Date.now() - t0 })
+      }
+      const stop = () => {
+        try {
+          if (rec.state !== 'inactive') rec.stop()
+          else finish()
+        } catch (_) { finish() }
+      }
+
+      meter = setInterval(() => {
+        let rms = 0
+        if (an && buf) {
+          an.getByteTimeDomainData(buf)
+          let sum = 0
+          for (let i = 0; i < buf.length; i++) { const d = (buf[i] - 128) / 128; sum += d * d }
+          rms = Math.sqrt(sum / buf.length)
+        } else {
+          rms = 0.06 // no analyser: treat everything as speech; the cap ends the take
+        }
+        if (typeof onLevel === 'function') { try { onLevel(Math.min(1, rms * 6)) } catch (_) { /* UI only */ } }
+        const now = Date.now()
+        if (rms > 0.045) {
+          spoke = true
+          quietSince = 0
+        } else if (spoke) {
+          if (!quietSince) quietSince = now
+          if (now - quietSince >= quietMs) stop()
+        }
+        if (now - t0 >= capMs) stop()
+      }, 80)
+
+      rec.ondataavailable = (e) => { if (e.data && e.data.size) chunks.push(e.data) }
+      rec.onstop = finish
+      rec.onerror = () => finish()
+      activeRecStop = stop
+      try { rec.start(250) } catch (_) { finish() }
+    }).catch(() => reject(codedError('denied')))
+  })
 }

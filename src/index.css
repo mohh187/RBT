@@ -1123,7 +1123,11 @@ ul {
   }
   .cashier-shell > .container.page,
   .kds-shell > .kds-wrap,
-  .venue-above > [data-menu-layout] {
+  .venue-above > [data-menu-layout],
+  /* the diner SUBPAGES (profile/order/events/book) scroll via .container.page —
+     without this, a venue that configures menuChrome.pages gets a clipped,
+     frozen page inside the 100vh shell at desktop widths */
+  .venue-above > .container.page {
     flex: 1 !important;
     overflow-y: auto !important;
     overflow-x: hidden !important;
@@ -3887,6 +3891,62 @@ body[data-theme='dark'] .pos-fullscreen[data-systheme='glass'] { background: var
 .menu-hero[data-banner='card'] { padding: var(--sp-3) var(--sp-3) 0; }
 .menu-hero[data-banner='card'] .menu-hero-cover { border-radius: var(--r-lg); }
 .menu-hero[data-banner='card'] .menu-hero-fade { inset: var(--sp-3) var(--sp-3) 0; border-radius: var(--r-lg); }
+
+/* ---- the banner MEDIA WRAPPER (.menu-hero-media, mounted by MenuView) ----
+   One box around every media layer (video/image cover, tint cover, grad) so
+   the true-transparency melt mask (bannerMelt) has a single thing to mask.
+   The wrapper carries the banner height ITSELF and every layer inside paints
+   absolutely: the tint used to be a second IN-FLOW cover that doubled the
+   hero's height the moment it was active. Inert until the wrapper exists. */
+.menu-hero-media { position: relative; height: 140px; }
+.menu-hero[data-banner] .menu-hero-media { height: 190px; }
+.menu-hero[data-banner='tall'] .menu-hero-media { height: 250px; }
+.menu-hero-media .menu-hero-cover,
+.menu-hero-media .menu-hero-grad,
+.menu-hero-media .menu-hero-fade {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+}
+
+/* ---- hero ink over the ROOM (data-room stamped by MenuView when
+   menuWall.room is on). The wall photo is dark in both themes — same policy as
+   the image header (.app-bar-img): fixed light ink over a venue-dialled veil
+   (--bn-scrim, tenant.bannerScrim). The 0.35 default is tuned for DARK photo
+   walls; a venue on a light drawn wall raises the dial from its card. ---- */
+[data-room='1'] .menu-hero-body { color: #f7f2e9; }
+[data-room='1'] .menu-hero-title {
+  color: var(--typo-hero-color, #f7f2e9);
+  text-shadow: 0 1px 2px rgba(10, 6, 4, .55);
+}
+[data-room='1'] .menu-hero-body p { color: var(--typo-desc-color, #ddd6ca); }
+/* the veil holds a mid-stop so it does not decay to nothing under the
+   outermost glyphs; .menu-hero-body is already position:relative + z-index 2,
+   so a -1 pseudo sits between text and media */
+[data-room='1'] .menu-hero-body::before {
+  content: '';
+  position: absolute;
+  inset: -6px -14px -10px;
+  z-index: -1;
+  border-radius: 18px;
+  pointer-events: none;
+  background: radial-gradient(120% 110% at 50% 45%, rgba(10, 6, 4, var(--bn-scrim, .35)) 55%, transparent 100%);
+}
+
+/* ---- the featured plaster (tenant.featuredFilm -> data-film + --feat-film on
+   .special-sec). The plaster colour is the editorial canvas token, which flips
+   with the theme, so THEME ink stays readable on a film without room mode;
+   only room mode forces light ink (the wall photo does not flip). ---- */
+.special-sec[data-film] .special-card {
+  background: color-mix(in srgb, var(--edt-bg, var(--bg)) calc(var(--feat-film, 0) * 100%), transparent);
+  border-radius: 14px;
+}
+[data-room='1'] .special-head strong,
+[data-room='1'] .special-card .bold {
+  color: #f7f2e9;
+  text-shadow: 0 1px 2px rgba(10, 6, 4, .5);
+}
 
 /* plates — dishes float as circular plates on the surface, no card chrome (theme #44) */
 [data-menu-layout='plates'] .showcase-grid { grid-template-columns: 1fr 1fr; gap: var(--sp-5) var(--sp-3); }
@@ -6870,9 +6930,13 @@ body:has(.sd2-root) .toast-wrap { z-index: 840; }
              brick button 4.6:1, brick vs plaster 3.9:1, control edges 3.5:1
    The item stage portals to <body> — OUTSIDE .edt-wrap — so the SAME tokens are
    declared on .edt-stg. Without that every var() below resolved to nothing inside
-   the stage and the amber "add to cart" button rendered transparent (dark on dark). */
+   the stage and the amber "add to cart" button rendered transparent (dark on dark).
+   [data-menu-layout='editorial'] (the MenuView root) carries the same set so the
+   PRE-MENU zone — hero, search, chips, featured — can resolve them too: room
+   mode (menuWall.room) and the featured film paint with these tokens. */
 .edt-wrap,
-.edt-stg {
+.edt-stg,
+[data-menu-layout='editorial'] {
   --edt-bg: #100c0a;
   --edt-bg-2: #191310;
   --edt-amber: #f5b942;
@@ -6909,6 +6973,22 @@ body:has(.sd2-root) .toast-wrap { z-index: 840; }
   /* the mortar bed the brick is laid into, and the shadow it throws */
   --edt-brick-bed: rgba(46, 18, 8, 0.34);
   --edt-brick-cast: rgba(46, 18, 8, 0.30);
+  /* DERIVED: the same bed/cast scaled by the venue's button-shadow dial
+     (--edt-sh-btn, tenant.menuShadows.buttons — engine stamps it, absent = 1).
+     Plain aliases here; the dialled color-mix versions live in the @supports
+     block below, because a custom property cannot carry a fallback line (its
+     LAST declaration always wins) and an engine without color-mix would drop
+     the whole consuming box-shadow, insets included. */
+  --edt-bed-sh: var(--edt-brick-bed);
+  --edt-cast-sh: var(--edt-brick-cast);
+}
+@supports (color: color-mix(in srgb, red 50%, transparent)) {
+  .edt-wrap,
+  .edt-stg,
+  [data-menu-layout='editorial'] {
+    --edt-bed-sh: color-mix(in srgb, var(--edt-brick-bed) calc(var(--edt-sh-btn, 1) * 100%), transparent);
+    --edt-cast-sh: color-mix(in srgb, var(--edt-brick-cast) calc(var(--edt-sh-btn, 1) * 100%), transparent);
+  }
 }
 .edt-wrap {
   background-color: var(--edt-bg);
@@ -6942,6 +7022,31 @@ body:has(.sd2-root) .toast-wrap { z-index: 840; }
   background-image: none;
 }
 .edt-stg[data-wall] { background-image: none; }
+
+/* ---- THE ROOM (menuWall.room -> EditorialRoomBg in the theme) ----
+   The venue's ONE wall, fixed behind the whole page — header, banner, search,
+   featured and the dishes stand in the same room instead of three background
+   zones. Mounted by MenuView only when resolveWall(tenant).room is true;
+   every rule below is inert until .edt-roombg / data-roombg exist. */
+.edt-roombg {
+  position: fixed;
+  inset: 0;
+  z-index: -1;
+  pointer-events: none;
+  background-color: var(--edt-bg, #100c0a);
+  /* the wall's blend mode must act on the same canvas it acts on inside the
+     wrap, and must never leak past this layer */
+  isolation: isolate;
+}
+/* the wrap stops repainting the room it is already standing in — a wall with
+   opacity < 1 or a blend mode would otherwise render visibly darker */
+.edt-wrap[data-roombg] {
+  background-color: transparent;
+  background-image: none;
+}
+/* the ambient venue background would be the SAME wall painted a second time
+   (it portals to <body>, so the :has() must sit at body level) */
+body:has(.edt-roombg) .venue-bg { display: none; }
 
 /* THE PLASTER THE WORDS SIT ON, and the reason the paragraph above is safe.
    A venue wall is not the theme's own quiet tile: it can be a whitewash, a
@@ -6991,7 +7096,11 @@ body:has(.sd2-root) .toast-wrap { z-index: 840; }
   border-radius: 18px;
   background: var(--edt-bg);
   background: color-mix(in srgb, var(--edt-bg) calc(var(--edt-panel, .65) * 100%), transparent);
+  /* the outward halo now has its OWN dial (--edt-sh-panel, from
+     tenant.menuShadows.panelHalo) so a venue can keep the veil and drop the
+     frame; absent var = 1 = exactly the line above */
   box-shadow: 0 8px 22px 12px color-mix(in srgb, var(--edt-bg) calc(var(--edt-panel, .65) * 82%), transparent);
+  box-shadow: 0 8px 22px 12px color-mix(in srgb, var(--edt-bg) calc(var(--edt-panel, .65) * var(--edt-sh-panel, 1) * 82%), transparent);
 }
 /* With a TABLE under the words the panel's outward halo is what drew the dark
    frame around the furniture: the table's own edge should end it crisply — it
@@ -7015,8 +7124,12 @@ body:has(.sd2-root) .toast-wrap { z-index: 840; }
   top: var(--edt-top, 0px);
   z-index: 12;
   background: var(--edt-bg);
+  /* hairline + cast ride the bars dial (--edt-sh-bars,
+     tenant.menuShadows.bars); the literal lines stay first as fallbacks */
   border-bottom: 1px solid var(--edt-line);
+  border-bottom-color: color-mix(in srgb, var(--edt-line) calc(var(--edt-sh-bars, 1) * 100%), transparent);
   box-shadow: 0 14px 18px -10px var(--edt-bg);
+  box-shadow: 0 14px 18px -10px color-mix(in srgb, var(--edt-bg) calc(var(--edt-sh-bars, 1) * 100%), transparent);
 }
 /* Over a venue wall the solid bar + canvas-coloured shadow drew a black band
    across the brick. Let the wall show through a frosted bar instead, and cast
@@ -7052,7 +7165,8 @@ body:has(.sd2-root) .toast-wrap { z-index: 840; }
   border-radius: 6px;
   border: 1px solid var(--edt-edge);
   background: var(--edt-soft);
-  color: var(--edt-mut);
+  /* the venue's own chip ink when set (menuInk.*.chip); identical otherwise */
+  color: var(--edt-chip-ink, var(--edt-mut));
   font-size: 13px;
   font-weight: 700;
   line-height: 1;
@@ -7122,8 +7236,12 @@ body:has(.sd2-root) .toast-wrap { z-index: 840; }
   margin-inline: auto;
   border-radius: var(--edt-radius, 0px);
   background-color: var(--edt-bg);
+  /* the card's border + lift follow the seams dial (--edt-sh-seam,
+     tenant.menuShadows.seams); literals first as fallbacks */
   border: 1px solid var(--edt-line);
+  border-color: color-mix(in srgb, var(--edt-line) calc(var(--edt-sh-seam, 1) * 100%), transparent);
   box-shadow: 0 18px 40px -18px var(--edt-brick-cast);
+  box-shadow: 0 18px 40px -18px color-mix(in srgb, var(--edt-brick-cast) calc(var(--edt-sh-seam, 1) * 100%), transparent);
 }
 
 /* PHOTO FIRST, then the price and everything that explains it — the venue's
@@ -7301,11 +7419,13 @@ body:has(.sd2-root) .toast-wrap { z-index: 840; }
   background-image:
     repeating-linear-gradient(101deg, rgba(255, 255, 255, .022) 0 3px, rgba(46, 18, 8, .03) 3px 7px),
     linear-gradient(180deg, var(--edt-brick-top) 0%, var(--edt-brick-mid) 48%, var(--edt-brick-bot) 100%);
+  /* the two OUTWARD layers ride the derived --edt-bed-sh/--edt-cast-sh tokens
+     (the buttons dial); the insets are the brick's face and never scale */
   box-shadow:
     inset 0 1px 0 var(--edt-mortar-lit),
     inset 0 -2px 0 var(--edt-mortar-dark),
-    0 2px 0 var(--edt-brick-bed),
-    0 7px 16px var(--edt-brick-cast);
+    0 2px 0 var(--edt-bed-sh, var(--edt-brick-bed)),
+    0 7px 16px var(--edt-cast-sh, var(--edt-brick-cast));
 }
 .edt-open-btn {
   display: inline-flex; align-items: center; gap: 7px;
@@ -7318,8 +7438,8 @@ body:has(.sd2-root) .toast-wrap { z-index: 840; }
   box-shadow:
     inset 0 1px 0 var(--edt-mortar-lit),
     inset 0 -2px 0 var(--edt-mortar-dark),
-    0 3px 0 var(--edt-brick-bed),
-    0 10px 22px var(--edt-brick-cast);
+    0 3px 0 var(--edt-bed-sh, var(--edt-brick-bed)),
+    0 10px 22px var(--edt-cast-sh, var(--edt-brick-cast));
 }
 .edt-open-btn:active {
   transform: translateY(1px);
@@ -7347,6 +7467,7 @@ body:has(.sd2-root) .toast-wrap { z-index: 840; }
   background-repeat: var(--edt-btn-rep);
   background-position: var(--edt-btn-pos);
   text-shadow: 0 1px 2px rgba(0, 0, 0, .4);
+  text-shadow: 0 1px 2px color-mix(in srgb, rgb(0 0 0) calc(40% * var(--edt-sh-btn, 1)), transparent);
 }
 
 /* «كل الأزرار وليس الأساسية فقط» (resolveButtons.scope = 'all'): the same face
@@ -7369,6 +7490,7 @@ body:has(.sd2-root) .toast-wrap { z-index: 840; }
   background-repeat: var(--edt-btn-rep);
   background-position: var(--edt-btn-pos);
   text-shadow: 0 1px 2px rgba(0, 0, 0, .4);
+  text-shadow: 0 1px 2px color-mix(in srgb, rgb(0 0 0) calc(40% * var(--edt-sh-btn, 1)), transparent);
 }
 .edt-wrap[data-btnscope='all'] .edt-chip.on,
 .edt-stg[data-btnscope='all'] .edt-opt.on {
@@ -7407,8 +7529,8 @@ body:has(.sd2-root) .toast-wrap { z-index: 840; }
   box-shadow:
     inset 0 1px 0 var(--edt-mortar-lit, rgba(255, 231, 205, .3)),
     inset 0 -2px 0 var(--edt-mortar-dark, rgba(46, 18, 8, .34)),
-    0 2px 0 var(--edt-brick-bed, rgba(46, 18, 8, .34)),
-    0 7px 16px var(--edt-brick-cast, rgba(46, 18, 8, .3));
+    0 2px 0 var(--edt-bed-sh, var(--edt-brick-bed, rgba(46, 18, 8, .34))),
+    0 7px 16px var(--edt-cast-sh, var(--edt-brick-cast, rgba(46, 18, 8, .3)));
 }
 /* the slab ring for the selected state has to REPLACE the bed shadows, not be
    replaced by them, so it restates both */
@@ -7418,7 +7540,7 @@ body:has(.sd2-root) .toast-wrap { z-index: 840; }
     inset 0 0 0 2px var(--edt-amber, #f5b942),
     inset 0 1px 0 var(--edt-mortar-lit, rgba(255, 231, 205, .3)),
     inset 0 -2px 0 var(--edt-mortar-dark, rgba(46, 18, 8, .34)),
-    0 2px 0 var(--edt-brick-bed, rgba(46, 18, 8, .34));
+    0 2px 0 var(--edt-bed-sh, var(--edt-brick-bed, rgba(46, 18, 8, .34)));
 }
 
 /* The photo now LEADS the section, still melting into the canvas at its foot so
@@ -7541,6 +7663,32 @@ video.edt-backdrop { width: 100%; height: 100%; display: block; }
 }
 .edt-fx { position: absolute; inset: 0; pointer-events: none; }
 
+/* ---- the TILT WRAPPER (imgTiltBoxStyle in lib/dishComposition.js) ----
+   The 3D lean lives on this wrapper, not on the img: the photo rasterises at
+   its final 2D size from the full-resolution source first, and only the
+   projection resamples it — that split is what removed the blur the owner
+   reported. --dish-persp makes the same stored degrees project the same on
+   every surface (rule of thumb: ~3x the photo box height); the 1100px default
+   lives in the contract function. Inert until the engine mounts the wrapper. */
+.edt-photo { --dish-persp: 1000px; }
+.edt-stg-hero { --dish-persp: 1700px; }
+.edt-tiltbox { display: block; width: 100%; min-width: 0; }
+/* the squashed ground ellipse that makes a lean read as a plate on a surface
+   (comp.img.tiltContact, inline opacity; mounted only when tilt AND dial > 0).
+   Centred with a LOGICAL margin — margin-inline-start calc(width / -2) —
+   never translate(-50%) against inset-inline-start (RTL trap #2). */
+.edt-tilt-contact {
+  position: absolute;
+  bottom: 1%;
+  inset-inline-start: 50%;
+  width: 68%;
+  height: 9%;
+  margin-inline-start: calc(68% / -2);
+  background: radial-gradient(50% 50% at 50% 50%, rgba(0, 0, 0, .5), rgba(0, 0, 0, 0) 72%);
+  filter: blur(6px);
+  pointer-events: none;
+}
+
 /* ---- how a dish ARRIVES (ANIMS in lib/dishComposition.js) ----
    Written with the individual translate / scale / rotate properties on purpose:
    those COMPOSE with the composition's own inline `transform`, where a
@@ -7612,6 +7760,9 @@ video.edt-backdrop { width: 100%; height: 100%; display: block; }
   .edt-photo img,
   .edt-photo[data-fit='wide'] img,
   .edt-photo[data-fit='tall'] img { max-height: min(60svh, 560px); object-position: center; }
+  /* the two-column list photo reaches 560px here — same size as the stage
+     hero, so it takes the same projection distance (~3x box height) */
+  .edt-photo { --dish-persp: 1700px; }
   .edt-side { font-size: clamp(56px, 6vw, 104px); top: 8%; }
 
   /* WITH A TABLE the two-column split is a lie: the dish would drop onto a
@@ -7680,9 +7831,13 @@ video.edt-backdrop { width: 100%; height: 100%; display: block; }
 .edt-stg-hero {
   position: relative;
   width: 100%;
-  min-height: min(30dvh, 260px);
+  /* the brick space above the dish and the hero's floor/cap are the venue's
+     stage-cohesion dials now (tableStageVars: --edt-stg-padtop/--edt-stg-heromin,
+     from menuTable.heroPad/heroMax) — the fallbacks ARE today's clamps, so an
+     untouched venue computes the identical box */
+  min-height: var(--edt-stg-heromin, min(30dvh, 260px));
   display: flex; align-items: center; justify-content: center;
-  padding: clamp(56px, 14vw, 76px) clamp(18px, 6vw, 40px) 0;
+  padding: var(--edt-stg-padtop, clamp(56px, 14vw, 76px)) clamp(18px, 6vw, 40px) 0;
   will-change: transform;
 }
 /* Size is a TRANSFORM now, not a cap. --edt-img-scale used to multiply this
@@ -7694,12 +7849,14 @@ video.edt-backdrop { width: 100%; height: 100%; display: block; }
   position: relative; /* paints above the ground glow */
   display: block;
   width: 100%; height: auto;
-  max-height: min(42dvh, 420px);
+  max-height: var(--edt-stg-heromax, min(42dvh, 420px));
   object-fit: contain;
   object-position: center;
 }
-.edt-stg-hero[data-fit='wide'] { min-height: min(26dvh, 220px); padding-inline: 0; }
-.edt-stg-hero[data-fit='tall'] img { max-height: min(50dvh, 500px); }
+.edt-stg-hero[data-fit='wide'] { min-height: var(--edt-stg-heromin, min(26dvh, 220px)); padding-inline: 0; }
+/* the tall-fit cap out-specifies the base img rule, so it must consume the
+   same var or heroMax silently dies on tall photos (the screenshot's case) */
+.edt-stg-hero[data-fit='tall'] img { max-height: var(--edt-stg-heromax, min(50dvh, 500px)); }
 .edt-stg-hero .edt-glow {
   inset: 6% 4% 8%;
   height: auto;
@@ -7832,6 +7989,21 @@ button.edt-pair:active { transform: scale(.98); }
   pointer-events: none;
 }
 .edt-table-art { position: absolute; inset: 0; }
+/* «ذوبان أعلى الطاولة في الجدار» (--edt-sh-ttop, tenant.menuShadows.tableTop):
+   a top feather melting a PHOTO table's hard first row up into the wall.
+   Scoped to :not([data-m]) — material tables carry data-m and already feather
+   their own first gradient stop, so the two softeners can never compound.
+   At the default 0 the gradient is opaque end to end = a mathematical no-op,
+   and an engine that cannot resolve the calc alpha drops the mask entirely,
+   which is also today's paint. */
+.edt-table-art:not([data-m]) {
+  -webkit-mask-image: linear-gradient(180deg,
+    rgb(0 0 0 / calc(1 - var(--edt-sh-ttop, 0))) 0,
+    #000 calc(var(--edt-sh-ttop, 0) * 26%));
+  mask-image: linear-gradient(180deg,
+    rgb(0 0 0 / calc(1 - var(--edt-sh-ttop, 0))) 0,
+    #000 calc(var(--edt-sh-ttop, 0) * 26%));
+}
 .edt-table-tint { position: absolute; inset: 0; }
 /* the venue's flat darkening veil («تعتيم أكثر») — strength arrives as inline
    opacity from resolveTable().dim */
@@ -7840,6 +8012,23 @@ button.edt-pair:active { transform: scale(.98); }
   position: absolute;
   inset: 0;
   background: linear-gradient(180deg, transparent var(--tbl-a, 16%), var(--edt-bg, #100c0a) var(--tbl-b, 52%));
+}
+/* «ذوبان الحافة السفلية» (tableMeltBottom -> --tbl-mba/--tbl-mbb, measured from
+   the BOTTOM): dissolves the raw sawn-off cut at the box bottom. The element is
+   only mounted while the dial is on; keep the #100c0a fallback — the admin
+   shell defines no --edt-bg (same reason .mtbl-melt hardcodes it). */
+.edt-table-melt-b {
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(0deg, var(--edt-bg, #100c0a) var(--tbl-mba, 0%), transparent var(--tbl-mbb, 24%));
+}
+/* «لوح قراءة فوق السطح» (resolveTable().veil, inline opacity): a canvas-colour
+   reading veil ABOVE material + melts, BELOW the lit edge and the contact pool,
+   so text contrast stops being hostage to the melt dial. Mounted only when > 0. */
+.edt-table-veil {
+  position: absolute;
+  inset: 0;
+  background: var(--edt-bg, #100c0a);
 }
 .edt-table-edge {
   position: absolute;
@@ -7850,8 +8039,10 @@ button.edt-pair:active { transform: scale(.98); }
 .edt-table-edge[data-e='lit'] {
   background: linear-gradient(90deg, transparent, rgba(255, 214, 160, .34) 22%, rgba(255, 224, 176, .5) 50%, rgba(255, 214, 160, .34) 78%, transparent);
   /* .45 read as one more dark line over a photo wall — the lip only needs a
-     hint of underside to sell the edge */
+     hint of underside to sell the edge. The remaining .26 is now the venue's
+     own dial (--edt-sh-tedge, tenant.menuShadows.tableEdge); literal first. */
   box-shadow: 0 1px 0 rgba(0, 0, 0, .26);
+  box-shadow: 0 1px 0 color-mix(in srgb, rgb(0 0 0) calc(26% * var(--edt-sh-tedge, 1)), transparent);
 }
 .edt-table-edge[data-e='soft'] {
   height: 7px;
@@ -7876,6 +8067,30 @@ button.edt-pair:active { transform: scale(.98); }
 .edt-sec[data-table] .edt-photo { position: relative; z-index: 2; }
 .edt-sec[data-table] .edt-main { position: relative; z-index: 1; }
 .edt-stg-body[data-table] { position: relative; }
+
+/* ---- extend-to-bottom («مدّ الطاولة حتى أسفل النافذة»، menuTable.stage.extend)
+   The stage stamps data-tbl-extend: the scroller becomes a flex column, the
+   body grows to the scroller's full height, and the table's bottom inset and
+   corners are squared off so the material runs flush into the frosted
+   .edt-stg-bar. Mid-scroll the table is simply taller than the viewport,
+   which is correct furniture behaviour. Inert until the attribute exists. ---- */
+.edt-stg[data-tbl-extend] .edt-stg-scroll { display: flex; flex-direction: column; }
+.edt-stg[data-tbl-extend] .edt-stg-media { flex: none; }
+.edt-stg[data-tbl-extend] .edt-stg-body { flex: 1 0 auto; }
+.edt-stg[data-tbl-extend] .edt-stg-body .edt-table {
+  inset: -8px -14px 0;
+  border-end-start-radius: 0;
+  border-end-end-radius: 0;
+}
+/* companion: the wall plaster ::before keeps a -18px bottom inset + 18px radius
+   of its own; absolutely positioned boxes still contribute to the scroller's
+   scrollable overflow, so without this the squared table meets the bar with an
+   18px scrollable overhang and rounded plaster corners poking past it */
+.edt-stg[data-wall][data-tbl-extend] .edt-stg-body::before {
+  bottom: 0;
+  border-end-start-radius: 0;
+  border-end-end-radius: 0;
+}
 
 /* ---- 3D / AR ---- */
 /* IN FLOW under the hero, never floated over it: absolute placement parked
@@ -7916,7 +8131,9 @@ button.edt-pair:active { transform: scale(.98); }
 .edt-stg-bar {
   display: flex; align-items: center; gap: 12px;
   padding: 12px 18px calc(12px + env(safe-area-inset-bottom, 0px));
+  /* the wall-less hairline follows the bars dial too; literal first */
   border-top: 1px solid var(--edt-line, rgba(247, 242, 233, .14));
+  border-top-color: color-mix(in srgb, var(--edt-line, rgba(247, 242, 233, .14)) calc(var(--edt-sh-bars, 1) * 100%), transparent);
   background: var(--edt-bg, #100c0a);
 }
 /* over a venue wall the solid bar + hairline drew the same dark band the
@@ -7980,11 +8197,12 @@ button.edt-pair:active { transform: scale(.98); }
     padding: clamp(24px, 3vw, 44px) clamp(24px, 4vw, 64px) 0;
   }
   .edt-stg-media { position: sticky; top: 0; }
-  /* padding-top keeps the dish clear of the floating close button */
-  .edt-stg-hero { padding-top: clamp(56px, 5vw, 76px); min-height: min(44dvh, 440px); }
+  /* padding-top keeps the dish clear of the floating close button — heroPad's
+     floor of 20px in TABLE_RANGE exists for the same reason */
+  .edt-stg-hero { padding-top: var(--edt-stg-padtop, clamp(56px, 5vw, 76px)); min-height: min(44dvh, 440px); }
   .edt-stg-hero[data-fit='wide'] { min-height: min(34dvh, 320px); padding-inline: 0; }
   .edt-stg-hero img,
-  .edt-stg-hero[data-fit='tall'] img { max-height: min(56dvh, 560px); }
+  .edt-stg-hero[data-fit='tall'] img { max-height: var(--edt-stg-heromax, min(56dvh, 560px)); }
   .edt-stg-body { padding: 0 0 32px; max-width: 620px; margin-inline: 0; }
   .edt-stg-bar { width: 100%; max-width: 1280px; margin-inline: auto; padding-inline: clamp(24px, 4vw, 64px); }
   .edt-stg-x { inset-inline-start: 20px; top: 20px; }
@@ -7998,8 +8216,15 @@ button.edt-pair:active { transform: scale(.98); }
     padding-inline: clamp(24px, 4vw, 48px);
   }
   .edt-stg[data-table] .edt-stg-media { position: static; }
-  .edt-stg[data-table] .edt-stg-hero { min-height: min(38dvh, 380px); }
+  .edt-stg[data-table] .edt-stg-hero { min-height: var(--edt-stg-heromin, min(38dvh, 380px)); }
   .edt-stg[data-table] .edt-stg-body { max-width: 720px; margin-inline: auto; padding: 18px 22px 32px; }
+
+  /* extend-to-bottom must beat the display:block above — double attribute,
+     same media query, later in order */
+  .edt-stg[data-table][data-tbl-extend] .edt-stg-scroll {
+    display: flex;
+    flex-direction: column;
+  }
 }
 
 /* ---- Editorial in the LIGHT theme ----
@@ -8008,9 +8233,16 @@ button.edt-pair:active { transform: scale(.98); }
    identity, and the same fill happens to clear every threshold on either
    canvas (white label 4.62:1 at the lightest stop; the shape 4.2:1 on the dark
    canvas, 3.9:1 on the light one). Selectors carry the class chain so they win
-   on specificity wherever the dark rule used one. */
-[data-theme='light'] .edt-wrap,
-[data-theme='light'] .edt-stg {
+   on specificity wherever the dark rule used one.
+   :not([data-edt-dark]) — the flip applies only where the engine has not
+   PINNED the dark set (data-edt-dark: a configured wall with no venue light
+   inks — the photo does not change with the mode, so neither may the ink).
+   Venue inks arrive as INLINE vars and beat both blocks either way.
+   [data-menu-layout='editorial'] joins both blocks so the tokens also resolve
+   in the pre-menu zone (hero/search/featured) for room mode. */
+[data-theme='light'] .edt-wrap:not([data-edt-dark]),
+[data-theme='light'] .edt-stg:not([data-edt-dark]),
+[data-theme='light'] [data-menu-layout='editorial']:not([data-edt-dark]) {
   --edt-bg: #f7f0e6;
   --edt-bg-2: #efe4d4;
   --edt-amber: #8a4a12;
@@ -8035,17 +8267,29 @@ button.edt-pair:active { transform: scale(.98); }
 }
 /* the amber ground-light under a cutout has to become a clay one, or it reads
    as a stain on the plaster instead of a lamp */
-[data-theme='light'] .edt-glow {
+[data-theme='light'] .edt-wrap:not([data-edt-dark]) .edt-glow,
+[data-theme='light'] .edt-stg:not([data-edt-dark]) .edt-glow {
   background: radial-gradient(58% 100% at 50% 100%, rgba(143, 74, 29, .16), transparent 74%);
 }
-[data-theme='light'] .edt-stg-hero .edt-glow {
+[data-theme='light'] .edt-stg:not([data-edt-dark]) .edt-stg-hero .edt-glow {
   background: radial-gradient(56% 62% at 50% 56%, rgba(143, 74, 29, .14), transparent 74%);
 }
 /* the vertical category watermark needs a touch more ink to survive on cream */
-[data-theme='light'] .edt-side { color: rgba(36, 23, 14, 0.08); }
-/* the catbar's own drop-off is a shadow, not a copy of the page colour */
-[data-theme='light'] .edt-catbar { box-shadow: 0 10px 16px -12px rgba(36, 23, 14, .40); }
-[data-theme='light'] .edt-progress { background: rgba(247, 240, 230, .90); }
+[data-theme='light'] .edt-wrap:not([data-edt-dark]) .edt-side { color: rgba(36, 23, 14, 0.08); }
+/* the catbar's own drop-off is a shadow, not a copy of the page colour — and
+   it rides the bars dial (--edt-sh-bars) like its dark sibling */
+[data-theme='light'] .edt-wrap:not([data-edt-dark]) .edt-catbar {
+  box-shadow: 0 10px 16px -12px rgba(36, 23, 14, .40);
+  box-shadow: 0 10px 16px -12px color-mix(in srgb, rgb(36 23 14) calc(40% * var(--edt-sh-bars, 1)), transparent);
+}
+/* the :not() guard raised the light cast's specificity past the frosted wall
+   rule — restate the wall's own answer so a light venue wall keeps today's
+   clean frosted bar (no line, no cast) */
+[data-theme='light'] .edt-wrap[data-wall] .edt-catbar {
+  border-bottom: none;
+  box-shadow: none;
+}
+[data-theme='light'] .edt-wrap:not([data-edt-dark]) .edt-progress { background: rgba(247, 240, 230, .90); }
 /* the brick itself is unchanged — it is the venue's identity, and its bed
    shadow already flips through --edt-brick-bed / --edt-brick-cast above */
 
@@ -8075,11 +8319,19 @@ button.edt-pair:active { transform: scale(.98); }
   background-repeat: var(--edt-hd-rep, repeat);
   background-position: var(--edt-hd-pos, center);
   color: #ffffff;
+  /* bottom line + outward cast follow the header dial (--edt-hd-sh, stamped by
+     headerBrickVars from tenant.menuShadows.header); the two insets are the
+     bar's own masonry and never scale. Literal lines first as fallbacks. */
   border-bottom: 1px solid rgba(46, 18, 8, .62);
+  border-bottom-color: color-mix(in srgb, rgb(46 18 8) calc(62% * var(--edt-hd-sh, 1)), transparent);
   box-shadow:
     inset 0 1px 0 rgba(255, 231, 205, .22),
     inset 0 -2px 0 rgba(46, 18, 8, .45),
     0 4px 10px -7px rgba(46, 18, 8, .38);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 231, 205, .22),
+    inset 0 -2px 0 rgba(46, 18, 8, .45),
+    0 4px 10px -7px color-mix(in srgb, rgb(46 18 8) calc(38% * var(--edt-hd-sh, 1)), transparent);
   backdrop-filter: none;
 }
 [data-edt-head='brick'] .app-bar .db-brand strong { text-shadow: 0 1px 2px rgba(46, 18, 8, .55); }
@@ -8104,8 +8356,12 @@ button.edt-pair:active { transform: scale(.98); }
 .app-bar.app-bar-img {
   overflow: hidden;
   color: #ffffff;
+  /* line + cast follow the header dial (--hd-sh, stamped by DinerBar from
+     tenant.menuShadows.header); literals first as fallbacks */
   border-bottom: 1px solid rgba(0, 0, 0, .35);
+  border-bottom-color: color-mix(in srgb, rgb(0 0 0) calc(35% * var(--hd-sh, 1)), transparent);
   box-shadow: 0 4px 10px -7px rgba(0, 0, 0, .4);
+  box-shadow: 0 4px 10px -7px color-mix(in srgb, rgb(0 0 0) calc(40% * var(--hd-sh, 1)), transparent);
 }
 .app-bar.app-bar-img::before {
   content: '';
@@ -8666,6 +8922,15 @@ button.edt-pair:active { transform: scale(.98); }
   .vw-mic.live .vw-ring, .vw-mic.busy { animation: none; }
   .vw-mic.live .vw-ring { opacity: .5; }
 }
+/* cloud recording: a LIVE level ring — scale arrives inline from the
+   AnalyserNode meter (recordOnce onLevel), so it breathes with the voice */
+.vw-ring-level {
+  transition: transform .09s linear;
+  opacity: .5;
+}
+@media (prefers-reduced-motion: reduce) {
+  .vw-ring-level { transition: none; transform: none !important; opacity: .35; }
+}
 .vw-mic-label { font-size: 15px; font-weight: 800; }
 .vw-hint { margin: 0; font-size: 12.5px; line-height: 1.7; color: var(--text-muted); }
 
@@ -8711,6 +8976,23 @@ button.edt-pair:active { transform: scale(.98); }
 
 .vw-choose-title { font-size: 14.5px; }
 .vw-choices { display: grid; gap: 8px; }
+/* cloud multi-item confirm («فهمت طلبك — أكّده»): one row per understood item.
+   Grid, wrapping card — NEVER an inner scroller (hard rule: no visible
+   scrollbars; the overlay body already scrolls with hidden thumbs). */
+.vw-multi { display: grid; gap: 8px; }
+.vw-multi-row {
+  display: grid;
+  grid-template-columns: auto 1fr auto;
+  align-items: center;
+  gap: 10px;
+  padding: 8px 10px;
+  background: var(--surface-2);
+  border: 1px solid var(--border);
+  border-radius: var(--r-md, 12px);
+}
+.vw-multi-row .vw-multi-txt { display: grid; gap: 2px; min-width: 0; }
+.vw-multi-row .vw-multi-txt b { font-size: 14.5px; }
+.vw-multi-note { font-size: 11.5px; color: var(--text-muted); }
 .vw-choice {
   display: flex; align-items: center; gap: 12px; width: 100%;
   padding: 10px 12px; cursor: pointer; text-align: start;
@@ -9230,6 +9512,10 @@ button.edt-pair:active { transform: scale(.98); }
   font-size: 14px; font-weight: 700;
 }
 .po-file { position: absolute; width: 1px; height: 1px; opacity: 0; pointer-events: none; }
+/* two entry paths side by side — «التقط صورة» and «ارفع من الاستوديو».
+   Flex only, no translate centring (RTL trap #2). */
+.po-empty-row { display: flex; gap: 10px; width: 100%; height: 100%; }
+.po-empty-row .po-empty { flex: 1; width: auto; height: auto; }
 .po-stage.scanning .po-img { filter: saturate(.7) brightness(.75); }
 .po-scanline {
   position: absolute; inset-inline: 0; height: 34%; top: 0;
@@ -9966,6 +10252,61 @@ button.edt-pair:active { transform: scale(.98); }
 }
 .exp-chip:active { transform: scale(.97); }
 @media (prefers-reduced-motion: reduce) { .exp-chip { transition: none; } }
+
+/* ---- the venue's button skin reaches the experience chips ----
+   MenuView stamps data-btnskin/data-btnshape + buttonSkinVars output on the
+   .exp-bar itself (editorial only). The bar sits OUTSIDE .edt-wrap, so every
+   var() carries its own literal fallback. Longhands at (0,3,0) beat tactile's
+   .exp-chip.is-games shorthand at (0,2,0) per property — the purple gradient
+   dies only while a skin is active; venues without menuButtons keep today's
+   chips pixel-for-pixel. */
+.exp-bar[data-btnskin] .exp-chip {
+  color: var(--edt-btn-ink, #fff);
+  border: none;
+  border-radius: var(--edt-btn-r, 12px);
+  background-color: var(--edt-btn-color, #5d3a24);
+  background-image: var(--edt-btn-img);
+  background-size: var(--edt-btn-size);
+  background-repeat: var(--edt-btn-rep);
+  background-position: var(--edt-btn-pos);
+  text-shadow: 0 1px 2px rgba(0, 0, 0, .4);
+}
+/* the games chip surrenders its own gradient to the venue face (the longhands
+   above already beat it); it stays unmissable through the amber inset ring —
+   brick is the building, amber is the light. NO background shorthand here:
+   the --edt-btn-* vars are multi-layer lists and a shorthand refilled from
+   them is invalid at computed-value time (the chip would render faceless). */
+.exp-bar[data-btnskin] .exp-chip.is-games {
+  box-shadow: inset 0 0 0 2px var(--edt-amber, #f5b942);
+}
+.exp-bar[data-btnskin] .exp-chip.is-games::after {
+  border-color: color-mix(in srgb, var(--edt-amber, #f5b942) 60%, transparent);
+}
+.exp-bar[data-btnskin] .exp-chip.is-games::before { content: none; }
+/* shapes compose exactly like the wrap-level rules */
+.exp-bar[data-btnshape='pill'] { --edt-btn-r: 999px; }
+.exp-bar[data-btnshape='sharp'] { --edt-btn-r: 0px; }
+.exp-bar[data-btnshape='chamfer'] .exp-chip {
+  --edt-btn-r: 0px;
+  clip-path: polygon(9px 0, calc(100% - 9px) 0, 100% 9px, 100% calc(100% - 9px), calc(100% - 9px) 100%, 9px 100%, 0 calc(100% - 9px), 0 9px);
+}
+.exp-bar[data-btnshape='slab'] .exp-chip {
+  box-shadow:
+    inset 0 1px 0 var(--edt-mortar-lit, rgba(255, 231, 205, .3)),
+    inset 0 -2px 0 var(--edt-mortar-dark, rgba(46, 18, 8, .34)),
+    0 2px 0 var(--edt-bed-sh, rgba(46, 18, 8, .34)),
+    0 7px 16px var(--edt-cast-sh, rgba(46, 18, 8, .3));
+}
+.exp-bar[data-btnshape='slab'] .exp-chip.is-games {
+  box-shadow:
+    inset 0 0 0 2px var(--edt-amber, #f5b942),
+    inset 0 1px 0 var(--edt-mortar-lit, rgba(255, 231, 205, .3)),
+    inset 0 -2px 0 var(--edt-mortar-dark, rgba(46, 18, 8, .34)),
+    0 2px 0 var(--edt-bed-sh, rgba(46, 18, 8, .34));
+}
+/* the light theme's ochre accent for the games ring — guarded like the token
+   block so a dark-locked venue keeps its lantern amber */
+[data-theme='light'] [data-menu-layout='editorial']:not([data-edt-dark]) .exp-bar[data-btnskin] { --edt-amber: #8a4a12; }
 
 /* ==== /experience-bar v1 ==== */
 
@@ -10954,3 +11295,310 @@ button.edt-pair:active { transform: scale(.98); }
 [data-chrome]:not([data-chrome='auto']) .m-bottomnav .center-cart-btn .cart-circle-container { border-color: var(--chrome-bg, var(--surface)); }
 [data-chrome]:not([data-chrome='auto']) .m-bottomnav .center-cart-btn .cart-badge-count { border-color: var(--chrome-bg, var(--surface)); }
 /* ==== /app-chrome v1 ==== */
+
+/* ==== THE VENUE'S CHROME (resolveChrome -> ChromeSkin.jsx) ====
+   tenant.menuChrome dresses the chrome surfaces the button skin cannot reach:
+   bottom nav, the two fabs, the lang/theme toggles, social buttons, the diner
+   sheets and their backdrop. ChromeSkin stamps ONE gate attribute per
+   configured element (data-mch-nav / -fab / -bell / -lang / -theme / -soc /
+   -sheet) plus --mch-* vars on <body>; body-level vars cascade into every
+   portal, which is what makes one stamp reach all surfaces. Absent config =
+   zero attributes = today's pixels.
+   Precedence (conflicts ruling 5): menuChrome face > menuInk bar colours >
+   chromeTheme preset > theme — encoded as var(--mch-*, var(--chrome-*, theme)).
+   Every surface takes its IMAGE on an isolated ::before (z-index -1,
+   border-radius inherit) carrying filter + background-blend-mode, so a filter
+   can never smear the icons or labels. The face colour rides the element. */
+body[data-mch-nav] .m-bottomnav.m-bottomnav {
+  isolation: isolate;
+  border-top-color: transparent;
+  /* .m-bottomnav doubled + !important: the explicit chrome-preset rules above
+     are (0,3,0) and the bar face is !important there — the venue's own face
+     must beat the preset it is replacing (precedence ruling: menuChrome >
+     menuInk bars > chromeTheme preset > theme) */
+  background: var(--mch-nav-color, var(--chrome-bg, var(--surface))) !important;
+  color: var(--mch-nav-ink, var(--chrome-text, var(--text)));
+}
+body[data-mch-nav] .m-bottomnav::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  z-index: -1;
+  border-radius: inherit;
+  pointer-events: none;
+  background-color: var(--mch-nav-color, transparent);
+  background-image: var(--mch-nav-img, none);
+  background-size: var(--mch-nav-size, auto);
+  background-repeat: var(--mch-nav-rep, repeat);
+  background-position: var(--mch-nav-pos, center);
+  background-blend-mode: var(--mch-nav-blend, normal);
+  filter: var(--mch-nav-filter, none);
+}
+body[data-mch-nav] .m-bottomnav.m-bottomnav button {
+  color: var(--mch-nav-ink, var(--chrome-muted, var(--text-muted)));
+  text-shadow: 0 1px 2px rgba(0, 0, 0, .4);
+}
+body[data-mch-nav] .m-bottomnav.m-bottomnav button.active {
+  color: var(--mch-nav-ink, #fff);
+  box-shadow: inset 0 -2px 0 var(--edt-amber, #f5b942);
+}
+/* explicit variant answers: segmented gives every button its own
+   --chrome-bg-2 tile which would paint OVER the skinned bar — drop the tiles
+   (selection stays on the amber underline); floating already clips, restated
+   so the ::before image can never bleed past its pill corners */
+body[data-mch-nav] .m-bottomnav[data-nav='segmented'] button,
+body[data-mch-nav] .m-bottomnav[data-nav='segmented'] button.active { background: none; }
+body[data-mch-nav] .m-bottomnav[data-nav='floating'] { overflow: hidden; }
+
+/* the two fabs also take «إمكانية التحريك» — screen-px translate offsets
+   (CHROME_RANGE.x/y). ChromeSkin may stamp the gate for offsets alone, so
+   every FACE fallback below equals today's paint (the face itself lives on
+   ::before and paints nothing until its vars exist). */
+body[data-mch-fab] .m-bottomnav .center-cart-btn .cart-circle-container {
+  position: relative;
+  isolation: isolate;
+  color: var(--mch-fab-ink, var(--on-brand, #ffffff));
+  border-radius: var(--mch-fab-r, 50%);
+  transform: translate(var(--mch-fab-x, 0px), var(--mch-fab-y, 0px));
+}
+body[data-mch-fab] .m-bottomnav .center-cart-btn:active .cart-circle-container {
+  transform: translate(var(--mch-fab-x, 0px), var(--mch-fab-y, 0px)) scale(0.92);
+}
+body[data-mch-fab] .m-bottomnav .center-cart-btn .cart-circle-container::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  z-index: -1;
+  border-radius: inherit;
+  pointer-events: none;
+  background-color: var(--mch-fab-color, transparent);
+  background-image: var(--mch-fab-img, none);
+  background-size: var(--mch-fab-size, cover);
+  background-repeat: var(--mch-fab-rep, no-repeat);
+  background-position: var(--mch-fab-pos, center);
+  background-blend-mode: var(--mch-fab-blend, normal);
+  filter: var(--mch-fab-filter, none);
+}
+body[data-mch-bell] .m-fab-bell {
+  position: fixed;
+  isolation: isolate;
+  color: var(--mch-bell-ink, var(--text));
+  border-radius: var(--mch-bell-r, 50%);
+  transform: translate(var(--mch-bell-x, 0px), var(--mch-bell-y, 0px));
+}
+body[data-mch-bell] .m-fab-bell:active {
+  transform: translate(var(--mch-bell-x, 0px), var(--mch-bell-y, 0px)) scale(.92);
+}
+body[data-mch-bell] .m-fab-bell::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  z-index: -1;
+  border-radius: inherit;
+  pointer-events: none;
+  background-color: var(--mch-bell-color, transparent);
+  background-image: var(--mch-bell-img, none);
+  background-size: var(--mch-bell-size, cover);
+  background-repeat: var(--mch-bell-rep, no-repeat);
+  background-position: var(--mch-bell-pos, center);
+  background-blend-mode: var(--mch-bell-blend, normal);
+  filter: var(--mch-bell-filter, none);
+}
+/* lang/theme toggles (DinerBar stamps .db-lang / .db-theme): the gates fire
+   only with a configured face, so the r/ink vars are always present here */
+body[data-mch-lang] .app-bar .icon-btn.db-lang,
+body[data-mch-lang] .db-floating .icon-btn.db-lang,
+body[data-mch-lang] .app-bar .icon-btn.db-chrome,
+body[data-mch-lang] .db-floating .icon-btn.db-chrome,
+body[data-mch-theme] .app-bar .icon-btn.db-theme,
+body[data-mch-theme] .db-floating .icon-btn.db-theme {
+  position: relative;
+  isolation: isolate;
+  border: none;
+}
+/* the bar's OTHER buttons (back/menu/bell — .db-chrome) wear the langBtn face
+   so a skinned bar has no odd-one-out control */
+body[data-mch-lang] .app-bar .icon-btn.db-lang,
+body[data-mch-lang] .db-floating .icon-btn.db-lang,
+body[data-mch-lang] .app-bar .icon-btn.db-chrome,
+body[data-mch-lang] .db-floating .icon-btn.db-chrome {
+  color: var(--mch-lang-ink, #fff);
+  border-radius: var(--mch-lang-r, 999px);
+  background: var(--mch-lang-color, var(--surface));
+}
+body[data-mch-theme] .app-bar .icon-btn.db-theme,
+body[data-mch-theme] .db-floating .icon-btn.db-theme {
+  color: var(--mch-theme-ink, #fff);
+  border-radius: var(--mch-theme-r, 999px);
+  background: var(--mch-theme-color, var(--surface));
+}
+body[data-mch-lang] .app-bar .icon-btn.db-lang::before,
+body[data-mch-lang] .db-floating .icon-btn.db-lang::before,
+body[data-mch-lang] .app-bar .icon-btn.db-chrome::before,
+body[data-mch-lang] .db-floating .icon-btn.db-chrome::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  z-index: -1;
+  border-radius: inherit;
+  pointer-events: none;
+  background-color: var(--mch-lang-color, transparent);
+  background-image: var(--mch-lang-img, none);
+  background-size: var(--mch-lang-size, cover);
+  background-repeat: var(--mch-lang-rep, no-repeat);
+  background-position: var(--mch-lang-pos, center);
+  background-blend-mode: var(--mch-lang-blend, normal);
+  filter: var(--mch-lang-filter, none);
+}
+body[data-mch-theme] .app-bar .icon-btn.db-theme::before,
+body[data-mch-theme] .db-floating .icon-btn.db-theme::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  z-index: -1;
+  border-radius: inherit;
+  pointer-events: none;
+  background-color: var(--mch-theme-color, transparent);
+  background-image: var(--mch-theme-img, none);
+  background-size: var(--mch-theme-size, cover);
+  background-repeat: var(--mch-theme-rep, no-repeat);
+  background-position: var(--mch-theme-pos, center);
+  background-blend-mode: var(--mch-theme-blend, normal);
+  filter: var(--mch-theme-filter, none);
+}
+/* social buttons */
+body[data-mch-soc] .social-links a {
+  position: relative;
+  isolation: isolate;
+  color: var(--mch-soc-ink, inherit);
+  border-radius: var(--mch-soc-r, 50%);
+  background: var(--mch-soc-color, color-mix(in srgb, currentColor 10%, transparent));
+}
+body[data-mch-soc] .social-links a::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  z-index: -1;
+  border-radius: inherit;
+  pointer-events: none;
+  background-color: var(--mch-soc-color, transparent);
+  background-image: var(--mch-soc-img, none);
+  background-size: var(--mch-soc-size, cover);
+  background-repeat: var(--mch-soc-rep, no-repeat);
+  background-position: var(--mch-soc-pos, center);
+  background-blend-mode: var(--mch-soc-blend, normal);
+  filter: var(--mch-soc-filter, none);
+}
+/* the diner sheets + their backdrop. The immersive item sheet is EXCLUDED —
+   its own ::before is the item's overlay veil and the item's backdrop wins
+   over the venue sheet skin by design. */
+body[data-mch-sheet] .sheet:not(.sheet-immersive) {
+  isolation: isolate;
+  background: var(--mch-sheet-color, var(--surface));
+  border-radius: var(--mch-sheet-r, var(--r-xl)) var(--mch-sheet-r, var(--r-xl)) 0 0;
+}
+body[data-mch-sheet] .sheet:not(.sheet-immersive)::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  z-index: -1;
+  border-radius: inherit;
+  pointer-events: none;
+  background-color: var(--mch-sheet-color, transparent);
+  background-image: var(--mch-sheet-img, none);
+  background-size: var(--mch-sheet-size, cover);
+  background-repeat: var(--mch-sheet-rep, no-repeat);
+  background-position: var(--mch-sheet-pos, center);
+  background-blend-mode: var(--mch-sheet-blend, normal);
+  filter: var(--mch-sheet-filter, none);
+}
+/* the readability scrim rides its own ::after ABOVE the face (tree order) */
+body[data-mch-sheet] .sheet:not(.sheet-immersive)::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  z-index: -1;
+  border-radius: inherit;
+  pointer-events: none;
+  background: rgba(10, 6, 4, var(--mch-sheet-scrim, 0));
+}
+/* the sheet's own chrome stays readable above the two -1 layers */
+body[data-mch-sheet] .sheet .sheet-handle,
+body[data-mch-sheet] .sheet .sheet-head,
+body[data-mch-sheet] .sheet .sheet-body,
+body[data-mch-sheet] .sheet .sheet-foot {
+  position: relative;
+  z-index: 0;
+}
+body[data-mch-sheet] .backdrop {
+  background: rgba(20, 14, 9, var(--mch-backdrop, .55));
+  -webkit-backdrop-filter: blur(var(--mch-backdrop-blur, 2px));
+  backdrop-filter: blur(var(--mch-backdrop-blur, 2px));
+}
+/* a venue-uploaded icon replacing a built-in glyph (DinerBar/DinerNav/Social) */
+.mch-icon {
+  width: 22px;
+  height: 22px;
+  object-fit: contain;
+  display: block;
+}
+/* ==== /venue chrome ==== */
+
+/* ==== video trim (VideoTrimRange.jsx — «مقطع التشغيل») ====
+   Dual-thumb window over the clip: two stacked native ranges whose TRACKS are
+   pointer-transparent while the THUMBS stay grabbable. The whole strip is
+   dir="ltr" by design — a video timeline flows left-to-right even in an Arabic
+   UI, which is also why physical left/width are correct here. Amber = the
+   light (selected window); no visible scrollbars anywhere. */
+.vtrim { direction: ltr; }
+.vtrim-track {
+  position: relative;
+  height: 26px;
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--text, #999) 14%, transparent);
+}
+.vtrim-fill {
+  position: absolute;
+  top: 9px;
+  height: 8px;
+  border-radius: 999px;
+  background: color-mix(in srgb, #f5b942 65%, transparent);
+  pointer-events: none;
+}
+.vtrim-track input[type='range'] {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  margin: 0;
+  background: none;
+  -webkit-appearance: none;
+  appearance: none;
+  pointer-events: none;
+}
+.vtrim-track input[type='range']:focus-visible { outline: 2px solid #f5b942; outline-offset: 2px; }
+.vtrim-track input[type='range']::-webkit-slider-runnable-track { background: none; }
+.vtrim-track input[type='range']::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  pointer-events: auto;
+  width: 16px;
+  height: 16px;
+  margin-top: 5px;
+  border-radius: 50%;
+  background: #f5b942;
+  border: 2px solid #1c1917;
+  cursor: ew-resize;
+}
+.vtrim-track input[type='range']::-moz-range-track { background: none; }
+.vtrim-track input[type='range']::-moz-range-thumb {
+  pointer-events: auto;
+  width: 14px;
+  height: 14px;
+  border-radius: 50%;
+  background: #f5b942;
+  border: 2px solid #1c1917;
+  cursor: ew-resize;
+}
+@media (prefers-reduced-motion: reduce) {
+  .vtrim-track input[type='range']::-webkit-slider-thumb { transition: none; }
+}
+/* ==== /video trim ==== */

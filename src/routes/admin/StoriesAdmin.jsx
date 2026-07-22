@@ -9,6 +9,8 @@ import Sheet from '../../components/Sheet.jsx'
 import { timeAgo } from '../../lib/format.js'
 import { uploadImage, uploadFile, UPLOAD_LIMITS_MB } from '../../lib/storage.js'
 import ImageCropper from '../../components/ImageCropper.jsx'
+import VideoTrimRange from '../../components/VideoTrimRange.jsx'
+import { useVideoTrim } from '../../lib/useVideoTrim.js'
 import { generatePostImage, generateCaption, generateFromInlineRefs } from '../../lib/postGen.js'
 
 const MAX_VIDEO_MB = 25
@@ -68,6 +70,9 @@ export default function StoriesAdmin() {
   const [ytLink, setYtLink] = useState('') // alt music source: YouTube link → audioYt
   // per-story presentation (all additive on the story doc)
   const [durationSec, setDurationSec] = useState(6)
+  // video playback window {start,end}|null — published as story.trim only when
+  // the admin touched the range (absence = whole clip, viewer byte-identical)
+  const [vidTrim, setVidTrim] = useState(null)
   const [transition, setTransition] = useState('fade')
   const [capStyle, setCapStyle] = useState({ ...DEF_CAP })
   // AI generation panel (this screen loads no items — refs are local uploads only, CORS-immune)
@@ -82,6 +87,9 @@ export default function StoriesAdmin() {
   const [stickerOpen, setStickerOpen] = useState(false)
   const prevRef = useRef(null)
   const dragging = useRef(null)
+  // the staged preview player honors the chosen window, so the admin sees
+  // exactly what will be published (hook lives above the early return below)
+  const prevTrimRef = useVideoTrim(draft?.isVideo ? vidTrim : null)
 
   // revoke every live object URL on unmount (they leaked before)
   const urlsRef = useRef([])
@@ -144,6 +152,7 @@ export default function StoriesAdmin() {
     if (draft?.url) URL.revokeObjectURL(draft.url)
     clearUndo()
     setFilterCss(''); setOverlays([]); setSelId(null); setStickerOpen(false)
+    setVidTrim(null) // a window chosen for the previous clip must never apply to this one
     setDraft({ file, url: URL.createObjectURL(file), isVideo })
   }
 
@@ -224,12 +233,14 @@ export default function StoriesAdmin() {
         transition,
         captionStyle: { ...capStyle },
         audioYt: ytOk ? ytLink.trim() : '',
+        // playback window — absent when untouched (matches the audioStart precedent)
+        ...(draft.isVideo && vidTrim ? { trim: vidTrim } : {}),
       })
       URL.revokeObjectURL(draft.url)
       if (aud?.url) URL.revokeObjectURL(aud.url)
       clearUndo()
       setDraft(null); setTitle(''); setCaption(''); setLink(''); setLinkLabel(''); setFilterCss(''); setOverlays([]); setSelId(null); setAud(null)
-      setDurationSec(6); setTransition('fade'); setCapStyle({ ...DEF_CAP }); setYtLink(''); setAiEdit(''); setStickerOpen(false)
+      setDurationSec(6); setVidTrim(null); setTransition('fade'); setCapStyle({ ...DEF_CAP }); setYtLink(''); setAiEdit(''); setStickerOpen(false)
       setAiDesc(''); setAiRef(null) // AI panel state must not bleed into the next draft
       toast.success(ar ? 'نُشر الاستوري (يظهر 24 ساعة)' : 'Story published (24h)')
     } catch (e) {
@@ -258,7 +269,7 @@ export default function StoriesAdmin() {
               <div ref={prevRef} className="story-ov-edit" style={{ position: 'relative', display: 'inline-block' }}
                 onPointerMove={onOvMove} onPointerUp={() => { dragging.current = null }} onPointerCancel={() => { dragging.current = null }}>
                 {draft.isVideo
-                  ? <video src={draft.url} style={{ maxWidth: '100%', maxHeight: 340, display: 'block', filter: filterCss || undefined }} autoPlay muted loop playsInline />
+                  ? <video ref={prevTrimRef} src={draft.url} style={{ maxWidth: '100%', maxHeight: 340, display: 'block', filter: filterCss || undefined }} autoPlay muted loop playsInline />
                   : <img src={draft.url} alt="" style={{ maxWidth: '100%', maxHeight: 340, display: 'block', filter: filterCss || undefined }} />}
                 {overlays.map((o) => (
                   <span key={o.id} className={selId === o.id ? 'sel' : ''} style={{ left: `${o.x}%`, top: `${o.y}%`, fontSize: o.size, color: o.color }}
@@ -272,6 +283,10 @@ export default function StoriesAdmin() {
                 )}
               </div>
             </div>
+            {/* playback window — the story advances at the chosen end second */}
+            {draft.isVideo && (
+              <VideoTrimRange url={draft.url} value={vidTrim} ar={ar} onChange={setVidTrim} />
+            )}
             {!draft.isVideo && (
               <div className="row" style={{ gap: 6 }}>
                 <input className="input input-sm grow" placeholder={ar ? 'عدّل الصورة: مثال — اجعل الخلفية رخامية' : 'Edit image: e.g. make the background marble'}

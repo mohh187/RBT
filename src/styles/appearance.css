@@ -1402,3 +1402,121 @@
 }
 .mtbl-name { position: relative; color: #f7f2e9; font-size: 15px; font-weight: 800; }
 .mtbl-price { position: relative; color: #f5b942; font-size: 13px; font-weight: 800; }
+
+/* ================================== the tilt projection in the editors === */
+
+/* Same degrees, same lean: --dish-persp ~= 3x the CANVAS height so the editor
+   previews project like the menu surfaces (index.css sets 1000px/1700px on
+   .edt-photo/.edt-stg-hero). dcx is fixed-height (176 / 292); dlx derives its
+   height from max-width 340 x aspect-ratio (~288 / ~331). */
+.dcx-stage[data-variant='list'] { --dish-persp: 550px; }
+.dcx-stage[data-variant='stage'] { --dish-persp: 900px; }
+.dlx-canvas[data-variant='list'] { --dish-persp: 860px; }
+.dlx-canvas[data-variant='stage'] { --dish-persp: 1000px; }
+/* Inside the flex-centred shots the tiltbox HUGS the img — width/height auto,
+   flex none — so transform-origin 50% 100% is the PHOTO's bottom edge, exactly
+   as in .edt-photo, and the preview keeps matching the menu. The img keeps its
+   74/78% caps in CONTAINER units (the canvases are container-type: size), so
+   the caps resolve against the canvas even though the box shrink-wraps; the
+   %-fallback line covers engines without cq units, and both canvases clip
+   overflow anyway. */
+.dcx-shot .edt-tiltbox,
+.dlx-shot .edt-tiltbox {
+  display: block;
+  flex: none;
+  width: auto;
+  height: auto;
+  min-width: 0;
+}
+.dcx-shot .edt-tiltbox img,
+.dlx-shot .edt-tiltbox img {
+  max-width: 74%;
+  max-height: 78%;
+  max-width: 74cqw;
+  max-height: 78cqh;
+}
+
+/* ============================ the item editor's LIVE preview (.ie / .ilp) ===
+   ItemLivePreview.jsx: the real /preview/<slug> frame beside the item form.
+   Desktop (>=1000px): the editor Sheet widens into a two-pane dialog — the
+   600px cap in index.css is `max-width: 600px !important` inside a media
+   query, so the override must be a HIGHER-SPECIFICITY !important rule
+   (.sheet.ie-sheet.ie-sheet), order-independent. Below 1000px the pane is a
+   PORTALLED bottom drawer (never a fixed child of .sheet — the sheet's
+   overflow:hidden + entrance transform would clip and trap it) that mounts
+   COLLAPSED by default and collapses by transform so the iframe never
+   unmounts. No visible scrollbars: only .ie-form-col scrolls, under the app's
+   overlay-scrollbar policy; the drawer body holds only the iframe. */
+@media (min-width: 1000px) {
+  .sheet.ie-sheet.ie-sheet { max-width: min(1280px, calc(100vw - 48px)) !important; }
+  .ie-sheet .sheet-body { padding: 0; overflow: hidden; display: flex; min-height: 0; }
+  .ie-grid { display: flex; flex: 1; min-height: 0; width: 100%; }
+  .ie-form-col {
+    flex: 1 1 54%;
+    min-width: 0;
+    overflow-y: auto;
+    overscroll-behavior: contain;
+    scrollbar-width: none;
+    -ms-overflow-style: none;
+    padding: var(--sp-4);
+  }
+  .ie-form-col::-webkit-scrollbar { width: 0; height: 0; }
+  .ilp-pane {
+    flex: 1 1 46%;
+    min-width: 0;
+    display: flex;
+    flex-direction: column;
+    border-inline-start: 1px solid var(--border);
+    background: var(--surface-2);
+  }
+  .ilp-pane .ilp-body {
+    flex: 1;
+    min-height: 0;
+    display: flex;
+    align-items: flex-start;
+    justify-content: center;
+    overflow: hidden;
+  }
+}
+@media (max-width: 999.98px) {
+  .ilp-drawer {
+    position: fixed;
+    inset-inline: 0;
+    bottom: 0;
+    z-index: calc(var(--z-sheet, 310) + 1);
+    background: var(--surface);
+    border-top: 1px solid var(--border);
+    border-radius: var(--r-xl) var(--r-xl) 0 0;
+    box-shadow: var(--sh-3);
+    height: min(56dvh, 560px);
+    padding-bottom: var(--safe-b, 0px);
+    display: flex;
+    flex-direction: column;
+    transition: transform var(--dur-slow, .3s) var(--ease, ease);
+  }
+  /* collapsed (the DEFAULT below 1000px): only the 44px handle row + the safe
+     area stay on screen; the iframe stays mounted behind the fold */
+  .ilp-drawer[data-collapsed='1'] {
+    transform: translateY(calc(100% - 44px - var(--safe-b, 0px)));
+  }
+  .ilp-drawer .ilp-body {
+    flex: 1;
+    min-height: 0;
+    overflow: hidden;
+    display: flex;
+    justify-content: center;
+  }
+}
+.ilp-head {
+  height: 44px;
+  flex: none;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 0 var(--sp-3);
+  border-bottom: 1px solid var(--border);
+}
+@media (prefers-reduced-motion: reduce) {
+  .ilp-drawer { transition: none; }
+}

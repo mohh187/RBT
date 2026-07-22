@@ -34,10 +34,20 @@ import {
   WALL_PATTERNS, WALL_FINISHES, WALL_RANGE, BLEND_MODES, FILTERS, resolveWall, wallStyle,
   SECTION_MODES, SECTION_RANGE, resolveSections,
   DECOR_ANCHORS, DECOR_MOTIONS, DECOR_RANGE, DECOR_DEPTHS, resolveDecor, decorStyle,
-  TABLE_KINDS, TABLE_MATERIALS, TABLE_EDGES, TABLE_RANGE, TABLE_STAGE_KEYS, resolveTable, tableStyle, tableMeltStops, tableFreeStyle,
+  TABLE_KINDS, TABLE_MATERIALS, TABLE_EDGES, TABLE_RANGE, TABLE_STAGE_KEYS, resolveTable, tableStyle, tableMeltStops, tableFreeStyle, tableMeltBottom,
   HEADER_MODES, HEADER_RANGE, resolveMenuHeader,
   BUTTON_SKINS, BUTTON_SCOPES, BUTTON_SHAPES, BUTTON_RANGE, resolveButtons,
+  SHADOW_RANGE,
+  INK_FIELDS,
+  BANNER_RANGE, FEATURED_RANGE,
+  HOME_BLOCKS, resolveHomeOrder,
+  CHROME_ELEMENTS, CHROME_SKIN_MODES, CHROME_PAGE_IDS, PAGE_BG_MODES, CHROME_RANGE, CHROME_SHEET_RANGE, PAGE_BG_RANGE,
 } from '../../lib/dishComposition.js'
+// Home-block reorder (set-menuhome) — the exact drag pattern GamesCatalogue uses.
+import { DndContext, closestCenter, PointerSensor, TouchSensor, useSensor, useSensors } from '@dnd-kit/core'
+import { SortableContext, verticalListSortingStrategy, useSortable, arrayMove } from '@dnd-kit/sortable'
+import { CSS } from '@dnd-kit/utilities'
+import VideoTrimRange from '../../components/VideoTrimRange.jsx'
 import SocialLinks from '../../components/SocialLinks.jsx'
 import StaffPreview from '../../components/StaffPreview.jsx'
 import TemplateGallery from '../../components/TemplateGallery.jsx'
@@ -152,6 +162,9 @@ const WALL_DEFAULTS = {
   // own: it takes the bond, the clay and the mortar chosen right above it, so
   // storing it anywhere else would be storing half a decision.
   header: false,
+  // Whether this ONE wall runs behind the ENTIRE page (room mode). Same home
+  // as `header` and for the same reason: it IS this wall, reaching further.
+  room: false,
 }
 // Stored as ONE object at `tenant.menuTable` — the owner's own idea: the dark
 // panel that carries the dish's name and price IS a table the dish stands on.
@@ -166,6 +179,10 @@ const TABLE_DEFAULTS = {
   // free placement + strength dials (contract TABLE_RANGE): the bolted position
   x: TABLE_RANGE.x.dflt, y: TABLE_RANGE.y.dflt, w: TABLE_RANGE.w.dflt, h: TABLE_RANGE.h.dflt,
   dim: TABLE_RANGE.dim.dflt, melt: TABLE_RANGE.melt.dflt,
+  // bottom-edge melt + the reading veil over the material (contract dials)
+  meltBottom: TABLE_RANGE.meltBottom.dflt, veil: TABLE_RANGE.veil.dflt,
+  // stage-window cohesion: extend-to-bottom + the space/height of the hero photo
+  extend: false, heroPad: TABLE_RANGE.heroPad.dflt, heroMax: TABLE_RANGE.heroMax.dflt,
   // per-place overrides for the opened-item window (TABLE_STAGE_KEYS only)
   stage: {},
 }
@@ -189,7 +206,11 @@ const TABLE_SLIDERS = [
   ['lift', 'جلوس الطبق على الطاولة (مقدار النزول)', 'Seat the dish (drop onto the table)', 'pct'],
   ['shade', 'تعتيم الطاولة نحو الأسفل', 'Darkening toward the front', 'pct'],
   ['dim', 'تعتيم كامل فوق السطح', 'Flat darkening over the surface', 'pct'],
-  ['melt', 'ذوبان السطح خلف النص', 'Melt into the canvas behind the text', 'pct'],
+  // renamed «علوي» once the bottom edge got its own dial — the pair must name
+  // their edges or the two melts read as one broken slider.
+  ['melt', 'ذوبان علوي — السطح خلف النص', 'Top melt behind the text', 'pct'],
+  ['meltBottom', 'ذوبان الحافة السفلية', 'Bottom-edge melt', 'pct'],
+  ['veil', 'حجاب القراءة (لوح فوق السطح لوضوح النص)', 'Reading veil over the surface', 'pct'],
   ['contact', 'ظل التماس تحت الطبق', 'Contact shadow under the plate', 'pct'],
   ['radius', 'انحناء الحافة', 'Corner radius', 'px'],
   ['opacity', 'شفافية الطاولة', 'Table opacity', 'pct'],
@@ -226,6 +247,76 @@ const WALL_SLIDERS = [
   ['vignette', 'ذوبان أسفل صورة الطبق في الجدار', 'Melt under the dish photo', 'pct'],
 ]
 const wallSliderText = (unit, v) => (unit === 'pct' ? `${Math.round(v * 100)}%` : unit === 'x' ? `${Number(v).toFixed(2)}x` : `${Number(v)}px`)
+
+// ============================ SHADOWS (tenant.menuShadows) ==================
+// One dial per fixed dark line/cast in the editorial room — bounds ONLY from
+// SHADOW_RANGE (the no-local-numbers rule; the inline drift scanner compares
+// every used key against the contract). Defaults are the contract's own, so
+// «إرجاع الافتراضي» reproduces exactly today's paint.
+const SHADOW_DEFAULTS = Object.fromEntries(Object.entries(SHADOW_RANGE).map(([k, r]) => [k, r.dflt]))
+// [key, ar, en] — order puts the table band (the owner's actual complaint) first.
+const SHADOW_SLIDERS = [
+  ['tableEdge', 'الخط الداكن تحت حافة الطاولة', 'Dark line under the table edge'],
+  ['tableTop', 'ذوبان أعلى الطاولة في الجدار (لطاولات الصور فقط)', 'Melt the table top into the wall (photo tables only)'],
+  ['panelHalo', 'هالة لوح القراءة (الظل حول النص)', 'Reading-panel halo'],
+  ['header', 'ظل الهيدر وخطه السفلي', 'Header shadow & hairline'],
+  ['bars', 'خطوط شريط التصنيفات وشريط الإضافة', 'Category/action bar lines'],
+  ['buttons', 'الظل الملقى من الأزرار', 'Button cast shadows'],
+  ['dish', 'قوة ظلال الأطباق (كل الأصناف)', 'All dish shadows (master)'],
+  ['seams', 'ظل وحدود وضع البطاقات', 'Card-mode border & lift'],
+]
+
+// Home blocks that also exist in the hide matrix — hide and order stay ONE
+// system: the eye flips the SAME ovHidden draft the matrix edits.
+const HOME_HIDEABLE = ['stories', 'search', 'welcome', 'promos', 'special']
+
+// Labels for the subpages the chrome card can dress (ids from the contract's
+// CHROME_PAGE_IDS — labels are UI copy, not contract data).
+const CHROME_PAGE_LABELS = {
+  profile: ['قصتنا وأخبارنا', 'Our story & news'],
+  events: ['الفعاليات', 'Events'],
+  book: ['حجز الفعاليات', 'Event booking'],
+  order: ['تتبع الطلب', 'Order tracking'],
+  reserve: ['حجز الطاولات', 'Table booking'],
+  pass: ['بطاقة الدخول والتذكرة', 'Pass & ticket'],
+}
+// Platforms whose glyph can be replaced by an uploaded icon (mirrors the
+// social-accounts card's own list).
+const CHROME_SOCIAL_PLATFORMS = [
+  ['instagram', 'Instagram'], ['x', 'X (Twitter)'], ['tiktok', 'TikTok'],
+  ['snapchat', 'Snapchat'], ['whatsapp', 'WhatsApp'], ['googleMaps', 'خرائط جوجل'], ['website', 'الموقع'],
+]
+
+// WCAG relative-luminance ratio for the ink card's 4.5:1 warning chip.
+const inkLum = (h) => {
+  const c = [1, 3, 5].map((i) => {
+    let v = parseInt(String(h).slice(i, i + 2), 16) / 255
+    if (!Number.isFinite(v)) v = 0
+    return v <= 0.04045 ? v / 12.92 : ((v + 0.055) / 1.055) ** 2.4
+  })
+  return 0.2126 * c[0] + 0.7152 * c[1] + 0.0722 * c[2]
+}
+const inkRatio = (a, b) => {
+  const [x, y] = [inkLum(a), inkLum(b)].sort((p, q) => q - p)
+  return (x + 0.05) / (y + 0.05)
+}
+
+// One draggable row of the home-order card. Module scope like SortableGameRow:
+// useSortable is only ever mounted INSIDE a SortableContext.
+function HomeOrderRow({ id, label, hideable, hidden, onToggleHide, hint, ar }) {
+  const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({ id })
+  return (
+    <div ref={setNodeRef} className="row" style={{ gap: 8, alignItems: 'center', padding: '8px 10px', border: '1px solid var(--border)', borderRadius: 10, background: 'var(--surface-1)', transform: CSS.Transform.toString(transform), transition, opacity: isDragging ? 0.5 : 1 }}>
+      <button type="button" className="icon-btn" style={{ width: 28, height: 28, cursor: 'grab', touchAction: 'none', flex: 'none' }} aria-label={ar ? 'اسحب لإعادة الترتيب' : 'Drag to reorder'} {...attributes} {...listeners}><Icon name="drag" size={14} /></button>
+      <span className="small grow">{label}{hint ? <span className="xs faint"> · {hint}</span> : null}</span>
+      {hideable && (
+        <button type="button" className={`chip ${hidden ? '' : 'active'}`} style={{ borderRadius: 8, flex: 'none' }} onClick={onToggleHide}>
+          <Icon name={hidden ? 'eyeOff' : 'eye'} size={12} /> {hidden ? (ar ? 'مخفي' : 'Hidden') : (ar ? 'ظاهر' : 'Shown')}
+        </button>
+      )}
+    </div>
+  )
+}
 
 // Crop presets per upload kind. The WALL is deliberately ratio-free: it either
 // tiles or covers a whole screen, so pinning it to the banner's 2.5:1 would
@@ -526,6 +617,12 @@ const SEARCH_INDEX = [
   { keys: ['الطاولة', 'طاولة', 'طاولة الصنف', 'سطح الطبق', 'table', 'tabletop', 'dish table'], tab: 'studio', aSec: 'room', at: 'set-menutable', ar: 'طاولة الصنف (تحت الطبق)', en: 'Dish table (under the plate)' },
   { keys: ['الفاصل', 'فاصل', 'الفواصل', 'الفراغ بين الاصناف', 'الفراغ بين الأصناف', 'اتصال', 'متصل', 'بطاقات', 'خط فاصل', 'ارتفاع الصنف', 'seam', 'gap', 'divider', 'cards', 'continuity', 'sections'], tab: 'studio', aSec: 'room', at: 'set-menusections', ar: 'الفاصل بين صنف وصنف', en: 'The join between two dishes' },
   { keys: ['الزينة', 'زينة', 'فانوس', 'فوانيس', 'زخرفة', 'زخارف', 'تعليق', 'معلقات', 'نجفة', 'لوحة', 'نبتة', 'decor', 'decoration', 'lantern', 'ornament', 'hang'], tab: 'studio', aSec: 'room', at: 'set-menudecor', ar: 'زينة الغرفة (فوانيس ومعلّقات)', en: 'Room decoration (lanterns & hung objects)' },
+  { keys: ['الظل', 'الظلال', 'ظل', 'ظلال', 'خط داكن', 'الخط الداكن', 'shadow', 'shadows', 'dark line'], tab: 'studio', aSec: 'room', at: 'set-menushadows', ar: 'الظلال والخطوط الداكنة', en: 'Shadows & dark lines' },
+  { keys: ['الوان الخطوط', 'ألوان الخطوط', 'لون الخط', 'الفاتح والداكن', 'حبر', 'الحبر', 'ink', 'light mode', 'dark mode'], tab: 'studio', aSec: 'room', at: 'set-menuink', ar: 'ألوان الخطوط — فاتح وداكن', en: 'Menu inks — light & dark' },
+  { keys: ['ترتيب العناصر', 'ترتيب الصفحة', 'ترتيب المنيو', 'اسحب', 'reorder', 'home order'], tab: 'studio', aSec: 'room', at: 'set-menuhome', ar: 'ترتيب عناصر صفحة المنيو', en: 'Menu home order' },
+  { keys: ['كساء الكروم', 'ازرار التواصل', 'أزرار التواصل', 'زر اللغة', 'زر الوضع', 'القائمة السفلية', 'زر السلة العائم', 'جرس الاشعارات', 'جرس الإشعارات', 'chrome skin', 'fab'], tab: 'studio', aSec: 'room', at: 'set-menuchrome', ar: 'كساء الكروم — الأزرار والقوائم', en: 'Chrome skin — buttons & bars' },
+  { keys: ['كساء القوائم', 'القوائم المنبثقة', 'قائمة السلة', 'sheet skin', 'sheets'], tab: 'studio', aSec: 'room', at: 'set-menusheets', ar: 'كساء القوائم المنبثقة', en: 'Sheet skin' },
+  { keys: ['خلفيات الصفحات', 'خلفية الصفحات', 'خلفية صفحة', 'page background', 'subpages'], tab: 'studio', aSec: 'room', at: 'set-menupages', ar: 'خلفيات باقي الصفحات', en: 'Subpage backgrounds' },
   { keys: ['الاندماج', 'اندماج', 'تدرج', 'fade', 'melt'], tab: 'studio', aSec: 'media', ar: 'اندماج البانر', en: 'Banner melt' },
   { keys: ['تفاصيل الصنف', 'شاشة الصنف', 'صورة الصنف', 'item details'], tab: 'studio', aSec: 'details', ar: 'شاشة تفاصيل الصنف', en: 'Item details screen' },
   { keys: ['الخلفية الفنية', 'فنية', 'لوحة', 'art'], tab: 'studio', aSec: 'details', ar: 'الخلفية الفنية', en: 'Art backdrop' },
@@ -727,7 +824,19 @@ export default function Settings() {
   const [bannerGradient, setBannerGradient] = useState(tenant?.bannerGradient != null ? tenant.bannerGradient : 0.55)
   const [bannerStyle, setBannerStyle] = useState(tenant?.bannerStyle || 'full')
   const [bannerVideoUrl, setBannerVideoUrl] = useState(tenant?.bannerVideoUrl || '')
+  // the banner video's playback window — stored NEXT TO its url; any handler
+  // that replaces or clears the url must null this too (a window chosen for
+  // clip A must never silently apply to clip B)
+  const [bannerVideoTrim, setBannerVideoTrim] = useState(tenant?.bannerVideoTrim || null)
   const [bannerFadeDir, setBannerFadeDir] = useState(tenant?.bannerFadeDir || 'bottom') // bottom | top | both | none
+  // TRUE-transparency melt of the banner into the room (0 keeps the legacy
+  // painted fade) + the ramp length + the hero-text veil for room mode.
+  // Draft states like their banner siblings; bounds from BANNER_RANGE only.
+  const [bannerMelt, setBannerMelt] = useState(tenant?.bannerMelt != null ? tenant.bannerMelt : BANNER_RANGE.melt.dflt)
+  const [bannerMeltLen, setBannerMeltLen] = useState(tenant?.bannerMeltLen != null ? tenant.bannerMeltLen : BANNER_RANGE.meltLen.dflt)
+  const [bannerScrim, setBannerScrim] = useState(tenant?.bannerScrim != null ? tenant.bannerScrim : BANNER_RANGE.scrim.dflt)
+  // plaster film behind the featured cards (room mode's companion dial)
+  const [featuredFilm, setFeaturedFilm] = useState(tenant?.featuredFilm != null ? tenant.featuredFilm : FEATURED_RANGE.film.dflt)
   // the banner's MOOD — the same filter/blend/tint vocabulary the wall and the
   // dish backdrops already speak (FILTERS / BLEND_MODES from the contract)
   const [bannerFilter, setBannerFilter] = useState(tenant?.bannerFilter || '')
@@ -736,12 +845,14 @@ export default function Settings() {
   const [bannerTintAmount, setBannerTintAmount] = useState(tenant?.bannerTintAmount != null ? tenant.bannerTintAmount : 0)
   const [immersiveBgUrl, setImmersiveBgUrl] = useState(tenant?.immersiveBgUrl || '')
   const [immersiveBgVideoUrl, setImmersiveBgVideoUrl] = useState(tenant?.immersiveBgVideoUrl || '')
+  const [immersiveBgVideoTrim, setImmersiveBgVideoTrim] = useState(tenant?.immersiveBgVideoTrim || null)
   const [immersiveBgOpacity, setImmersiveBgOpacity] = useState(tenant?.immersiveBgOpacity != null ? tenant.immersiveBgOpacity : 0.5)
   const [immersiveBgPosition, setImmersiveBgPosition] = useState(tenant?.immersiveBgPosition || 'center')
   const [immersiveBgScale, setImmersiveBgScale] = useState(tenant?.immersiveBgScale != null ? tenant.immersiveBgScale : 1)
   const [immersiveFull, setImmersiveFull] = useState(tenant?.immersiveFull === true)
   const [bgImageUrl, setBgImageUrl] = useState(tenant?.bgImageUrl || '')
   const [bgVideoUrl, setBgVideoUrl] = useState(tenant?.bgVideoUrl || '')
+  const [bgVideoTrim, setBgVideoTrim] = useState(tenant?.bgVideoTrim || null)
   // Media-library picker: { kind, apply(url,item) } — reuse an already-uploaded asset
   const [libPick, setLibPick] = useState(null)
   const [watermarkUrl, setWatermarkUrl] = useState(tenant?.watermarkUrl || '')
@@ -1153,6 +1264,121 @@ export default function Settings() {
     } catch (_) { toast.error(ar ? 'تعذّر رفع الصورة (فعّل Storage)' : 'Upload failed (enable Storage)') } finally { setBtnBusy(false) }
   }
 
+  // ===== THE SHADOWS (tenant.menuShadows) =====
+  // Same draft-free discipline as the wall: sliders debounce, buttons save at
+  // once. Absent field = the contract's untouched path (today's paint exactly).
+  const [shCfg, setShCfg] = useState(() => ({ ...SHADOW_DEFAULTS, ...(tenant?.menuShadows || {}) }))
+  const shSavedKey = JSON.stringify(tenant?.menuShadows || null)
+  useEffect(() => { setShCfg({ ...SHADOW_DEFAULTS, ...(tenant?.menuShadows || {}) }) }, [shSavedKey]) // eslint-disable-line react-hooks/exhaustive-deps
+  const writeShadows = async (patch, debounced) => {
+    const next = { ...shCfg, ...patch }
+    setShCfg(next)
+    if (debounced) { commitPosBg({ menuShadows: next }); return }
+    try { await saveNow({ menuShadows: next }); updateTenantLocal({ menuShadows: next }); toast.success(t('saved')) } catch (_) { toast.error(t('error')) }
+  }
+  const resetShadows = () => writeShadows({ ...SHADOW_DEFAULTS })
+  // «أزل كل الظلال والخطوط» — every key to 0 in ONE patch, EXCEPT tableTop:
+  // that dial is a feather the venue ADDS (opt-in, dflt 0), not a shadow.
+  const killShadows = () => writeShadows(Object.fromEntries(Object.keys(SHADOW_RANGE).filter((k) => k !== 'tableTop').map((k) => [k, 0])))
+
+  // ===== PER-MODE MENU INKS (tenant.menuInk) =====
+  // The venue's own text colours per light/dark mode. Structure is
+  // { followTheme?, light?{}, dark?{} } — a cleared picker DELETES its key so
+  // «تلقائي» really is absence, and an empty menuInk resolves to null.
+  const [inkCfg, setInkCfg] = useState(() => ({ ...(tenant?.menuInk || {}) }))
+  const inkSavedKey = JSON.stringify(tenant?.menuInk || null)
+  useEffect(() => { setInkCfg({ ...(tenant?.menuInk || {}) }) }, [inkSavedKey]) // eslint-disable-line react-hooks/exhaustive-deps
+  const [inkEditMode, setInkEditMode] = useState('dark') // which mode the pickers edit
+  const [inkPin, setInkPin] = useState(false) // pin the big preview to that mode (top-level previewTheme envelope key)
+  const writeInkTop = async (patch, debounced) => {
+    const next = { ...inkCfg, ...patch }
+    setInkCfg(next)
+    if (debounced) { commitPosBg({ menuInk: next }); return }
+    try { await saveNow({ menuInk: next }); updateTenantLocal({ menuInk: next }); toast.success(t('saved')) } catch (_) { toast.error(t('error')) }
+  }
+  const writeInkMode = (patch, debounced) => {
+    const cur = { ...(inkCfg[inkEditMode] || {}), ...patch }
+    Object.keys(cur).forEach((k) => { if (!cur[k]) delete cur[k] }) // clearing a picker deletes the key
+    return writeInkTop({ [inkEditMode]: cur }, debounced)
+  }
+  const resetInk = async () => {
+    setInkCfg({})
+    setInkPin(false)
+    try { await saveNow({ menuInk: null }); updateTenantLocal({ menuInk: null }); toast.success(t('saved')) } catch (_) { toast.error(t('error')) }
+  }
+  // is ANY wall configured? (the automatic dark-ink lock applies to every
+  // configured wall, drawn or photographic — not photo walls alone). Gated on
+  // the SAVED field first: wallCfg is seeded from WALL_DEFAULTS (a running
+  // bond), so judging the card state alone would call every venue walled.
+  const inkWallOn = !!(tenant?.menuWall && resolveWall({ menuWall: wallCfg }))
+
+  // ===== HOME-BLOCK ORDER (tenant.menuHome.order) =====
+  // Order saves INSTANTLY (one write per drop); the eye toggles reuse ovHidden,
+  // which persists with the main Save button — the card copy says both.
+  const [homeOrder, setHomeOrder] = useState(() => resolveHomeOrder(tenant))
+  const homeSavedKey = JSON.stringify(tenant?.menuHome || null)
+  useEffect(() => { setHomeOrder(resolveHomeOrder(tenant)) }, [homeSavedKey]) // eslint-disable-line react-hooks/exhaustive-deps
+  const writeHome = async (order) => {
+    setHomeOrder(resolveHomeOrder({ menuHome: { order } }))
+    try { await saveNow({ menuHome: { order } }); updateTenantLocal({ menuHome: { order } }); toast.success(t('saved')) } catch (_) { toast.error(t('error')) }
+  }
+  const resetHome = () => writeHome([]) // [] resolves to the default order
+  const homeSensors = useSensors(
+    useSensor(PointerSensor, { activationConstraint: { distance: 6 } }),
+    useSensor(TouchSensor, { activationConstraint: { delay: 200, tolerance: 6 } }),
+  )
+  const onHomeDragEnd = ({ active, over }) => {
+    if (!over || active.id === over.id) return
+    const from = homeOrder.indexOf(active.id)
+    const to = homeOrder.indexOf(over.id)
+    if (from < 0 || to < 0) return
+    writeHome(arrayMove(homeOrder, from, to))
+  }
+
+  // ===== THE MENU CHROME (tenant.menuChrome) =====
+  // One identity system for the bars, fabs, language/theme buttons, social
+  // buttons, the sheets and the subpage backgrounds. Whole feature is opt-in:
+  // the field only exists once the card is touched.
+  const [chromeCfg, setChromeCfg] = useState(() => ({ follow: false, elements: {}, sheet: {}, pages: {}, socialIcons: {}, ...(tenant?.menuChrome || {}) }))
+  const chromeSavedKey = JSON.stringify(tenant?.menuChrome || null)
+  useEffect(() => { setChromeCfg({ follow: false, elements: {}, sheet: {}, pages: {}, socialIcons: {}, ...(tenant?.menuChrome || {}) }) }, [chromeSavedKey]) // eslint-disable-line react-hooks/exhaustive-deps
+  const writeChrome = async (patch, debounced) => {
+    const next = { ...chromeCfg, ...patch }
+    setChromeCfg(next)
+    if (debounced) { commitPosBg({ menuChrome: next }); return }
+    try { await saveNow({ menuChrome: next }); updateTenantLocal({ menuChrome: next }); toast.success(t('saved')) } catch (_) { toast.error(t('error')) }
+  }
+  const writeChromeEl = (id, elPatch, debounced) => writeChrome({ elements: { ...(chromeCfg.elements || {}), [id]: { ...((chromeCfg.elements || {})[id] || {}), ...elPatch } } }, debounced)
+  const writeChromeSheet = (patch, debounced) => writeChrome({ sheet: { ...(chromeCfg.sheet || {}), ...patch } }, debounced)
+  const writeChromePage = (pid, patch, debounced) => writeChrome({ pages: { ...(chromeCfg.pages || {}), [pid]: { ...((chromeCfg.pages || {})[pid] || {}), ...patch } } }, debounced)
+  const resetChrome = async () => {
+    setChromeCfg({ follow: false, elements: {}, sheet: {}, pages: {}, socialIcons: {} })
+    try { await saveNow({ menuChrome: null }); updateTenantLocal({ menuChrome: null }); toast.success(t('saved')) } catch (_) { toast.error(t('error')) }
+  }
+  const [chromeElSel, setChromeElSel] = useState('') // which element's accordion is open
+  const [chromeBusy, setChromeBusy] = useState(false)
+  // ONE hidden input serves every chrome upload; the target ref says where the
+  // picked file goes (element face, element icon, sheet face, page bg, social icon).
+  const chromeFileTarget = useRef(null)
+  const chromeFileRef = useRef(null)
+  const pickChromeFile = (target) => { chromeFileTarget.current = target; chromeFileRef.current?.click() }
+  const onChromeFile = async (e) => {
+    const file = e.target.files?.[0]; e.target.value = ''
+    const tgt = chromeFileTarget.current
+    if (!file || !tgt) return
+    setChromeBusy(true)
+    try {
+      const icon = tgt.type === 'icon' || tgt.type === 'social'
+      const small = await shrinkImage(file, icon ? 256 : tgt.type === 'page' ? 1600 : 800, 0.85)
+      const url = await uploadImage(tenantId, small, 'branding')
+      if (tgt.type === 'face') await writeChromeEl(tgt.id, { url, skin: 'image' })
+      else if (tgt.type === 'icon') await writeChromeEl(tgt.id, { icon: url })
+      else if (tgt.type === 'sheet') await writeChromeSheet({ url, skin: 'image' })
+      else if (tgt.type === 'page') await writeChromePage(tgt.id, { url, mode: 'image' })
+      else if (tgt.type === 'social') await writeChrome({ socialIcons: { ...(chromeCfg.socialIcons || {}), [tgt.id]: url } })
+    } catch (_) { toast.error(ar ? 'تعذّر رفع الصورة (فعّل Storage)' : 'Upload failed (enable Storage)') } finally { setChromeBusy(false) }
+  }
+
   // ===== HOW DISHES ARE JOINED (tenant.menuSections) =====
   // Same draft-free discipline as the wall: discrete picks save at once, the
   // sliders go through the shared 400ms debounce.
@@ -1341,11 +1567,12 @@ export default function Settings() {
     // its bars the moment a chrome preset is picked instead of on the next reload
     chromeTheme: tenant?.chromeTheme || 'auto',
     skin: { skinId, overrides: skinOverrides }, themePreset: preset, themeColor: color, themeAccent: accent,
-    bannerUrl, bannerVideoUrl, bannerFadeDir, bannerOpacity: Number(bannerOpacity), bannerPosition, bannerScale: Number(bannerScale), bannerGradient: Number(bannerGradient), bannerStyle,
+    bannerUrl, bannerVideoUrl, bannerVideoTrim, bannerFadeDir, bannerOpacity: Number(bannerOpacity), bannerPosition, bannerScale: Number(bannerScale), bannerGradient: Number(bannerGradient), bannerStyle,
     bannerFilter, bannerBlend, bannerTint, bannerTintAmount: Number(bannerTintAmount) || 0,
-    immersiveBgUrl, immersiveBgVideoUrl, immersiveBgOpacity: Number(immersiveBgOpacity), immersiveBgPosition, immersiveBgScale: Number(immersiveBgScale), immersiveFull,
+    bannerMelt: Number(bannerMelt) || 0, bannerMeltLen: Number(bannerMeltLen), bannerScrim: Number(bannerScrim),
+    immersiveBgUrl, immersiveBgVideoUrl, immersiveBgVideoTrim, immersiveBgOpacity: Number(immersiveBgOpacity), immersiveBgPosition, immersiveBgScale: Number(immersiveBgScale), immersiveFull,
     typo,
-    bgGradient: gradientCss, bgImageUrl, bgVideoUrl: bgVideoUrl.trim(), watermarkUrl,
+    bgGradient: gradientCss, bgImageUrl, bgVideoUrl: bgVideoUrl.trim(), bgVideoTrim, watermarkUrl,
     bgOpacity: Number(bgOpacity), bgPosition, bgScale: Number(bgScale),
     // THE ROOM, live. These are the cards' own working states — not the saved
     // tenant — so the preview repaints on every slider tick instead of waiting
@@ -1362,9 +1589,14 @@ export default function Settings() {
     ...(tenant?.menuDecor ? { menuDecor: decor.map(writeDecorRow) } : {}),
     ...(tenant?.menuHeader ? { menuHeader: hdrCfg } : {}),
     ...(tenant?.menuButtons ? { menuButtons: btnCfg } : {}),
+    ...(tenant?.menuShadows ? { menuShadows: shCfg } : {}),
+    ...(tenant?.menuInk ? { menuInk: inkCfg } : {}),
+    ...(tenant?.menuHome ? { menuHome: { order: homeOrder } } : {}),
+    ...(tenant?.menuChrome ? { menuChrome: chromeCfg } : {}),
     // instant-saved singles the frame should also follow without a reload
     socialStyle: tenant?.socialStyle, welcomeStyle: tenant?.welcomeStyle, catNavStyle: tenant?.catNavStyle,
     featuredMode: tenant?.featuredMode, featuredCount: tenant?.featuredCount, featuredStyle: tenant?.featuredStyle,
+    featuredFilm: Number(featuredFilm) || 0,
   }
 
   const onPick = (e, kind) => { const file = e.target.files?.[0]; e.target.value = ''; if (file) setCropState({ file, kind }) }
@@ -1399,7 +1631,7 @@ export default function Settings() {
       if (kind === 'watermark') setWatermarkUrl(url)
       else if (kind === 'banner') setBannerUrl(url)
       else if (kind === 'immersive') setImmersiveBgUrl(url)
-      else { setBgImageUrl(url); setBgVideoUrl(''); patch.bgVideoUrl = '' }
+      else { setBgImageUrl(url); setBgVideoUrl(''); setBgVideoTrim(null); patch.bgVideoUrl = ''; patch.bgVideoTrim = null }
       await saveNow(patch); updateTenantLocal(patch); toast.success(t('saved'))
     } catch (_) { toast.error(ar ? 'تعذّر رفع الصورة (فعّل Storage)' : 'Upload failed (enable Storage)') } finally { setUploading('') }
   }
@@ -1444,7 +1676,9 @@ export default function Settings() {
     try {
       const url = await uploadFile(tenantId, file, 'branding')
       setBgVideoUrl(url)
-      await saveNow({ bgVideoUrl: url }); updateTenantLocal({ bgVideoUrl: url }); toast.success(t('saved'))
+      // a NEW clip must not inherit the old clip's trim window
+      setBgVideoTrim(null)
+      await saveNow({ bgVideoUrl: url, bgVideoTrim: null }); updateTenantLocal({ bgVideoUrl: url, bgVideoTrim: null }); toast.success(t('saved'))
     } catch (_) { toast.error(ar ? 'تعذّر رفع الفيديو (فعّل Storage)' : 'Upload failed (enable Storage)') } finally { setUploading('') }
   }
   // Banner VIDEO (hero) — replaces the banner image when set; same controls apply.
@@ -1456,7 +1690,8 @@ export default function Settings() {
     try {
       const url = await uploadFile(tenantId, file, 'branding')
       setBannerVideoUrl(url)
-      await saveNow({ bannerVideoUrl: url }); updateTenantLocal({ bannerVideoUrl: url }); toast.success(t('saved'))
+      setBannerVideoTrim(null)
+      await saveNow({ bannerVideoUrl: url, bannerVideoTrim: null }); updateTenantLocal({ bannerVideoUrl: url, bannerVideoTrim: null }); toast.success(t('saved'))
     } catch (_) { toast.error(ar ? 'تعذّر رفع الفيديو (فعّل Storage)' : 'Upload failed (enable Storage)') } finally { setUploading('') }
   }
   const onDetailsVideoFile = async (e) => {
@@ -1467,13 +1702,18 @@ export default function Settings() {
     try {
       const url = await uploadFile(tenantId, file, 'branding')
       setImmersiveBgVideoUrl(url)
-      await saveNow({ immersiveBgVideoUrl: url }); updateTenantLocal({ immersiveBgVideoUrl: url }); toast.success(t('saved'))
+      setImmersiveBgVideoTrim(null)
+      await saveNow({ immersiveBgVideoUrl: url, immersiveBgVideoTrim: null }); updateTenantLocal({ immersiveBgVideoUrl: url, immersiveBgVideoTrim: null }); toast.success(t('saved'))
     } catch (_) { toast.error(ar ? 'تعذّر رفع الفيديو' : 'Upload failed') } finally { setUploading('') }
   }
-  const clearField = async (key, setter) => {
+  // `extra` lets a video url clear its sibling trim in the SAME write:
+  // { patch: { bannerVideoTrim: null }, apply: () => setBannerVideoTrim(null) }.
+  const clearField = async (key, setter, extra) => {
     setter('')
-    updateTenantLocal({ [key]: '' })
-    try { await saveNow({ [key]: '' }) } catch (_) { toast.error(t('error')) }
+    extra?.apply?.()
+    const patch = { [key]: '', ...(extra?.patch || {}) }
+    updateTenantLocal(patch)
+    try { await saveNow(patch) } catch (_) { toast.error(t('error')) }
   }
 
   // ----- named custom themes (save the whole current skin config under a name) -----
@@ -1485,10 +1725,11 @@ export default function Settings() {
   // A full snapshot of EVERY appearance field (so a saved theme restores backgrounds, banner, typography… exactly).
   const currentAppearance = () => ({
     themePreset: preset, themeColor: color, themeAccent: accent,
-    bannerUrl, bannerVideoUrl, bannerFadeDir, bannerOpacity, bannerPosition, bannerScale, bannerGradient, bannerStyle,
+    bannerUrl, bannerVideoUrl, bannerVideoTrim, bannerFadeDir, bannerOpacity, bannerPosition, bannerScale, bannerGradient, bannerStyle,
     bannerFilter, bannerBlend, bannerTint, bannerTintAmount,
-    immersiveBgUrl, immersiveBgVideoUrl, immersiveBgOpacity, immersiveBgPosition, immersiveBgScale, immersiveFull,
-    bgImageUrl, bgVideoUrl, watermarkUrl, bgOpacity, bgPosition, bgScale,
+    bannerMelt, bannerMeltLen, bannerScrim, featuredFilm,
+    immersiveBgUrl, immersiveBgVideoUrl, immersiveBgVideoTrim, immersiveBgOpacity, immersiveBgPosition, immersiveBgScale, immersiveFull,
+    bgImageUrl, bgVideoUrl, bgVideoTrim, watermarkUrl, bgOpacity, bgPosition, bgScale,
     gradEnabled, gradC1, gradC2, gradAngle, typo,
   })
   const saveCurrentAsTheme = () => {
@@ -1508,10 +1749,11 @@ export default function Settings() {
     // restore the full appearance snapshot (older themes without it keep current backgrounds)
     if (ct.appearance) {
       setPreset(a.themePreset || 'custom')
-      setBannerUrl(a.bannerUrl || ''); setBannerVideoUrl(a.bannerVideoUrl || ''); setBannerFadeDir(a.bannerFadeDir || 'bottom'); setBannerOpacity(a.bannerOpacity ?? 1); setBannerPosition(a.bannerPosition || 'center'); setBannerScale(a.bannerScale ?? 1); setBannerGradient(a.bannerGradient ?? 0.55); setBannerStyle(a.bannerStyle || 'full')
+      setBannerUrl(a.bannerUrl || ''); setBannerVideoUrl(a.bannerVideoUrl || ''); setBannerVideoTrim(a.bannerVideoTrim || null); setBannerFadeDir(a.bannerFadeDir || 'bottom'); setBannerOpacity(a.bannerOpacity ?? 1); setBannerPosition(a.bannerPosition || 'center'); setBannerScale(a.bannerScale ?? 1); setBannerGradient(a.bannerGradient ?? 0.55); setBannerStyle(a.bannerStyle || 'full')
       setBannerFilter(a.bannerFilter || ''); setBannerBlend(a.bannerBlend || 'normal'); setBannerTint(a.bannerTint || ''); setBannerTintAmount(a.bannerTintAmount ?? 0)
-      setImmersiveBgUrl(a.immersiveBgUrl || ''); setImmersiveBgVideoUrl(a.immersiveBgVideoUrl || ''); setImmersiveBgOpacity(a.immersiveBgOpacity ?? 0.5); setImmersiveBgPosition(a.immersiveBgPosition || 'center'); setImmersiveBgScale(a.immersiveBgScale ?? 1); setImmersiveFull(a.immersiveFull === true)
-      setBgImageUrl(a.bgImageUrl || ''); setBgVideoUrl(a.bgVideoUrl || ''); setWatermarkUrl(a.watermarkUrl || ''); setBgOpacity(a.bgOpacity ?? 0.15); setBgPosition(a.bgPosition || 'center'); setBgScale(a.bgScale ?? 1)
+      setBannerMelt(a.bannerMelt ?? BANNER_RANGE.melt.dflt); setBannerMeltLen(a.bannerMeltLen ?? BANNER_RANGE.meltLen.dflt); setBannerScrim(a.bannerScrim ?? BANNER_RANGE.scrim.dflt); setFeaturedFilm(a.featuredFilm ?? FEATURED_RANGE.film.dflt)
+      setImmersiveBgUrl(a.immersiveBgUrl || ''); setImmersiveBgVideoUrl(a.immersiveBgVideoUrl || ''); setImmersiveBgVideoTrim(a.immersiveBgVideoTrim || null); setImmersiveBgOpacity(a.immersiveBgOpacity ?? 0.5); setImmersiveBgPosition(a.immersiveBgPosition || 'center'); setImmersiveBgScale(a.immersiveBgScale ?? 1); setImmersiveFull(a.immersiveFull === true)
+      setBgImageUrl(a.bgImageUrl || ''); setBgVideoUrl(a.bgVideoUrl || ''); setBgVideoTrim(a.bgVideoTrim || null); setWatermarkUrl(a.watermarkUrl || ''); setBgOpacity(a.bgOpacity ?? 0.15); setBgPosition(a.bgPosition || 'center'); setBgScale(a.bgScale ?? 1)
       setGradEnabled(a.gradEnabled === true); setGradC1(a.gradC1 || '#7c2d2d'); setGradC2(a.gradC2 || '#2a1212'); setGradAngle(a.gradAngle ?? 135)
       setTypo(a.typo || {})
     } else {
@@ -1528,11 +1770,12 @@ export default function Settings() {
         name: name.trim(), descAr: descAr.trim(), phone: phone.trim(), address: address.trim(), googleMapsUrl: googleMapsUrl.trim(), currency,
         skin: { skinId, overrides: skinOverrides }, themePreset: preset, themeColor: color, themeAccent: accent,
         logoUrl, coverUrl,
-        bannerUrl, bannerVideoUrl, bannerFadeDir, bannerOpacity: Number(bannerOpacity), bannerPosition, bannerScale: Number(bannerScale), bannerGradient: Number(bannerGradient), bannerStyle,
+        bannerUrl, bannerVideoUrl, bannerVideoTrim, bannerFadeDir, bannerOpacity: Number(bannerOpacity), bannerPosition, bannerScale: Number(bannerScale), bannerGradient: Number(bannerGradient), bannerStyle,
         bannerFilter, bannerBlend, bannerTint, bannerTintAmount: Number(bannerTintAmount) || 0,
-        immersiveBgUrl, immersiveBgVideoUrl, immersiveBgOpacity: Number(immersiveBgOpacity), immersiveBgPosition, immersiveBgScale: Number(immersiveBgScale), immersiveFull,
+        bannerMelt: Number(bannerMelt) || 0, bannerMeltLen: Number(bannerMeltLen), bannerScrim: Number(bannerScrim), featuredFilm: Number(featuredFilm) || 0,
+        immersiveBgUrl, immersiveBgVideoUrl, immersiveBgVideoTrim, immersiveBgOpacity: Number(immersiveBgOpacity), immersiveBgPosition, immersiveBgScale: Number(immersiveBgScale), immersiveFull,
         typo,
-        bgImageUrl, bgVideoUrl: bgVideoUrl.trim(), watermarkUrl,
+        bgImageUrl, bgVideoUrl: bgVideoUrl.trim(), bgVideoTrim, watermarkUrl,
         bgOpacity: Number(bgOpacity), bgPosition, bgScale: Number(bgScale),
         gradEnabled, gradC1, gradC2, gradAngle: Number(gradAngle), bgGradient: gradientCss,
         loyaltyEnabled, loyaltyThreshold: Number(loyaltyThreshold) || 5, curbsideEnabled,
@@ -1955,6 +2198,20 @@ export default function Settings() {
                   onChange={async (e) => { try { await saveNow({ [key]: e.target.checked }); updateTenantLocal({ [key]: e.target.checked }); toast.success(t('saved')) } catch (_) { toast.error(t('error')) } }} />
               </div>
             ))}
+            {/* CLOUD VOICE AI — deliberately OUTSIDE the list above: every row
+                there is default-ON (`!== false`), while this one costs real
+                cloud money per call and so ships default-OFF (`=== true`,
+                matching the server's own gate). Do not fold it into any
+                `!== false` list — it would render as ON while the server
+                refuses the call. */}
+            <div className="row-between wrap" style={{ gap: 10, paddingBlock: 4, borderTop: '1px solid var(--border)' }}>
+              <div>
+                <div className="small bold">{ar ? 'الطلب الصوتي الذكي (سحابي)' : 'Smart cloud voice ordering'}</div>
+                <div className="xs faint">{ar ? 'يرسل التسجيل لذكاء المنصة ليفهم كل اللهجات واللغات ويستخرج الأصناف والكميات — استهلاك سحابي بحصة شهرية، لذا الافتراضي مطفأ.' : 'Sends the recording to the platform AI to parse any dialect/language into items and quantities — metered cloud usage with a monthly quota, so it is off by default.'}</div>
+              </div>
+              <input type="checkbox" checked={tenant?.voiceAiEnabled === true} style={{ width: 22, height: 22 }}
+                onChange={async (e) => { const on = e.target.checked === true; try { await saveNow({ voiceAiEnabled: on }); updateTenantLocal({ voiceAiEnabled: on }); toast.success(t('saved')) } catch (_) { toast.error(t('error')) } }} />
+            </div>
           </div>
           )}
 
@@ -2149,7 +2406,10 @@ export default function Settings() {
                     </div>
                   </div>
                   {tenant?.slug
-                    ? <MenuPreview slug={tenant.slug} override={previewOverride} mode={previewMode} />
+                    /* previewTheme is a TOP-LEVEL envelope key by contract (a
+                       sibling of appearance, never inside it) — the ink card's
+                       pin rides it so the frame holds the edited mode. */
+                    ? <MenuPreview slug={tenant.slug} override={previewOverride} mode={previewMode} previewTheme={inkPin ? inkEditMode : null} />
                     : <p className="xs faint center" style={{ padding: 'var(--sp-6)' }}>{ar ? 'احفظ بيانات المنشأة أولاً لعرض المعاينة' : 'Save the venue first to preview'}</p>}
                 </>
               )}
@@ -2616,7 +2876,7 @@ export default function Settings() {
                             ? <video src={tenant.appBg.url} muted style={{ width: 84, height: 52, objectFit: 'cover', borderRadius: 8 }} />
                             : <img src={tenant.appBg.url} alt="" style={{ width: 84, height: 52, objectFit: 'cover', borderRadius: 8 }} />}
                           <button className="btn btn-sm btn-outline" style={{ color: 'var(--danger)' }}
-                            onClick={async () => { const next = { ...(tenant?.appBg || {}), url: '' }; try { await saveNow({ appBg: next }); updateTenantLocal({ appBg: next }) } catch (_) { toast.error(t('error')) } }}>{ar ? 'إزالة' : 'Remove'}</button>
+                            onClick={async () => { const next = { ...(tenant?.appBg || {}), url: '', trim: null }; try { await saveNow({ appBg: next }); updateTenantLocal({ appBg: next }) } catch (_) { toast.error(t('error')) } }}>{ar ? 'إزالة' : 'Remove'}</button>
                         </div>
                       )}
                       <div className="row" style={{ gap: 6, flexWrap: 'wrap' }}>
@@ -2630,14 +2890,14 @@ export default function Settings() {
                               try {
                                 const isV = f.type.startsWith('video/')
                                 const url = isV ? await uploadFile(tenantId, f, 'appbg') : await uploadImage(tenantId, f, 'appbg')
-                                const next = { ...(tenant?.appBg || {}), url, kind: isV ? 'video' : 'image' }
+                                const next = { ...(tenant?.appBg || {}), url, kind: isV ? 'video' : 'image', trim: null }
                                 await saveNow({ appBg: next }); updateTenantLocal({ appBg: next }); toast.success(t('saved'))
                               } catch (err) { toast.error(err?.message && !err?.code ? err.message : t('error')) } finally { setPosBgBusy(false) }
                             }} />
                         </label>
                         <button className="btn btn-outline" onClick={() => setLibPick({ kind: tenant?.appBg?.kind === 'video' ? 'video' : 'image', apply: async (url, item) => {
                           const isV = (item?.kind || tenant?.appBg?.kind) === 'video'
-                          const next = { ...(tenant?.appBg || {}), url, kind: isV ? 'video' : 'image' }
+                          const next = { ...(tenant?.appBg || {}), url, kind: isV ? 'video' : 'image', trim: null }
                           try { await saveNow({ appBg: next }); updateTenantLocal({ appBg: next }); toast.success(t('saved')) } catch (_) { toast.error(t('error')) }
                         } })}>
                           <Icon name="folder" size={15} /> {ar ? 'من المكتبة' : 'From library'}
@@ -2647,6 +2907,10 @@ export default function Settings() {
                         <label>{ar ? `وضوح الخلفية: ${Math.round((tenant?.appBg?.opacity ?? 1) * 100)}%` : `Media opacity: ${Math.round((tenant?.appBg?.opacity ?? 1) * 100)}%`}</label>
                         <input type="range" min="0.2" max="1" step="0.05" value={tenant?.appBg?.opacity ?? 1} style={{ width: '100%' }}
                           onChange={(e) => { const next = { ...(tenant?.appBg || {}), opacity: Number(e.target.value) }; updateTenantLocal({ appBg: next }); commitPosBg({ appBg: next }) }} />
+                        {tenant?.appBg?.kind === 'video' && tenant?.appBg?.url && (
+                          <VideoTrimRange url={tenant.appBg.url} value={tenant?.appBg?.trim || null} ar={ar}
+                            onChange={async (v) => { const next = { ...(tenant?.appBg || {}), trim: v }; try { await saveNow({ appBg: next }); updateTenantLocal({ appBg: next }) } catch (_) { toast.error(t('error')) } }} />
+                        )}
                       </div>
                     </>
                   )}
@@ -2797,6 +3061,13 @@ export default function Settings() {
                           <option value="circle">{ar ? 'دائرية كلاسيكية' : 'Classic circle'}</option>
                         </select>
                       </div>
+                    </div>
+                    {/* plaster film behind each card — the room-mode companion
+                        dial (seeded by the wall card's room toggle); 0 = today */}
+                    <div className="field">
+                      <label>{ar ? `لوح خفيف خلف البطاقات (لوضع الغرفة): ${Math.round(Number(featuredFilm) * 100)}%` : `Plaster film behind the cards (room mode): ${Math.round(Number(featuredFilm) * 100)}%`}</label>
+                      <input type="range" min={FEATURED_RANGE.film.min} max={FEATURED_RANGE.film.max} step={FEATURED_RANGE.film.step} value={Number(featuredFilm)} onChange={(e) => setFeaturedFilm(Number(e.target.value))} style={{ width: '100%' }} />
+                      <span className="xs faint">{ar ? 'يجعل الأطباق المفرّغة مقروءة فوق جدار مصوّر. يُعاين فوراً ويُحفظ مع زر الحفظ.' : 'Keeps cutout dishes readable over a photo wall. Previews live; commits with Save.'}</span>
                     </div>
                     <p className="xs faint" style={{ margin: 0 }}>
                       {tenant?.featuredMode === 'auto'
@@ -3225,6 +3496,34 @@ export default function Settings() {
                     <input type="checkbox" checked={wallCfg.header === true} onChange={(e) => writeWall({ header: e.target.checked })} style={{ width: 22, height: 22, flex: 'none' }} />
                   </label>
 
+                  {/* ROOM MODE (menuWall.room): the ONE wall runs behind the whole
+                      page. Enabling it seeds the companion dials ONCE — and only
+                      the ones the venue never touched — so opting in lands on the
+                      designed look while every engine default stays OFF. */}
+                  <label className="row-between" style={{ gap: 10, alignItems: 'flex-start', cursor: 'pointer', borderTop: '1px solid var(--border)', paddingTop: 10 }}>
+                    <span className="stack" style={{ gap: 2 }}>
+                      <strong className="xs">{ar ? 'الجدار خلف الصفحة كلها' : 'The wall behind the whole page'}</strong>
+                      <span className="xs faint">
+                        {ar
+                          ? 'يمتد الجدار نفسه خلف الهيدر والبانر والأصناف المميزة — غرفة واحدة بلا فواصل. تفعيله يضبط ذوبان البانر الشفاف ولوحاً خفيفاً خلف الأصناف المميزة (إن لم تضبطهما من قبل)، وتتحكم فيهما لاحقاً من بطاقتيهما.'
+                          : 'The same wall runs behind the header, the banner and the featured strip — one room, no seams. Enabling it also seeds the transparent banner melt and a soft plaster behind the featured cards (only if you never set them); both stay tunable in their own cards.'}
+                      </span>
+                    </span>
+                    <input type="checkbox" checked={wallCfg.room === true} style={{ width: 22, height: 22, flex: 'none' }}
+                      onChange={async (e) => {
+                        const on = e.target.checked
+                        await writeWall({ room: on })
+                        if (on) {
+                          const seed = {}
+                          if (tenant?.bannerMelt == null) { seed.bannerMelt = 0.65; seed.bannerMeltLen = 55; setBannerMelt(0.65); setBannerMeltLen(55) }
+                          if (tenant?.featuredFilm == null) { seed.featuredFilm = 0.12; setFeaturedFilm(0.12) }
+                          if (Object.keys(seed).length) {
+                            try { await saveNow(seed); updateTenantLocal(seed) } catch (_) { toast.error(t('error')) }
+                          }
+                        }
+                      }} />
+                  </label>
+
                   {wallCfg.pattern === 'none' ? (
                     <p className="xs faint" style={{ margin: 0 }}>{ar ? 'الجدار مطفأ — يعرض الثيم لوحته الداكنة السادة خلف الأطباق.' : 'The wall is off — the theme shows its plain dark canvas behind the dishes.'}</p>
                   ) : (
@@ -3326,6 +3625,86 @@ export default function Settings() {
                         <span className="xs faint">{ar ? 'اقرأ اسم الطبق وسعره فوق الجدار: إن صعبت القراءة قلّل «ظهور الجدار» أو زد «تنعيم الجدار».' : 'Read the dish name and price over the wall: if that is hard, lower “Wall opacity” or raise “Wall blur”.'}</span>
                       </div>
                     </>
+                  )}
+                </div>
+
+                {/* 6b-ink. PER-MODE MENU INKS (tenant.menuInk) — the venue's own
+                    text colours per light/dark mode. A configured wall is the
+                    same picture in both modes, so the engine LOCKS dark inks in
+                    light mode until the venue saves light inks or opts back
+                    into the theme flip (followTheme). */}
+                <div id="set-menuink" className="card card-pad stack" style={{ gap: 12 }}>
+                  <div className="row-between wrap" style={{ gap: 8, alignItems: 'center' }}>
+                    <strong className="small"><Icon name="penLine" size={14} style={{ verticalAlign: 'middle' }} /> {ar ? 'ألوان الخطوط — فاتح وداكن' : 'Menu inks — light & dark'}</strong>
+                    <button type="button" className="btn-link xs" onClick={resetInk}><Icon name="reload" size={12} /> {ar ? 'إرجاع للثيم' : 'Back to the theme'}</button>
+                  </div>
+                  <p className="xs faint" style={{ margin: 0 }}>
+                    {ar
+                      ? 'عند تحويل الزبون بين الفاتح والداكن، هذه ألوان خطوطك أنت لكل وضع: العناوين والوصف والسعر والرقاقات ولوح القراءة والشريطين. أي خانة تتركها «تلقائي» يقررها الثيم. تعمل الألوان في ثيم «المجلة الداكنة» وعلى الشريطين في كل الثيمات.'
+                      : 'When the guest flips light/dark, these are YOUR inks per mode: headings, body, price, chips, the reading canvas and the two bars. Any field left on “auto” stays the theme’s. Menu inks apply in the editorial theme; bar inks apply everywhere.'}
+                  </p>
+                  <div className="row wrap" style={{ gap: 8, alignItems: 'center' }}>
+                    <span className="xs faint bold">{ar ? 'أي وضع تعدّل الآن؟' : 'Editing which mode?'}</span>
+                    <div className="segmented">
+                      <button type="button" className={inkEditMode === 'light' ? 'active' : ''} onClick={() => setInkEditMode('light')}><Icon name="sun" size={13} /> {ar ? 'الفاتح' : 'Light'}</button>
+                      <button type="button" className={inkEditMode === 'dark' ? 'active' : ''} onClick={() => setInkEditMode('dark')}><Icon name="moon" size={13} /> {ar ? 'الداكن' : 'Dark'}</button>
+                    </div>
+                    <button type="button" className={`chip ${inkPin ? 'active' : ''}`} aria-pressed={inkPin} onClick={() => setInkPin((p) => !p)}>
+                      <Icon name="eye" size={12} /> {ar ? 'ثبّت المعاينة على هذا الوضع' : 'Pin the preview to this mode'}
+                    </button>
+                  </div>
+                  <div className="stack" style={{ gap: 8 }}>
+                    {INK_FIELDS.map((f) => {
+                      const cur = (inkCfg[inkEditMode] || {})[f.id] || ''
+                      return (
+                        <div key={f.id} className="row" style={{ gap: 10, alignItems: 'center' }}>
+                          <span className="small" style={{ minWidth: 150 }}>{ar ? f.ar : f.en}</span>
+                          <input type="color" value={cur || '#888888'} style={{ width: 42, height: 32, border: '1px solid var(--border)', borderRadius: 8, background: 'none', cursor: 'pointer' }}
+                            aria-label={ar ? f.ar : f.en}
+                            onChange={(e) => writeInkMode({ [f.id]: e.target.value }, true)} />
+                          {cur
+                            ? <span className="xs bold num">{String(cur).toUpperCase()}</span>
+                            : <span className="xs faint">{ar ? 'تلقائي (الثيم)' : 'Auto (theme)'}</span>}
+                          {cur && (
+                            <button type="button" className="btn-link xs" onClick={() => writeInkMode({ [f.id]: '' })}>{ar ? 'تلقائي' : 'Auto'}</button>
+                          )}
+                        </div>
+                      )
+                    })}
+                  </div>
+                  {(() => {
+                    // 4.5:1 contrast guard — computed against the picked canvas
+                    // (or the theme's own canvas for the edited mode); colour
+                    // literals here are fallbacks for display only, not bounds.
+                    const m = inkCfg[inkEditMode] || {}
+                    const canvas = m.canvas || (inkEditMode === 'dark' ? '#181310' : '#f7f0e6')
+                    const weak = ['heading', 'text', 'muted'].filter((k) => m[k] && inkRatio(m[k], canvas) < 4.5)
+                    if (!weak.length) return null
+                    const names = weak.map((k) => { const f = INK_FIELDS.find((x) => x.id === k); return ar ? f.ar : f.en }).join(' · ')
+                    return (
+                      <p className="xs" style={{ margin: 0, color: 'var(--warning)' }}>
+                        {ar
+                          ? `تباين ضعيف (أقل من 4.5:1) بين لوح القراءة وبين: ${names} — قد لا يُقرأ النص. فتّح أو غمّق اللون.`
+                          : `Weak contrast (below 4.5:1) against the canvas for: ${names} — the text may not read. Lighten or darken the ink.`}
+                      </p>
+                    )
+                  })()}
+                  {inkWallOn && (
+                    <label className="row-between" style={{ gap: 10, alignItems: 'flex-start', cursor: 'pointer', borderTop: '1px solid var(--border)', paddingTop: 10 }}>
+                      <span className="stack" style={{ gap: 2 }}>
+                        <strong className="xs">{ar ? 'اتبع وضع الثيم (ألغِ قفل الداكن)' : 'Follow the theme mode (unlock)'}</strong>
+                        <span className="xs faint">
+                          {ar
+                            ? 'جدارك هو نفس الصورة في الوضعين، لذا يبقي المنيو حبره الداكن في الوضع الفاتح تلقائياً كي لا يصير النص داكناً فوق غرفة داكنة. فعّل هذا الخيار (أو احفظ ألواناً للوضع الفاتح) ليعود الانقلاب مع الثيم.'
+                            : 'Your wall is the same picture in both modes, so the menu keeps its dark inks in light mode automatically. Turn this on (or save light inks) to restore the theme flip.'}
+                        </span>
+                      </span>
+                      <input type="checkbox" checked={inkCfg.followTheme === true} style={{ width: 22, height: 22, flex: 'none' }}
+                        onChange={(e) => writeInkTop({ followTheme: e.target.checked === true })} />
+                    </label>
+                  )}
+                  {(btnCfg.scope || 'primary') === 'all' && (
+                    <span className="xs faint">{ar ? 'ملاحظة: رقاقات التصنيفات تلبس كساء الأزرار (النطاق «كل الأزرار») فلون حبرها يأتي من بطاقة الأزرار لا من هنا.' : 'Note: with the button skin scoped to “every button”, the category chips take their ink from the buttons card, not from here.'}</span>
                   )}
                 </div>
 
@@ -3543,6 +3922,314 @@ export default function Settings() {
                   )}
                 </div>
 
+                {/* 6b4. HOME-BLOCK ORDER (tenant.menuHome.order) — drag what
+                    shows above the dishes into the venue's own order. Applies
+                    to EVERY layout (no editorial-only warning on purpose).
+                    Order saves instantly; the eye toggles are the SAME ovHidden
+                    draft as the hide matrix and follow the main Save. */}
+                <div id="set-menuhome" className="card card-pad stack" style={{ gap: 12 }}>
+                  <div className="row-between wrap" style={{ gap: 8, alignItems: 'center' }}>
+                    <strong className="small"><Icon name="list" size={14} style={{ verticalAlign: 'middle' }} /> {ar ? 'ترتيب عناصر صفحة المنيو' : 'Menu home order'}</strong>
+                    <button type="button" className="btn-link xs" onClick={resetHome}><Icon name="reload" size={12} /> {ar ? 'إرجاع الافتراضي' : 'Reset to default'}</button>
+                  </div>
+                  <p className="xs faint" style={{ margin: 0 }}>
+                    {ar
+                      ? 'اسحب من المقبض لترتيب ما يظهر أعلى المنيو — يعمل مع كل الثيمات ويُحفظ الترتيب فوراً. عين العنصر تخفيه من نفس نظام «إظهار/إخفاء العناصر» وتُحفظ مع زر «حفظ» أسفل الشاشة.'
+                      : 'Drag to order what shows above the dishes — all layouts; the order saves instantly. The eye hides via the same show/hide system and commits with the main Save button.'}
+                  </p>
+                  {ovLayout === 'storefront' && (
+                    <p className="xs" style={{ margin: 0, color: 'var(--warning)' }}>
+                      {ar ? 'تخطيط «تطبيق متجر» لا يعرض «العروض» و«الأطباق المميزة» في هذا التدفق — سحبهما لن يغيّر شيئاً فيه.' : 'The storefront layout does not render Promos or Featured in this flow — dragging them changes nothing there.'}
+                    </p>
+                  )}
+                  <DndContext sensors={homeSensors} collisionDetection={closestCenter} onDragEnd={onHomeDragEnd}>
+                    <SortableContext items={homeOrder} strategy={verticalListSortingStrategy}>
+                      <div className="stack" style={{ gap: 6 }}>
+                        {homeOrder.map((id) => {
+                          const b = HOME_BLOCKS.find((x) => x.id === id)
+                          const hideable = HOME_HIDEABLE.includes(id)
+                          return (
+                            <HomeOrderRow key={id} id={id} ar={ar} label={b ? (ar ? b.ar : b.en) : id}
+                              hideable={hideable} hidden={ovHidden.includes(id)}
+                              hint={id === 'chips' ? (ar ? 'تُفعَّل فرادى من «إظهار/إخفاء العناصر»' : 'Toggled individually under show/hide') : ''}
+                              onToggleHide={() => setOvHidden((h) => (h.includes(id) ? h.filter((x) => x !== id) : [...h, id]))} />
+                          )
+                        })}
+                      </div>
+                    </SortableContext>
+                  </DndContext>
+                  <span className="xs faint">{ar ? 'إخفاء «البحث» قد يُبقي الصف ظاهراً إذا كان «زر طريقة العرض» ما زال ظاهراً — الصف واحد لكليهما.' : 'Hiding Search may keep the row visible while the view toggle is still shown — they share one row.'}</span>
+                </div>
+
+                {/* 6b5. THE MENU CHROME (tenant.menuChrome) — one identity for
+                    the bottom bar, the fabs, the language/theme buttons and the
+                    social buttons: theme default / the room's wall / the venue's
+                    own photo / transparent, plus custom icons and fab offsets. */}
+                <div id="set-menuchrome" className="card card-pad stack" style={{ gap: 12 }}>
+                  <div className="row-between wrap" style={{ gap: 8, alignItems: 'center' }}>
+                    <strong className="small"><Icon name="shapes" size={14} style={{ verticalAlign: 'middle' }} /> {ar ? 'كساء الكروم — الأزرار والقوائم' : 'Chrome skin — buttons & bars'}</strong>
+                    <button type="button" className="btn-link xs" onClick={resetChrome}><Icon name="reload" size={12} /> {ar ? 'إرجاع الافتراضي' : 'Reset to default'}</button>
+                  </div>
+                  <p className="xs faint" style={{ margin: 0 }}>
+                    {ar
+                      ? 'البس شريط التنقل وزر السلة والجرس وزرَي اللغة والوضع وأزرار التواصل هويةَ غرفتك: من جدار المنيو نفسه أو من صورة ترفعها، مع فلتر ودمج وصبغة وأيقونات مخصصة وتحريك للزرين العائمين. يعمل مع كل الثيمات.'
+                      : 'Dress the bottom bar, the cart fab, the bell, the language/theme buttons and the social buttons in the room’s identity: the menu wall itself or your own photo, with filter, blend, tint, custom icons and offsets for the two floating buttons. Works with every layout.'}
+                  </p>
+                  <input ref={chromeFileRef} type="file" accept="image/*" hidden onChange={onChromeFile} />
+                  <label className="row-between" style={{ gap: 10, alignItems: 'flex-start', cursor: 'pointer' }}>
+                    <span className="stack" style={{ gap: 2 }}>
+                      <strong className="xs">{ar ? 'اتبع جدار المنيو — كل الأزرار والقوائم من هوية الغرفة' : 'Follow the menu wall — every button and sheet takes the room identity'}</strong>
+                      <span className="xs faint">{ar ? 'مفتاح واحد: كل عنصر لم تخصّصه يلبس الجدار، وكل صفحة بلا خلفية تأخذ الجدار. التخصيص الفردي أدناه يتقدّم عليه.' : 'One switch: every untouched element wears the wall, every page without a background takes the wall. Per-element choices below override it.'}</span>
+                    </span>
+                    <input type="checkbox" checked={chromeCfg.follow === true} onChange={(e) => writeChrome({ follow: e.target.checked === true })} style={{ width: 22, height: 22, flex: 'none' }} />
+                  </label>
+                  <div className="row wrap" style={{ gap: 6, alignItems: 'center' }}>
+                    <span className="xs faint bold">{ar ? 'العنصر' : 'Element'}</span>
+                    {CHROME_ELEMENTS.map((el2) => (
+                      <button key={el2.id} type="button" className={`chip ${chromeElSel === el2.id ? 'active' : ''}`} aria-pressed={chromeElSel === el2.id}
+                        onClick={() => setChromeElSel((s) => (s === el2.id ? '' : el2.id))}>{ar ? el2.ar : el2.en}</button>
+                    ))}
+                    {chromeBusy && <span className="spinner" />}
+                  </div>
+                  {chromeElSel && (() => {
+                    const el = (chromeCfg.elements || {})[chromeElSel] || {}
+                    const isFab = chromeElSel === 'cartFab' || chromeElSel === 'bellFab'
+                    const faceOn = !!el.skin || chromeCfg.follow === true
+                    return (
+                      <div className="stack" style={{ gap: 10, borderTop: '1px solid var(--border)', paddingTop: 10 }}>
+                        <div className="row wrap" style={{ gap: 6, alignItems: 'center' }}>
+                          <span className="xs faint bold">{ar ? 'الوجه' : 'The face'}</span>
+                          {CHROME_SKIN_MODES.map((m) => {
+                            const on = (el.skin || '') === m.id
+                            return (
+                              <button key={m.id || 'theme'} type="button" className={`chip ${on ? 'active' : ''}`} aria-pressed={on}
+                                onClick={() => {
+                                  if (m.id === 'image' && !el.url) { pickChromeFile({ type: 'face', id: chromeElSel }); return }
+                                  writeChromeEl(chromeElSel, { skin: m.id })
+                                }}>{ar ? m.ar : m.en}</button>
+                            )
+                          })}
+                        </div>
+                        {el.skin === 'image' && el.url && (
+                          <div className="row wrap" style={{ gap: 8, alignItems: 'center' }}>
+                            <button type="button" className="btn btn-sm btn-outline" onClick={() => pickChromeFile({ type: 'face', id: chromeElSel })}><Icon name="upload" size={13} /> {ar ? 'تغيير الصورة' : 'Change the photo'}</button>
+                            <button type="button" className="btn-link xs" onClick={() => setLibPick({ kind: 'image', apply: (url) => writeChromeEl(chromeElSel, { url, skin: 'image' }) })}>{ar ? 'من المكتبة' : 'From library'}</button>
+                          </div>
+                        )}
+                        {faceOn && (
+                          <>
+                            <div className="row wrap" style={{ gap: 10 }}>
+                              <div className="field grow" style={{ minWidth: 150 }}>
+                                <label>{ar ? 'استدارة الزوايا' : 'Corner radius'} · <span className="num">{Number(el.radius ?? CHROME_RANGE.radius.dflt)}px</span></label>
+                                <input type="range" min={CHROME_RANGE.radius.min} max={CHROME_RANGE.radius.max} step={CHROME_RANGE.radius.step} value={Number(el.radius ?? CHROME_RANGE.radius.dflt)} onChange={(e3) => writeChromeEl(chromeElSel, { radius: Number(e3.target.value) }, true)} style={{ width: '100%' }} />
+                              </div>
+                              <div className="field grow" style={{ minWidth: 150 }}>
+                                <label>{ar ? 'تعتيم فوق الوجه' : 'Veil over the face'} · <span className="num">{Math.round(Number(el.scrim ?? CHROME_RANGE.scrim.dflt) * 100)}%</span></label>
+                                <input type="range" min={CHROME_RANGE.scrim.min} max={CHROME_RANGE.scrim.max} step={CHROME_RANGE.scrim.step} value={Number(el.scrim ?? CHROME_RANGE.scrim.dflt)} onChange={(e3) => writeChromeEl(chromeElSel, { scrim: Number(e3.target.value) }, true)} style={{ width: '100%' }} />
+                              </div>
+                              <div className="field" style={{ minWidth: 130 }}>
+                                <label>{ar ? 'لون الأيقونة' : 'Glyph ink'}</label>
+                                <div className="segmented">
+                                  <button type="button" className={el.ink !== 'dark' ? 'active' : ''} onClick={() => writeChromeEl(chromeElSel, { ink: 'light' })}>{ar ? 'فاتح' : 'Light'}</button>
+                                  <button type="button" className={el.ink === 'dark' ? 'active' : ''} onClick={() => writeChromeEl(chromeElSel, { ink: 'dark' })}>{ar ? 'داكن' : 'Dark'}</button>
+                                </div>
+                              </div>
+                            </div>
+                            <div className="row wrap" style={{ gap: 10 }}>
+                              <div className="field grow" style={{ minWidth: 150 }}>
+                                <label>{ar ? 'حجم الصورة داخل الوجه' : 'Picture zoom inside the face'} · <span className="num">{Number(el.imgScale ?? CHROME_RANGE.imgScale.dflt).toFixed(2)}x</span></label>
+                                <input type="range" min={CHROME_RANGE.imgScale.min} max={CHROME_RANGE.imgScale.max} step={CHROME_RANGE.imgScale.step} value={Number(el.imgScale ?? CHROME_RANGE.imgScale.dflt)} onChange={(e3) => writeChromeEl(chromeElSel, { imgScale: Number(e3.target.value) }, true)} style={{ width: '100%' }} />
+                              </div>
+                              <div className="field grow" style={{ minWidth: 140 }}>
+                                <label>{ar ? 'موضع الصورة أفقياً' : 'Picture X'} · <span className="num">{Math.round(Number(el.imgX ?? CHROME_RANGE.imgX.dflt))}%</span></label>
+                                <input type="range" min={CHROME_RANGE.imgX.min} max={CHROME_RANGE.imgX.max} step={CHROME_RANGE.imgX.step} value={Number(el.imgX ?? CHROME_RANGE.imgX.dflt)} onChange={(e3) => writeChromeEl(chromeElSel, { imgX: Number(e3.target.value) }, true)} style={{ width: '100%' }} />
+                              </div>
+                              <div className="field grow" style={{ minWidth: 140 }}>
+                                <label>{ar ? 'موضع الصورة عمودياً' : 'Picture Y'} · <span className="num">{Math.round(Number(el.imgY ?? CHROME_RANGE.imgY.dflt))}%</span></label>
+                                <input type="range" min={CHROME_RANGE.imgY.min} max={CHROME_RANGE.imgY.max} step={CHROME_RANGE.imgY.step} value={Number(el.imgY ?? CHROME_RANGE.imgY.dflt)} onChange={(e3) => writeChromeEl(chromeElSel, { imgY: Number(e3.target.value) }, true)} style={{ width: '100%' }} />
+                              </div>
+                            </div>
+                            <div className="row wrap" style={{ gap: 10 }}>
+                              <div className="field grow" style={{ minWidth: 150 }}>
+                                <label>{ar ? 'فلتر' : 'Filter'}</label>
+                                <select className="input" value={el.filter || ''} onChange={(e3) => writeChromeEl(chromeElSel, { filter: e3.target.value })}>
+                                  {FILTERS.map((f) => <option key={f.id || 'none'} value={f.id}>{ar ? f.ar : f.en}</option>)}
+                                </select>
+                              </div>
+                              <div className="field grow" style={{ minWidth: 150 }}>
+                                <label>{ar ? 'الدمج' : 'Blend'}</label>
+                                <select className="input" value={el.blend || 'normal'} onChange={(e3) => writeChromeEl(chromeElSel, { blend: e3.target.value })}>
+                                  {BLEND_MODES.map((b) => <option key={b.id} value={b.id}>{ar ? b.ar : b.en}</option>)}
+                                </select>
+                              </div>
+                              <label className="row" style={{ gap: 6, cursor: 'pointer', alignItems: 'center' }}>
+                                <span className="xs faint">{ar ? 'صبغة' : 'Tint'}</span>
+                                <input type="color" value={el.tint || '#000000'} onChange={(e3) => writeChromeEl(chromeElSel, { tint: e3.target.value, tintAmount: Number(el.tintAmount) > 0 ? el.tintAmount : 0.2 }, true)} style={{ width: 42, height: 32, border: '1px solid var(--border)', borderRadius: 8, background: 'none', cursor: 'pointer' }} aria-label={ar ? 'لون الصبغة' : 'Tint colour'} />
+                                {Number(el.tintAmount) > 0 && (
+                                  <>
+                                    <input type="range" min={CHROME_RANGE.tintAmount.min} max={CHROME_RANGE.tintAmount.max} step={CHROME_RANGE.tintAmount.step} value={Number(el.tintAmount)} onChange={(e3) => writeChromeEl(chromeElSel, { tintAmount: Number(e3.target.value) }, true)} style={{ width: 90 }} aria-label={ar ? 'قوة الصبغة' : 'Tint strength'} />
+                                    <button type="button" className="btn btn-sm btn-outline" onClick={() => writeChromeEl(chromeElSel, { tint: '', tintAmount: 0 })}>{ar ? 'إزالة' : 'Remove'}</button>
+                                  </>
+                                )}
+                              </label>
+                            </div>
+                          </>
+                        )}
+                        {isFab && (
+                          <div className="row wrap" style={{ gap: 10 }}>
+                            {[['x', 'إزاحة أفقية', 'Horizontal offset'], ['y', 'إزاحة عمودية', 'Vertical offset']].map(([k, la, le]) => (
+                              <div key={k} className="field grow" style={{ minWidth: 150 }}>
+                                <label>{ar ? la : le} · <span className="num">{Number(el[k] ?? CHROME_RANGE[k].dflt)}px</span></label>
+                                <input type="range" min={CHROME_RANGE[k].min} max={CHROME_RANGE[k].max} step={CHROME_RANGE[k].step} value={Number(el[k] ?? CHROME_RANGE[k].dflt)} onChange={(e3) => writeChromeEl(chromeElSel, { [k]: Number(e3.target.value) }, true)} style={{ width: '100%' }} />
+                              </div>
+                            ))}
+                          </div>
+                        )}
+                        {isFab && (
+                          <div className="row wrap" style={{ gap: 8, alignItems: 'center' }}>
+                            <span className="xs faint bold">{ar ? 'أيقونة مخصصة' : 'Custom icon'}</span>
+                            {el.icon && <img src={el.icon} alt="" style={{ width: 28, height: 28, borderRadius: 8, objectFit: 'contain', background: 'var(--surface-2)' }} />}
+                            <button type="button" className="btn btn-sm btn-outline" onClick={() => pickChromeFile({ type: 'icon', id: chromeElSel })}><Icon name="upload" size={13} /> {el.icon ? (ar ? 'تغيير' : 'Change') : (ar ? 'رفع أيقونة' : 'Upload icon')}</button>
+                            {el.icon && <button type="button" className="btn-link xs" style={{ color: 'var(--danger)' }} onClick={() => writeChromeEl(chromeElSel, { icon: '' })}>{ar ? 'إزالة' : 'Remove'}</button>}
+                          </div>
+                        )}
+                        {chromeElSel === 'social' && (
+                          <div className="stack" style={{ gap: 6 }}>
+                            <span className="xs faint bold">{ar ? 'أيقونات المنصات — ارفع بديلاً لأي منصة' : 'Per-platform icons — upload a replacement'}</span>
+                            <div className="row wrap" style={{ gap: 8 }}>
+                              {CHROME_SOCIAL_PLATFORMS.map(([pid, plabel]) => {
+                                const cur = (chromeCfg.socialIcons || {})[pid] || ''
+                                return (
+                                  <div key={pid} className="row" style={{ gap: 6, alignItems: 'center', border: '1px solid var(--border)', borderRadius: 10, padding: '4px 8px' }}>
+                                    {cur ? <img src={cur} alt="" style={{ width: 22, height: 22, borderRadius: 6, objectFit: 'contain' }} /> : null}
+                                    <span className="xs">{plabel}</span>
+                                    <button type="button" className="btn-link xs" onClick={() => pickChromeFile({ type: 'social', id: pid })}>{cur ? (ar ? 'تغيير' : 'Change') : (ar ? 'رفع' : 'Upload')}</button>
+                                    {cur && <button type="button" className="btn-link xs" style={{ color: 'var(--danger)' }} onClick={() => writeChrome({ socialIcons: Object.fromEntries(Object.entries(chromeCfg.socialIcons || {}).filter(([k2]) => k2 !== pid)) })}>{ar ? 'إزالة' : 'Remove'}</button>}
+                                  </div>
+                                )
+                              })}
+                            </div>
+                          </div>
+                        )}
+                      </div>
+                    )
+                  })()}
+                  <span className="xs faint">
+                    {ar
+                      ? 'حدود معلومة: أزرار «أضف للسلة» وعناصر التحكم داخل القوائم يكسوها «كساء الأزرار» في ثيم «المجلة الداكنة» فقط؛ أيقونات القائمة السفلية (الرئيسية/الطلبات/العروض…) تبقى المدمجة — الأيقونة المخصصة للسلة والجرس وحدهما؛ و«نفس التصميم فاتحاً وداكناً لكل تخصيص» جولة مستقلة قادمة.'
+                      : 'Known limits: in-sheet controls and the add-to-cart buttons are skinned by the button-skin card (editorial theme only); bottom-nav item icons stay built-in (custom icons are cart + bell only); and “one design across light & dark” is its own future round.'}
+                  </span>
+                </div>
+
+                {/* 6b6. THE SHEETS' FACE (tenant.menuChrome.sheet) — the cart,
+                    orders, offers and item sheets. */}
+                <div id="set-menusheets" className="card card-pad stack" style={{ gap: 12 }}>
+                  <div className="row-between wrap" style={{ gap: 8, alignItems: 'center' }}>
+                    <strong className="small"><Icon name="layers" size={14} style={{ verticalAlign: 'middle' }} /> {ar ? 'كساء القوائم المنبثقة' : 'Sheet skin'}</strong>
+                  </div>
+                  <p className="xs faint" style={{ margin: 0 }}>
+                    {ar
+                      ? 'القوائم التي تطلع من أسفل الشاشة (السلة والطلبات والعروض وتفاصيل الصنف) تلبس وجهاً من الجدار أو من صورتك تحت طبقة قراءة، مع تحكم في الضبابية والاستدارة وتعتيم ما خلفها. نافذة الصنف الغامرة تحتفظ بخلفيتها الخاصة.'
+                      : 'The bottom sheets (cart, orders, offers, item details) wear a face from the wall or your photo under a readability veil, with blur, radius and backdrop dim. The immersive item sheet keeps its own backdrop.'}
+                  </p>
+                  {(() => {
+                    const sh2 = chromeCfg.sheet || {}
+                    return (
+                      <>
+                        <div className="row wrap" style={{ gap: 6, alignItems: 'center' }}>
+                          <span className="xs faint bold">{ar ? 'الوجه' : 'The face'}</span>
+                          {CHROME_SKIN_MODES.map((m) => {
+                            const on = (sh2.skin || '') === m.id
+                            return (
+                              <button key={m.id || 'theme'} type="button" className={`chip ${on ? 'active' : ''}`} aria-pressed={on}
+                                onClick={() => {
+                                  if (m.id === 'image' && !sh2.url) { pickChromeFile({ type: 'sheet' }); return }
+                                  writeChromeSheet({ skin: m.id })
+                                }}>{ar ? m.ar : m.en}</button>
+                            )
+                          })}
+                        </div>
+                        {sh2.skin === 'image' && sh2.url && (
+                          <div className="row wrap" style={{ gap: 8, alignItems: 'center' }}>
+                            <button type="button" className="btn btn-sm btn-outline" onClick={() => pickChromeFile({ type: 'sheet' })}><Icon name="upload" size={13} /> {ar ? 'تغيير الصورة' : 'Change the photo'}</button>
+                            <button type="button" className="btn-link xs" onClick={() => setLibPick({ kind: 'image', apply: (url) => writeChromeSheet({ url, skin: 'image' }) })}>{ar ? 'من المكتبة' : 'From library'}</button>
+                          </div>
+                        )}
+                        <div className="row wrap" style={{ gap: 10 }}>
+                          {[
+                            ['scrim', 'طبقة القراءة فوق الوجه', 'Readability veil', 'pct'],
+                            ['blur', 'ضبابية الوجه', 'Face blur', 'px'],
+                            ['radius', 'استدارة الأعلى', 'Top radius', 'px'],
+                            ['backdrop', 'تعتيم ما خلف القائمة', 'Backdrop dim', 'pct'],
+                          ].map(([k, la, le, unit]) => {
+                            const R = CHROME_SHEET_RANGE[k]
+                            const v = Number(sh2[k] ?? R.dflt)
+                            return (
+                              <div key={k} className="field grow" style={{ minWidth: 150 }}>
+                                <label>{ar ? la : le} · <span className="num">{wallSliderText(unit, v)}</span></label>
+                                <input type="range" min={R.min} max={R.max} step={R.step} value={v} onChange={(e3) => writeChromeSheet({ [k]: Number(e3.target.value) }, true)} style={{ width: '100%' }} />
+                              </div>
+                            )
+                          })}
+                        </div>
+                      </>
+                    )
+                  })()}
+                </div>
+
+                {/* 6b7. SUBPAGE BACKGROUNDS (tenant.menuChrome.pages) — the wall
+                    (or a photo) behind قصتنا/الفعاليات/الحجوزات/تتبع الطلب…
+                    'none' is the explicit opt-out that beats the follow switch. */}
+                <div id="set-menupages" className="card card-pad stack" style={{ gap: 12 }}>
+                  <div className="row-between wrap" style={{ gap: 8, alignItems: 'center' }}>
+                    <strong className="small"><Icon name="image" size={14} style={{ verticalAlign: 'middle' }} /> {ar ? 'خلفيات باقي الصفحات' : 'Subpage backgrounds'}</strong>
+                  </div>
+                  <p className="xs faint" style={{ margin: 0 }}>
+                    {ar
+                      ? 'كل صفحة من صفحات الزبون تأخذ خلفيتها: جدار المنيو نفسه، أو صورة خاصة بها، أو «بدون» لتبقى على الثيم حتى مع مفتاح «اتبع الجدار».'
+                      : 'Each guest page takes its background: the menu wall, its own photo, or “none” to stay on the theme even with the follow switch on.'}
+                  </p>
+                  {CHROME_PAGE_IDS.map((pid) => {
+                    const p = (chromeCfg.pages || {})[pid] || {}
+                    const [pAr, pEn] = CHROME_PAGE_LABELS[pid] || [pid, pid]
+                    const bgOn = p.mode === 'wall' || (p.mode === 'image' && p.url)
+                    return (
+                      <div key={pid} className="stack" style={{ gap: 6, borderTop: '1px solid var(--border)', paddingTop: 8 }}>
+                        <span className="xs faint bold">{ar ? pAr : pEn}</span>
+                        <div className="row wrap" style={{ gap: 6 }}>
+                          {PAGE_BG_MODES.map((m) => {
+                            const on = (p.mode || '') === m.id
+                            return (
+                              <button key={m.id || 'theme'} type="button" className={`chip ${on ? 'active' : ''}`} aria-pressed={on}
+                                onClick={() => {
+                                  if (m.id === 'image' && !p.url) { pickChromeFile({ type: 'page', id: pid }); return }
+                                  writeChromePage(pid, { mode: m.id })
+                                }}>{ar ? m.ar : m.en}</button>
+                            )
+                          })}
+                          {p.mode === 'image' && p.url && (
+                            <button type="button" className="btn-link xs" onClick={() => pickChromeFile({ type: 'page', id: pid })}>{ar ? 'تغيير الصورة' : 'Change the photo'}</button>
+                          )}
+                        </div>
+                        {bgOn && (
+                          <div className="row wrap" style={{ gap: 10 }}>
+                            {[['dim', 'تعتيم الخلفية', 'Background dim', 'pct'], ['blur', 'ضبابية', 'Blur', 'px']].map(([k, la, le, unit]) => {
+                              const R = PAGE_BG_RANGE[k]
+                              const v = Number(p[k] ?? R.dflt)
+                              return (
+                                <div key={k} className="field grow" style={{ minWidth: 140 }}>
+                                  <label>{ar ? la : le} · <span className="num">{wallSliderText(unit, v)}</span></label>
+                                  <input type="range" min={R.min} max={R.max} step={R.step} value={v} onChange={(e3) => writeChromePage(pid, { [k]: Number(e3.target.value) }, true)} style={{ width: '100%' }} />
+                                </div>
+                              )
+                            })}
+                          </div>
+                        )}
+                      </div>
+                    )
+                  })}
+                </div>
+
                 {/* 6c. HOW ONE DISH IS JOINED TO THE NEXT (tenant.menuSections).
                     The editorial theme gives every dish its own screen, and the
                     SEAM between two of them is what the owner complained about —
@@ -3591,6 +4278,13 @@ export default function Settings() {
                       )
                     })}
                   </div>
+                  {Number(secCfg.fade) > 0.6 && (
+                    <p className="xs" style={{ margin: 0, color: 'var(--warning)' }}>
+                      {ar
+                        ? '«تعتيم الغرفة خلف النص» مرتفع — هذه هي الطبقة الداكنة التي تراها فوق الأطباق، وليست عطلاً. أنزل المنزلق إن بدت الغرفة معتمة.'
+                        : 'The room-dim behind the text is high — this IS the dark layer you see over the dishes, not a bug. Lower the slider if the room looks murky.'}
+                    </p>
+                  )}
 
                   {secCfg.mode === 'divider' && (
                     <div className="row wrap" style={{ gap: 16, alignItems: 'center' }}>
@@ -3755,6 +4449,38 @@ export default function Settings() {
                         )}
                       </div>
 
+                      {/* STAGE COHESION — opened-item window only: extend the
+                          table to the window bottom, and rein in the space
+                          above the dish + the photo's height. All three keys
+                          are TABLE_STAGE_KEYS so writeTableAt lands them in
+                          menuTable.stage. `extend` is a boolean by contract
+                          (=== true), never num-clamped. */}
+                      {tblPlace === 'stage' && (
+                        <div className="stack" style={{ gap: 8, borderTop: '1px solid var(--border)', paddingTop: 10 }}>
+                          <span className="xs faint bold">{ar ? 'تناسق نافذة الصنف' : 'Item-window cohesion'}</span>
+                          <label className="row" style={{ gap: 8, alignItems: 'center', cursor: 'pointer' }}>
+                            <input type="checkbox" checked={tblValueAt('extend') === true} onChange={(e3) => writeTableAt({ extend: e3.target.checked === true })} style={{ width: 20, height: 20, flex: 'none' }} />
+                            <span className="xs">{ar ? 'مدّ الطاولة حتى أسفل النافذة (تلتحم بشريط الإضافة)' : 'Extend the table to the window bottom (meets the add bar)'}</span>
+                          </label>
+                          {[['heroPad', 'المساحة فوق الطبق', 'Space above the dish', 'px'], ['heroMax', 'أقصى ارتفاع لصورة الطبق', 'Dish photo max height', 'dvh']].map(([key, la, le, unit]) => {
+                            const R = TABLE_RANGE[key]
+                            const v = Number(tblValueAt(key))
+                            const overridden = tblStageOver[key] != null
+                            return (
+                              <div key={key} className="field" style={{ gap: 2 }}>
+                                <label>{ar ? la : le} · <span className="num">{v}{unit}</span>{overridden ? <span className="xs" style={{ color: 'var(--brand)' }}> · {ar ? 'مخصص للنافذة' : 'window only'}</span> : null}</label>
+                                <input type="range" min={R.min} max={R.max} step={R.step} value={v} onChange={(e3) => writeTableAt({ [key]: Number(e3.target.value) }, true)} style={{ width: '100%' }} />
+                              </div>
+                            )
+                          })}
+                          <span className="xs faint">
+                            {ar
+                              ? 'معاينة البطاقة هنا لا تُظهر هذه الثلاثة (لا يوجد فيها محاكاة لنافذة الصنف) — احكم عليها من المعاينة الكبيرة أو من المنيو نفسه.'
+                              : 'The small card preview cannot show these three (it has no item-window mock) — judge them in the big preview or the live menu.'}
+                          </span>
+                        </div>
+                      )}
+
                       <div className="row wrap" style={{ gap: 10 }}>
                         <div className="field grow" style={{ minWidth: 150 }}>
                           <label>{ar ? 'الدمج' : 'Blend'}</label>
@@ -3795,6 +4521,13 @@ export default function Settings() {
                                   <span className="edt-table-art" data-m={tblResolved.kind === 'material' ? tblResolved.material : undefined} style={tableStyle(tblResolved) || undefined} />
                                   {tblResolved.dim > 0 ? <span className="edt-table-dim" style={{ opacity: tblResolved.dim }} /> : null}
                                   <span className="mtbl-melt" />
+                                  {(() => {
+                                    // contract layers in the engine's own paint order:
+                                    // melt → melt-b → veil → edge → contact
+                                    const mb2 = tableMeltBottom(tblResolved)
+                                    return mb2 ? <span className="edt-table-melt-b" style={{ '--tbl-mba': `${mb2.a}%`, '--tbl-mbb': `${mb2.b}%` }} /> : null
+                                  })()}
+                                  {tblResolved.veil > 0 ? <span className="edt-table-veil" style={{ opacity: tblResolved.veil }} /> : null}
                                   <span className="edt-table-edge" data-e={tblResolved.edge} />
                                   {tblResolved.contact > 0 ? <span className="edt-table-contact" /> : null}
                                 </span>
@@ -3807,6 +4540,64 @@ export default function Settings() {
                       </div>
                     </>
                   )}
+                </div>
+
+                {/* 6c-3. THE SHADOWS (tenant.menuShadows) — every fixed dark
+                    line and cast in the room, one dial each: 1 is exactly
+                    today's look, 0 removes it outright. Placed right after the
+                    table card because the owner's two complaints live at the
+                    table band. */}
+                <div id="set-menushadows" className="card card-pad stack" style={{ gap: 12 }}>
+                  <div className="row-between wrap" style={{ gap: 8, alignItems: 'center' }}>
+                    <strong className="small"><Icon name="layers" size={14} style={{ verticalAlign: 'middle' }} /> {ar ? 'الظلال والخطوط الداكنة' : 'Shadows & dark lines'}</strong>
+                    <button type="button" className="btn-link xs" onClick={resetShadows}><Icon name="reload" size={12} /> {ar ? 'إرجاع الافتراضي' : 'Reset to default'}</button>
+                  </div>
+                  <p className="xs faint" style={{ margin: 0 }}>
+                    {ar
+                      ? 'كل خط داكن وكل ظل في المنيو — صفر يزيله نهائياً، والوضع الحالي هو الافتراضي. «ذوبان أعلى الطاولة» إضافة اختيارية تخص طاولات الصور وحدها.'
+                      : 'Every dark line and cast in the menu — zero removes it outright; the current look is the default. The table-top melt is an opt-in extra for photo tables only.'}
+                  </p>
+                  {ovLayout !== 'editorial' && (
+                    <p className="xs" style={{ margin: 0, color: 'var(--warning)' }}>
+                      {ar ? 'هذه الظلال تخص ثيم «المجلة الداكنة»، وتخطيط المنيو الحالي غيره. ' : 'These dials belong to the “Dark Editorial” theme, and your layout is currently different. '}
+                      <button type="button" className="btn-link" style={{ fontSize: 'inherit', fontWeight: 700 }} onClick={() => setASec('elements')}>{ar ? 'تغيير التخطيط' : 'Change the layout'}</button>
+                    </p>
+                  )}
+                  <div className="row wrap" style={{ gap: 8 }}>
+                    <button type="button" className="btn btn-sm btn-outline" onClick={killShadows}>
+                      <Icon name="close" size={13} /> {ar ? 'أزل كل الظلال والخطوط' : 'Remove every shadow & line'}
+                    </button>
+                  </div>
+                  <span className="xs faint">
+                    {ar
+                      ? 'إزالة «ظلال الأطباق» لا تحذف عمل موظفيك على الأصناف — تُخفّضه فقط، ويعود كاملاً برفع المنزلق. ظل الشريط العلوي الافتراضي (خارج أوضاع الصورة والطوب) ثابت عمداً — يتبع «لون الشريط».'
+                      : 'Killing the dish shadows never deletes the per-item work — it scales it, and raising the dial restores it. The default app-bar shadow (outside the image/brick modes) is deliberately fixed — it follows the bar-colour preset.'}
+                  </span>
+                  <div className="stack" style={{ gap: 8 }}>
+                    {SHADOW_SLIDERS.map(([key, la, le]) => {
+                      const R = SHADOW_RANGE[key]
+                      const v = Number(shCfg[key] != null ? shCfg[key] : R.dflt)
+                      return (
+                        <div key={key} className="field" style={{ gap: 2 }}>
+                          <label>{ar ? la : le} · <span className="num">{wallSliderText('pct', v)}</span></label>
+                          <input type="range" min={R.min} max={R.max} step={R.step} value={v} onChange={(e3) => writeShadows({ [key]: Number(e3.target.value) }, true)} style={{ width: '100%' }} />
+                        </div>
+                      )
+                    })}
+                  </div>
+                  {/* the OTHER half of the table band lives in two existing dials —
+                      these deep links are load-bearing, not polish: clearing the
+                      band needs tableEdge + contact + vignette together. */}
+                  <span className="xs faint">
+                    {ar ? 'نصفا «الشريط الداكن» الباقيان في بطاقتين أخريين: ' : 'The other half of the dark band lives in two other cards: '}
+                    <button type="button" className="btn-link" style={{ fontSize: 'inherit' }} onClick={() => document.getElementById('set-menuwall')?.scrollIntoView({ behavior: 'smooth', block: 'start' })}>
+                      {ar ? '«ذوبان أسفل صورة الطبق» في بطاقة الجدار' : '“Melt under the dish photo” in the wall card'}
+                    </button>
+                    {' · '}
+                    <button type="button" className="btn-link" style={{ fontSize: 'inherit' }} onClick={() => document.getElementById('set-menutable')?.scrollIntoView({ behavior: 'smooth', block: 'start' })}>
+                      {ar ? '«ظل التماس تحت الطبق» في بطاقة الطاولة' : '“Contact shadow” in the table card'}
+                    </button>
+                  </span>
                 </div>
 
                 {/* 6d. ROOM DECORATION (tenant.menuDecor) — the venue hangs its
@@ -3866,7 +4657,7 @@ export default function Settings() {
                         {uploading === 'bg' ? <div className="spinner" /> : bgImageUrl ? <img src={bgImageUrl} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover' }} /> : <span className="xs text-center">{ar ? 'اضغط لرفع صورة' : 'Upload Image'}</span>}
                         <input type="file" accept="image/*" hidden onChange={(e) => onBgFile(e, 'bg')} />
                       </label>
-                      <button type="button" className="btn-link text-center xs" style={{ marginTop: 4 }} onClick={() => setLibPick({ kind: 'image', apply: async (url) => { setBgImageUrl(url); setBgVideoUrl(''); try { await saveNow({ bgImageUrl: url, bgVideoUrl: '' }); updateTenantLocal({ bgImageUrl: url, bgVideoUrl: '' }); toast.success(t('saved')) } catch (_) { toast.error(t('error')) } } })}>{ar ? 'من المكتبة' : 'From library'}</button>
+                      <button type="button" className="btn-link text-center xs" style={{ marginTop: 4 }} onClick={() => setLibPick({ kind: 'image', apply: async (url) => { setBgImageUrl(url); setBgVideoUrl(''); setBgVideoTrim(null); try { await saveNow({ bgImageUrl: url, bgVideoUrl: '', bgVideoTrim: null }); updateTenantLocal({ bgImageUrl: url, bgVideoUrl: '', bgVideoTrim: null }); toast.success(t('saved')) } catch (_) { toast.error(t('error')) } } })}>{ar ? 'من المكتبة' : 'From library'}</button>
                       {bgImageUrl && <button type="button" className="btn-link text-center xs" style={{ color: 'var(--danger)', marginTop: 4 }} onClick={() => clearField('bgImageUrl', setBgImageUrl)}>{ar ? 'إزالة الصورة' : 'Remove'}</button>}
                     </div>
 
@@ -3885,7 +4676,11 @@ export default function Settings() {
                         {uploading === 'bannerVideo' ? <div className="spinner" /> : bannerVideoUrl ? <video src={bannerVideoUrl} muted loop autoPlay playsInline style={{ width: '100%', height: '100%', objectFit: 'cover' }} /> : <span className="xs text-center">{ar ? 'اضغط لرفع فيديو' : 'Upload Video'}</span>}
                         <input type="file" accept="video/*" hidden onChange={onBannerVideoFile} />
                       </label>
-                      {bannerVideoUrl && <button type="button" className="btn-link text-center xs" style={{ color: 'var(--danger)', marginTop: 4 }} onClick={() => clearField('bannerVideoUrl', setBannerVideoUrl)}>{ar ? 'إزالة الفيديو' : 'Remove'}</button>}
+                      {bannerVideoUrl && <button type="button" className="btn-link text-center xs" style={{ color: 'var(--danger)', marginTop: 4 }} onClick={() => clearField('bannerVideoUrl', setBannerVideoUrl, { patch: { bannerVideoTrim: null }, apply: () => setBannerVideoTrim(null) })}>{ar ? 'إزالة الفيديو' : 'Remove'}</button>}
+                      {bannerVideoUrl && (
+                        <VideoTrimRange url={bannerVideoUrl} value={bannerVideoTrim} ar={ar}
+                          onChange={(v) => { setBannerVideoTrim(v); saveNow({ bannerVideoTrim: v }).then(() => updateTenantLocal({ bannerVideoTrim: v })).catch(() => toast.error(t('error'))) }} />
+                      )}
                     </div>
 
                     <div style={{ flex: '1 1 45%', minWidth: 140 }} className="stack">
@@ -3894,8 +4689,12 @@ export default function Settings() {
                         {uploading === 'video' ? <div className="spinner" /> : bgVideoUrl ? <div className="xs text-center bold text-success" style={{ display: 'inline-flex', alignItems: 'center', gap: 4 }}><Icon name="check" size={12} /> {ar ? 'فيديو مرفوع' : 'Video set'}</div> : <span className="xs text-center">{ar ? 'اضغط لرفع فيديو' : 'Upload Video'}</span>}
                         <input type="file" accept="video/*" hidden onChange={onVideoFile} />
                       </label>
-                      <button type="button" className="btn-link text-center xs" style={{ marginTop: 4 }} onClick={() => setLibPick({ kind: 'video', apply: async (url) => { setBgVideoUrl(url); try { await saveNow({ bgVideoUrl: url }); updateTenantLocal({ bgVideoUrl: url }); toast.success(t('saved')) } catch (_) { toast.error(t('error')) } } })}>{ar ? 'من المكتبة' : 'From library'}</button>
-                      {bgVideoUrl && <button type="button" className="btn-link text-center xs" style={{ color: 'var(--danger)', marginTop: 4 }} onClick={() => clearField('bgVideoUrl', setBgVideoUrl)}>{ar ? 'إزالة الفيديو' : 'Remove'}</button>}
+                      <button type="button" className="btn-link text-center xs" style={{ marginTop: 4 }} onClick={() => setLibPick({ kind: 'video', apply: async (url) => { setBgVideoUrl(url); setBgVideoTrim(null); try { await saveNow({ bgVideoUrl: url, bgVideoTrim: null }); updateTenantLocal({ bgVideoUrl: url, bgVideoTrim: null }); toast.success(t('saved')) } catch (_) { toast.error(t('error')) } } })}>{ar ? 'من المكتبة' : 'From library'}</button>
+                      {bgVideoUrl && <button type="button" className="btn-link text-center xs" style={{ color: 'var(--danger)', marginTop: 4 }} onClick={() => clearField('bgVideoUrl', setBgVideoUrl, { patch: { bgVideoTrim: null }, apply: () => setBgVideoTrim(null) })}>{ar ? 'إزالة الفيديو' : 'Remove'}</button>}
+                      {bgVideoUrl && (
+                        <VideoTrimRange url={bgVideoUrl} value={bgVideoTrim} ar={ar}
+                          onChange={(v) => { setBgVideoTrim(v); saveNow({ bgVideoTrim: v }).then(() => updateTenantLocal({ bgVideoTrim: v })).catch(() => toast.error(t('error'))) }} />
+                      )}
                     </div>
 
                     <div style={{ flex: '1 1 45%', minWidth: 140 }} className="stack">
@@ -3940,6 +4739,28 @@ export default function Settings() {
                       <span className="xs faint">{ar ? 'التدرّج يذوّب الصورة/الفيديو في خلفية المنيو نفسها فيبدو جزءاً منه لا شريطاً منفصلاً.' : 'The fade dissolves the image/video into the menu background itself — one piece, not a pasted strip.'}</span>
                     </div>
                     <div className="field"><label>{ar ? `قوّة الاندماج: ${Math.round(bannerGradient * 100)}%` : `Melt strength: ${Math.round(bannerGradient * 100)}%`}</label><input type="range" min="0" max="1" step="0.05" value={bannerGradient} onChange={(e) => setBannerGradient(Number(e.target.value))} style={{ width: '100%' }} /></div>
+                    {/* TRUE-transparency melt (bannerMelt > 0): the media stack
+                        becomes a mask so whatever runs behind the banner — the
+                        room wall — shows through the ramp. 0 keeps the painted
+                        fade above exactly as it is today. */}
+                    <div className="field">
+                      <label>{ar ? `ذوبان شفاف (يُظهر الجدار خلفه): ${Math.round(Number(bannerMelt) * 100)}%` : `Transparent melt (shows the wall behind): ${Math.round(Number(bannerMelt) * 100)}%`}</label>
+                      <input type="range" min={BANNER_RANGE.melt.min} max={BANNER_RANGE.melt.max} step={BANNER_RANGE.melt.step} value={Number(bannerMelt)} onChange={(e) => setBannerMelt(Number(e.target.value))} style={{ width: '100%' }} />
+                      <span className="xs faint">{ar ? 'فوق الصفر يتحول البانر لشفافية حقيقية تُظهر ما خلفه بدل التدرّج المرسوم أعلاه. صفر يبقي السلوك القديم كما هو.' : 'Above zero the banner switches to true transparency showing what runs behind it; zero keeps the painted fade untouched.'}</span>
+                    </div>
+                    {Number(bannerMelt) > 0 && (
+                      <div className="row wrap" style={{ gap: 10 }}>
+                        <div className="field grow" style={{ minWidth: 150 }}>
+                          <label>{ar ? `طول الذوبان: ${Math.round(Number(bannerMeltLen))}%` : `Melt length: ${Math.round(Number(bannerMeltLen))}%`}</label>
+                          <input type="range" min={BANNER_RANGE.meltLen.min} max={BANNER_RANGE.meltLen.max} step={BANNER_RANGE.meltLen.step} value={Number(bannerMeltLen)} onChange={(e) => setBannerMeltLen(Number(e.target.value))} style={{ width: '100%' }} />
+                        </div>
+                        <div className="field grow" style={{ minWidth: 150 }}>
+                          <label>{ar ? `حجاب نص البانر (وضع الغرفة): ${Math.round(Number(bannerScrim) * 100)}%` : `Hero-text veil (room mode): ${Math.round(Number(bannerScrim) * 100)}%`}</label>
+                          <input type="range" min={BANNER_RANGE.scrim.min} max={BANNER_RANGE.scrim.max} step={BANNER_RANGE.scrim.step} value={Number(bannerScrim)} onChange={(e) => setBannerScrim(Number(e.target.value))} style={{ width: '100%' }} />
+                          <span className="xs faint">{ar ? 'القيمة الافتراضية مضبوطة لجدار مصوّر داكن — مع جدار فاتح ارفعها نحو 60% ليبقى النص مقروءاً.' : 'The default suits a dark photo wall — over a light wall raise it toward 60% to keep the text readable.'}</span>
+                        </div>
+                      </div>
+                    )}
                     <BgPanPad value={bannerPosition} onChange={setBannerPosition} label={ar ? 'تحريك البانر (اسحب النقطة)' : 'Move banner (drag the dot)'} />
                     <div className="field"><label>{ar ? `التكبير: ${Number(bannerScale).toFixed(1)}×` : `Zoom: ${Number(bannerScale).toFixed(1)}×`}</label><input type="range" min="1" max="3" step="0.1" value={bannerScale} onChange={(e) => setBannerScale(Number(e.target.value))} style={{ width: '100%' }} /></div>
                     {/* the banner's MOOD — the same filter/blend/tint the wall
@@ -4040,13 +4861,17 @@ export default function Settings() {
                     {immersiveBgUrl && <button className="btn btn-sm btn-ghost" style={{ color: 'var(--danger)' }} onClick={() => clearField('immersiveBgUrl', setImmersiveBgUrl)}>{ar ? 'إزالة الصورة' : 'Remove'}</button>}
 
                     <label className="btn btn-sm btn-outline" style={{ cursor: 'pointer' }}><Icon name="video" size={15} /> {uploading === 'immersive-video' ? t('saving') : (ar ? 'فيديو الخلفية' : 'Screen backdrop video')}<input type="file" accept="video/*" hidden onChange={onDetailsVideoFile} /></label>
-                    {immersiveBgVideoUrl && <button className="btn btn-sm btn-ghost" style={{ color: 'var(--danger)' }} onClick={() => clearField('immersiveBgVideoUrl', setImmersiveBgVideoUrl)}>{ar ? 'إزالة الفيديو' : 'Remove'}</button>}
+                    {immersiveBgVideoUrl && <button className="btn btn-sm btn-ghost" style={{ color: 'var(--danger)' }} onClick={() => clearField('immersiveBgVideoUrl', setImmersiveBgVideoUrl, { patch: { immersiveBgVideoTrim: null }, apply: () => setImmersiveBgVideoTrim(null) })}>{ar ? 'إزالة الفيديو' : 'Remove'}</button>}
                   </div>
                   {(immersiveBgUrl || immersiveBgVideoUrl) && (
                     <>
                       <div className="field"><label>{ar ? `شفافية الخلفية: ${Math.round(immersiveBgOpacity * 100)}%` : `Backdrop opacity: ${Math.round(immersiveBgOpacity * 100)}%`}</label><input type="range" min="0.05" max="1" step="0.05" value={immersiveBgOpacity} onChange={(e) => setImmersiveBgOpacity(Number(e.target.value))} style={{ width: '100%' }} /></div>
                       <BgPanPad value={immersiveBgPosition} onChange={setImmersiveBgPosition} label={ar ? 'تحريك الخلفية (اسحب النقطة)' : 'Move backdrop (drag the dot)'} />
                       <div className="field"><label>{ar ? `التكبير: ${Number(immersiveBgScale).toFixed(1)}×` : `Zoom: ${Number(immersiveBgScale).toFixed(1)}×`}</label><input type="range" min="1" max="3" step="0.1" value={immersiveBgScale} onChange={(e) => setImmersiveBgScale(Number(e.target.value))} style={{ width: '100%' }} /></div>
+                      {immersiveBgVideoUrl && (
+                        <VideoTrimRange url={immersiveBgVideoUrl} value={immersiveBgVideoTrim} ar={ar}
+                          onChange={(v) => { setImmersiveBgVideoTrim(v); saveNow({ immersiveBgVideoTrim: v }).then(() => updateTenantLocal({ immersiveBgVideoTrim: v })).catch(() => toast.error(t('error'))) }} />
+                      )}
                     </>
                   )}
                   <label className="row-between" style={{ cursor: 'pointer' }}>

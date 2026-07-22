@@ -1,4 +1,4 @@
-import { lazy, Suspense, useEffect, useMemo, useRef, useState } from 'react'
+import { Fragment, lazy, Suspense, useEffect, useMemo, useRef, useState } from 'react'
 import { createPortal } from 'react-dom'
 import { Link, useNavigate } from 'react-router-dom'
 import { useI18n, pickLang } from '../lib/i18n.jsx'
@@ -20,7 +20,8 @@ import { evaluateOffers, activeAutoOffers, offerForItem, discountedPrice } from 
 import { alertParty } from '../lib/notify.js'
 import { initTracking, identify, trackItemView, trackItemClose, trackCartAdd, trackSearch, trackCheckout, trackOrdered, trackGame } from '../lib/track.js'
 import ItemFx from './ItemFx.jsx'
-import { RANGE, filterCss, BLEND_IDS } from '../lib/dishComposition.js'
+import { RANGE, filterCss, BLEND_IDS, resolveWall, resolveButtons, resolveBanner, resolveFeatured, resolveHomeOrder, resolveChrome, resolveInk, inkModeFor, chromeInkVars, imgTiltBoxStyle } from '../lib/dishComposition.js'
+import { useVideoTrim } from '../lib/useVideoTrim.js'
 import GamesIcon from './GamesIcon.jsx'
 import '../styles/tactile.css'
 import '../styles/scrollfix.css'
@@ -43,8 +44,9 @@ import { getLocalCustomer, setLocalCustomer, isRegisterDismissed, dismissRegiste
 import { resolveSkin } from '../lib/skins.js'
 import { distanceMeters, getPosition } from '../lib/geo.js'
 import { startPayment } from '../lib/payments.js'
-import EditorialLayout, { EditorialItemStage } from './menuThemes/EditorialLayout.jsx'
+import EditorialLayout, { EditorialItemStage, buttonSkinVars, EditorialRoomBg } from './menuThemes/EditorialLayout.jsx'
 import OceanArtLayout from './menuThemes/OceanArtLayout.jsx'
+import ChromeSkin from './ChromeSkin.jsx'
 
 const resolveItemStyles = (it) => {
   const nameStyle = {}
@@ -67,8 +69,8 @@ const resolveItemStyles = (it) => {
 }
 
 // Shared diner menu + cart + checkout (offers + loyalty + modifiers).
-export default function MenuView({ tenant, tenantId, items, categories, offers = [], table, partySize, onPlaced, onCallWaiter, preview = false }) {
-  const { t, lang } = useI18n()
+export default function MenuView({ tenant, tenantId, items, categories, offers = [], table, partySize, onPlaced, onCallWaiter, preview = false, previewFocus = null }) {
+  const { t, lang, theme } = useI18n()
   const toast = useToast()
   const currency = tenant?.currency || 'SAR'
   // The active skin's menu layout drives how items are presented (Phase 2).
@@ -134,6 +136,75 @@ export default function MenuView({ tenant, tenantId, items, categories, offers =
   // Elements the venue chose to hide for this surface (events, search, …).
   const hiddenEls = resolveSkin(tenant, 'menu')?.hidden || []
   const isHidden = (k) => hiddenEls.includes(k)
+
+  // ---- the venue's room dials -----------------------------------------------
+  // Everything below is opt-in with null/0 defaults, so an untouched venue
+  // renders byte-identically. Fingerprint memos (JSON keys) follow the theme's
+  // own wallKey/btnKey pattern so streamed studio snapshots never rebuild the
+  // expensive paints per slider tick.
+  const edtWallKey = JSON.stringify(tenant?.menuWall || null)
+  // Room mode derives from the RESOLVED wall — null for pattern 'none' and for
+  // 'image' without a url — never from raw pattern truthiness, or data-room
+  // would stamp fixed light hero ink with no room behind it.
+  const edtWall = useMemo(() => (menuLayout === 'editorial' ? resolveWall(tenant) : null), [menuLayout, edtWallKey]) // eslint-disable-line react-hooks/exhaustive-deps
+  const roomOn = !!(edtWall && edtWall.room)
+  const banner = resolveBanner(tenant)
+  const featured = resolveFeatured(tenant)
+  // The true-transparency banner melt: bannerMelt > 0 replaces the painted
+  // .menu-hero-fade with a mask on the media wrapper, revealing whatever runs
+  // behind the banner (the room wall). bannerFadeDir is honoured — 'top' ramps
+  // upward, 'both' ramps both edges, anything else (including 'none': the
+  // owner opted into the melt explicitly) ramps toward the bottom.
+  const meltStyle = useMemo(() => {
+    if (!(banner.melt > 0)) return null
+    const hold = Math.max(0, 100 - banner.meltLen)
+    const edge = `rgba(0, 0, 0, ${(1 - banner.melt).toFixed(3)})`
+    const dir = tenant?.bannerFadeDir === 'top' ? 'top' : tenant?.bannerFadeDir === 'both' ? 'both' : 'bottom'
+    const half = banner.meltLen / 2
+    const mask = dir === 'both'
+      ? `linear-gradient(to bottom, ${edge} 0%, #000 ${Math.min(50, half)}%, #000 ${Math.max(50, 100 - half)}%, ${edge} 100%)`
+      : `linear-gradient(to ${dir}, #000 0%, #000 ${hold}%, ${edge} 100%)`
+    return { WebkitMaskImage: mask, maskImage: mask }
+  }, [banner.melt, banner.meltLen, tenant?.bannerFadeDir]) // eslint-disable-line react-hooks/exhaustive-deps
+  // The exp-bar wears the venue button skin — editorial-only, gated exactly
+  // like the theme switch below; buttonSkinVars is the theme's own painter so
+  // the two faces can never drift.
+  const edtBtnKey = JSON.stringify(tenant?.menuButtons || null)
+  const edtBtn = useMemo(() => (menuLayout === 'editorial' ? resolveButtons(tenant) : null), [menuLayout, edtBtnKey]) // eslint-disable-line react-hooks/exhaustive-deps
+  const edtBtnVars = useMemo(() => (edtBtn ? buttonSkinVars(edtBtn, edtWall) : null), [edtBtn, edtWall])
+  // Tenant-ordered home blocks (tenant.menuHome.order; absent = today's order).
+  const homeKey = JSON.stringify(tenant?.menuHome || null)
+  const homeOrder = useMemo(() => resolveHomeOrder(tenant), [homeKey]) // eslint-disable-line react-hooks/exhaustive-deps
+  // Menu chrome: custom bell icon + per-platform social icons resolve here;
+  // the faces themselves ride ChromeSkin's body vars.
+  const chromeKey = JSON.stringify(tenant?.menuChrome || null)
+  const mch = useMemo(() => resolveChrome(tenant), [chromeKey]) // eslint-disable-line react-hooks/exhaustive-deps
+  // Pre-menu ink lock: while the light flip is a lie (configured wall, no
+  // venue light inks) the root pins the dark token set for the zone ABOVE
+  // .edt-wrap too — index.css guards its light [data-menu-layout='editorial']
+  // block with :not([data-edt-dark]). Same condition the theme stamps.
+  const edtDarkRoot = menuLayout === 'editorial' && theme !== 'dark' && inkModeFor(tenant, theme) === 'dark'
+  // Banner video trim window (tenant.bannerVideoTrim) — the hook lives at TOP
+  // level (Rules of Hooks); the <video> itself renders inside an IIFE below.
+  const bannerTrimRef = useVideoTrim(tenant?.bannerVideoTrim)
+  // «ألوان الخطوط» bar inks: chromeInkVars stamped on the portal root so the
+  // app bar + bottom nav + portalled kin read the venue's per-mode bar
+  // colours. Cleanup mirrors the clearChrome discipline — the exact key list
+  // is captured and removed one by one, so nothing leaks into staff shells.
+  // Deps carry a menuWall fingerprint because inkModeFor()'s automatic dark
+  // lock derives from the resolved wall (a streamed wall change must re-run).
+  const inkKeyMv = JSON.stringify(tenant?.menuInk || null)
+  const inkWallKeyMv = JSON.stringify([tenant?.menuWall?.pattern || '', tenant?.menuWall?.url || ''])
+  useEffect(() => {
+    const node = menuPortalRoot
+    if (!node) return undefined
+    const ink = resolveInk(tenant)
+    const vars = ink ? chromeInkVars(ink[inkModeFor(tenant, theme)]) : null
+    if (!vars) return undefined
+    const keys = Object.keys(vars)
+    keys.forEach((k) => node.style.setProperty(k, vars[k]))
+    return () => keys.forEach((k) => node.style.removeProperty(k))
+  }, [menuPortalRoot, inkKeyMv, inkWallKeyMv, theme]) // eslint-disable-line react-hooks/exhaustive-deps
 
   const navigate = useNavigate()
   const [activeCat, setActiveCat] = useState('all')
@@ -454,6 +525,28 @@ export default function MenuView({ tenant, tenantId, items, categories, offers =
     return undefined
   }, [viewItem, preview])
 
+  // The studio/editor preview steers which dish is on screen (preview only).
+  // SPLIT into two effects on purpose: the scroll effect keys on the focus
+  // identity alone, so the fresh focus clone every postMessage tick brings
+  // never re-scrolls under the owner's wheel; the stage-follow effect keys on
+  // `items` too, so the OPEN stage keeps tracking the streamed draft live —
+  // freezing on the first draft was the exact complaint this serves.
+  useEffect(() => {
+    if (!preview || !previewFocus || !previewFocus.itemId || previewFocus.view === 'stage') return undefined
+    setViewItem(null); setOpenRect(null)
+    const tm = setTimeout(() => {
+      const el = rootRef.current && rootRef.current.querySelector(`[data-item-id="${previewFocus.itemId}"]`)
+      if (el && el.scrollIntoView) el.scrollIntoView({ block: 'center' })
+    }, 80)
+    return () => clearTimeout(tm)
+  }, [preview, previewFocus?.itemId, previewFocus?.view]) // eslint-disable-line react-hooks/exhaustive-deps
+  useEffect(() => {
+    if (!preview || !previewFocus || previewFocus.view !== 'stage' || !previewFocus.itemId) return undefined
+    const it = (items || []).find((x) => x.id === previewFocus.itemId)
+    if (it) setViewItem(it)
+    return undefined
+  }, [preview, previewFocus?.itemId, previewFocus?.view, items]) // eslint-disable-line react-hooks/exhaustive-deps
+
   // Searches (including the zero-result ones — what guests ask for and the
   // venue does not have) are recorded after the guest stops typing.
   useEffect(() => {
@@ -661,8 +754,242 @@ export default function MenuView({ tenant, tenantId, items, categories, offers =
 
   const hasAnyItems = allActive.length > 0
 
+  // ------------------------------------------------------------------ home ----
+  // The blocks above the dishes, extracted VERBATIM into one renderer map so
+  // tenant.menuHome.order (resolveHomeOrder) can arrange them. Every renderer
+  // keeps its exact original condition INSIDE itself, so a block that renders
+  // nothing today still renders nothing wherever it is placed. The resume
+  // banner stays pinned above the loop (system notice, not decor) and the
+  // layout switch stays fixed after it.
+  //
+  // hero: the venue header. All media layers live inside ONE .menu-hero-media
+  // wrapper (the wrapper carries the banner height; every layer inside paints
+  // absolutely — the tint used to be a second in-flow cover that doubled the
+  // hero's height) so the true-transparency melt has a single thing to mask.
+  // The painted .menu-hero-fade stays OUTSIDE the wrapper (its card-variant
+  // inset is authored against .menu-hero) and is gated OFF while bannerMelt>0.
+  const HOME_RENDER = {
+    hero: () => (
+      <div className="menu-hero" data-banner={(tenant?.bannerVideoUrl || tenant?.bannerUrl) ? (tenant?.bannerStyle || 'full') : undefined}>
+        <div className="menu-hero-media" style={meltStyle || undefined} aria-hidden="true">
+          {(tenant?.bannerVideoUrl || tenant?.bannerUrl) ? (
+            <>
+              {(() => {
+                /* the banner's MOOD — the same filter presets, blend modes and
+                   tint every other backdrop already has (bannerFilter/bannerBlend/
+                   bannerTint+bannerTintAmount). filterCss() resolves the preset,
+                   so an unknown id is simply no filter, never a broken string. */
+                const moodFilter = filterCss(tenant?.bannerFilter) || undefined
+                const moodBlend = tenant?.bannerBlend && tenant.bannerBlend !== 'normal' && BLEND_IDS.includes(tenant.bannerBlend) ? tenant.bannerBlend : undefined
+                return tenant?.bannerVideoUrl ? (
+                  /* video banner — same opacity/position/zoom controls as the image */
+                  <video ref={bannerTrimRef} className="menu-hero-cover menu-hero-video" src={tenant.bannerVideoUrl} autoPlay muted loop playsInline preload="auto"
+                    style={{ objectPosition: tenant.bannerPosition || 'center', opacity: tenant.bannerOpacity != null ? Number(tenant.bannerOpacity) : 1, transform: Number(tenant.bannerScale) > 1 ? `scale(${Number(tenant.bannerScale)})` : undefined, transformOrigin: tenant.bannerPosition || 'center', filter: moodFilter, mixBlendMode: moodBlend }} />
+                ) : (
+                  <div className="menu-hero-cover" style={{ backgroundImage: `url(${tenant.bannerUrl})`, backgroundSize: tenant.bannerScale ? `${Number(tenant.bannerScale) * 100}%` : 'cover', backgroundPosition: tenant.bannerPosition || 'center', opacity: tenant.bannerOpacity != null ? Number(tenant.bannerOpacity) : 1, filter: moodFilter, mixBlendMode: moodBlend }} />
+                )
+              })()}
+              {tenant?.bannerTint && Number(tenant.bannerTintAmount) > 0 && (
+                <div className="menu-hero-cover" aria-hidden="true" style={{ background: tenant.bannerTint, opacity: Math.min(1, Number(tenant.bannerTintAmount)), pointerEvents: 'none' }} />
+              )}
+            </>
+          ) : tenant?.coverUrl ? (
+            <div className="menu-hero-cover" style={{ backgroundImage: `url(${tenant.coverUrl})` }} />
+          ) : (
+            <div className="menu-hero-cover menu-hero-grad" />
+          )}
+        </div>
+        {(tenant?.bannerVideoUrl || tenant?.bannerUrl) && banner.melt === 0 && (
+          <div className="menu-hero-fade" data-fade={tenant?.bannerFadeDir || 'bottom'} style={{ opacity: tenant.bannerGradient != null ? Number(tenant.bannerGradient) : 0.55 }} />
+        )}
+        <div className="container menu-hero-body">
+          {tenant?.logoUrl && <img className="menu-hero-logo" src={tenant.logoUrl} alt="" decoding="async" />}
+          <h2 className="menu-hero-title" style={{ marginTop: tenant?.logoUrl ? 4 : 44 }}>{tenant?.name}</h2>
+          {tenant?.descAr && <p className="muted small" style={{ maxWidth: 520 }}>{tenant.descAr}</p>}
+          {!isHidden('social') && <SocialLinks social={tenant?.social} appearance={tenant?.socialStyle} icons={mch?.socialIcons} className="menu-hero-social" />}
+          {!isHidden('profile') && tenant?.slug && !preview && (
+            <Link to={`/m/${tenant.slug}/about`} className="btn btn-sm btn-outline" style={{ marginTop: 8 }}>
+              <Icon name="events" size={14} /> {lang === 'ar' ? 'قصتنا وأخبارنا' : 'Our story & news'}
+            </Link>
+          )}
+        </div>
+      </div>
+    ),
+    // stories strip (hidden via appearance "hidden elements"; renders nothing when empty)
+    stories: () => (!isHidden('stories') && !preview ? <Stories tenantId={tenantId} lang={lang} /> : null),
+    // search + view toggle
+    search: () => ((!isHidden('search') || (showViewToggle && !isHidden('viewToggle'))) ? (
+      <div className="container" id="m-search" style={{ marginTop: 'var(--sp-3)' }}>
+        <div className="row" style={{ gap: 'var(--sp-2)' }}>
+          {!isHidden('search') && (
+            <div className="m-search grow">
+              <Icon name="search" size={18} className="faint" />
+              <input value={search} onChange={(e) => setSearch(e.target.value)} placeholder={t('searchFood')} aria-label={t('search')} />
+              {search && <button type="button" className="icon-btn" style={{ width: 36, height: 36 }} onClick={() => setSearch('')}><Icon name="close" size={15} /></button>}
+            </div>
+          )}
+          {showViewToggle && !isHidden('viewToggle') && (
+            <div className="view-toggle">
+              <button className={viewMode === 'list' ? 'on' : ''} onClick={() => setViewMode('list')} aria-label={t('listView')}><Icon name="list" size={18} /></button>
+              <button className={viewMode === 'gallery' ? 'on' : ''} onClick={() => setViewMode('gallery')} aria-label={t('galleryView')}><Icon name="grid" size={18} /></button>
+            </div>
+          )}
+        </div>
+      </div>
+    ) : null),
+    // «التجربة التفاعلية» — voice / photo / 3D world / compare / table order.
+    // The bar renders while the tenant is still loading (an empty row whose
+    // height is reserved in CSS) and once it has chips — but NOT once we know
+    // the venue enabled no experiences, so the row's vertical footprint never
+    // shifts. It renders in the studio preview too now (the venue must SEE the
+    // chip skin and position while editing); the click guard keeps the
+    // overlays closed there. The bar wears the venue button skin
+    // (data-btnskin/-btnshape + buttonSkinVars — the theme's own painter)
+    // whenever menuButtons is configured on the editorial theme, regardless of
+    // scope: these chips are primary-grade actions. The games chip keeps its
+    // GamesIcon; under a skin its purple gradient surrenders to the venue face
+    // via the exp-bar skin CSS and stays findable through the amber inset ring
+    // (brick is structure, amber is light). Same icon box for every chip so
+    // the row is one consistent control set.
+    chips: () => ((!tenant || expChips.length > 0) ? (
+      <div className="container" style={{ marginTop: 'var(--sp-2)' }}>
+        <div className="exp-bar scroll-x" data-btnskin={edtBtn ? edtBtn.skin : undefined} data-btnshape={edtBtn && edtBtn.shape ? edtBtn.shape : undefined} style={edtBtnVars || undefined}>
+          {expChips.map((c) => (
+            <button key={c.id} type="button" className={`exp-chip${c.id === 'games' ? ' is-games' : ''}`} onClick={() => { if (!preview) setFxOpen(c.id) }}>
+              {c.id === 'games'
+                ? <GamesIcon size={16} animated />
+                : <Icon name={c.icon} size={16} />}
+              <span>{c.label}</span>
+            </button>
+          ))}
+        </div>
+      </div>
+    ) : null),
+    // The welcome pair. The browse-only card keeps its condition INDEPENDENT
+    // of isHidden('welcome') — hiding 'welcome' has never hidden it, and the
+    // merge into one ordered block must not change that.
+    welcome: () => (
+      <>
+        {!orderingEnabled && !search.trim() && (
+          <div className="container" style={{ paddingTop: 8 }}>
+            <div className="welcome-card" style={{ borderColor: 'var(--brand)' }}>
+              <span className="welcome-ic"><Icon name="menu" size={19} /></span>
+              <div className="grow stack" style={{ gap: 1 }}>
+                <strong className="small">{lang === 'ar' ? 'منيو للتصفح والاستعراض' : 'Browse-only menu'}</strong>
+                <span className="xs faint">{lang === 'ar' ? 'سجّل رقمك ليصلك كل جديد وعروضنا على واتساب' : 'Register to get our news & offers on WhatsApp'}</span>
+              </div>
+              <button className="btn btn-sm btn-primary" onClick={() => setRegOpen(true)}>{lang === 'ar' ? 'سجّل الآن' : 'Register'}</button>
+            </div>
+          </div>
+        )}
+        {(memberCard?.active || savedCustomer || !regDismissed) && !search.trim() && !isHidden('welcome') && (
+          <div className="container" data-welcome-style={tenant?.welcomeStyle || 'tinted'} style={{ paddingTop: 8, paddingBottom: 4 }}>
+            {memberCard?.active && tenant?.slug ? (
+              <a className="welcome-card" href={`/mcard/${tenant.slug}/${memberCard.token}`} style={{ textDecoration: 'none', color: 'inherit', cursor: 'pointer', borderColor: (TIER_META[memberCard.tier] || {}).color }}>
+                {/* TIER_META has icon/color (no emoji field — this used to render empty) */}
+                <span className="welcome-ic" style={{ color: (TIER_META[memberCard.tier] || TIER_META.silver).color }}><Icon name={(TIER_META[memberCard.tier] || TIER_META.silver).icon || 'award'} size={19} /></span>
+                <div className="grow stack" style={{ gap: 1 }}>
+                  <strong className="small">{lang === 'ar' ? `عضو ${TIER_META[memberCard.tier] ? TIER_META[memberCard.tier].ar : ''}` : `${TIER_META[memberCard.tier] ? TIER_META[memberCard.tier].en : ''} member`} · {memberCard.points || 0} {lang === 'ar' ? 'نقطة' : 'pts'} · {memberCard.discountPct || 0}%</strong>
+                  <span className="xs faint">{lang === 'ar' ? 'اضغط لعرض بطاقتك' : 'Tap to view your card'}</span>
+                </div>
+                <Icon name="next" size={18} className="faint" />
+              </a>
+            ) : savedCustomer ? (
+              <div className="welcome-card">
+                <span className="welcome-ic"><Icon name="user" size={19} /></span>
+                <div className="grow stack" style={{ gap: 1 }}>
+                  <strong className="small">{lang === 'ar' ? `أهلاً ${savedCustomer.name || 'بعودتك'}` : `Welcome back${savedCustomer.name ? ` ${savedCustomer.name}` : ''}`}</strong>
+                  <span className="xs faint">{lang === 'ar' ? 'سعداء بعودتك — تابع نقاطك وعروضك' : 'Track your points & offers'}</span>
+                </div>
+                <Icon name="award" size={18} className="faint" />
+              </div>
+            ) : (
+              <div className="welcome-card">
+                <span className="welcome-ic"><Icon name="sparkles" size={19} /></span>
+                <div className="grow stack" style={{ gap: 1 }}>
+                  <strong className="small">{lang === 'ar' ? 'انضمّ لبرنامج الولاء' : 'Join the loyalty program'}</strong>
+                  <span className="xs faint">{lang === 'ar' ? 'اجمع نقاطاً واحصل على عروض خاصة' : 'Collect points & unlock offers'}</span>
+                </div>
+                <button className="btn btn-sm btn-primary" onClick={() => setRegOpen(true)}>{lang === 'ar' ? 'تسجيل' : 'Join'}</button>
+                <button className="icon-btn" style={{ width: 36, height: 36 }} onClick={() => { dismissRegister(tenantId); setRegDismissed(true) }}><Icon name="close" size={15} /></button>
+              </div>
+            )}
+          </div>
+        )}
+      </>
+    ),
+    // promos
+    promos: () => (promos.length > 0 && !search.trim() && !isHidden('promos') && menuLayout !== 'storefront' ? (
+      <div className="container" style={{ marginTop: 'var(--sp-3)' }}>
+        <div className="m-promos">
+          {promos.map((o) => (
+            <div key={o.id} className="m-promo">
+              <strong style={{ fontSize: 'var(--fs-lg)' }}>{o.type === 'percent' ? `${o.value}%` : <Price value={o.value} currency={currency} lang={lang} />} {lang === 'ar' ? 'خصم' : 'OFF'}</strong>
+              <span className="small" style={{ opacity: .92 }}>{pickLang(o, 'name', lang) || (lang === 'ar' ? 'عرض خاص' : 'Special offer')}</span>
+              {o.code && <span className="badge" style={{ width: 'fit-content', background: 'rgba(255,255,255,.2)', color: 'var(--on-brand)' }}>{o.code}</span>}
+            </div>
+          ))}
+        </div>
+      </div>
+    ) : null),
+    // «ذاكرة المكان» — a returning guest is recognised the way a good waiter
+    // would: only things that are true and specific, and silence otherwise.
+    memory: () => (!preview && memoryLines.length > 0 ? (
+      <div className="container" style={{ marginTop: 'var(--sp-3)' }}>
+        <Suspense fallback={null}>
+          <VenueMemory
+            lines={memoryLines}
+            venueName={tenant?.name || ''}
+            lang={lang}
+            storageKey={tenantId}
+            onAction={(line) => {
+              if (line?.kind === 'lookedNotOrdered' && line.itemId) {
+                const it = (items || []).find((i) => i.id === line.itemId)
+                if (it) setViewItem(it)
+              } else if (line?.kind === 'usual' && line.itemId) {
+                const it = (items || []).find((i) => i.id === line.itemId)
+                if (it) setViewItem(it)
+              }
+            }}
+          />
+        </Suspense>
+      </div>
+    ) : null),
+    // Google-reviews showcase strip — the ReviewsStudio toggle
+    // (tenant.reviewShowcase.enabled) finally has its render surface.
+    reviews: () => (tenant?.reviewShowcase?.enabled && !search.trim() && !preview ? (
+      <ReviewShowcase tenantId={tenantId} lang={lang} />
+    ) : null),
+    // special dishes — data-film + --feat-film carry the venue's plaster dial
+    // (resolveFeatured; 0 = attribute absent, byte-identical)
+    special: () => (special.length > 0 && !search.trim() && !isHidden('special') && menuLayout !== 'storefront' ? (
+      <div className="container special-sec" data-menu-layout={menuLayout} data-featured-style={tenant?.featuredStyle || 'soft'} data-film={featured.film > 0 ? '1' : undefined} style={{ marginTop: 'var(--sp-4)', ...(featured.film > 0 ? { '--feat-film': featured.film } : {}) }}>
+        <div className="special-head">
+          <Icon name={featuredMode === 'auto' ? 'flame' : 'star'} size={16} />
+          <strong>{featuredMode === 'auto' ? (lang === 'ar' ? 'الأكثر طلباً' : 'Best sellers') : t('specialDishes')}</strong>
+        </div>
+        <div className="special-row">
+          {special.map((it, idx) => (
+            <button key={it.id} className="special-card" onClick={() => setViewItem(it)}>
+              {featuredMode === 'auto'
+                ? <span className="special-badge special-rank">{idx + 1}</span>
+                : <span className="special-badge special-star" aria-hidden="true"><Icon name="star" size={11} /></span>}
+              {it.imageUrl ? <img src={it.imageUrl} alt="" loading="lazy" decoding="async" /> : <span className="special-ph" aria-hidden="true"><Icon name="image" size={26} /></span>}
+              <div className="bold small" style={{ whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{pickLang(it, 'name', lang)}</div>
+              <div className="price small" style={{ color: 'var(--brand)' }}><Price value={it.price} currency={currency} lang={lang} /></div>
+            </button>
+          ))}
+        </div>
+      </div>
+    ) : null),
+  }
+
   return (
-    <div ref={rootRef} data-menu-layout={menuLayout} data-motion={motion} data-motion-speed={motionSpeed} data-tap={tap} data-menuglass={menuGlassLvl || undefined} data-venue-bg={(tenant?.bgImageUrl || tenant?.bgVideoUrl || tenant?.watermarkUrl || tenant?.bgGradient) ? '1' : '0'} key={`${motion}-${motionSpeed}`} style={{ paddingBottom: 'calc(var(--bottomnav-h) + var(--safe-b) + 8px)', ...glassVars(tenant, 'menu') }}>
+    <div ref={rootRef} data-menu-layout={menuLayout} data-motion={motion} data-motion-speed={motionSpeed} data-tap={tap} data-menuglass={menuGlassLvl || undefined} data-venue-bg={(tenant?.bgImageUrl || tenant?.bgVideoUrl || tenant?.watermarkUrl || tenant?.bgGradient) ? '1' : '0'} data-room={roomOn ? '1' : undefined} data-edt-dark={edtDarkRoot ? '1' : undefined} key={`${motion}-${motionSpeed}`} style={{ paddingBottom: 'calc(var(--bottomnav-h) + var(--safe-b) + 8px)', ...glassVars(tenant, 'menu'), ...(roomOn ? { '--bn-scrim': banner.scrim } : {}) }}>
+      {/* the venue's chrome faces (null-render body vars) + the ONE room wall
+          behind the whole page (menuWall.room — EditorialRoomBg guards itself) */}
+      <ChromeSkin tenant={tenant} />
+      {menuLayout === 'editorial' && <EditorialRoomBg tenant={tenant} />}
       {/* resume banner — a returning diner taps to reopen their live order page */}
       {!preview && activeOrder && tenant?.slug && (() => {
         const [stLabel, stIcon] = ORDER_ST[activeOrder.status] || ORDER_ST.pending
@@ -690,216 +1017,12 @@ export default function MenuView({ tenant, tenantId, items, categories, offers =
         )
       })()}
 
-      <div className="menu-hero" data-banner={(tenant?.bannerVideoUrl || tenant?.bannerUrl) ? (tenant?.bannerStyle || 'full') : undefined}>
-        {(tenant?.bannerVideoUrl || tenant?.bannerUrl) ? (
-          <>
-            {(() => {
-              /* the banner's MOOD — the same filter presets, blend modes and
-                 tint every other backdrop already has (bannerFilter/bannerBlend/
-                 bannerTint+bannerTintAmount). filterCss() resolves the preset,
-                 so an unknown id is simply no filter, never a broken string. */
-              const moodFilter = filterCss(tenant?.bannerFilter) || undefined
-              const moodBlend = tenant?.bannerBlend && tenant.bannerBlend !== 'normal' && BLEND_IDS.includes(tenant.bannerBlend) ? tenant.bannerBlend : undefined
-              return tenant?.bannerVideoUrl ? (
-                /* video banner — same opacity/position/zoom controls as the image */
-                <video className="menu-hero-cover menu-hero-video" src={tenant.bannerVideoUrl} autoPlay muted loop playsInline preload="auto"
-                  style={{ objectPosition: tenant.bannerPosition || 'center', opacity: tenant.bannerOpacity != null ? Number(tenant.bannerOpacity) : 1, transform: Number(tenant.bannerScale) > 1 ? `scale(${Number(tenant.bannerScale)})` : undefined, transformOrigin: tenant.bannerPosition || 'center', filter: moodFilter, mixBlendMode: moodBlend }} />
-              ) : (
-                <div className="menu-hero-cover" style={{ backgroundImage: `url(${tenant.bannerUrl})`, backgroundSize: tenant.bannerScale ? `${Number(tenant.bannerScale) * 100}%` : 'cover', backgroundPosition: tenant.bannerPosition || 'center', opacity: tenant.bannerOpacity != null ? Number(tenant.bannerOpacity) : 1, filter: moodFilter, mixBlendMode: moodBlend }} />
-              )
-            })()}
-            {tenant?.bannerTint && Number(tenant.bannerTintAmount) > 0 && (
-              <div className="menu-hero-cover" aria-hidden="true" style={{ background: tenant.bannerTint, opacity: Math.min(1, Number(tenant.bannerTintAmount)), pointerEvents: 'none' }} />
-            )}
-            {/* the melt-into-the-menu fade: direction + strength are venue-controlled */}
-            <div className="menu-hero-fade" data-fade={tenant?.bannerFadeDir || 'bottom'} style={{ opacity: tenant.bannerGradient != null ? Number(tenant.bannerGradient) : 0.55 }} />
-          </>
-        ) : tenant?.coverUrl ? (
-          <div className="menu-hero-cover" style={{ backgroundImage: `url(${tenant.coverUrl})` }} />
-        ) : (
-          <div className="menu-hero-cover menu-hero-grad" />
-        )}
-        <div className="container menu-hero-body">
-          {tenant?.logoUrl && <img className="menu-hero-logo" src={tenant.logoUrl} alt="" decoding="async" />}
-          <h2 className="menu-hero-title" style={{ marginTop: tenant?.logoUrl ? 4 : 44 }}>{tenant?.name}</h2>
-          {tenant?.descAr && <p className="muted small" style={{ maxWidth: 520 }}>{tenant.descAr}</p>}
-          {!isHidden('social') && <SocialLinks social={tenant?.social} appearance={tenant?.socialStyle} className="menu-hero-social" />}
-          {!isHidden('profile') && tenant?.slug && !preview && (
-            <Link to={`/m/${tenant.slug}/about`} className="btn btn-sm btn-outline" style={{ marginTop: 8 }}>
-              <Icon name="events" size={14} /> {lang === 'ar' ? 'قصتنا وأخبارنا' : 'Our story & news'}
-            </Link>
-          )}
-        </div>
-      </div>
-
-      {/* stories strip (hidden via appearance "hidden elements"; renders nothing when empty) */}
-      {!isHidden('stories') && !preview && <Stories tenantId={tenantId} lang={lang} />}
-
-      {/* search + view toggle */}
-      {(!isHidden('search') || (showViewToggle && !isHidden('viewToggle'))) && (
-        <div className="container" id="m-search" style={{ marginTop: 'var(--sp-3)' }}>
-          <div className="row" style={{ gap: 'var(--sp-2)' }}>
-            {!isHidden('search') && (
-              <div className="m-search grow">
-                <Icon name="search" size={18} className="faint" />
-                <input value={search} onChange={(e) => setSearch(e.target.value)} placeholder={t('searchFood')} aria-label={t('search')} />
-                {search && <button type="button" className="icon-btn" style={{ width: 36, height: 36 }} onClick={() => setSearch('')}><Icon name="close" size={15} /></button>}
-              </div>
-            )}
-            {showViewToggle && !isHidden('viewToggle') && (
-              <div className="view-toggle">
-                <button className={viewMode === 'list' ? 'on' : ''} onClick={() => setViewMode('list')} aria-label={t('listView')}><Icon name="list" size={18} /></button>
-                <button className={viewMode === 'gallery' ? 'on' : ''} onClick={() => setViewMode('gallery')} aria-label={t('galleryView')}><Icon name="grid" size={18} /></button>
-              </div>
-            )}
-          </div>
-        </div>
-      )}
-
-      {/* «التجربة التفاعلية» — voice / photo / 3D world / compare / table order.
-          Each chip appears only when the venue enabled it AND it has something
-          to show (e.g. the 3D world needs at least one item with a model). */}
-      {/* Render the bar while the tenant is still loading (an empty row whose
-          height is reserved in CSS) and once it has chips — but NOT once we know
-          the venue enabled no experiences. So the row's vertical footprint is
-          fixed from first paint through load: chips fill in horizontally, never
-          pushing the menu up or down. */}
-      {!preview && (!tenant || expChips.length > 0) && (
-        <div className="container" style={{ marginTop: 'var(--sp-2)' }}>
-          <div className="exp-bar scroll-x">
-            {expChips.map((c) => (
-              <button key={c.id} type="button" className={`exp-chip${c.id === 'games' ? ' is-games' : ''}`} onClick={() => setFxOpen(c.id)}>
-                {/* The games entry gets its own mark — cards, a die and a
-                    domino — because a generic play triangle said "video", not
-                    "sit down and play with us". */}
-                {/* Same icon box for every chip so the row is one consistent
-                    control set; the games chip stands out by its gradient and
-                    pulse, not by being a different size. */}
-                {c.id === 'games'
-                  ? <GamesIcon size={16} animated />
-                  : <Icon name={c.icon} size={16} />}
-                <span>{c.label}</span>
-              </button>
-            ))}
-          </div>
-        </div>
-      )}
-
-      {/* display-only menu: clear positioning + one-tap registration for updates */}
-      {!orderingEnabled && !search.trim() && (
-        <div className="container" style={{ paddingTop: 8 }}>
-          <div className="welcome-card" style={{ borderColor: 'var(--brand)' }}>
-            <span className="welcome-ic"><Icon name="menu" size={19} /></span>
-            <div className="grow stack" style={{ gap: 1 }}>
-              <strong className="small">{lang === 'ar' ? 'منيو للتصفح والاستعراض' : 'Browse-only menu'}</strong>
-              <span className="xs faint">{lang === 'ar' ? 'سجّل رقمك ليصلك كل جديد وعروضنا على واتساب' : 'Register to get our news & offers on WhatsApp'}</span>
-            </div>
-            <button className="btn btn-sm btn-primary" onClick={() => setRegOpen(true)}>{lang === 'ar' ? 'سجّل الآن' : 'Register'}</button>
-          </div>
-        </div>
-      )}
-
-      {(memberCard?.active || savedCustomer || !regDismissed) && !search.trim() && !isHidden('welcome') && (
-        <div className="container" data-welcome-style={tenant?.welcomeStyle || 'tinted'} style={{ paddingTop: 8, paddingBottom: 4 }}>
-          {memberCard?.active && tenant?.slug ? (
-            <a className="welcome-card" href={`/mcard/${tenant.slug}/${memberCard.token}`} style={{ textDecoration: 'none', color: 'inherit', cursor: 'pointer', borderColor: (TIER_META[memberCard.tier] || {}).color }}>
-              {/* TIER_META has icon/color (no emoji field — this used to render empty) */}
-              <span className="welcome-ic" style={{ color: (TIER_META[memberCard.tier] || TIER_META.silver).color }}><Icon name={(TIER_META[memberCard.tier] || TIER_META.silver).icon || 'award'} size={19} /></span>
-              <div className="grow stack" style={{ gap: 1 }}>
-                <strong className="small">{lang === 'ar' ? `عضو ${TIER_META[memberCard.tier] ? TIER_META[memberCard.tier].ar : ''}` : `${TIER_META[memberCard.tier] ? TIER_META[memberCard.tier].en : ''} member`} · {memberCard.points || 0} {lang === 'ar' ? 'نقطة' : 'pts'} · {memberCard.discountPct || 0}%</strong>
-                <span className="xs faint">{lang === 'ar' ? 'اضغط لعرض بطاقتك' : 'Tap to view your card'}</span>
-              </div>
-              <Icon name="next" size={18} className="faint" />
-            </a>
-          ) : savedCustomer ? (
-            <div className="welcome-card">
-              <span className="welcome-ic"><Icon name="user" size={19} /></span>
-              <div className="grow stack" style={{ gap: 1 }}>
-                <strong className="small">{lang === 'ar' ? `أهلاً ${savedCustomer.name || 'بعودتك'}` : `Welcome back${savedCustomer.name ? ` ${savedCustomer.name}` : ''}`}</strong>
-                <span className="xs faint">{lang === 'ar' ? 'سعداء بعودتك — تابع نقاطك وعروضك' : 'Track your points & offers'}</span>
-              </div>
-              <Icon name="award" size={18} className="faint" />
-            </div>
-          ) : (
-            <div className="welcome-card">
-              <span className="welcome-ic"><Icon name="sparkles" size={19} /></span>
-              <div className="grow stack" style={{ gap: 1 }}>
-                <strong className="small">{lang === 'ar' ? 'انضمّ لبرنامج الولاء' : 'Join the loyalty program'}</strong>
-                <span className="xs faint">{lang === 'ar' ? 'اجمع نقاطاً واحصل على عروض خاصة' : 'Collect points & unlock offers'}</span>
-              </div>
-              <button className="btn btn-sm btn-primary" onClick={() => setRegOpen(true)}>{lang === 'ar' ? 'تسجيل' : 'Join'}</button>
-              <button className="icon-btn" style={{ width: 36, height: 36 }} onClick={() => { dismissRegister(tenantId); setRegDismissed(true) }}><Icon name="close" size={15} /></button>
-            </div>
-          )}
-        </div>
-      )}
-
-      {/* promos */}
-      {promos.length > 0 && !search.trim() && !isHidden('promos') && menuLayout !== 'storefront' && (
-        <div className="container" style={{ marginTop: 'var(--sp-3)' }}>
-          <div className="m-promos">
-            {promos.map((o) => (
-              <div key={o.id} className="m-promo">
-                <strong style={{ fontSize: 'var(--fs-lg)' }}>{o.type === 'percent' ? `${o.value}%` : <Price value={o.value} currency={currency} lang={lang} />} {lang === 'ar' ? 'خصم' : 'OFF'}</strong>
-                <span className="small" style={{ opacity: .92 }}>{pickLang(o, 'name', lang) || (lang === 'ar' ? 'عرض خاص' : 'Special offer')}</span>
-                {o.code && <span className="badge" style={{ width: 'fit-content', background: 'rgba(255,255,255,.2)', color: 'var(--on-brand)' }}>{o.code}</span>}
-              </div>
-            ))}
-          </div>
-        </div>
-      )}
-
-      {/* «ذاكرة المكان» — a returning guest is recognised the way a good waiter
-          would: only things that are true and specific, and silence otherwise. */}
-      {!preview && memoryLines.length > 0 && (
-        <div className="container" style={{ marginTop: 'var(--sp-3)' }}>
-          <Suspense fallback={null}>
-            <VenueMemory
-              lines={memoryLines}
-              venueName={tenant?.name || ''}
-              lang={lang}
-              storageKey={tenantId}
-              onAction={(line) => {
-                if (line?.kind === 'lookedNotOrdered' && line.itemId) {
-                  const it = (items || []).find((i) => i.id === line.itemId)
-                  if (it) setViewItem(it)
-                } else if (line?.kind === 'usual' && line.itemId) {
-                  const it = (items || []).find((i) => i.id === line.itemId)
-                  if (it) setViewItem(it)
-                }
-              }}
-            />
-          </Suspense>
-        </div>
-      )}
-
-      {/* Google-reviews showcase strip — the ReviewsStudio toggle
-          (tenant.reviewShowcase.enabled) finally has its render surface. */}
-      {tenant?.reviewShowcase?.enabled && !search.trim() && !preview && (
-        <ReviewShowcase tenantId={tenantId} lang={lang} />
-      )}
-
-      {/* special dishes */}
-      {special.length > 0 && !search.trim() && !isHidden('special') && menuLayout !== 'storefront' && (
-        <div className="container special-sec" data-menu-layout={menuLayout} data-featured-style={tenant?.featuredStyle || 'soft'} style={{ marginTop: 'var(--sp-4)' }}>
-          <div className="special-head">
-            <Icon name={featuredMode === 'auto' ? 'flame' : 'star'} size={16} />
-            <strong>{featuredMode === 'auto' ? (lang === 'ar' ? 'الأكثر طلباً' : 'Best sellers') : t('specialDishes')}</strong>
-          </div>
-          <div className="special-row">
-            {special.map((it, idx) => (
-              <button key={it.id} className="special-card" onClick={() => setViewItem(it)}>
-                {featuredMode === 'auto'
-                  ? <span className="special-badge special-rank">{idx + 1}</span>
-                  : <span className="special-badge special-star" aria-hidden="true"><Icon name="star" size={11} /></span>}
-                {it.imageUrl ? <img src={it.imageUrl} alt="" loading="lazy" decoding="async" /> : <span className="special-ph" aria-hidden="true"><Icon name="image" size={26} /></span>}
-                <div className="bold small" style={{ whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{pickLang(it, 'name', lang)}</div>
-                <div className="price small" style={{ color: 'var(--brand)' }}><Price value={it.price} currency={currency} lang={lang} /></div>
-              </button>
-            ))}
-          </div>
-        </div>
-      )}
+      {/* the home blocks, in the venue's own order (tenant.menuHome.order —
+          renderers + conditions live in HOME_RENDER above the return) */}
+      {homeOrder.map((k) => {
+        const render = HOME_RENDER[k]
+        return render ? <Fragment key={k}>{render()}</Fragment> : null
+      })}
 
       {menuLayout === 'spotlight' ? (
         /* spotlight — immersive one-product-per-view: big image, scroll-snap, direct add-to-cart */
@@ -1101,7 +1224,9 @@ export default function MenuView({ tenant, tenantId, items, categories, offers =
       {/* floating actions: notifications bell on the LEFT — each with a count badge */}
       {!isHidden('notifications') && (
         <button className="m-fab m-fab-bell" onClick={() => setNotifOpen(true)} aria-label={t('notificationsTitle')}>
-          <Icon name="bell" size={20} />{unreadCount > 0 && <span className="b">{unreadCount}</span>}
+          {mch?.elements?.bellFab?.icon
+            ? <img className="mch-icon" src={mch.elements.bellFab.icon} alt="" />
+            : <Icon name="bell" size={20} />}{unreadCount > 0 && <span className="b">{unreadCount}</span>}
         </button>
       )}
 
@@ -1161,9 +1286,14 @@ export default function MenuView({ tenant, tenantId, items, categories, offers =
       {/* interactive-experience overlays (lazy; one at a time) */}
       {fxOpen && (
         <Suspense fallback={null}>
+          {/* The AI engines re-validate server-matched ids against allItems —
+              the FULL active menu — never the tab/search-filtered visibleItems,
+              which would silently drop a correctly understood dish. The cloud
+              engine is gated off in the studio preview (no quota burn). */}
           {fxOpen === 'voice' && (
             <VoiceWaiter
-              open items={visibleItems} lang={lang} currency={currency}
+              open items={visibleItems} allItems={allActive} tenant={tenant} tenantId={tenantId}
+              cloudEnabled={!preview} lang={lang} currency={currency}
               onClose={() => setFxOpen('')}
               onAdd={(item, variant, mods, qty) => addLine(item, variant, mods || [], qty || 1)}
               onOpenItem={(it) => { setFxOpen(''); setViewItem(it) }}
@@ -1171,7 +1301,8 @@ export default function MenuView({ tenant, tenantId, items, categories, offers =
           )}
           {fxOpen === 'photo' && (
             <PhotoOrder
-              open items={visibleItems} tenant={tenant} lang={lang} currency={currency}
+              open items={visibleItems} allItems={allActive} tenant={tenant} tenantId={tenantId}
+              cloudEnabled={!preview} lang={lang} currency={currency}
               onClose={() => setFxOpen('')}
               onPick={(it) => { setFxOpen(''); setViewItem(it) }}
             />
@@ -1286,6 +1417,9 @@ function SpotSlide({ it, slideId, currency, offers, catName, suggestions = [], o
   const [variant, setVariant] = useState(() => (it.variants && it.variants.length ? it.variants[0] : null))
   const [qty, setQty] = useState(1)
   const [flipped, setFlipped] = useState(false)
+  // playback window for the legacy spot video (item.videoTrim — engine-only,
+  // the field has no uploader; a null trim attaches nothing)
+  const spotTrimRef = useVideoTrim(it.videoTrim)
 
   useEffect(() => {
     const el = ref.current
@@ -1323,7 +1457,7 @@ function SpotSlide({ it, slideId, currency, offers, catName, suggestions = [], o
           <span className={`spot-flip ${flipped ? 'flipped' : ''}`}>
             <span className="spot-face spot-front">
               {it.videoUrl
-                ? <video className="spot-img" src={it.videoUrl} autoPlay muted loop playsInline />
+                ? <video ref={spotTrimRef} className="spot-img" src={it.videoUrl} autoPlay muted loop playsInline />
                 : it.imageUrl
                   ? <img className="spot-img" src={it.imageUrl} alt="" decoding="async" />
                   : <span className="spot-img spot-noimg"><Icon name="coffee" size={90} /></span>}
@@ -1564,6 +1698,13 @@ export function ItemSheet({ item, tenant, currency, tenantId, onClose, onAdd, de
   // silently did nothing on this sheet.
   const detailScale = Math.min(RANGE.scale.max, Math.max(RANGE.scale.min, Number(item.imageScale) || 1))
   const scaleStyle = detailScale !== 1 ? { transform: `scale(${detailScale})`, transformOrigin: 'center' } : null
+  // The perspective lean on this sheet's photo — the same contract wrapper the
+  // editorial engine mounts (imgTiltBoxStyle: --dish-persp var + base origin
+  // 50% 100%), clamped through RANGE.tilt exactly like the editor's slider.
+  // The wrapper carries the 3D projection while scale stays 2D on the img
+  // inside it; null when tilt is 0, so untouched items are byte-identical.
+  const detailTilt = Math.min(RANGE.tilt.max, Math.max(RANGE.tilt.min, Number(item.imageTilt) || 0))
+  const tiltBox = imgTiltBoxStyle({ tilt: detailTilt, blend: 'normal' })
   const [variant, setVariant] = useState(variants[0] || null)
   const [qty, setQty] = useState(1)
   const [selected, setSelected] = useState(() => groups.map(() => []))
@@ -1645,11 +1786,15 @@ export function ItemSheet({ item, tenant, currency, tenantId, onClose, onAdd, de
   const displayCount = item.reviewsCount || (reviews ? reviews.length || null : null)
 
   const imBgVideo = ownBg ? (item.bgKind === 'video' ? ownBg : '') : (tenant?.immersiveBgVideoUrl || '')
+  // The trim source MIRRORS the url source line-for-line (ownBg wins): the
+  // item's own backdrop window or the venue-wide immersive one, never a mix.
+  const imBgTrim = ownBg ? (item.bgKind === 'video' ? item.bgVideoTrim : null) : (tenant?.immersiveBgVideoTrim || null)
+  const imBgTrimRef = useVideoTrim(imBgTrim)
   const bgNode = (imBgVideo || imBg) ? (
     <div className="sheet-bg-media-layer" style={{ '--immersive-overlay-opacity': String(1 - imOpacity) }} aria-hidden="true">
       {imBgVideo ? (
         // item-detail video honors the same opacity / pan / zoom controls as images
-        <video className="sheet-bg-video" src={imBgVideo} autoPlay muted loop playsInline preload="auto" style={{ objectPosition: imPos, opacity: imOpacity, objectFit: 'cover', transform: imScale > 1 ? `scale(${imScale})` : undefined, transformOrigin: imPos }} />
+        <video ref={imBgTrimRef} className="sheet-bg-video" src={imBgVideo} autoPlay muted loop playsInline preload="auto" style={{ objectPosition: imPos, opacity: imOpacity, objectFit: 'cover', transform: imScale > 1 ? `scale(${imScale})` : undefined, transformOrigin: imPos }} />
       ) : imBg ? (
         <div className="sheet-bg-image" style={{ backgroundImage: `url(${imBg})`, backgroundSize: imScale > 1 ? `${imScale * 100}%` : 'cover', backgroundPosition: imPos, opacity: imOpacity }} />
       ) : null}
@@ -1672,7 +1817,10 @@ export function ItemSheet({ item, tenant, currency, tenantId, onClose, onAdd, de
           <button type="button" className="dish-nav-btn end" onClick={() => onNavigate(nextItem)} aria-label={lang === 'ar' ? 'التالي' : 'Next'}><Icon name={lang === 'ar' ? 'back' : 'next'} size={20} /></button>
         )}
         {gallery.length === 1 ? (
-          <span style={{ position: 'relative', display: 'inline-block' }}>
+          /* the tilt wrapper rides the EXISTING outer span (img + fx tilt
+             together, so steam stays attached to a leaned plate); the span
+             shrink-wraps the img, so origin 50% 100% is the photo's base */
+          <span style={{ position: 'relative', display: 'inline-block', ...(tiltBox || {}) }}>
             <img className="dish-circle" data-imgstyle={imgStyle} src={gallery[0]} alt={pickLang(item, 'name', lang)} decoding="async" onClick={() => setZoom(true)} style={{ cursor: 'zoom-in', ...scaleStyle }} />
             <ItemFx kind={item.effect} />
           </span>
@@ -1680,7 +1828,7 @@ export function ItemSheet({ item, tenant, currency, tenantId, onClose, onAdd, de
           <div className="dish-stack">
             <div className="dish-carousel" onScroll={(e) => { const w = e.currentTarget.clientWidth || 1; setImgIdx(Math.min(gallery.length - 1, Math.round(Math.abs(e.currentTarget.scrollLeft) / w))) }}>
               {gallery.map((src, i) => (
-                <div key={i} className="dish-slide" style={{ position: 'relative' }}>
+                <div key={i} className="dish-slide" style={{ position: 'relative', ...(tiltBox || {}) }}>
                   <img className="dish-circle" data-imgstyle={imgStyle} src={src} alt="" decoding="async" onClick={() => setZoom(true)} style={{ cursor: 'zoom-in', ...scaleStyle }} />
                   {i === imgIdx && <ItemFx kind={item.effect} />}
                 </div>

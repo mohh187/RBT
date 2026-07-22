@@ -99,6 +99,9 @@ export const RANGE = {
   // perspective lean (rotateX): what lays a top-shot plate down onto a surface
   // instead of leaving it pasted upright against the wall.
   tilt: { min: -60, max: 60, step: 1, dflt: 0 },       // degrees
+  // the squashed ground ellipse under a TILTED dish — the cheap honest cue that
+  // the plate touches something. Opt-in (0 = off); drawn only while tilt ≠ 0.
+  tiltContact: { min: 0, max: 1, step: 0.05, dflt: 0 },
   blur: { min: 0, max: 24, step: 0.5, dflt: 0 },      // px
   opacity: { min: 0, max: 1, step: 0.05, dflt: 1 },
   bgOpacity: { min: 0, max: 1, step: 0.05, dflt: 0.5 },
@@ -259,6 +262,7 @@ export function resolveComposition(item, options) {
     scale: num(it.bgScale, RANGE.bgScale.dflt, RANGE.bgScale.min, RANGE.bgScale.max),
     blend: str(it.bgBlend, BLEND_IDS, 'normal'),
     filter: filterCss(it.bgFilter),
+    trim: normalizeVideoTrim(it.bgVideoTrim),
   } : null
 
   // ---- the dish photo -------------------------------------------------------
@@ -275,6 +279,10 @@ export function resolveComposition(item, options) {
     blend: str(it.imageBlend, BLEND_IDS, 'normal'),
     filter: filterCss(it.imageFilter),
     blur: num(it.imageBlur, 0, RANGE.blur.min, RANGE.blur.max),
+    // NOT `contact` — that name already means the table's contact pool
+    // (TABLE_RANGE.contact); two identically-named resolved fields would be
+    // exactly the two-halves confusion this file exists to prevent.
+    tiltContact: num(it.tiltContact, RANGE.tiltContact.dflt, 0, 1),
   }
 
   // ---- the shadow the dish casts on its surface ------------------------------
@@ -325,13 +333,16 @@ export function bgStyle(bg) {
 export function imgStyle(img, shadow) {
   if (!img) return null
   const t = []
-  // perspective() must LEAD the list — it only applies to the functions after
-  // it, so appended at the end it would be a silent no-op.
-  if (img.tilt) t.push('perspective(900px)')
+  // The tilt projection is DELIBERATELY absent here: rotateX on the <img>
+  // itself rasterised the photo at layout size and then resampled it through
+  // scale() AND the projection — twice through one undersized bitmap, which is
+  // the blur the owner reported. The projection lives on a wrapper now
+  // (imgTiltBoxStyle); a renderer MUST mount that wrapper whenever it returns
+  // non-null. With tilt set, x/y/scale/rot apply IN the tilted plane (they
+  // gain foreshortening) — accepted as part of the tilt redesign.
   if (img.x || img.y) t.push(`translate(${img.x}%, ${img.y}%)`)
   if (img.scale !== 1) t.push(`scale(${img.scale})`)
   if (img.rot) t.push(`rotate(${img.rot}deg)`)
-  if (img.tilt) t.push(`rotateX(${img.tilt}deg)`)
   const s = {}
   if (t.length) s.transform = t.join(' ')
   const filters = []
@@ -344,6 +355,33 @@ export function imgStyle(img, shadow) {
     filters.push(`drop-shadow(${shadow.x}px ${shadow.y}px ${shadow.blur}px ${shadow.color}${a})`)
   }
   if (filters.length) s.filter = filters.join(' ')
+  // With tilt set the blend moves to the wrapper: a transformed wrapper is a
+  // stacking context, so a blend left on the img inside it would blend with
+  // nothing at all.
+  if (img.blend && img.blend !== 'normal' && !img.tilt) s.mixBlendMode = img.blend
+  return s
+}
+
+/**
+ * THE TILT WRAPPER. The projection wraps the photo instead of transforming it:
+ * the photo paints at its final 2D size from the full-resolution source first,
+ * and only the projection resamples it — once. Origin is the BASE (50% 100%):
+ * a plate on a table pivots about its contact edge; the centre-origin default
+ * is what made it read as a postcard falling backwards. `lift` is PREPENDED
+ * (leftmost = applied last = pure screen-space drop) so the seat still meets
+ * the table under any tilt. perspective is a var: the same stored degrees must
+ * project the same on a 250px list photo and a 560px stage hero, so each
+ * surface sets --dish-persp to roughly 3x its photo-box height (index.css and
+ * appearance.css own the per-surface values).
+ */
+export function imgTiltBoxStyle(img, lift = 0) {
+  if (!img || !img.tilt) return null
+  const s = {
+    transform: `${lift ? `translateY(${lift}%) ` : ''}perspective(var(--dish-persp, 1100px)) rotateX(${img.tilt}deg)`,
+    transformOrigin: '50% 100%',
+    backfaceVisibility: 'hidden',
+    willChange: 'transform',
+  }
   if (img.blend && img.blend !== 'normal') s.mixBlendMode = img.blend
   return s
 }
@@ -449,6 +487,12 @@ export function resolveWall(tenant) {
     // takes this bond, this clay and this mortar, scales the unit down to the
     // bar and lays a scrim over it. Storing it apart would store half a decision.
     header: t.header === true,
+    // Whether this ONE wall runs behind the ENTIRE page (header → content),
+    // replacing the pre-menu grey zone. Lives on menuWall like `header` does:
+    // it has no colours of its own, it IS this wall reaching further. Renderers
+    // must derive room-mode from resolveWall() !== null && .room — never from
+    // raw pattern truthiness ('none' and 'image'-without-url resolve to null).
+    room: t.room === true,
   }
 }
 
@@ -562,9 +606,9 @@ export const TABLE_RANGE = {
   // the venue slides it, widens it, shortens it — wherever the furniture goes.
   // All defaults are the bolted position, so nothing moves for a saved venue.
   x: { min: -60, max: 60, step: 0.5, dflt: 0 },   // percent of the panel box, physical
-  y: { min: -60, max: 60, step: 0.5, dflt: 0 },
+  y: { min: -100, max: 100, step: 0.5, dflt: 0 }, // widened ±60→±100 («كاملة للأسفل»); clamped on read, saved venues unmoved
   w: { min: 40, max: 180, step: 1, dflt: 100 },   // percent of the bolted width
-  h: { min: 30, max: 220, step: 1, dflt: 100 },
+  h: { min: 30, max: 300, step: 1, dflt: 100 },   // max widened 220→300 — but the honest flush-to-bottom path is `extend`
   // A flat darkening veil over the surface («تعتيم أكثر») — separate from shade,
   // which only darkens toward the front, and from tint, which recolours.
   dim: { min: 0, max: 0.85, step: 0.05, dflt: 0 },
@@ -573,6 +617,21 @@ export const TABLE_RANGE = {
   // higher melts it away sooner. The venue owns its own readability trade-off,
   // the same way it owns the reading panel.
   melt: { min: 0, max: 1, step: 0.05, dflt: 0.5 },
+  // Bottom-side melt: dissolves the material into the canvas at the BOX BOTTOM,
+  // hiding the raw cut the owner reported («الطاولة حافّة من تحت»). 0 (default)
+  // = exactly today's paint. Measured upward from the bottom edge.
+  meltBottom: { min: 0, max: 1, step: 0.05, dflt: 0 },
+  // A canvas-colour reading veil ABOVE the material but under the glyphs, so
+  // readability is no longer hostage to the melt dial. Capped at 0.9 so the
+  // surface never fully disappears. Raise toward 0.6+ before trusting body
+  // text on a bright material (the 4.5:1 rule is the venue's to keep here).
+  veil: { min: 0, max: 0.9, step: 0.05, dflt: 0 },
+  // Stage cohesion (opened-item window only): the space above the dish and the
+  // photo's max height. Defaults reproduce the CSS clamps exactly. heroPad's
+  // floor is 20, not 0 — below that the photo slides under the floating close
+  // button (.edt-stg-x, top:12px + 44px tall).
+  heroPad: { min: 20, max: 80, step: 2, dflt: 56 },  // px, capped by 14vw in CSS
+  heroMax: { min: 20, max: 60, step: 1, dflt: 42 },  // dvh; px cap = value*10
 }
 
 // The keys a venue may override FOR THE OPENED-ITEM WINDOW alone
@@ -581,7 +640,7 @@ export const TABLE_RANGE = {
 // cannot fit both: the owner reported the table «لا تظهر بشكل مناسب عند فتح
 // الصنف». Geometry and strength may differ per place; the material may not —
 // it is one room with one table.
-export const TABLE_STAGE_KEYS = ['x', 'y', 'w', 'h', 'lift', 'opacity', 'shade', 'dim', 'melt', 'contact', 'scale']
+export const TABLE_STAGE_KEYS = ['x', 'y', 'w', 'h', 'lift', 'opacity', 'shade', 'dim', 'melt', 'meltBottom', 'veil', 'extend', 'heroPad', 'heroMax', 'contact', 'scale']
 
 /**
  * The table under the dish details. Reads the TENANT document, because it is one
@@ -631,6 +690,13 @@ export function resolveTable(tenant, options) {
     h: num(t.h, R.h.dflt, R.h.min, R.h.max),
     dim: num(t.dim, R.dim.dflt, 0, R.dim.max),
     melt: num(t.melt, R.melt.dflt, 0, 1),
+    meltBottom: num(t.meltBottom, R.meltBottom.dflt, 0, 1),
+    veil: num(t.veil, R.veil.dflt, 0, R.veil.max),
+    // «مدّ الطاولة حتى أسفل النافذة» — stage engine only (data-tbl-extend).
+    // A boolean, never num-clamped.
+    extend: t.extend === true,
+    heroPad: num(t.heroPad, R.heroPad.dflt, R.heroPad.min, R.heroPad.max),
+    heroMax: num(t.heroMax, R.heroMax.dflt, R.heroMax.min, R.heroMax.max),
   }
 }
 
@@ -671,6 +737,34 @@ export function tableMeltStops(tb) {
   const a = Math.max(0, Math.min(140, a0 + shift))
   const b = Math.max(a + 6, Math.min(190, b0 + shift))
   return { a: Math.round(a), b: Math.round(b) }
+}
+
+/**
+ * Bottom-edge melt stops, in % measured FROM THE BOTTOM. Null while off, so
+ * the element is never mounted and the untouched path stays byte-identical.
+ */
+export function tableMeltBottom(tb) {
+  if (!tb || !tb.meltBottom) return null
+  return { a: Math.round(tb.meltBottom * 8), b: Math.round(8 + tb.meltBottom * 40) }
+}
+
+/**
+ * Stage-window cohesion vars (space above the dish / photo height). Null at
+ * the defaults so the CSS clamp fallbacks keep governing untouched venues.
+ * --edt-stg-heromin rides along whenever heroMax is overridden: the hero's
+ * min-height flex-centring is half of «الصفحة تظهر كبيرة من فوق», and capping
+ * the max without releasing the min would change nothing for short photos.
+ */
+export function tableStageVars(tb) {
+  if (!tb) return null
+  const v = {}
+  if (tb.heroPad !== TABLE_RANGE.heroPad.dflt) v['--edt-stg-padtop'] = `min(${tb.heroPad}px, 14vw)`
+  if (tb.heroMax !== TABLE_RANGE.heroMax.dflt) {
+    v['--edt-stg-heromax'] = `min(${tb.heroMax}dvh, ${tb.heroMax * 10}px)`
+    const mn = Math.min(30, tb.heroMax)
+    v['--edt-stg-heromin'] = `min(${mn}dvh, ${mn * 10}px)`
+  }
+  return Object.keys(v).length ? v : null
 }
 
 /** Inline style for the table panel itself. */
@@ -948,4 +1042,481 @@ export function resolveButtons(tenant) {
     // the one photo the heuristic will inevitably get wrong.
     ink: b.ink === 'dark' ? 'dark' : 'light',
   }
+}
+
+// ------------------------------------------------------------- video trim ----
+//
+// One {start,end} window in SECONDS for every uploaded video, stored NEXT TO
+// its url field: tenant.bannerVideoTrim, tenant.bgVideoTrim,
+// tenant.immersiveBgVideoTrim, tenant.appBg.trim (nested — appBg is already an
+// object), item.bgVideoTrim, item.videoTrim (legacy spot video), story.trim.
+// end === 0 means «to the natural end», so a start-only trim can be saved
+// before the duration is known. Both zero = no trim, and normalize returns
+// null so the untouched playback path stays byte-identical. Every handler that
+// REPLACES a video url must null its sibling trim — a window chosen for clip A
+// must never silently apply to clip B.
+
+export const VIDEO_TRIM_RANGE = {
+  start: { min: 0, max: 7200, step: 0.1, dflt: 0 },
+  end: { min: 0, max: 7200, step: 0.1, dflt: 0 }, // 0 = natural end
+  span: 0.5, // narrowest playable window, seconds
+}
+
+export function normalizeVideoTrim(raw) {
+  if (!raw || typeof raw !== 'object') return null
+  const R = VIDEO_TRIM_RANGE
+  const start = num(raw.start, R.start.dflt, R.start.min, R.start.max)
+  let end = num(raw.end, R.end.dflt, R.end.min, R.end.max)
+  if (end && end < start + R.span) end = 0 // impossible window -> to the end
+  if (!start && !end) return null
+  return { start, end }
+}
+
+/**
+ * The window actually playable once the real duration is known: start is
+ * pulled back if it falls past the file's end; an end past the duration means
+ * the natural end.
+ */
+export function trimWindow(trim, duration) {
+  if (!trim) return null
+  const d = Number.isFinite(duration) && duration > 0 ? duration : Infinity
+  const start = d === Infinity ? trim.start : Math.min(trim.start, Math.max(0, d - VIDEO_TRIM_RANGE.span))
+  const end = trim.end && trim.end > start && trim.end < d ? trim.end : d
+  return { start, end }
+}
+
+// ---------------------------------------------------------------- shadows ----
+//
+// «التحكم في الظلال بالكامل — إزالتها أو وضعها كما هي». Every fixed dark line
+// and cast in the editorial room, one dial each, 0..1 where 1 is exactly
+// today's look and 0 removes it outright. tableTop is the exception: it is a
+// FEATHER (melts an image-table's hard top edge up into the wall), a softener
+// the venue adds — so its default is 0 per the opt-in policy. In CSS it is
+// scoped to .edt-table-art:not([data-m]) so it reaches ONLY photo tables;
+// material tables already feather their own top stop.
+
+export const SHADOW_RANGE = {
+  panelHalo: { min: 0, max: 1, step: 0.05, dflt: 1 }, // reading-panel outward halo
+  tableEdge: { min: 0, max: 1, step: 0.05, dflt: 1 }, // dark 1px under the lit lip
+  tableTop: { min: 0, max: 1, step: 0.05, dflt: 0 },  // photo-table top feather (opt-in)
+  header: { min: 0, max: 1, step: 0.05, dflt: 1 },    // bar bottom hairline + cast
+  bars: { min: 0, max: 1, step: 0.05, dflt: 1 },      // catbar / stage-bar hairlines
+  buttons: { min: 0, max: 1, step: 0.05, dflt: 1 },   // brick bed + cast + skin text-shadow
+  dish: { min: 0, max: 1, step: 0.05, dflt: 1 },      // master over per-item dish shadows
+  seams: { min: 0, max: 1, step: 0.05, dflt: 1 },     // card-mode border + lift shadow
+}
+
+/**
+ * Null when the venue never opened the shadows card, so the untouched path
+ * stays byte-identical. CALLERS MEMOIZE on a JSON fingerprint of
+ * tenant.menuShadows — a fresh object per render would defeat every comp memo
+ * downstream.
+ */
+export function resolveShadows(tenant) {
+  const s = tenant && tenant.menuShadows
+  if (!s || typeof s !== 'object') return null
+  const out = {}
+  Object.keys(SHADOW_RANGE).forEach((k) => {
+    const R = SHADOW_RANGE[k]
+    out[k] = num(s[k], R.dflt, R.min, R.max)
+  })
+  return out
+}
+
+/**
+ * CSS vars for BOTH engine roots (.edt-wrap and the portalled .edt-stg).
+ * `header` deliberately rides elsewhere: --hd-sh is stamped by DinerBar and
+ * --edt-hd-sh by headerBrickVars, because the app bar lives outside the wrap.
+ */
+export function shadowVars(sh) {
+  if (!sh) return null
+  return {
+    '--edt-sh-panel': sh.panelHalo,
+    '--edt-sh-tedge': sh.tableEdge,
+    '--edt-sh-ttop': sh.tableTop,
+    '--edt-sh-bars': sh.bars,
+    '--edt-sh-btn': sh.buttons,
+    '--edt-sh-dish': sh.dish,
+    '--edt-sh-seam': sh.seams,
+  }
+}
+
+/**
+ * The tenant-level master over per-item dish shadows. Scales, never deletes:
+ * the staff's per-item work survives under a lowered dial.
+ */
+export const scaleDishShadow = (comp, k) =>
+  (!comp || !comp.shadow || k == null || k === 1)
+    ? comp
+    : { ...comp, shadow: { ...comp.shadow, opacity: comp.shadow.opacity * k } }
+
+// ------------------------------------------------------ per-mode menu inks --
+//
+// «عند التحويل للفاتح أو الداكن أتحكم في ألوان الخطوط». The editorial tokens
+// flip globally with [data-theme]; a photographic wall does not. These are the
+// venue's own inks per mode, emitted INLINE at the menu root so they beat both
+// token blocks. Every key optional; an empty object means the theme decides.
+
+export const INK_MODE_IDS = ['light', 'dark']
+export const INK_FIELDS = [
+  { id: 'heading', ar: 'العناوين', en: 'Headings' },                  // --edt-ink
+  { id: 'text', ar: 'نص الوصف', en: 'Body text' },                    // --edt-ink-2
+  { id: 'muted', ar: 'النص الثانوي', en: 'Muted text' },              // --edt-mut
+  { id: 'price', ar: 'السعر والتمييز', en: 'Price & accent' },        // --edt-amber
+  { id: 'chip', ar: 'رقاقات التصنيفات', en: 'Category chips' },       // --edt-chip-ink
+  { id: 'canvas', ar: 'لوح القراءة والذوبان', en: 'Reading canvas' }, // --edt-bg/-2
+  { id: 'barBg', ar: 'خلفية الشريطين', en: 'Bars background' },       // --chrome-bg
+  { id: 'barText', ar: 'نص الشريطين', en: 'Bars text' },              // --chrome-text
+]
+export const INK_FIELD_IDS = INK_FIELDS.map((f) => f.id)
+
+// Derived-surface alphas: hairlines/fills/bar-muted are FUNCTIONS of the text
+// ink, exactly as the theme derives its own. One place, or the card's preview
+// and the engine drift.
+export const INK_ALPHA = { line: 0.15, edge: 0.45, soft: 0.05, soft2: 0.10, barMuted: 0.78, barBorder: 0.18 }
+
+const HEX6 = /^#[0-9a-fA-F]{6}$/
+const inkRgb = (h) => [parseInt(h.slice(1, 3), 16), parseInt(h.slice(3, 5), 16), parseInt(h.slice(5, 7), 16)]
+const inkRgba = (h, a) => { const [r, g, b] = inkRgb(h); return `rgba(${r}, ${g}, ${b}, ${a})` }
+const inkModeObj = (m) => {
+  if (!m || typeof m !== 'object') return null
+  const out = {}
+  INK_FIELD_IDS.forEach((k) => {
+    const v = String(m[k] || '')
+    if (HEX6.test(v)) out[k] = v
+  })
+  return Object.keys(out).length ? out : null
+}
+
+export function resolveInk(tenant) {
+  const i = tenant && tenant.menuInk
+  if (!i || typeof i !== 'object') return null
+  const light = inkModeObj(i.light)
+  const dark = inkModeObj(i.dark)
+  if (!light && !dark && i.followTheme !== true) return null
+  return { light, dark, followTheme: i.followTheme === true }
+}
+
+/**
+ * AUTOMATIC FALLBACK: a configured wall — photo OR drawn — is the same picture
+ * in both modes, so with no light override the light flip is a lie (dark ink
+ * onto the dark room). Locked ⇒ the engine keeps the dark token set in light
+ * mode. The venue opts back into the flip with menuInk.followTheme, or simply
+ * by saving light inks.
+ */
+export function inkLocked(tenant) {
+  if (!resolveWall(tenant)) return false
+  const i = resolveInk(tenant)
+  return !(i && (i.followTheme || i.light))
+}
+
+/** The mode whose inks apply right now. `theme` is i18n's 'light'|'dark'. */
+export const inkModeFor = (tenant, theme) => (theme === 'dark' || inkLocked(tenant) ? 'dark' : 'light')
+
+/** Inline vars for the menu roots (.edt-wrap / .edt-stg). */
+export function inkVars(m) {
+  if (!m) return null
+  const v = {}
+  if (m.heading) v['--edt-ink'] = m.heading
+  if (m.text) v['--edt-ink-2'] = m.text
+  if (m.muted) v['--edt-mut'] = m.muted
+  if (m.price) { v['--edt-amber'] = m.price; v['--edt-amber-soft'] = m.price }
+  if (m.chip) v['--edt-chip-ink'] = m.chip
+  const src = m.text || m.heading
+  if (src) {
+    v['--edt-line'] = inkRgba(src, INK_ALPHA.line)
+    v['--edt-edge'] = inkRgba(src, INK_ALPHA.edge)
+    v['--edt-soft'] = inkRgba(src, INK_ALPHA.soft)
+    v['--edt-soft-2'] = inkRgba(src, INK_ALPHA.soft2)
+  }
+  if (m.canvas) { v['--edt-bg'] = m.canvas; v['--edt-bg-2'] = m.canvas }
+  return Object.keys(v).length ? v : null
+}
+
+/** Bar vars for the app bar + bottom nav, set on the portal root. */
+export function chromeInkVars(m) {
+  if (!m || (!m.barBg && !m.barText)) return null
+  const v = {}
+  if (m.barBg) { v['--chrome-bg'] = m.barBg; v['--chrome-bg-2'] = m.barBg }
+  if (m.barText) {
+    v['--chrome-text'] = m.barText
+    v['--chrome-icon'] = m.barText
+    v['--chrome-active'] = m.barText
+    v['--chrome-muted'] = inkRgba(m.barText, INK_ALPHA.barMuted)
+    v['--chrome-border'] = inkRgba(m.barText, INK_ALPHA.barBorder)
+  }
+  return v
+}
+
+// -------------------------------------------------- banner + featured film --
+//
+// The venue header's melt into the page and the plaster behind featured cards.
+// melt 0 keeps the legacy painted fade untouched; >0 switches the banner media
+// stack to a TRUE-transparency mask so whatever runs behind it (the room wall)
+// shows through the ramp.
+
+export const BANNER_RANGE = {
+  melt: { min: 0, max: 1, step: 0.05, dflt: 0 },
+  meltLen: { min: 10, max: 100, step: 1, dflt: 55 }, // % of banner height the ramp covers
+  // Veil behind the hero text, painted ONLY in room mode. Honest note: 0.35 is
+  // tuned for DARK photo walls; a light drawn wall needs ~0.6 for 4.5:1.
+  scrim: { min: 0, max: 1, step: 0.05, dflt: 0.35 },
+}
+
+export function resolveBanner(tenant) {
+  const t = tenant || {}
+  const R = BANNER_RANGE
+  return {
+    melt: num(t.bannerMelt, R.melt.dflt, 0, 1),
+    meltLen: num(t.bannerMeltLen, R.meltLen.dflt, R.meltLen.min, R.meltLen.max),
+    scrim: num(t.bannerScrim, R.scrim.dflt, 0, 1),
+  }
+}
+
+export const FEATURED_RANGE = {
+  // plaster behind each featured card so cutout dishes read over a photo wall;
+  // engine default 0 = nothing changes for any saved venue (the studio seeds a
+  // subtle value only when room mode is switched on)
+  film: { min: 0, max: 1, step: 0.05, dflt: 0 },
+}
+
+export const resolveFeatured = (tenant) => ({
+  film: num(tenant && tenant.featuredFilm, FEATURED_RANGE.film.dflt, 0, 1),
+})
+
+// ------------------------------------------------- the home page order ----
+//
+// Which blocks the menu HOME shows above the dishes, and in what order. Ids
+// reuse skin.overrides.hidden keys where those exist (stories/search/welcome/
+// promos/special) so hide and order stay ONE system, never two.
+
+export const HOME_BLOCKS = [
+  { id: 'hero', ar: 'الترويسة والشعار', en: 'Header & logo' },
+  { id: 'stories', ar: 'القصص', en: 'Stories' },
+  { id: 'search', ar: 'البحث', en: 'Search' },
+  { id: 'chips', ar: 'أزرار التجارب — الألعاب والصوت والصورة', en: 'Experience buttons' },
+  { id: 'welcome', ar: 'بطاقة الترحيب والولاء', en: 'Welcome & loyalty card' },
+  { id: 'promos', ar: 'العروض', en: 'Promos' },
+  { id: 'memory', ar: 'ذاكرة المكان', en: 'Venue memory' },
+  { id: 'reviews', ar: 'تقييمات جوجل', en: 'Google reviews' },
+  { id: 'special', ar: 'الأطباق المميزة', en: 'Featured dishes' },
+]
+export const HOME_BLOCK_IDS = HOME_BLOCKS.map((b) => b.id)
+
+/**
+ * Tenant-chosen order of the home blocks. Absent/empty → default order
+ * (byte-identical home for every venue that never touched the card). Unknown
+ * ids are dropped; ids missing from a saved order (features added later) are
+ * inserted at their DEFAULT position, not appended blindly.
+ */
+export function resolveHomeOrder(tenant) {
+  const raw = tenant && tenant.menuHome && Array.isArray(tenant.menuHome.order) ? tenant.menuHome.order : []
+  const saved = raw
+    .map((k) => String(k || ''))
+    .filter((k, i, a) => HOME_BLOCK_IDS.includes(k) && a.indexOf(k) === i)
+    .slice(0, 16)
+  if (!saved.length) return [...HOME_BLOCK_IDS]
+  const out = [...saved]
+  HOME_BLOCK_IDS.forEach((id, idx) => {
+    if (out.includes(id)) return
+    let at = -1
+    for (let j = idx - 1; j >= 0 && at < 0; j--) {
+      const p = out.indexOf(HOME_BLOCK_IDS[j])
+      if (p >= 0) at = p + 1
+    }
+    if (at < 0) {
+      for (let j = idx + 1; j < HOME_BLOCK_IDS.length && at < 0; j++) {
+        const p = out.indexOf(HOME_BLOCK_IDS[j])
+        if (p >= 0) at = p
+      }
+    }
+    out.splice(at < 0 ? out.length : at, 0, id)
+  })
+  return out
+}
+
+// -------------------------------------------------------- the menu chrome --
+//
+// «نفس الشيء مع أزرار التواصل واللغة والثيم والإشعارات والسلة والقائمة
+// السفلية». One identity system for every chrome surface instead of twelve
+// pickers: each element takes a face (theme default / the room's wall / the
+// venue's own photo / transparent), the sheets take a face, and the subpages
+// (قصتنا وأخبارنا وغيرها) take a background — all falling back to the wall by
+// the ONE `follow` switch. Whole feature is opt-in: an absent menuChrome
+// resolves to null and not a single body attribute is stamped.
+
+export const CHROME_ELEMENTS = [
+  { id: 'nav', ar: 'الشريط السفلي', en: 'Bottom bar' },
+  { id: 'cartFab', ar: 'زر السلة العائم', en: 'Cart button' },
+  { id: 'bellFab', ar: 'جرس الإشعارات', en: 'Notification bell' },
+  { id: 'langBtn', ar: 'زر اللغة', en: 'Language button' },
+  { id: 'themeBtn', ar: 'زر الوضع', en: 'Theme button' },
+  { id: 'social', ar: 'أزرار التواصل', en: 'Social buttons' },
+]
+export const CHROME_ELEMENT_IDS = CHROME_ELEMENTS.map((e) => e.id)
+
+export const CHROME_SKIN_MODES = [
+  { id: '', ar: 'حسب الثيم', en: 'Theme default' },
+  { id: 'room', ar: 'من جدار المنيو', en: 'From the menu wall' },
+  { id: 'image', ar: 'صورتي', en: 'My own image' },
+  { id: 'none', ar: 'شفاف', en: 'Transparent' },
+]
+export const CHROME_SKIN_MODE_IDS = CHROME_SKIN_MODES.map((m) => m.id)
+
+// profile = «قصتنا وأخبارنا» (VenueProfile), order = order tracking,
+// reserve = table booking, pass = the ticket/reservation pass page.
+export const CHROME_PAGE_IDS = ['profile', 'events', 'book', 'order', 'reserve', 'pass']
+
+export const PAGE_BG_MODES = [
+  { id: '', ar: 'حسب الثيم', en: 'Theme default' },
+  { id: 'wall', ar: 'جدار المنيو', en: 'The menu wall' },
+  { id: 'image', ar: 'صورتي', en: 'My own image' },
+  { id: 'none', ar: 'بدون خلفية', en: 'None' },
+]
+export const PAGE_BG_MODE_IDS = PAGE_BG_MODES.map((m) => m.id)
+
+export const CHROME_RANGE = {
+  // mirrors BUTTON_RANGE deliberately — one mental model for every face
+  imgScale: { min: 0.2, max: 4, step: 0.05, dflt: 1 },
+  imgX: { min: 0, max: 100, step: 1, dflt: 50 },
+  imgY: { min: 0, max: 100, step: 1, dflt: 50 },
+  radius: { min: 0, max: 28, step: 1, dflt: 12 },
+  scrim: { min: 0, max: 1, step: 0.05, dflt: 0.35 },
+  tintAmount: { min: 0, max: 1, step: 0.05, dflt: 0 },
+  // «إمكانية التحريك»: screen-px offsets, consumed ONLY by the two fixed fabs
+  // (cartFab/bellFab) as a translate — bars and in-flow buttons do not move.
+  x: { min: -60, max: 60, step: 1, dflt: 0 },
+  y: { min: -60, max: 60, step: 1, dflt: 0 },
+}
+
+export const CHROME_SHEET_RANGE = {
+  scrim: { min: 0, max: 1, step: 0.05, dflt: 0.5 },   // readability veil over the face
+  blur: { min: 0, max: 24, step: 0.5, dflt: 0 },
+  radius: { min: 0, max: 28, step: 1, dflt: 18 },
+  backdrop: { min: 0, max: 0.85, step: 0.05, dflt: 0.55 }, // veil BEHIND the sheet
+}
+
+export const PAGE_BG_RANGE = {
+  dim: { min: 0, max: 0.85, step: 0.05, dflt: 0.35 },
+  blur: { min: 0, max: 30, step: 0.5, dflt: 0 },
+}
+
+export function normalizeChromeElement(raw) {
+  const e = raw || {}
+  const R = CHROME_RANGE
+  let skin = str(e.skin, CHROME_SKIN_MODE_IDS, '')
+  const url = String(e.url || '')
+  // «صورتي» with no photo yet degrades to theme-default instead of vanishing —
+  // the kind:'image'-without-url lesson from resolveTable.
+  if (skin === 'image' && !url) skin = ''
+  return {
+    skin,
+    url,
+    imgScale: num(e.imgScale, R.imgScale.dflt, R.imgScale.min, R.imgScale.max),
+    imgX: num(e.imgX, R.imgX.dflt, 0, 100),
+    imgY: num(e.imgY, R.imgY.dflt, 0, 100),
+    filter: filterCss(e.filter),
+    blend: str(e.blend, BLEND_IDS, 'normal'),
+    tint: String(e.tint || ''),
+    tintAmount: num(e.tintAmount, R.tintAmount.dflt, 0, 1),
+    radius: num(e.radius, R.radius.dflt, R.radius.min, R.radius.max),
+    scrim: num(e.scrim, R.scrim.dflt, 0, 1),
+    ink: e.ink === 'dark' ? 'dark' : 'light',
+    icon: String(e.icon || ''),
+    x: num(e.x, R.x.dflt, R.x.min, R.x.max),
+    y: num(e.y, R.y.dflt, R.y.min, R.y.max),
+  }
+}
+
+/**
+ * Null when the venue never opened the chrome card — zero body attributes,
+ * today's pixels. follow===true makes every element whose skin is '' resolve
+ * 'room', so ONE switch flows the wall identity everywhere; explicit
+ * per-element values override it.
+ */
+export function resolveChrome(tenant) {
+  const c = tenant && tenant.menuChrome
+  if (!c || typeof c !== 'object') return null
+  const follow = c.follow === true
+  const elements = {}
+  CHROME_ELEMENT_IDS.forEach((id) => {
+    const el = normalizeChromeElement((c.elements || {})[id])
+    if (follow && !el.skin) el.skin = 'room'
+    // an element earns its entry by having ANY effect: a face, a custom icon,
+    // or (fabs only) a position offset
+    if (el.skin || el.icon || el.x || el.y) elements[id] = el
+  })
+  const icons = {}
+  Object.entries(c.socialIcons || {}).forEach(([k, v]) => { if (v) icons[k] = String(v) })
+  return { follow, elements, socialIcons: icons, sheet: resolveChromeSheet(tenant) }
+}
+
+/** The diner sheets' face (cart, orders, offers, item…) + backdrop veil. */
+export function resolveChromeSheet(tenant) {
+  const c = tenant && tenant.menuChrome
+  if (!c || typeof c !== 'object') return null
+  const s = c.sheet && typeof c.sheet === 'object' ? c.sheet : {}
+  let skin = str(s.skin, CHROME_SKIN_MODE_IDS, '')
+  const url = String(s.url || '')
+  if (skin === 'image' && !url) skin = ''
+  if (!skin && c.follow === true) skin = 'room'
+  if (!skin && !c.sheet) return null
+  const R = CHROME_SHEET_RANGE
+  return {
+    skin,
+    url,
+    scrim: num(s.scrim, R.scrim.dflt, 0, 1),
+    blur: num(s.blur, R.blur.dflt, R.blur.min, R.blur.max),
+    radius: num(s.radius, R.radius.dflt, R.radius.min, R.radius.max),
+    backdrop: num(s.backdrop, R.backdrop.dflt, 0, R.backdrop.max),
+  }
+}
+
+/**
+ * One subpage's background. Null = mount nothing (theme default). 'none' is
+ * the explicit opt-out that beats `follow`.
+ */
+export function resolveChromePage(tenant, pageId) {
+  const c = tenant && tenant.menuChrome
+  if (!c || typeof c !== 'object') return null
+  if (!CHROME_PAGE_IDS.includes(pageId)) return null
+  const p = (c.pages && typeof c.pages === 'object' && c.pages[pageId]) || {}
+  let mode = str(p.mode, PAGE_BG_MODE_IDS, '')
+  const url = String(p.url || '')
+  if (mode === 'image' && !url) mode = ''
+  if (!mode && c.follow === true) mode = 'wall'
+  if (!mode || mode === 'none') return null
+  const R = PAGE_BG_RANGE
+  return {
+    mode,
+    url,
+    dim: num(p.dim, R.dim.dflt, 0, R.dim.max),
+    blur: num(p.blur, R.blur.dflt, R.blur.min, R.blur.max),
+  }
+}
+
+// ------------------------------------------------------- AI feature bounds --
+//
+// 3D generation contract (imageTo3d): UI half. functions/platformExtensions.js
+// mirrors maxViews=4 (the Meshy hard cap) — keep in sync BY HAND; the functions
+// package is CommonJS and cannot import this ESM module, and the inline drift
+// scanner does not cover functions/.
+export const GEN3D_RANGE = {
+  maxViews: 4,             // primary photo + up to 3 hand-picked gallery shots
+  maxExtraViews: 3,        // checkboxes the studio may enable
+  smoothPolycount: 150000, // only used by the opt-in smooth (stylized) mode
+}
+
+// Diner AI ordering (photo + voice) — client-side bounds. Server mirror:
+// DINER_AI in functions/platformExtensions.js (photoMaxB64 6.5MB ≈ 4.5MB raw,
+// audioMaxB64 2.5MB, monthlyDflt 2000, perMinute 20, catalogMax 200). Same
+// numbers, same names — change BOTH or the halves diverge.
+export const AI_ORDER_RANGE = {
+  photoMaxEdge: { min: 640, max: 2048, step: 64, dflt: 1280 },          // px, canvas downscale long edge
+  photoJpegQ: { min: 0.5, max: 0.95, step: 0.01, dflt: 0.82 },
+  photoMaxBytes: { min: 1048576, max: 4718592, step: 1, dflt: 4718592 }, // post-resize hard cap (4.5MB)
+  recordMaxMs: { min: 4000, max: 30000, step: 1000, dflt: 15000 },
+  silenceStopMs: { min: 600, max: 3000, step: 100, dflt: 1400 },        // auto-stop after this much quiet
+  cloudTimeoutMs: { min: 4000, max: 20000, step: 500, dflt: 12000 },
+  qty: { min: 1, max: 20, step: 1, dflt: 1 },
 }

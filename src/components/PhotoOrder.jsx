@@ -1,28 +1,34 @@
 import { useEffect, useRef, useState } from 'react'
 import { createPortal } from 'react-dom'
-import { httpsCallable } from 'firebase/functions'
-import { functions, firebaseReady } from '../lib/firebase.js'
 import { usePortalRoot } from './PortalRoot.jsx'
 import { pickLang } from '../lib/i18n.jsx'
 import Icon from './Icon.jsx'
 import { Price } from './Riyal.jsx'
 import { matchItems } from '../lib/voiceOrder.js'
+import { callDinerAi, blobToInline, downscaleImage } from '../lib/dinerAi.js'
+import { AI_ORDER_RANGE } from '../lib/dishComposition.js'
 
 // «اطلب بالصورة» — the guest photographs a dish (a friend's plate, a screenshot,
-// a printed menu photo) and we find the closest items on THIS venue's menu.
+// a printed menu photo) or uploads one from the gallery, and we find the
+// closest items on THIS venue's menu.
 //
-// Anti-hallucination contract: Gemini only ever picks from a name list we send,
-// and whatever it returns is re-resolved against the REAL item array with the
-// local matcher. A name the model invented simply fails to map and is dropped —
-// an imaginary dish can never become an orderable card.
+// PRIMARY engine: the guest-facing `dinerOrderAi` callable (server builds the
+// catalog itself and answers with real item ids — index-only selection, so the
+// model can never invent a dish). SECONDARY (dev only): a direct Gemini call
+// behind VITE_GEMINI_API_KEY where the anti-hallucination contract is the old
+// one — names re-resolved through the local matcher, unmapped names dropped.
+// Ids from the server are re-validated against the FULL active item list
+// (allItems), never the filtered view, so a correct match on another category
+// tab is not silently dropped.
 
 const VISION_MODEL = 'gemini-2.5-flash'
 
 const COPY = {
   ar: {
     title: 'اطلب بالصورة',
-    intro: 'صوّر الطبق الذي تريده وسنبحث عن أقرب صنف في منيو المطعم.',
+    intro: 'صوّر الطبق الذي تريده أو ارفع صورته وسنبحث عن أقرب صنف في منيو المطعم.',
     take: 'التقط صورة',
+    upload: 'ارفع من الاستوديو',
     change: 'صورة أخرى',
     analyze: 'ابحث عن الصنف',
     scanning: 'نحلل الصورة…',
@@ -34,12 +40,14 @@ const COPY = {
     noAi: 'خدمة تحليل الصور غير مهيأة لهذه المنشأة.',
     failed: 'تعذر تحليل الصورة — أعد المحاولة بعد لحظات.',
     tooBig: 'الصورة كبيرة جداً — التقط صورة أصغر أو أقل جودة.',
+    quota: 'خدمة التحليل مشغولة مؤقتاً — جرّب بعد قليل.',
     retry: 'إعادة المحاولة',
   },
   en: {
     title: 'Order by photo',
-    intro: 'Photograph the dish you want and we will find the closest item on the menu.',
+    intro: 'Photograph the dish you want — or upload it from your gallery — and we will find the closest item on the menu.',
     take: 'Take a photo',
+    upload: 'Upload from gallery',
     change: 'Another photo',
     analyze: 'Find the dish',
     scanning: 'Analysing the photo…',
@@ -51,40 +59,19 @@ const COPY = {
     noAi: 'Photo analysis is not configured for this venue.',
     failed: 'Could not analyse the photo — please try again.',
     tooBig: 'That photo is too large — try a smaller one.',
+    quota: 'The analysis service is busy — try again shortly.',
     retry: 'Try again',
   },
 }
 
-const MAX_BYTES = 4.5 * 1024 * 1024 // inline request cap; larger files are rejected honestly
-
-// File/Blob -> Gemini inlineData part (same pattern as postGen.js).
-function blobToInlineData(blob) {
-  return new Promise((resolve, reject) => {
-    const fr = new FileReader()
-    fr.onload = () => {
-      const [head, data] = String(fr.result).split(',')
-      const mimeType = /data:(.*?)[;,]/.exec(`${head},`)?.[1] || blob.type || 'image/jpeg'
-      resolve({ mimeType, data })
-    }
-    fr.onerror = () => reject(new Error('read failed'))
-    fr.readAsDataURL(blob)
+// Dev-only direct Gemini call (VITE_GEMINI_API_KEY, never set in prod builds).
+async function devVision(body) {
+  const key = import.meta.env.VITE_GEMINI_API_KEY
+  const r = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${VISION_MODEL}:generateContent?key=${key}`, {
+    method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body),
   })
-}
-
-// geminiProxy (prod, server key) first, then a direct call when a local dev key exists.
-async function sendVision(body) {
-  try {
-    const res = await httpsCallable(functions, 'geminiProxy')({ model: VISION_MODEL, body })
-    return res.data
-  } catch (e) {
-    const key = import.meta.env.VITE_GEMINI_API_KEY
-    if (!key) throw new Error(String(e?.message || e))
-    const r = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${VISION_MODEL}:generateContent?key=${key}`, {
-      method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body),
-    })
-    if (!r.ok) throw new Error(`${r.status}`)
-    return r.json()
-  }
+  if (!r.ok) throw new Error(`${r.status}`)
+  return r.json()
 }
 
 // Models wrap JSON in prose or fences no matter how firmly you ask — parse defensively.
@@ -114,11 +101,18 @@ function parseMatches(raw) {
   return []
 }
 
-export default function PhotoOrder({ open, onClose, items = [], tenant = null, lang = 'ar', currency = 'SAR', onPick }) {
+export default function PhotoOrder({ open, onClose, items = [], allItems = null, tenant = null, tenantId = '', lang = 'ar', currency = 'SAR', onPick, cloudEnabled = true, preview: previewMode = false }) {
   const portalRoot = usePortalRoot()
   const t = COPY[lang === 'en' ? 'en' : 'ar']
-  const fileRef = useRef(null)
+  const cameraRef = useRef(null)
+  const galleryRef = useRef(null)
   const urlRef = useRef('')
+  // id re-validation universe: the FULL active list when the parent passes it,
+  // else the (possibly filtered) items prop
+  const universe = (allItems && allItems.length ? allItems : items) || []
+  const tid = tenantId || tenant?.id || ''
+  // the studio preview must never burn real quota
+  const cloudOk = cloudEnabled !== false && !previewMode
 
   const [file, setFile] = useState(null)
   const [preview, setPreview] = useState('')
@@ -142,67 +136,107 @@ export default function PhotoOrder({ open, onClose, items = [], tenant = null, l
     return () => { document.removeEventListener('keydown', onKey); document.body.style.overflow = prev }
   }, [open, onClose])
 
-  const onFile = (e) => {
+  const onFile = async (e) => {
     const f = e.target.files?.[0]
     e.target.value = '' // allow re-picking the same file
     if (!f) return
     setErr(''); setResults(null)
-    if (f.size > MAX_BYTES) { setErr(t.tooBig); return }
+    // canvas downscale first — modern phone photos are routinely 5-12MB and the
+    // old hard reject made that a dead-end; tooBig now fires only for files
+    // that stay oversized even after the resize (or refuse to decode)
+    let use = f
+    try { use = await downscaleImage(f) } catch (_) { /* keep the original */ }
+    if (use.size > AI_ORDER_RANGE.photoMaxBytes.dflt) { setErr(t.tooBig); return }
     revoke()
-    urlRef.current = URL.createObjectURL(f)
-    setFile(f)
+    urlRef.current = URL.createObjectURL(use)
+    setFile(use)
     setPreview(urlRef.current)
+    // optimistic: recognition starts the moment the picture lands (one tap)
+    analyzeWith(use)
   }
 
-  const analyze = async () => {
-    if (!file || busy) return
-    if (!firebaseReady) { setErr(t.noAi); return }
+  // Dev-only secondary engine: direct Gemini with the venue name list; every
+  // proposed name is re-resolved through the local matcher and hallucinated
+  // names are dropped rather than shown.
+  const devAnalyze = async (inline) => {
+    const names = universe
+      .filter((i) => i && (i.nameAr || i.nameEn))
+      .slice(0, 160)
+      .map((i) => `${i.nameAr || ''}${i.nameEn ? ` / ${i.nameEn}` : ''}`)
+    const prompt = [
+      `You identify food and drinks for the venue "${tenant?.name || 'a cafe'}".`,
+      'STEP 1: Look at the attached photo and identify the dish or drink it shows.',
+      'STEP 2: Choose the closest matches ONLY from this exact menu list. You may NOT invent, translate, or modify a name — copy it verbatim from the list.',
+      `MENU LIST:\n${names.map((n) => `- ${n}`).join('\n')}`,
+      'If nothing on the list plausibly matches what is in the photo, return an EMPTY matches array. Never force a match.',
+      'Return up to 4 matches, best first.',
+      'Answer with STRICT JSON only, no prose and no code fences:',
+      '{"matches":[{"name":"<verbatim name from the list>","confidence":<integer 0-100>,"why":"<short reason in Arabic>"}]}',
+      'The "why" text must be short Arabic, with no emojis and using Latin digits only.',
+    ].join('\n')
+    const body = {
+      contents: [{ role: 'user', parts: [{ inlineData: inline }, { text: prompt }] }],
+      generationConfig: { responseMimeType: 'application/json', temperature: 0.2 },
+    }
+    const json = await devVision(body)
+    const raw = (json?.candidates?.[0]?.content?.parts || []).map((p) => p.text).filter(Boolean).join('')
+    const proposed = parseMatches(raw)
+    const seen = new Set()
+    const mapped = []
+    for (const m of proposed) {
+      const ranked = matchItems(m.name, universe, lang)
+      const hit = ranked[0]
+      if (!hit || hit.score < 3) continue
+      if (seen.has(hit.item.id)) continue
+      seen.add(hit.item.id)
+      mapped.push({ item: hit.item, confidence: m.confidence, why: m.why })
+    }
+    return mapped
+  }
+
+  const analyzeWith = async (f) => {
+    if (!f) return
     setBusy(true); setErr(''); setResults(null)
     try {
-      const inline = await blobToInlineData(file)
-      // The venue's real menu vocabulary — the model may not answer outside it.
-      const names = (items || [])
-        .filter((i) => i && (i.nameAr || i.nameEn))
-        .slice(0, 160)
-        .map((i) => `${i.nameAr || ''}${i.nameEn ? ` / ${i.nameEn}` : ''}`)
-      const prompt = [
-        `You identify food and drinks for the venue "${tenant?.name || 'a cafe'}".`,
-        'STEP 1: Look at the attached photo and identify the dish or drink it shows.',
-        'STEP 2: Choose the closest matches ONLY from this exact menu list. You may NOT invent, translate, or modify a name — copy it verbatim from the list.',
-        `MENU LIST:\n${names.map((n) => `- ${n}`).join('\n')}`,
-        'If nothing on the list plausibly matches what is in the photo, return an EMPTY matches array. Never force a match.',
-        'Return up to 4 matches, best first.',
-        'Answer with STRICT JSON only, no prose and no code fences:',
-        '{"matches":[{"name":"<verbatim name from the list>","confidence":<integer 0-100>,"why":"<short reason in Arabic>"}]}',
-        'The "why" text must be short Arabic, with no emojis and using Latin digits only.',
-      ].join('\n')
-      const body = {
-        contents: [{ role: 'user', parts: [{ inlineData: inline }, { text: prompt }] }],
-        generationConfig: { responseMimeType: 'application/json', temperature: 0.2 },
-      }
-      const json = await sendVision(body)
-      const raw = (json?.candidates?.[0]?.content?.parts || []).map((p) => p.text).filter(Boolean).join('')
-      const proposed = parseMatches(raw)
-
-      // Re-resolve every proposed name against the REAL items. Unmapped (i.e.
-      // hallucinated) names are dropped rather than shown.
-      const seen = new Set()
-      const mapped = []
-      for (const m of proposed) {
-        const ranked = matchItems(m.name, items, lang)
-        const hit = ranked[0]
-        if (!hit || hit.score < 3) continue
-        if (seen.has(hit.item.id)) continue
-        seen.add(hit.item.id)
-        mapped.push({ item: hit.item, confidence: m.confidence, why: m.why })
-      }
-      setResults(mapped)
+      const inline = await blobToInline(f)
+      const devKey = import.meta.env.VITE_GEMINI_API_KEY
+      if (cloudOk) {
+        try {
+          // PRIMARY: the guest callable — server-built catalog, id answers
+          const res = await callDinerAi({ tenantId: tid, mode: 'photo', media: inline, lang })
+          const list = Array.isArray(res?.matches) ? res.matches : (Array.isArray(res?.lines) ? res.lines : [])
+          const seen = new Set()
+          const mapped = []
+          for (const m of list) {
+            const item = universe.find((i) => i && i.id === m.id)
+            if (!item || seen.has(item.id)) continue
+            seen.add(item.id)
+            mapped.push({
+              item,
+              confidence: Math.max(0, Math.min(100, Math.round(Number(m.confidence) || 0))),
+              why: String(m.why || '').trim(),
+            })
+          }
+          setResults(mapped)
+          return
+        } catch (e) {
+          if (e?.code === 'quota') { setErr(t.quota); return }
+          if (e?.code === 'disabled') { setErr(t.noAi); return }
+          if (e?.code === 'toolarge') { setErr(t.tooBig); return }
+          if (!devKey) { setErr(t.failed); return }
+          // else fall through to the dev-only engine below
+        }
+      } else if (!devKey) { setErr(t.noAi); return }
+      setResults(await devAnalyze(inline))
     } catch (_) {
       setErr(t.failed)
     } finally {
       setBusy(false)
     }
   }
+
+  // thin retry wrapper — the retry/primary buttons and auto-analyze share ONE path
+  const analyze = () => { if (file && !busy) analyzeWith(file) }
 
   if (!open || !portalRoot) return null
 
@@ -222,16 +256,24 @@ export default function PhotoOrder({ open, onClose, items = [], tenant = null, l
           {preview
             ? <img className="po-img" src={preview} alt="" />
             : (
-              <button type="button" className="po-empty" onClick={() => fileRef.current?.click()}>
-                <Icon name="camera" size={38} />
-                <span>{t.take}</span>
-              </button>
+              <div className="po-empty-row">
+                <button type="button" className="po-empty" onClick={() => cameraRef.current?.click()}>
+                  <Icon name="camera" size={34} />
+                  <span>{t.take}</span>
+                </button>
+                <button type="button" className="po-empty" onClick={() => galleryRef.current?.click()}>
+                  <Icon name="upload" size={34} />
+                  <span>{t.upload}</span>
+                </button>
+              </div>
             )}
           {busy && <span className="po-scanline" aria-hidden="true" />}
         </div>
 
+        {/* two entry paths: capture forces the camera app; the gallery input
+            (no capture attribute) opens the photo library */}
         <input
-          ref={fileRef}
+          ref={cameraRef}
           className="po-file"
           type="file"
           accept="image/*"
@@ -239,10 +281,21 @@ export default function PhotoOrder({ open, onClose, items = [], tenant = null, l
           onChange={onFile}
           aria-label={t.take}
         />
+        <input
+          ref={galleryRef}
+          className="po-file"
+          type="file"
+          accept="image/*"
+          onChange={onFile}
+          aria-label={t.upload}
+        />
 
         <div className="po-actions">
-          <button type="button" className="btn btn-ghost" onClick={() => fileRef.current?.click()} disabled={busy}>
+          <button type="button" className="btn btn-ghost" onClick={() => cameraRef.current?.click()} disabled={busy}>
             <Icon name="camera" size={16} /> {preview ? t.change : t.take}
+          </button>
+          <button type="button" className="btn btn-ghost" onClick={() => galleryRef.current?.click()} disabled={busy}>
+            <Icon name="upload" size={16} /> {t.upload}
           </button>
           <button type="button" className="btn btn-primary" onClick={analyze} disabled={!file || busy}>
             <Icon name="sparkles" size={16} /> {busy ? t.scanning : t.analyze}

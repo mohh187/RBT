@@ -1,6 +1,7 @@
 import {
   Home, UtensilsCrossed, ReceiptText, BarChart3, MoreHorizontal, Bell, BellOff, BellRing,
   Sun, Moon, Languages, LogOut, Plus, Pencil, Trash2, Printer, X, ChevronLeft, ChevronRight,
+  ChevronUp, ChevronDown,
   ChefHat, QrCode, Tags, Armchair, Gift, Users, UserCog, Settings, Search, Check, Download,
   Upload, Volume2, Play, Store, Coffee, Star, Phone, MapPin, Image as ImageIcon, Camera,
   GripVertical, User, Circle, ShoppingCart, Hand, Sparkles, Boxes, Wallet, Clock, Eye, EyeOff,
@@ -41,6 +42,8 @@ const MAP = {
   close: X,
   back: ChevronLeft,
   next: ChevronRight,
+  chevronUp: ChevronUp,
+  chevronDown: ChevronDown,
   kitchen: ChefHat,
   qr: QrCode,
   categories: Tags,

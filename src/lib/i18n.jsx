@@ -408,10 +408,21 @@ const I18nContext = createContext(null)
 
 // Diner-facing surfaces keep their OWN light/dark preference: flipping the
 // back-office dark must never flip the customer menu (and vice versa). The
-// studio's menu preview runs in an iframe on a diner route, so it follows the
-// menu key — toggle it from the preview or the menu itself, independently.
-const DINER_PREFIXES = ['/m/', '/order/', '/e/', '/book/', '/t/', '/screen', '/preview/menu']
-const isDinerSurface = () => typeof location !== 'undefined' && DINER_PREFIXES.some((p) => location.pathname.startsWith(p))
+// studio's menu preview runs in an iframe on a diner route (/preview/:slug), so
+// it follows the menu key — toggle it from the preview or the menu itself,
+// independently. EXCEPTION: /preview/pos and /preview/pinlock are STAFF screen
+// previews and must stay on the back-office key — otherwise the studio's theme
+// pin (previewTheme) would persist into the admin 'ml.theme' preference.
+const DINER_PREFIXES = ['/m/', '/order/', '/e/', '/book/', '/t/', '/screen']
+const STAFF_PREVIEW_PATHS = ['/preview/pos', '/preview/pinlock']
+const isDinerSurface = () => {
+  if (typeof location === 'undefined') return false
+  const path = location.pathname
+  if (path.startsWith('/preview/')) {
+    return !STAFF_PREVIEW_PATHS.some((p) => path === p || path.startsWith(`${p}/`))
+  }
+  return DINER_PREFIXES.some((p) => path.startsWith(p))
+}
 const themeKey = () => (isDinerSurface() ? 'ml.theme.menu' : 'ml.theme')
 
 export function I18nProvider({ children }) {

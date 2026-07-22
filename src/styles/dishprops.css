@@ -252,7 +252,13 @@
 .dp-root[data-surface='shelf'] .dp-grain { opacity: .45; }
 .dp-root[data-surface='shelf'] .dp-horizon { top: 9%; }
 
-/* contact shadow — the single detail that stops a cutout floating */
+/* contact shadow — the single detail that stops a cutout floating.
+   STRENGTH DIAL: --edt-sh-dish (tenant.menuShadows.dish) scales the GRADIENT
+   COLOURS, never the element opacity — the arrival keyframes (dp-contact-in /
+   dp-shadow-in, fill both) and the reduced-motion block drive opacity
+   themselves and would overwrite any opacity dial. Literal lines stay first
+   as fallbacks; absent var = 1 = identical paint (the admin picker stage,
+   outside the editorial wrap, therefore never changes). */
 .dp-contact {
   position: absolute;
   left: 50%;
@@ -263,6 +269,10 @@
   transform: translateX(-50%);
   opacity: 0;
   background: radial-gradient(50% 50% at 50% 50%, rgba(0, 0, 0, .66), rgba(0, 0, 0, .32) 44%, transparent 73%);
+  background: radial-gradient(50% 50% at 50% 50%,
+    color-mix(in srgb, rgb(0 0 0) calc(66% * var(--edt-sh-dish, 1)), transparent),
+    color-mix(in srgb, rgb(0 0 0) calc(32% * var(--edt-sh-dish, 1)), transparent) 44%,
+    transparent 73%);
 }
 /* the tight dark core right where the dish meets the material */
 .dp-contact::after {
@@ -274,6 +284,9 @@
   height: 46%;
   transform: translate(-50%, -50%);
   background: radial-gradient(50% 50% at 50% 50%, rgba(0, 0, 0, .74), transparent 70%);
+  background: radial-gradient(50% 50% at 50% 50%,
+    color-mix(in srgb, rgb(0 0 0) calc(74% * var(--edt-sh-dish, 1)), transparent),
+    transparent 70%);
 }
 /* the detail stage gives the dish more air, so its plane sits tighter */
 .dp-stage .dp-plane { min-height: 56px; }
@@ -330,7 +343,12 @@
   z-index: -1;
   transform: translateX(-50%) scaleX(.7);
   opacity: 0;
+  /* same dish dial, same colour-not-opacity rule; the reduced-motion block's
+     0.9 opacity relationship below stays untouched */
   background: radial-gradient(50% 50% at 50% 50%, rgba(0, 0, 0, .5), transparent 70%);
+  background: radial-gradient(50% 50% at 50% 50%,
+    color-mix(in srgb, rgb(0 0 0) calc(50% * var(--edt-sh-dish, 1)), transparent),
+    transparent 70%);
 }
 .dp-behind .dp-prop::after { display: none; }
 
@@ -482,10 +500,17 @@
 [data-theme='light'] .edt-photo .dp-contact,
 [data-theme='light'] .edt-stg-hero .dp-contact {
   background: radial-gradient(50% 50% at 50% 50%, rgba(52, 27, 13, .44), rgba(52, 27, 13, .21) 44%, transparent 73%);
+  background: radial-gradient(50% 50% at 50% 50%,
+    color-mix(in srgb, rgb(52 27 13) calc(44% * var(--edt-sh-dish, 1)), transparent),
+    color-mix(in srgb, rgb(52 27 13) calc(21% * var(--edt-sh-dish, 1)), transparent) 44%,
+    transparent 73%);
 }
 [data-theme='light'] .edt-photo .dp-contact::after,
 [data-theme='light'] .edt-stg-hero .dp-contact::after {
   background: radial-gradient(50% 50% at 50% 50%, rgba(52, 27, 13, .52), transparent 70%);
+  background: radial-gradient(50% 50% at 50% 50%,
+    color-mix(in srgb, rgb(52 27 13) calc(52% * var(--edt-sh-dish, 1)), transparent),
+    transparent 70%);
 }
 /* the plaster light washing over the far edge of the material */
 [data-theme='light'] .edt-photo .dp-plane::after,

@@ -1,6 +1,7 @@
 import { useNavigate } from 'react-router-dom'
 import { useI18n } from '../lib/i18n.jsx'
 import { resolveSkin } from '../lib/skins.js'
+import { resolveChrome } from '../lib/dishComposition.js'
 import Icon from './Icon.jsx'
 
 // Shared diner bottom nav. On the menu page, cart/orders open sheets (pass callbacks);
@@ -13,6 +14,9 @@ export default function DinerNav({ slug, tenant, variant, active = 'menu', cartC
   const resolved = resolveSkin(tenant, 'menu')
   const navStyle = variant || resolved?.layout?.bottomNav || 'standard'
   const hidden = resolved?.hidden || []
+  // menuChrome custom cart-fab icon: the fab FACE rides body-level --mch-fab
+  // vars stamped by ChromeSkin — only the glyph swap lives here.
+  const cartIcon = resolveChrome(tenant)?.elements?.cartFab?.icon || ''
   if (navStyle === 'none') return null
 
   return (
@@ -29,7 +33,7 @@ export default function DinerNav({ slug, tenant, variant, active = 'menu', cartC
       {showCart && (
         <button className="center-cart-btn" onClick={onCart || tap(null, `/m/${slug}?cart=1`)}>
           <div className="cart-circle-container">
-            <Icon name="cart" size={20} />
+            {cartIcon ? <img className="mch-icon" src={cartIcon} alt="" /> : <Icon name="cart" size={20} />}
             {cartCount > 0 && <span className="cart-badge-count">{cartCount}</span>}
           </div>
           <span>{lang === 'ar' ? 'السلة' : 'Cart'}</span>

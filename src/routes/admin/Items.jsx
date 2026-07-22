@@ -21,21 +21,27 @@ import { Price } from '../../components/Riyal.jsx'
 import Icon from '../../components/Icon.jsx'
 import { ItemSheet } from '../../components/MenuView.jsx'
 import ModelStudio from '../../components/ModelStudio.jsx'
-import ItemFx from '../../components/ItemFx.jsx'
 import DishHotspots from '../../components/DishHotspots.jsx'
+// The LIVE preview pane: the real /preview/<slug> menu beside the form, fed the
+// unsaved draft over the studio's postMessage bus. It replaced the old inline
+// dark-canvas approximations (.dcx-stage / .dpx-stage), which showed neither
+// the venue wall nor its table.
+import ItemLivePreview from '../../components/ItemLivePreview.jsx'
+import VideoTrimRange from '../../components/VideoTrimRange.jsx'
+import { useVideoTrim } from '../../lib/useVideoTrim.js'
 import { lex, venueType } from '../../lib/venueTypes.js'
 import { sectionTemplate, templateOptions } from '../../lib/systemTemplates.js'
-// Surface + garnish: the catalogue is data-only (no React, no CSS), the drawing
-// component is the very one the live menu uses — so the editor preview is the
-// real thing rather than an approximation of it.
+// Surface + garnish: the catalogue is data-only (no React, no CSS); the result
+// is judged in the live menu preview pane, which renders through the real
+// theme pipeline rather than an inline approximation.
 import { SURFACES, PROPS, PROP_CATEGORIES, resolveDishProps } from '../../lib/dishProps.js'
-import DishProps from '../../components/menuThemes/DishProps.jsx'
 // Dish composition: the ONE contract for the backdrop, the photo on it, the
 // effect over it and how it arrives. The composer below builds every control
 // from these catalogues and previews with the renderer's own style functions,
 // so a control and the pixel it produces cannot drift.
 import {
   BLEND_MODES, FILTERS, ANIMS, FX, RANGE, resolveComposition, bgStyle, imgStyle,
+  imgTiltBoxStyle, normalizeVideoTrim,
   LAYER_DEPTHS, LAYER_MOTIONS, LAYER_RANGE, normalizeLayer, layerStyle,
 } from '../../lib/dishComposition.js'
 import '../../styles/appearance.css'
@@ -91,14 +97,18 @@ const DENSITY_CHOICES = [
 
 // ---------------------------------------------------- dish composition ------
 // The default of every field lib/dishComposition.js reads, in that module's own
-// terms. `null` on the three list-only fields is not "zero": resolveComposition
+// terms. `null` on the four list-only fields is not "zero": resolveComposition
 // falls back to the opened-item value while they are absent, which is exactly
 // what an owner who only tuned the item screen expects the list to do.
+// `bgVideoTrim: null` means "play the whole clip" — normalizeVideoTrim treats
+// absence and the untouched window identically, so an untrimmed item gains no
+// key at all. Without this entry the save whitelist below would silently drop
+// the field on every save.
 const COMPOSE_DEFAULTS = {
-  bgUrl: '', bgKind: '', bgOpacity: RANGE.bgOpacity.dflt, bgPos: 'center', bgScale: 1, bgBlend: 'normal', bgFilter: '',
+  bgUrl: '', bgKind: '', bgOpacity: RANGE.bgOpacity.dflt, bgPos: 'center', bgScale: 1, bgBlend: 'normal', bgFilter: '', bgVideoTrim: null,
   imageScale: RANGE.scale.dflt, imageX: RANGE.offset.dflt, imageY: RANGE.offset.dflt,
-  listScale: null, listX: null, listY: null,
-  imageRot: RANGE.rot.dflt, imageTilt: RANGE.tilt.dflt, imageBlend: 'normal', imageFilter: '', imageBlur: RANGE.blur.dflt,
+  listScale: null, listX: null, listY: null, listTilt: null,
+  imageRot: RANGE.rot.dflt, imageTilt: RANGE.tilt.dflt, tiltContact: RANGE.tiltContact.dflt, imageBlend: 'normal', imageFilter: '', imageBlur: RANGE.blur.dflt,
   shadowOn: false, shadowX: 0, shadowY: 14, shadowBlur: RANGE.shadowBlur.dflt, shadowOpacity: 0.45, shadowColor: '#000000',
   effect: '', anim: '',
 }
@@ -118,6 +128,8 @@ const COMPOSE_BOUNDS = {
   listY: [RANGE.offset.min, RANGE.offset.max],
   imageRot: [RANGE.rot.min, RANGE.rot.max],
   imageTilt: [RANGE.tilt.min, RANGE.tilt.max],
+  listTilt: [RANGE.tilt.min, RANGE.tilt.max],
+  tiltContact: [RANGE.tiltContact.min, RANGE.tiltContact.max],
   imageBlur: [RANGE.blur.min, RANGE.blur.max],
   shadowX: [-60, 60],
   shadowY: [-60, 60],
@@ -155,14 +167,20 @@ function composePayload(form, original) {
     bgScale: compClamp(f.bgScale, 'bgScale', COMPOSE_DEFAULTS.bgScale),
     bgBlend: compId(f.bgBlend, BLEND_MODES, 'normal'),
     bgFilter: compId(f.bgFilter, FILTERS, ''),
+    // The playback window of a video backdrop. normalizeVideoTrim returns null
+    // for "whole clip", which equals the default, so the sparse-emission rule
+    // below writes it only when a window is set or one is stored to clear.
+    bgVideoTrim: normalizeVideoTrim(f.bgVideoTrim),
     imageScale: compClamp(f.imageScale, 'imageScale', COMPOSE_DEFAULTS.imageScale),
     imageX: compClamp(f.imageX, 'imageX', COMPOSE_DEFAULTS.imageX),
     imageY: compClamp(f.imageY, 'imageY', COMPOSE_DEFAULTS.imageY),
     listScale: compOpt(f.listScale, 'listScale'),
     listX: compOpt(f.listX, 'listX'),
     listY: compOpt(f.listY, 'listY'),
+    listTilt: compOpt(f.listTilt, 'listTilt'),
     imageRot: compClamp(f.imageRot, 'imageRot', COMPOSE_DEFAULTS.imageRot),
     imageTilt: compClamp(f.imageTilt, 'imageTilt', COMPOSE_DEFAULTS.imageTilt),
+    tiltContact: compClamp(f.tiltContact, 'tiltContact', COMPOSE_DEFAULTS.tiltContact),
     imageBlend: compId(f.imageBlend, BLEND_MODES, 'normal'),
     imageFilter: compId(f.imageFilter, FILTERS, ''),
     imageBlur: compClamp(f.imageBlur, 'imageBlur', COMPOSE_DEFAULTS.imageBlur),
@@ -806,7 +824,8 @@ function ItemEditor({ tenantId, cats, currency, value, onClose, onSaved, onDelet
       const f = new File([blob], `item-${Date.now()}.webp`, { type: 'image/webp' })
       const url = await uploadImage(tenantId, f)
       if (target === 'extra') set('images', [...(form.images || []), url])
-      else if (target === 'bg') setForm((s) => ({ ...s, bgUrl: url, bgKind: 'image' }))
+      // a NEW backdrop must not inherit the previous clip's trim window
+      else if (target === 'bg') setForm((s) => ({ ...s, bgUrl: url, bgKind: 'image', bgVideoTrim: null }))
       else set('imageUrl', url)
     } catch (_) {
       toast.error(lang === 'ar' ? 'تعذّر رفع الصورة' : 'Upload failed')
@@ -873,11 +892,12 @@ function ItemEditor({ tenantId, cats, currency, value, onClose, onSaved, onDelet
     if (!form.imageUrl) { toast.error(lang === 'ar' ? 'أضف صورة للصنف أولاً' : 'Add a photo first'); return }
     setReal3dSec(0)
     try {
+      // Single-best-image REALISM (server default). The swipe gallery is NOT
+      // sent: those are arbitrary marketing shots, and fusing mismatched
+      // platings is what produced the cartoon-blob models. Hand-picked
+      // multi-view + the stylized smooth mode live in ModelStudio only.
       const res = await httpsCallable(functions, 'imageTo3d', { timeout: 540000 })({
         tenantId, itemId: form.id || '', imageUrl: form.imageUrl,
-        // every gallery shot goes along: more views = a real back side instead
-        // of a guessed one (the server caps at the provider's 4)
-        imageUrls: form.images || [],
         itemName: form.nameEn || form.nameAr || '',
       })
       const url = res?.data?.url
@@ -992,7 +1012,8 @@ function ItemEditor({ tenantId, cats, currency, value, onClose, onSaved, onDelet
     setUploading(true)
     try {
       const url = kind === 'video' ? await uploadFile(tenantId, file, 'itembg') : await uploadImage(tenantId, file)
-      setForm((f) => ({ ...f, bgUrl: url, bgKind: kind }))
+      // stale trim from the PREVIOUS clip must never apply to the new one
+      setForm((f) => ({ ...f, bgUrl: url, bgKind: kind, bgVideoTrim: null }))
     } catch (err) {
       toast.error(err?.message || (lang === 'ar' ? 'تعذّر الرفع' : 'Upload failed'))
     } finally {
@@ -1053,6 +1074,39 @@ function ItemEditor({ tenantId, cats, currency, value, onClose, onSaved, onDelet
   // switches below describing the wrong material.
   const dpSurface = resolveDishProps(dpPreviewItem, { variant: 'stage', catName: dpCatName }).surface
   const dpReflective = !!(dpSurface && dpSurface.reflective)
+
+  // ---- the ONE live preview -------------------------------------------------
+  // Which surface the preview frame shows (list row vs opened item). Lifted
+  // here — not local to CompositionEditor — because the same choice steers both
+  // the composer's data-live rings and the ItemLivePreview pane.
+  const [pvVariant, setPvVariant] = useState('list')
+  // The draft exactly as save() would write it, so the frame previews what a
+  // save would produce — every Number() coercion mirrored from the payload
+  // below. availability is FORCED on (and the time window blanked): the frame
+  // must never hide the very dish being edited behind a sold-out filter or a
+  // breakfast-hours window. Unsaved items travel under the synthetic id
+  // '__draft__', which PreviewMenu appends to the saved list.
+  const draftItem = useMemo(() => ({
+    ...form,
+    id: form.id || '__draft__',
+    price: Math.max(0, Number(form.price) || 0),
+    calories: Math.max(0, Number(form.calories) || 0),
+    prepTime: Math.max(0, Number(form.prepTime) || 0),
+    serves: Math.max(0, Number(form.serves) || 0),
+    rating: Math.max(0, Number(form.rating) || 0),
+    variants: (form.variants || [])
+      .filter((v) => v.nameAr || v.nameEn)
+      .map((v, idx) => ({ key: `v${idx}`, nameAr: v.nameAr, nameEn: v.nameEn, price: Math.max(0, Number(v.price) || 0) })),
+    layers: (layers || []).filter((l) => !l.hidden).map(writeLayer),
+    surface: dpOn ? (form.surface || '') : '',
+    props: dpPropsValue,
+    contactShadow: dpOn && !!dpSurface && !!form.contactShadow,
+    reflect: dpOn && dpReflective && !!form.reflect,
+    available: true,
+    archived: false,
+    availableFrom: '',
+    availableTo: '',
+  }), [form, layers, dpOn, dpSurface, dpReflective, dpPropsValue])
 
   const save = async () => {
     if (!form.nameAr.trim() && !form.nameEn.trim()) {
@@ -1206,9 +1260,14 @@ function ItemEditor({ tenantId, cats, currency, value, onClose, onSaved, onDelet
     onDeleted()
   }
 
+  // ie-sheet widens the dialog into two panes on >=1000px (appearance.css beats
+  // the 600px !important cap with a higher-specificity rule); below that the
+  // pane renders itself as a portalled bottom drawer, so the form column is
+  // untouched. The form's own markup is unmoved — only wrapped.
   return (
     <Sheet
       open onClose={onClose}
+      className="ie-sheet"
       title={isNew ? t('addItem') : t('editItem')}
       footer={
         delOpen && !isNew ? (
@@ -1231,7 +1290,8 @@ function ItemEditor({ tenantId, cats, currency, value, onClose, onSaved, onDelet
         )
       }
     >
-      <div className="stack">
+      <div className="ie-grid">
+        <div className="stack ie-form-col">
         {cropState && (
           <ImageCropper file={cropState.file} imageSrc={cropState.src}
             title={cropState.src ? (lang === 'ar' ? 'تعديل صورة الصنف' : 'Edit item image') : (lang === 'ar' ? 'قص صورة الصنف' : 'Crop item image')}
@@ -1440,8 +1500,8 @@ function ItemEditor({ tenantId, cats, currency, value, onClose, onSaved, onDelet
 
         <EditorSection id="ie-compose" title={lang === 'ar' ? 'تركيب الصنف' : 'Dish composition'} />
         <CompositionEditor
-          form={form} setForm={setForm} lang={lang} currency={currency} uploading={uploading}
-          layers={layers}
+          form={form} setForm={setForm} lang={lang} uploading={uploading}
+          variant={pvVariant} setVariant={setPvVariant}
           onPickBgImage={(e) => onPick(e, 'bg')}
           onEditBgImage={() => setCropState({ src: form.bgUrl, target: 'bg' })}
           onPickBgVideo={onBgPick('video')}
@@ -1553,24 +1613,11 @@ function ItemEditor({ tenantId, cats, currency, value, onClose, onSaved, onDelet
                 </div>
               )}
 
-              <div className="field" style={{ marginBottom: 0 }}>
-                <label>{lang === 'ar' ? 'معاينة حية — كما سيراها العميل' : 'Live preview — what the guest sees'}</label>
-                {/* The preview opts in exactly the way styles/dishprops.css
-                    says a host does — the same two attributes the menu sets on
-                    the photo box — so the switches above cannot show one thing
-                    here and another on the customer's screen. */}
-                <div
-                  className="dpx-stage"
-                  data-dp-contact={dpSurface && form.contactShadow ? '1' : undefined}
-                  data-dp-reflect={dpReflective && form.reflect ? '1' : undefined}
-                >
-                  <DishProps item={dpPreviewItem} active variant="stage" catName={dpCatName} />
-                  {form.imageUrl
-                    ? <img src={form.imageUrl} alt="" />
-                    : <span className="dpx-noimg">{lang === 'ar' ? 'ارفع صورة الصنف لترى المعاينة كاملة — الأفضل صورة بخلفية شفافة' : 'Upload the item photo for the full preview (a transparent cutout works best)'}</span>}
-                </div>
-                <p className="xs faint">{lang === 'ar' ? 'الزينة زخرفية فقط: لا تُعرض كمكوّنات ولا تُطبع في الطلب.' : 'Garnish is decoration only: never presented as an ingredient, never printed on the order.'}</p>
-              </div>
+              <p className="xs faint" style={{ margin: 0 }}>
+                {lang === 'ar'
+                  ? 'الزينة زخرفية فقط: لا تُعرض كمكوّنات ولا تُطبع في الطلب. شاهد النتيجة في المعاينة الحية للمنيو.'
+                  : 'Garnish is decoration only: never presented as an ingredient, never printed on the order. See it in the live menu preview.'}
+              </p>
             </div>
           )}
         </div>
@@ -1794,6 +1841,8 @@ function ItemEditor({ tenantId, cats, currency, value, onClose, onSaved, onDelet
           </label>
           {form.trackStock && <p className="xs faint" style={{ width: '100%' }}>{lang === 'ar' ? 'تُدار الكمية من قسم «المخزون» (العمليات).' : 'Quantity is managed in the Inventory section (Operations).'}</p>}
         </div>
+        </div>
+        <ItemLivePreview slug={tnt?.slug} draftItem={draftItem} variant={pvVariant} onVariant={setPvVariant} lang={lang} />
       </div>
     </Sheet>
   )
@@ -1864,44 +1913,15 @@ function CxGroup({ icon, title, hint, resetLabel, onReset, children }) {
   )
 }
 
-function CompositionEditor({ form, setForm, lang, currency, uploading, layers, onPickBgImage, onEditBgImage, onPickBgVideo }) {
+// `variant`/`setVariant` arrive LIFTED from ItemEditor: the same choice drives
+// the data-live rings here AND which surface the ItemLivePreview frame shows.
+// The old inline .dcx-stage preview this component used to draw is retired —
+// the pane previews through the real menu pipeline instead of a dark-canvas
+// approximation of it.
+function CompositionEditor({ form, setForm, lang, uploading, variant, setVariant, onPickBgImage, onEditBgImage, onPickBgVideo }) {
   const ar = lang === 'ar'
   const patch = (o) => setForm((f) => ({ ...f, ...o }))
   const set = (k, v) => patch({ [k]: v })
-
-  // Which variant the stage is showing. The two size/position blocks below are
-  // ringed to match, so it is never ambiguous which one a slider is moving.
-  const [variant, setVariant] = useState('list')
-  const [replay, setReplay] = useState(0)
-  // The placed elements ride along so THIS preview shows the whole dish rather
-  // than a photo with its decoration missing. Hidden ones are stripped first —
-  // resolveLayers() has no notion of "switched off", and it must not.
-  const compItem = useMemo(
-    () => ({ ...form, layers: (layers || []).filter((l) => !l.hidden).map(writeLayer) }),
-    [form, layers],
-  )
-  const comp = resolveComposition(compItem, { variant })
-
-  // Replay the entrance whenever the choice or the previewed variant changes —
-  // an animation you cannot see is an animation you cannot judge.
-  useEffect(() => { setReplay((r) => r + 1) }, [form.anim, variant])
-
-  // '' means "leave it to the theme"; the stage shows a gentle rise for it and
-  // says so, rather than pretending to know what each theme does.
-  const animPreview = comp.anim === 'none' ? '' : (comp.anim || 'rise')
-  const bgWrapStyle = comp.bg && comp.bg.kind === 'video'
-    ? {
-      opacity: comp.bg.opacity,
-      ...(comp.bg.blend !== 'normal' ? { mixBlendMode: comp.bg.blend } : null),
-      ...(comp.bg.filter ? { filter: comp.bg.filter } : null),
-    }
-    : null
-  const bgVideoStyle = comp.bg
-    ? {
-      objectPosition: comp.bg.pos,
-      ...(comp.bg.scale !== 1 ? { transform: `scale(${comp.bg.scale})`, transformOrigin: comp.bg.pos } : null),
-    }
-    : null
 
   // The list values FALL BACK to the opened-item ones while they are unset
   // (resolveComposition does exactly this), so the sliders must show the value
@@ -1912,13 +1932,16 @@ function CompositionEditor({ form, setForm, lang, currency, uploading, layers, o
   const listScale = form.listScale != null ? cxNum(form.listScale, stageScale) : stageScale
   const listX = form.listX != null ? cxNum(form.listX, stageX) : stageX
   const listY = form.listY != null ? cxNum(form.listY, stageY) : stageY
-  const listFollows = form.listScale == null && form.listX == null && form.listY == null
+  const stageTilt = cxNum(form.imageTilt, RANGE.tilt.dflt)
+  const listTilt = form.listTilt != null ? cxNum(form.listTilt, stageTilt) : stageTilt
+  const listFollows = form.listScale == null && form.listX == null && form.listY == null && form.listTilt == null
 
   const resetBg = () => patch({ bgOpacity: COMPOSE_DEFAULTS.bgOpacity, bgPos: COMPOSE_DEFAULTS.bgPos, bgScale: COMPOSE_DEFAULTS.bgScale, bgBlend: COMPOSE_DEFAULTS.bgBlend, bgFilter: COMPOSE_DEFAULTS.bgFilter })
   const resetImg = () => patch({
     imageScale: COMPOSE_DEFAULTS.imageScale, imageX: COMPOSE_DEFAULTS.imageX, imageY: COMPOSE_DEFAULTS.imageY,
-    listScale: null, listX: null, listY: null,
-    imageRot: COMPOSE_DEFAULTS.imageRot, imageTilt: COMPOSE_DEFAULTS.imageTilt, imageBlend: COMPOSE_DEFAULTS.imageBlend, imageFilter: COMPOSE_DEFAULTS.imageFilter, imageBlur: COMPOSE_DEFAULTS.imageBlur,
+    listScale: null, listX: null, listY: null, listTilt: null,
+    imageRot: COMPOSE_DEFAULTS.imageRot, imageTilt: COMPOSE_DEFAULTS.imageTilt, tiltContact: COMPOSE_DEFAULTS.tiltContact,
+    imageBlend: COMPOSE_DEFAULTS.imageBlend, imageFilter: COMPOSE_DEFAULTS.imageFilter, imageBlur: COMPOSE_DEFAULTS.imageBlur,
   })
   const resetShadow = () => patch({
     shadowOn: false, shadowX: COMPOSE_DEFAULTS.shadowX, shadowY: COMPOSE_DEFAULTS.shadowY,
@@ -1934,54 +1957,6 @@ function CompositionEditor({ form, setForm, lang, currency, uploading, layers, o
           ? 'تتحكم هنا في شكل هذا الصنف وحده: خلفيته وطريقة مزجها، مقاس صورته وموضعها في القائمة وفي شاشة الصنف كلٌّ على حدة، ظلّه، المؤثر فوقه، وطريقة ظهوره. كل قيمة تبقى على الافتراضي ما لم تحرّكها.'
           : 'Controls how this one item looks: its backdrop and blend, its photo size and position separately in the list and on its own screen, its shadow, the effect over it, and how it appears.'}
       </p>
-
-      <section className="dcx-group">
-        <div className="row-between" style={{ alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
-          <strong className="xs"><Icon name="eye" size={13} style={{ verticalAlign: 'middle' }} /> {ar ? 'معاينة حية' : 'Live preview'}</strong>
-          <div className="row" style={{ gap: 6, flex: 'none' }}>
-            <button type="button" className={`chip ${variant === 'list' ? 'active' : ''}`} onClick={() => setVariant('list')}>{ar ? 'القائمة' : 'Menu list'}</button>
-            <button type="button" className={`chip ${variant === 'stage' ? 'active' : ''}`} onClick={() => setVariant('stage')}>{ar ? 'الصنف المفتوح' : 'Opened item'}</button>
-            <button type="button" className="btn btn-xs btn-outline" onClick={() => setReplay((r) => r + 1)}>
-              <Icon name="reload" size={12} /> {ar ? 'إعادة الحركة' : 'Replay'}
-            </button>
-          </div>
-        </div>
-
-        <div className="dcx-stage" data-variant={variant}>
-          {comp.bg && comp.bg.kind === 'video' ? (
-            <span className="dcx-bg" style={bgWrapStyle}>
-              <video key={comp.bg.url} src={comp.bg.url} autoPlay muted loop playsInline style={bgVideoStyle} />
-            </span>
-          ) : comp.bg ? (
-            <span className="dcx-bg" style={bgStyle(comp.bg)} />
-          ) : null}
-
-          {comp.layers.behind.map((l) => <LayerArt key={`b${l.id}`} layer={l} replay={replay} />)}
-
-          {form.imageUrl ? (
-            <span className="dcx-shot">
-              <img key={replay} src={form.imageUrl} alt="" data-anim={animPreview || undefined} style={imgStyle(comp.img, comp.shadow) || undefined} />
-            </span>
-          ) : (
-            <span className="dcx-empty">{ar ? 'ارفع صورة الصنف لترى التركيب — الأفضل صورة بخلفية شفافة' : 'Upload the item photo to compose it (a transparent cutout works best)'}</span>
-          )}
-
-          {comp.layers.front.map((l) => <LayerArt key={`f${l.id}`} layer={l} replay={replay} />)}
-
-          <ItemFx kind={comp.fx} />
-
-          <span className="dcx-meta">
-            <b>{form.nameAr || form.nameEn || (ar ? 'اسم الصنف' : 'Item name')}</b>
-            <span className="num">{form.price || '0'} {currency}</span>
-          </span>
-        </div>
-
-        <p className="xs faint" style={{ margin: 0 }}>
-          {ar
-            ? 'الخلفية الداكنة هنا هي نفسها خلفية ثيم المجلة — وضع المزج يختلف كلياً فوق الفاتح والداكن، فالمعاينة تريك الحالة الحقيقية.'
-            : 'The dark canvas mirrors the editorial theme: blend modes read completely differently on light and dark.'}
-        </p>
-      </section>
 
       <CxGroup icon="image" title={ar ? 'الخلفية' : 'Backdrop'} resetLabel={resetLabel} onReset={resetBg}
         hint={ar ? 'صورة أو فيديو خلف هذا الصنف — تتفوق على الخلفية الموحّدة في الاستوديو.' : 'An image or video behind this item, overriding the venue-wide backdrop.'}>
@@ -2000,10 +1975,14 @@ function CompositionEditor({ form, setForm, lang, currency, uploading, layers, o
             </button>
           )}
           {form.bgUrl && (
-            <button type="button" className="btn-link xs" style={{ color: 'var(--danger)' }} onClick={() => patch({ bgUrl: '', bgKind: '' })}>{ar ? 'إزالة الخلفية' : 'Remove'}</button>
+            <button type="button" className="btn-link xs" style={{ color: 'var(--danger)' }} onClick={() => patch({ bgUrl: '', bgKind: '', bgVideoTrim: null })}>{ar ? 'إزالة الخلفية' : 'Remove'}</button>
           )}
           {uploading && <span className="spinner" style={{ flex: 'none' }} />}
         </div>
+
+        {form.bgUrl && form.bgKind === 'video' && (
+          <VideoTrimRange url={form.bgUrl} value={form.bgVideoTrim || null} ar={ar} onChange={(v) => patch({ bgVideoTrim: v })} />
+        )}
 
         {form.bgUrl ? (
           <div className="stack" style={{ gap: 9 }}>
@@ -2034,11 +2013,15 @@ function CompositionEditor({ form, setForm, lang, currency, uploading, layers, o
 
       <CxGroup icon="camera" title={ar ? 'الصورة' : 'The photo'} resetLabel={resetLabel} onReset={resetImg}
         hint={ar ? 'المقاس والموضع يُضبطان لكل شاشة على حدة: صورة بحجم صف في القائمة لا تكفي شاشة الصنف.' : 'Size and position are set per screen: a photo sized for a list row cannot carry a full item screen.'}>
+        <div className="row" style={{ gap: 6, flexWrap: 'wrap' }}>
+          <button type="button" className={`chip ${variant === 'list' ? 'active' : ''}`} onClick={() => setVariant('list')}>{ar ? 'القائمة' : 'Menu list'}</button>
+          <button type="button" className={`chip ${variant === 'stage' ? 'active' : ''}`} onClick={() => setVariant('stage')}>{ar ? 'الصنف المفتوح' : 'Opened item'}</button>
+        </div>
         <div className="dcx-sub" data-live={variant === 'list' ? 'true' : 'false'}>
           <div className="dcx-sub-head">
             <strong className="xs">{ar ? 'في القائمة (أثناء التصفح)' : 'In the menu list'}</strong>
             {!listFollows && (
-              <button type="button" className="btn btn-xs btn-ghost" style={{ flex: 'none' }} onClick={() => patch({ listScale: null, listX: null, listY: null })}>
+              <button type="button" className="btn btn-xs btn-ghost" style={{ flex: 'none' }} onClick={() => patch({ listScale: null, listX: null, listY: null, listTilt: null })}>
                 {ar ? 'اتبع الصنف المفتوح' : 'Follow the item screen'}
               </button>
             )}
@@ -2052,6 +2035,9 @@ function CompositionEditor({ form, setForm, lang, currency, uploading, layers, o
           <CxSlider label={ar ? 'الإزاحة الرأسية في القائمة' : 'Vertical offset in the list'} format={cxOff}
             min={RANGE.offset.min} max={RANGE.offset.max} step={RANGE.offset.step}
             value={listY} onChange={(v) => set('listY', v)} />
+          <CxSlider label={ar ? 'الإمالة على السطح — القائمة' : 'Lean on the surface — list'} format={cxDeg}
+            min={RANGE.tilt.min} max={RANGE.tilt.max} step={RANGE.tilt.step}
+            value={listTilt} onChange={(v) => set('listTilt', v)} />
           {listFollows && (
             <p className="xs faint" style={{ margin: 0 }}>{ar ? 'تتبع القائمة حالياً قيم الصنف المفتوح — حرّك أي مؤشر هنا لتفصلها.' : 'The list currently follows the item screen — move any slider here to split them.'}</p>
           )}
@@ -2070,14 +2056,17 @@ function CompositionEditor({ form, setForm, lang, currency, uploading, layers, o
           <CxSlider label={ar ? 'الإزاحة الرأسية' : 'Vertical offset'} format={cxOff}
             min={RANGE.offset.min} max={RANGE.offset.max} step={RANGE.offset.step}
             value={stageY} onChange={(v) => set('imageY', v)} />
+          <CxSlider label={ar ? 'الإمالة على السطح — نافذة الصنف' : 'Lean on the surface — item window'} format={cxDeg}
+            min={RANGE.tilt.min} max={RANGE.tilt.max} step={RANGE.tilt.step}
+            value={stageTilt} onChange={(v) => set('imageTilt', v)} />
         </div>
 
         <CxSlider label={ar ? 'الميلان (الدوران)' : 'Rotation'} format={cxDeg}
           min={RANGE.rot.min} max={RANGE.rot.max} step={RANGE.rot.step}
           value={cxNum(form.imageRot, RANGE.rot.dflt)} onChange={(v) => set('imageRot', v)} />
-        <CxSlider label={ar ? 'الإمالة على السطح (منظور)' : 'Lean onto the surface (perspective)'} format={cxDeg}
-          min={RANGE.tilt.min} max={RANGE.tilt.max} step={RANGE.tilt.step}
-          value={cxNum(form.imageTilt, RANGE.tilt.dflt)} onChange={(v) => set('imageTilt', v)} />
+        <CxSlider label={ar ? 'ظل ملامسة الطبق المائل (مع الإمالة فقط)' : 'Contact shadow under the leaned dish (tilt only)'} format={cxPct}
+          min={RANGE.tiltContact.min} max={RANGE.tiltContact.max} step={RANGE.tiltContact.step}
+          value={cxNum(form.tiltContact, RANGE.tiltContact.dflt)} onChange={(v) => set('tiltContact', v)} />
         <CxSlider label={ar ? 'التمويه' : 'Blur'} format={cxPx}
           min={RANGE.blur.min} max={RANGE.blur.max} step={RANGE.blur.step}
           value={cxNum(form.imageBlur, RANGE.blur.dflt)} onChange={(v) => set('imageBlur', v)} />
@@ -2140,9 +2129,9 @@ function CompositionEditor({ form, setForm, lang, currency, uploading, layers, o
             </button>
           ))}
         </div>
-        <button type="button" className="btn btn-sm btn-outline" style={{ alignSelf: 'flex-start' }} onClick={() => setReplay((r) => r + 1)}>
-          <Icon name="play" size={13} /> {ar ? 'شغّل الحركة في المعاينة' : 'Play it in the preview'}
-        </button>
+        <p className="xs faint" style={{ margin: 0 }}>
+          {ar ? 'زر «إعادة الحركة» في لوح المعاينة الحية يعيد تشغيل حركة الظهور.' : 'The Replay button on the live preview pane re-runs the entrance.'}
+        </p>
       </CxGroup>
     </div>
   )
@@ -2231,6 +2220,12 @@ function LayersEditor({ lang, tenantId, tenant, form, canLibrary, layers, setLay
     [form, layers],
   )
   const comp = resolveComposition(previewItem, { variant })
+  // This canvas mirrors the menu's own tilt + trim: the projection wrapper is
+  // the contract's imgTiltBoxStyle (null while tilt is 0 — untouched path
+  // byte-identical) and the backdrop video obeys comp.bg.trim through the one
+  // shared playback engine. --dish-persp per canvas lives in appearance.css.
+  const tiltBox = imgTiltBoxStyle(comp.img, 0)
+  const bgTrimRef = useVideoTrim(comp.bg ? comp.bg.trim : null)
 
   // Replay the entrances whenever the arrangement's animation choices change —
   // an animation you cannot see is an animation you cannot judge.
@@ -2521,7 +2516,7 @@ function LayersEditor({ lang, tenantId, tenant, form, canLibrary, layers, setLay
         >
           {comp.bg && comp.bg.kind === 'video' ? (
             <span className="dlx-bg" style={{ opacity: comp.bg.opacity, ...(comp.bg.blend !== 'normal' ? { mixBlendMode: comp.bg.blend } : null), ...(comp.bg.filter ? { filter: comp.bg.filter } : null) }}>
-              <video key={comp.bg.url} src={comp.bg.url} autoPlay muted loop playsInline style={{ objectPosition: comp.bg.pos }} />
+              <video ref={bgTrimRef} key={comp.bg.url} src={comp.bg.url} autoPlay muted loop playsInline style={{ objectPosition: comp.bg.pos }} />
             </span>
           ) : comp.bg ? (
             <span className="dlx-bg" style={bgStyle(comp.bg) || undefined} />
@@ -2531,7 +2526,13 @@ function LayersEditor({ lang, tenantId, tenant, form, canLibrary, layers, setLay
 
           {form.imageUrl ? (
             <span className="dlx-shot">
-              <img src={form.imageUrl} alt="" draggable={false} style={imgStyle(comp.img, comp.shadow) || undefined} />
+              {tiltBox ? (
+                <span className="edt-tiltbox" style={tiltBox}>
+                  <img src={form.imageUrl} alt="" draggable={false} style={imgStyle(comp.img, comp.shadow) || undefined} />
+                </span>
+              ) : (
+                <img src={form.imageUrl} alt="" draggable={false} style={imgStyle(comp.img, comp.shadow) || undefined} />
+              )}
             </span>
           ) : (
             <span className="dlx-empty">{ar ? 'ارفع صورة الصنف أولاً — العناصر تُركّب حولها' : 'Add the item photo first — elements are arranged around it'}</span>
@@ -2968,7 +2969,7 @@ function Batch3dSheet({ tenantId, items, lang, onClose, onOpenStudio }) {
         const it = queue[my]
         setStatus((s) => ({ ...s, [it.id]: { state: 'run', sec: 0 } }))
         try {
-          const res = await httpsCallable(functions, 'imageTo3d', { timeout: 540000 })({ tenantId, itemId: it.id, imageUrl: it.imageUrl, imageUrls: it.images || [], itemName: it.nameEn || it.nameAr || '' })
+          const res = await httpsCallable(functions, 'imageTo3d', { timeout: 540000 })({ tenantId, itemId: it.id, imageUrl: it.imageUrl, itemName: it.nameEn || it.nameAr || '' })
           const url = res?.data?.url || ''
           setStatus((s) => ({ ...s, [it.id]: { state: 'done', url } }))
         } catch (e) {
@@ -2992,8 +2993,8 @@ function Batch3dSheet({ tenantId, items, lang, onClose, onOpenStudio }) {
       <div className="stack" style={{ gap: 'var(--sp-3)' }}>
         <p className="small muted" style={{ margin: 0, lineHeight: 1.8 }}>
           {ar
-            ? `${candidates.length.toLocaleString('ar-SA-u-nu-latn')} صنفاً مصوّراً بلا مجسم واقعي. التحويل يستغرق 1-8 دقائق لكل صنف (صنفان معاً في كل مرة) — أبقِ الصفحة مفتوحة حتى الانتهاء.`
-            : `${candidates.length} photographed items without a realistic model. Each takes 1-8 minutes (2 at a time) — keep this page open.`}
+            ? `${candidates.length.toLocaleString('ar-SA-u-nu-latn')} صنفاً مصوّراً بلا مجسم واقعي. التحويل يستغرق 1-8 دقائق لكل صنف (صنفان معاً في كل مرة) — أبقِ الصفحة مفتوحة حتى الانتهاء. يعتمد التحويل الجماعي على صورة الصنف الرئيسية وحدها بالوضع الواقعي؛ اللقطات المتعددة والوضع المنمّق من استوديو المجسم.`
+            : `${candidates.length} photographed items without a realistic model. Each takes 1-8 minutes (2 at a time) — keep this page open. Batch runs single-image realism; multi-view and smooth mode live in the 3D studio.`}
         </p>
         {quota && (
           <div className="row-between card card-pad" style={{ paddingBlock: 8 }}>

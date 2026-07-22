@@ -7,6 +7,9 @@ import { FullSpinner, Empty, Stepper } from '../../components/ui.jsx'
 import Icon from '../../components/Icon.jsx'
 import DinerBar from '../../components/DinerBar.jsx'
 import DinerNav from '../../components/DinerNav.jsx'
+import ChromeSkin from '../../components/ChromeSkin.jsx'
+import PageBackground from '../../components/PageBackground.jsx'
+import { resolveChromePage } from '../../lib/dishComposition.js'
 import { createReservation } from '../../lib/db.js'
 import { getLocalCustomer, setLocalCustomer } from '../../lib/customer.js'
 import { startPayment } from '../../lib/payments.js'
@@ -63,9 +66,17 @@ export default function BookReservation() {
     }
   }
 
+  // The room follows in only when configured (menuChrome.pages.book / follow):
+  // the .venue-above stacking wrapper mounts over the fixed PageBackground
+  // layer. Untouched venues keep today's DOM — at >=980px .venue-above locks
+  // the page into a 100vh flex shell, so it must never appear un-opted-in.
+  const pageBgOn = !!resolveChromePage(venue.tenant, 'book')
+
   return (
-    <div style={{ minHeight: '100dvh', paddingBottom: 'calc(var(--bottomnav-h) + var(--safe-b) + 8px)' }}>
-      <DinerBar tenant={venue.tenant} right={<Link to={`/m/${slug}`} className="icon-btn" title={t('menu')}><Icon name="menu" /></Link>} />
+    <div className={pageBgOn ? 'venue-above' : undefined} style={{ minHeight: '100dvh', paddingBottom: 'calc(var(--bottomnav-h) + var(--safe-b) + 8px)' }}>
+      <ChromeSkin tenant={venue.tenant} />
+      <PageBackground tenant={venue.tenant} page="book" />
+      <DinerBar tenant={venue.tenant} right={<Link to={`/m/${slug}`} className="icon-btn db-chrome" title={t('menu')}><Icon name="menu" /></Link>} />
       <div className="container page stack">
         <h2 className="page-title row" style={{ gap: 8 }}><Icon name="cake" size={22} /> {t('bookOccasion')}</h2>
 

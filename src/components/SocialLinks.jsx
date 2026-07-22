@@ -56,7 +56,10 @@ const GLYPH = {
 
 // appearance (tenant.socialStyle): { shape: 'circle'|'rounded'|'square'|'bare',
 //   tone: 'auto'|'brand'|'custom', color: '#hex', size: 'sm'|'md'|'lg' }
-export default function SocialLinks({ social, className = '', style, appearance }) {
+// icons (tenant.menuChrome.socialIcons via resolveChrome(tenant)?.socialIcons):
+//   per-platform uploaded image replacing the built-in SVG glyph; the button
+//   FACE itself is dressed by body[data-mch-soc] CSS stamped by ChromeSkin.
+export default function SocialLinks({ social, className = '', style, appearance, icons }) {
   const entries = SOCIAL_KEYS
     .map(([k]) => [k, socialHref(k, social?.[k])])
     .filter(([, href]) => href)
@@ -68,7 +71,7 @@ export default function SocialLinks({ social, className = '', style, appearance 
     <div className={`social-links ${className}`} data-shape={appearance?.shape || 'circle'} style={{ ...(color ? { color } : null), ...style }}>
       {entries.map(([k, href]) => (
         <a key={k} href={href} target="_blank" rel="noopener noreferrer" aria-label={k} title={SOCIAL_KEYS.find(([id]) => id === k)?.[1]}>
-          <svg width={size} height={size} viewBox="0 0 24 24">{GLYPH[k]}</svg>
+          {icons?.[k] ? <img className="mch-icon" src={icons[k]} alt="" style={{ width: size, height: size }} /> : <svg width={size} height={size} viewBox="0 0 24 24">{GLYPH[k]}</svg>}
         </a>
       ))}
     </div>
