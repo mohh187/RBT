@@ -94,13 +94,19 @@ export function cleanCaption(text = '') {
     .trim()
 }
 
-// Classify raw API errors into actionable Arabic messages (the UI shows fallback advice).
-const arabicError = (raw) => {
+// Classify raw API errors into actionable Arabic messages (the UI shows
+// fallback advice). The owner/manager line fires ONLY on the callable's OWN
+// auth codes (e.code): a Google-API «403 PERMISSION_DENIED» from a bad LOCAL
+// dev key used to hit the same /permission/ regex and told a signed-in owner
+// he had no permission — a lie that sent him chasing roles instead of the key.
+const arabicError = (raw, code = '') => {
   const s = String(raw || '')
+  const c = String(code || '')
+  if (/(unauthenticated|permission-denied)/i.test(c)) return 'توليد الصور متاح للمالك والمدير فقط، وبعد نشر الدوال السحابية — سجّل الدخول بحساب المالك أو المدير.'
+  if (/(403|PERMISSION_DENIED|API key not valid|API_KEY_INVALID|expired)/i.test(s)) return 'مفتاح توليد الصور المحلي مرفوض (403) — تحقق من VITE_GEMINI_API_KEY أو جرّب من النسخة المنشورة.'
   if (/(404|not.?found|NOT_FOUND|unsupported|is not supported)/i.test(s)) return 'نموذج توليد الصور غير متاح حالياً على هذا المفتاح — جرّب لاحقاً أو استخدم «التصميم اليدوي».'
   if (/(429|quota|exhausted|RESOURCE_EXHAUSTED|rate.?limit)/i.test(s)) return 'استُهلكت حصة توليد الصور مؤقتاً — انتظر دقيقة ثم أعد المحاولة، أو استخدم «التصميم اليدوي».'
-  if (/(503|500|502|overload|unavailable|high demand|deadline|timeout)/i.test(s)) return 'نموذج الصور مزدحم الآن — أعد المحاولة بعد لحظات.'
-  if (/(unauthenticated|permission)/i.test(s)) return 'توليد الصور متاح للمالك والمدير فقط، وبعد نشر الدوال السحابية.'
+  if (/(503|500|502|overload|unavailable|high demand|deadline|timeout|network|failed to fetch)/i.test(s)) return 'تعذر الوصول للخادم أو النموذج مزدحم — تحقق من اتصالك وأعد المحاولة بعد لحظات.'
   return 'تعذر توليد الصورة: ' + s.slice(0, 160)
 }
 
@@ -111,7 +117,7 @@ async function sendGemini(model, body) {
     return res.data
   } catch (e) {
     const key = import.meta.env.VITE_GEMINI_API_KEY
-    if (!key) throw new Error(arabicError(e?.message || e))
+    if (!key) throw new Error(arabicError(e?.message || e, e?.code))
     const r = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${key}`, {
       method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body),
     })

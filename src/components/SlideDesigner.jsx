@@ -119,12 +119,17 @@ const EL_GROUPS = [
 // REQUIRES a reference photo, so this mirrors its exact proxy→direct-key
 // pattern for the "describe → image" case. NEVER fakes an image — throws a
 // clear Arabic message the toast shows as-is.
-const freeImgError = (raw) => {
+// Same truth-first classification as postGen.arabicError: the owner/manager
+// line fires only on the callable's OWN auth codes — a Google 403 from a bad
+// local key must name the key, not accuse the signed-in owner's role.
+const freeImgError = (raw, code = '') => {
   const s = String(raw || '')
+  const c = String(code || '')
+  if (/(unauthenticated|permission-denied)/i.test(c)) return 'توليد الصور متاح للمالك والمدير فقط، وبعد نشر الدوال السحابية — سجّل الدخول بحساب المالك أو المدير.'
+  if (/(403|PERMISSION_DENIED|API key not valid|API_KEY_INVALID|expired)/i.test(s)) return 'مفتاح توليد الصور المحلي مرفوض (403) — تحقق من VITE_GEMINI_API_KEY أو جرّب من النسخة المنشورة.'
   if (/(429|quota|exhausted|RESOURCE_EXHAUSTED|rate.?limit)/i.test(s)) return 'استُهلكت حصة توليد الصور مؤقتاً — انتظر دقيقة ثم أعد المحاولة.'
-  if (/(503|500|502|overload|unavailable|deadline|timeout)/i.test(s)) return 'نموذج الصور مزدحم الآن — أعد المحاولة بعد لحظات.'
+  if (/(503|500|502|overload|unavailable|deadline|timeout|network|failed to fetch)/i.test(s)) return 'تعذر الوصول للخادم أو النموذج مزدحم — تحقق من اتصالك وأعد المحاولة.'
   if (/(404|not.?found|NOT_FOUND|unsupported|is not supported)/i.test(s)) return 'نموذج توليد الصور غير متاح حالياً على هذا المفتاح — جرّب لاحقاً.'
-  if (/(unauthenticated|permission)/i.test(s)) return 'توليد الصور متاح للمالك والمدير فقط، وبعد نشر الدوال السحابية.'
   return 'تعذر توليد الصورة: ' + s.slice(0, 140)
 }
 async function generateFreeImage(desc, venueName) {
@@ -144,7 +149,7 @@ async function generateFreeImage(desc, venueName) {
     json = (await httpsCallable(functions, 'geminiProxy')({ model: IMAGE_MODEL, body })).data
   } catch (e) {
     const key = import.meta.env.VITE_GEMINI_API_KEY
-    if (!key) throw new Error(freeImgError(e?.message || e))
+    if (!key) throw new Error(freeImgError(e?.message || e, e?.code))
     const r = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${IMAGE_MODEL}:generateContent?key=${key}`, {
       method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body),
     })
