@@ -20,7 +20,7 @@ import { evaluateOffers, activeAutoOffers, offerForItem, discountedPrice } from 
 import { alertParty } from '../lib/notify.js'
 import { initTracking, identify, trackItemView, trackItemClose, trackCartAdd, trackSearch, trackCheckout, trackOrdered, trackGame } from '../lib/track.js'
 import ItemFx from './ItemFx.jsx'
-import { RANGE } from '../lib/dishComposition.js'
+import { RANGE, filterCss, BLEND_IDS } from '../lib/dishComposition.js'
 import GamesIcon from './GamesIcon.jsx'
 import '../styles/tactile.css'
 import '../styles/scrollfix.css'
@@ -693,12 +693,23 @@ export default function MenuView({ tenant, tenantId, items, categories, offers =
       <div className="menu-hero" data-banner={(tenant?.bannerVideoUrl || tenant?.bannerUrl) ? (tenant?.bannerStyle || 'full') : undefined}>
         {(tenant?.bannerVideoUrl || tenant?.bannerUrl) ? (
           <>
-            {tenant?.bannerVideoUrl ? (
-              /* video banner — same opacity/position/zoom controls as the image */
-              <video className="menu-hero-cover menu-hero-video" src={tenant.bannerVideoUrl} autoPlay muted loop playsInline preload="auto"
-                style={{ objectPosition: tenant.bannerPosition || 'center', opacity: tenant.bannerOpacity != null ? Number(tenant.bannerOpacity) : 1, transform: Number(tenant.bannerScale) > 1 ? `scale(${Number(tenant.bannerScale)})` : undefined, transformOrigin: tenant.bannerPosition || 'center' }} />
-            ) : (
-              <div className="menu-hero-cover" style={{ backgroundImage: `url(${tenant.bannerUrl})`, backgroundSize: tenant.bannerScale ? `${Number(tenant.bannerScale) * 100}%` : 'cover', backgroundPosition: tenant.bannerPosition || 'center', opacity: tenant.bannerOpacity != null ? Number(tenant.bannerOpacity) : 1 }} />
+            {(() => {
+              /* the banner's MOOD — the same filter presets, blend modes and
+                 tint every other backdrop already has (bannerFilter/bannerBlend/
+                 bannerTint+bannerTintAmount). filterCss() resolves the preset,
+                 so an unknown id is simply no filter, never a broken string. */
+              const moodFilter = filterCss(tenant?.bannerFilter) || undefined
+              const moodBlend = tenant?.bannerBlend && tenant.bannerBlend !== 'normal' && BLEND_IDS.includes(tenant.bannerBlend) ? tenant.bannerBlend : undefined
+              return tenant?.bannerVideoUrl ? (
+                /* video banner — same opacity/position/zoom controls as the image */
+                <video className="menu-hero-cover menu-hero-video" src={tenant.bannerVideoUrl} autoPlay muted loop playsInline preload="auto"
+                  style={{ objectPosition: tenant.bannerPosition || 'center', opacity: tenant.bannerOpacity != null ? Number(tenant.bannerOpacity) : 1, transform: Number(tenant.bannerScale) > 1 ? `scale(${Number(tenant.bannerScale)})` : undefined, transformOrigin: tenant.bannerPosition || 'center', filter: moodFilter, mixBlendMode: moodBlend }} />
+              ) : (
+                <div className="menu-hero-cover" style={{ backgroundImage: `url(${tenant.bannerUrl})`, backgroundSize: tenant.bannerScale ? `${Number(tenant.bannerScale) * 100}%` : 'cover', backgroundPosition: tenant.bannerPosition || 'center', opacity: tenant.bannerOpacity != null ? Number(tenant.bannerOpacity) : 1, filter: moodFilter, mixBlendMode: moodBlend }} />
+              )
+            })()}
+            {tenant?.bannerTint && Number(tenant.bannerTintAmount) > 0 && (
+              <div className="menu-hero-cover" aria-hidden="true" style={{ background: tenant.bannerTint, opacity: Math.min(1, Number(tenant.bannerTintAmount)), pointerEvents: 'none' }} />
             )}
             {/* the melt-into-the-menu fade: direction + strength are venue-controlled */}
             <div className="menu-hero-fade" data-fade={tenant?.bannerFadeDir || 'bottom'} style={{ opacity: tenant.bannerGradient != null ? Number(tenant.bannerGradient) : 0.55 }} />

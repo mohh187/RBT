@@ -41,7 +41,7 @@ import {
   resolveComposition, bgStyle, imgStyle,
   resolveWall, wallStyle, layerStyle,
   resolveSections, resolveDecor, decorStyle,
-  resolveTable, tableStyle,
+  resolveTable, tableStyle, tableFreeStyle, tableMeltStops,
   resolveMenuHeader, resolveButtons,
 } from '../../lib/dishComposition.js'
 import { loadModelViewer } from '../../lib/ar3d.js'
@@ -700,26 +700,58 @@ function buttonSkinVars(btn, wall) {
     '--edt-btn-r': `${btn.radius}px`,
     '--edt-btn-ink': btn.ink === 'dark' ? '#24170e' : '#ffffff',
   }
+  // «طوبة واحدة» (shape 'slab') on the brick skin: the face is ONE laid brick
+  // fired from the wall's own clay — the theme's default brick gradient plus
+  // its pore texture, in the venue's colour — instead of a bond shrunk until
+  // the units blur. The mortar arris/bed shadows come from the CSS side
+  // ([data-btnshape='slab']). An image skin keeps its photo; only the geometry
+  // changes there.
+  if (btn.shape === 'slab' && btn.skin === 'brick') {
+    const base = toRgb((wall || HEADER_FALLBACK_WALL).color, [138, 74, 44])
+    const top = hexOf(shade(base, 0.14))
+    const mid = hexOf(base)
+    const bot = hexOf(shade(base, -0.12))
+    out['--edt-btn-img'] = `${veil}, repeating-linear-gradient(101deg, rgba(255,255,255,.022) 0 3px, rgba(46,18,8,.03) 3px 7px), linear-gradient(180deg, ${top} 0%, ${mid} 48%, ${bot} 100%)`
+    out['--edt-btn-size'] = 'auto, auto, auto'
+    out['--edt-btn-rep'] = 'no-repeat, repeat, no-repeat'
+    out['--edt-btn-pos'] = 'center, center, center'
+    out['--edt-btn-color'] = mid
+    return out
+  }
   if (btn.skin === 'image') {
+    // «تكبير وتصغير الصورة داخل الزر»: 1 = cover; any other value is a real
+    // background-size, tiling when the picture no longer fills the face. The
+    // offsets pick WHICH part of the photo shows.
     out['--edt-btn-img'] = `${veil}, url("${String(btn.url).replace(/["\\]/g, '')}")`
-    out['--edt-btn-size'] = 'auto, cover'
-    out['--edt-btn-rep'] = 'no-repeat, no-repeat'
-    out['--edt-btn-pos'] = 'center, center'
+    out['--edt-btn-size'] = btn.imgScale === 1 ? 'auto, cover' : `auto, ${Math.round(btn.imgScale * 100)}%`
+    out['--edt-btn-rep'] = `no-repeat, ${btn.imgScale === 1 ? 'no-repeat' : 'repeat'}`
+    out['--edt-btn-pos'] = `center, ${btn.imgX}% ${btn.imgY}%`
     return out
   }
   // brick: a photo wall covers the face whole; a drawn bond scales its unit
   // down, else one brick fills the whole button and stops reading as brick.
+  // The imgScale dial multiplies either: the unit size on a drawn bond, the
+  // zoom of the photograph on a photo wall. Tint is stripped from the face —
+  // the veil is the button's own mood, and a second tint layer would make the
+  // zoom arithmetic below blind to which layer is the picture.
   const src = wall || HEADER_FALLBACK_WALL
+  const isPhoto = src.pattern === 'image'
   const p = wallPaint({
     ...src,
-    scale: src.pattern === 'image' ? 1 : clampNum(src.scale * 0.3, 0.18, 0.5),
-    opacity: 1, blur: 0, blend: 'normal', filter: '',
+    scale: isPhoto ? 1 : clampNum(src.scale * 0.3 * btn.imgScale, 0.1, 1.6),
+    opacity: 1, blur: 0, blend: 'normal', filter: '', tint: '', tintAmount: 0,
   })
   if (!p) return null
   out['--edt-btn-img'] = `${veil}, ${p.backgroundImage}`
-  out['--edt-btn-size'] = `auto, ${p.backgroundSize}`
-  out['--edt-btn-rep'] = `no-repeat, ${p.backgroundRepeat}`
-  out['--edt-btn-pos'] = `center, ${p.backgroundPosition}`
+  if (isPhoto) {
+    out['--edt-btn-size'] = btn.imgScale === 1 ? 'auto, cover' : `auto, ${Math.round(btn.imgScale * 100)}%`
+    out['--edt-btn-rep'] = `no-repeat, ${btn.imgScale === 1 ? 'no-repeat' : 'repeat'}`
+    out['--edt-btn-pos'] = `center, ${btn.imgX}% ${btn.imgY}%`
+  } else {
+    out['--edt-btn-size'] = `auto, ${p.backgroundSize}`
+    out['--edt-btn-rep'] = `no-repeat, ${p.backgroundRepeat}`
+    out['--edt-btn-pos'] = `center, ${p.backgroundPosition}`
+  }
   out['--edt-btn-color'] = p.backgroundColor
   return out
 }
@@ -1046,23 +1078,26 @@ function EdtDish({ comp, src, anim = '', bind = null, onLoad = null, fallback = 
 // melt: light wood under light text cannot pass contrast any other way, so on
 // those the table shows as a rim at the top rather than a full backdrop. That is
 // a readability decision, recorded here on purpose.
-const TABLE_BRIGHT = new Set(['linen', 'rattanMat'])
 function EdtTable({ tb }) {
   if (!tb) return null
-  const bright = tb.kind === 'image' || TABLE_BRIGHT.has(tb.material)
-  const a = bright ? 6 : 16
-  const b = bright ? 30 : Math.round(34 + tb.shade * 36)
+  // The melt stops come from the contract now (tableMeltStops): the settings
+  // preview paints with the same function, and `melt` is the venue's dial.
+  const { a, b } = tableMeltStops(tb)
   const art = tableStyle(tb) || {}
+  // Free placement: translate/scale against the bolted box, origin at the top
+  // centre so the seat (the top edge the dish drops onto) never drifts.
+  const free = tableFreeStyle(tb)
   return (
     <span
       className="edt-table"
       aria-hidden="true"
-      style={{ '--tbl-a': `${a}%`, '--tbl-b': `${b}%`, '--tbl-contact': tb.contact }}
+      style={{ '--tbl-a': `${a}%`, '--tbl-b': `${b}%`, '--tbl-contact': tb.contact, ...(free || {}) }}
     >
       <span className="edt-table-art" data-m={tb.kind === 'material' ? tb.material : undefined} style={art} />
       {tb.tint && tb.tintAmount > 0
         ? <span className="edt-table-tint" style={{ background: tb.tint, opacity: tb.tintAmount }} />
         : null}
+      {tb.dim > 0 ? <span className="edt-table-dim" style={{ opacity: tb.dim }} /> : null}
       <span className="edt-table-melt" />
       <span className="edt-table-edge" data-e={tb.edge} />
       {tb.contact > 0 ? <span className="edt-table-contact" /> : null}
@@ -1164,7 +1199,9 @@ export default function EditorialLayout({ tenant = null, cats, itemsByCat, visib
   return (
     <div
       className="edt-wrap" data-wall={wallAttr} data-btnskin={btn ? btn.skin : undefined}
-      style={{ '--edt-top': stickyTop, ...secVars, ...(wall ? { '--edt-panel': wall.panel } : {}), ...(btnVars || {}) }}
+      data-btnscope={btn && btn.scope === 'all' ? 'all' : undefined}
+      data-btnshape={btn && btn.shape ? btn.shape : undefined}
+      style={{ '--edt-top': stickyTop, ...secVars, ...(wall ? { '--edt-panel': wall.panel, '--edt-vig': wall.vignette } : {}), ...(btnVars || {}) }}
     >
       <EdtWall wall={wall} />
       <EdtDecorZones anchors={PAGE_ANCHORS} byAnchor={decor.byAnchor} mv={mv} rtl={rtl} />
@@ -1401,7 +1438,9 @@ export function EditorialItemStage({ item, tenant = null, currency, onClose, onA
   // stage's own plaster fade was a fixed band, which is the same complaint one
   // surface along, so it reads the venue's number too.
   const secVars = sectionVars(resolveSections(tenant))
-  const table = useMemo(() => resolveTable(tenant), [JSON.stringify(tenant && tenant.menuTable) || '']) // eslint-disable-line react-hooks/exhaustive-deps
+  // The stage variant: the same table, but the venue may have re-seated it for
+  // this far taller panel (menuTable.stage — see TABLE_STAGE_KEYS).
+  const table = useMemo(() => resolveTable(tenant, { variant: 'stage' }), [JSON.stringify(tenant && tenant.menuTable) || '']) // eslint-disable-line react-hooks/exhaustive-deps
   // the same button skin as the list — the stage is a portal, so the wrap's
   // custom properties cannot cascade into it and are stamped again here
   const btnKey = JSON.stringify(tenant && tenant.menuButtons) || ''
@@ -1524,7 +1563,10 @@ export function EditorialItemStage({ item, tenant = null, currency, onClose, onA
   return createPortal(
     <div
       className={`edt-stg ${closing ? 'closing' : ''}`} data-wall={wallAttr} data-btnskin={btn ? btn.skin : undefined}
-      style={{ ...secVars, ...(wall ? { '--edt-panel': wall.panel } : {}), ...(btnVars || {}) }}
+      data-btnscope={btn && btn.scope === 'all' ? 'all' : undefined}
+      data-btnshape={btn && btn.shape ? btn.shape : undefined}
+      data-table={table ? '1' : undefined}
+      style={{ ...secVars, ...(wall ? { '--edt-panel': wall.panel, '--edt-vig': wall.vignette } : {}), ...(btnVars || {}) }}
       role="dialog" aria-modal="true" aria-label={name}
     >
       <EdtWall wall={wall} />
@@ -1546,12 +1588,15 @@ export function EditorialItemStage({ item, tenant = null, currency, onClose, onA
             <EdtDish comp={comp} src={heroSrc} anim={stageAnim} bind={bind} onLoad={onLoad} fallback={72} lift={table ? table.lift : 0} />
             <EdtLayers list={comp.layers.front} />
             {item.hotspots?.length ? <Suspense fallback={null}><DishHotspots hotspots={item.hotspots} /></Suspense> : null}
-            {arOk && (
-              <button type="button" className="edt-stg-ar edt-brick" onClick={() => setArOpen(true)}>
-                <Icon name="shapes" size={15} /> {ar ? 'شاهده ثلاثي الأبعاد' : 'View in 3D'}
-              </button>
-            )}
           </div>
+          {/* IN FLOW, under the photo — not floated over it. The absolute
+              position put it on the dish itself (mid-left in RTL), covering
+              the food it offers to show; here it can never overlap anything. */}
+          {arOk && (
+            <button type="button" className="edt-stg-ar edt-brick" onClick={() => setArOpen(true)}>
+              <Icon name="shapes" size={15} /> {ar ? 'شاهده ثلاثي الأبعاد' : 'View in 3D'}
+            </button>
+          )}
           {gallery.length > 1 && (
             <div className="edt-thumbs scroll-x">
               {gallery.map((src, i) => (

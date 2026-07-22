@@ -98,7 +98,7 @@ const COMPOSE_DEFAULTS = {
   bgUrl: '', bgKind: '', bgOpacity: RANGE.bgOpacity.dflt, bgPos: 'center', bgScale: 1, bgBlend: 'normal', bgFilter: '',
   imageScale: RANGE.scale.dflt, imageX: RANGE.offset.dflt, imageY: RANGE.offset.dflt,
   listScale: null, listX: null, listY: null,
-  imageRot: RANGE.rot.dflt, imageBlend: 'normal', imageFilter: '', imageBlur: RANGE.blur.dflt,
+  imageRot: RANGE.rot.dflt, imageTilt: RANGE.tilt.dflt, imageBlend: 'normal', imageFilter: '', imageBlur: RANGE.blur.dflt,
   shadowOn: false, shadowX: 0, shadowY: 14, shadowBlur: RANGE.shadowBlur.dflt, shadowOpacity: 0.45, shadowColor: '#000000',
   effect: '', anim: '',
 }
@@ -117,6 +117,7 @@ const COMPOSE_BOUNDS = {
   listX: [RANGE.offset.min, RANGE.offset.max],
   listY: [RANGE.offset.min, RANGE.offset.max],
   imageRot: [RANGE.rot.min, RANGE.rot.max],
+  imageTilt: [RANGE.tilt.min, RANGE.tilt.max],
   imageBlur: [RANGE.blur.min, RANGE.blur.max],
   shadowX: [-60, 60],
   shadowY: [-60, 60],
@@ -161,6 +162,7 @@ function composePayload(form, original) {
     listX: compOpt(f.listX, 'listX'),
     listY: compOpt(f.listY, 'listY'),
     imageRot: compClamp(f.imageRot, 'imageRot', COMPOSE_DEFAULTS.imageRot),
+    imageTilt: compClamp(f.imageTilt, 'imageTilt', COMPOSE_DEFAULTS.imageTilt),
     imageBlend: compId(f.imageBlend, BLEND_MODES, 'normal'),
     imageFilter: compId(f.imageFilter, FILTERS, ''),
     imageBlur: compClamp(f.imageBlur, 'imageBlur', COMPOSE_DEFAULTS.imageBlur),
@@ -1916,7 +1918,7 @@ function CompositionEditor({ form, setForm, lang, currency, uploading, layers, o
   const resetImg = () => patch({
     imageScale: COMPOSE_DEFAULTS.imageScale, imageX: COMPOSE_DEFAULTS.imageX, imageY: COMPOSE_DEFAULTS.imageY,
     listScale: null, listX: null, listY: null,
-    imageRot: COMPOSE_DEFAULTS.imageRot, imageBlend: COMPOSE_DEFAULTS.imageBlend, imageFilter: COMPOSE_DEFAULTS.imageFilter, imageBlur: COMPOSE_DEFAULTS.imageBlur,
+    imageRot: COMPOSE_DEFAULTS.imageRot, imageTilt: COMPOSE_DEFAULTS.imageTilt, imageBlend: COMPOSE_DEFAULTS.imageBlend, imageFilter: COMPOSE_DEFAULTS.imageFilter, imageBlur: COMPOSE_DEFAULTS.imageBlur,
   })
   const resetShadow = () => patch({
     shadowOn: false, shadowX: COMPOSE_DEFAULTS.shadowX, shadowY: COMPOSE_DEFAULTS.shadowY,
@@ -2073,6 +2075,9 @@ function CompositionEditor({ form, setForm, lang, currency, uploading, layers, o
         <CxSlider label={ar ? 'الميلان (الدوران)' : 'Rotation'} format={cxDeg}
           min={RANGE.rot.min} max={RANGE.rot.max} step={RANGE.rot.step}
           value={cxNum(form.imageRot, RANGE.rot.dflt)} onChange={(v) => set('imageRot', v)} />
+        <CxSlider label={ar ? 'الإمالة على السطح (منظور)' : 'Lean onto the surface (perspective)'} format={cxDeg}
+          min={RANGE.tilt.min} max={RANGE.tilt.max} step={RANGE.tilt.step}
+          value={cxNum(form.imageTilt, RANGE.tilt.dflt)} onChange={(v) => set('imageTilt', v)} />
         <CxSlider label={ar ? 'التمويه' : 'Blur'} format={cxPx}
           min={RANGE.blur.min} max={RANGE.blur.max} step={RANGE.blur.step}
           value={cxNum(form.imageBlur, RANGE.blur.dflt)} onChange={(v) => set('imageBlur', v)} />

@@ -7026,7 +7026,11 @@ body:has(.sd2-root) .toast-wrap { z-index: 840; }
   background: color-mix(in srgb, var(--edt-bg) 74%, transparent);
   -webkit-backdrop-filter: blur(10px);
   backdrop-filter: blur(10px);
-  box-shadow: 0 8px 16px -12px rgba(0, 0, 0, .4);
+  /* NO line, NO cast. The 1px hairline + the soft shadow under this bar were
+     the last «خط شفاف داكن» crossing the venue's photo wall — the frosted blur
+     is already what separates the bar from the room. */
+  border-bottom: none;
+  box-shadow: none;
 }
 .edt-cats {
   display: flex;
@@ -7345,6 +7349,78 @@ body:has(.sd2-root) .toast-wrap { z-index: 840; }
   text-shadow: 0 1px 2px rgba(0, 0, 0, .4);
 }
 
+/* «كل الأزرار وليس الأساسية فقط» (resolveButtons.scope = 'all'): the same face
+   reaches EVERY control — category chips (on and off), size/option choices,
+   the small pairing bricks, the qty steppers and the close button. Selection
+   stays findable through an amber inset ring rather than through a different
+   face, so the venue's material is never traded away for state. */
+.edt-wrap[data-btnscope='all'] .edt-chip,
+.edt-stg[data-btnscope='all'] .edt-opt,
+.edt-wrap[data-btnscope='all'] .edt-lpair-add,
+.edt-stg[data-btnscope='all'] .edt-pair-add,
+.edt-stg[data-btnscope='all'] .edt-stg-x,
+.edt-stg[data-btnscope='all'] .edt-stg-bar .stepper button {
+  color: var(--edt-btn-ink, #fff);
+  border: none;
+  border-radius: var(--edt-btn-r, 12px);
+  background-color: var(--edt-btn-color, var(--edt-brick-mid));
+  background-image: var(--edt-btn-img);
+  background-size: var(--edt-btn-size);
+  background-repeat: var(--edt-btn-rep);
+  background-position: var(--edt-btn-pos);
+  text-shadow: 0 1px 2px rgba(0, 0, 0, .4);
+}
+.edt-wrap[data-btnscope='all'] .edt-chip.on,
+.edt-stg[data-btnscope='all'] .edt-opt.on {
+  box-shadow: inset 0 0 0 2px var(--edt-amber, #f5b942);
+}
+/* inside the stepper's own bordered pill the face keeps a small radius, or the
+   two square ends poke out of the control's rounding */
+.edt-stg[data-btnscope='all'] .edt-stg-bar .stepper button { border-radius: 6px; }
+
+/* ---- the SHAPE of the face (resolveButtons.shape) ----
+   pill / sharp only move the radius token, so they compose with any skin and
+   any scope for free. chamfer cuts the corners with a clip-path on the same
+   element set the skin dresses. slab («طوبة واحدة») lays the mortar's lit
+   arris and shadowed bed over the face, so whatever the face is — one clay
+   brick (the engine paints it), or the venue's photo — it reads as ONE laid
+   brick, not a wallpaper sample. */
+.edt-wrap[data-btnshape='pill'],
+.edt-stg[data-btnshape='pill'] { --edt-btn-r: 999px; }
+.edt-wrap[data-btnshape='sharp'],
+.edt-stg[data-btnshape='sharp'] { --edt-btn-r: 0px; }
+.edt-wrap[data-btnshape='chamfer'] .edt-open-btn,
+.edt-wrap[data-btnshape='chamfer'] .edt-chip.on,
+.edt-stg[data-btnshape='chamfer'] .edt-stg-add:not(:disabled),
+.edt-stg[data-btnshape='chamfer'] .edt-stg-ar,
+.edt-wrap[data-btnshape='chamfer'][data-btnscope='all'] .edt-chip,
+.edt-stg[data-btnshape='chamfer'][data-btnscope='all'] .edt-opt {
+  --edt-btn-r: 0px;
+  clip-path: polygon(9px 0, calc(100% - 9px) 0, 100% 9px, 100% calc(100% - 9px), calc(100% - 9px) 100%, 9px 100%, 0 calc(100% - 9px), 0 9px);
+}
+.edt-wrap[data-btnshape='slab'] .edt-open-btn,
+.edt-wrap[data-btnshape='slab'] .edt-chip.on,
+.edt-stg[data-btnshape='slab'] .edt-stg-add:not(:disabled),
+.edt-stg[data-btnshape='slab'] .edt-stg-ar,
+.edt-wrap[data-btnshape='slab'][data-btnscope='all'] .edt-chip,
+.edt-stg[data-btnshape='slab'][data-btnscope='all'] .edt-opt {
+  box-shadow:
+    inset 0 1px 0 var(--edt-mortar-lit, rgba(255, 231, 205, .3)),
+    inset 0 -2px 0 var(--edt-mortar-dark, rgba(46, 18, 8, .34)),
+    0 2px 0 var(--edt-brick-bed, rgba(46, 18, 8, .34)),
+    0 7px 16px var(--edt-brick-cast, rgba(46, 18, 8, .3));
+}
+/* the slab ring for the selected state has to REPLACE the bed shadows, not be
+   replaced by them, so it restates both */
+.edt-wrap[data-btnshape='slab'][data-btnscope='all'] .edt-chip.on,
+.edt-stg[data-btnshape='slab'][data-btnscope='all'] .edt-opt.on {
+  box-shadow:
+    inset 0 0 0 2px var(--edt-amber, #f5b942),
+    inset 0 1px 0 var(--edt-mortar-lit, rgba(255, 231, 205, .3)),
+    inset 0 -2px 0 var(--edt-mortar-dark, rgba(46, 18, 8, .34)),
+    0 2px 0 var(--edt-brick-bed, rgba(46, 18, 8, .34));
+}
+
 /* The photo now LEADS the section, still melting into the canvas at its foot so
    the table recedes into the plaster the words sit on. The box HUGS the picture
    instead of letterboxing it into one fixed frame: cutouts here range from
@@ -7403,9 +7479,11 @@ body:has(.sd2-root) .toast-wrap { z-index: 840; }
   background: linear-gradient(180deg, transparent 86%, var(--edt-bg) 100%);
 }
 /* Over a venue wall the full-strength melt read as a black band under every
-   dish. The wall is the room now — the photo may meet it more honestly. */
+   dish. The wall is the room now — and the strength is the venue's own dial
+   (--edt-vig, from menuWall.vignette): at 0 nothing is painted at all, which
+   is the honest end of «مازال يوجد خط شفاف داكن». */
 .edt-wrap[data-wall] .edt-vignette {
-  background: linear-gradient(180deg, transparent 90%, color-mix(in srgb, var(--edt-bg) 72%, transparent) 100%);
+  background: linear-gradient(180deg, transparent 90%, color-mix(in srgb, var(--edt-bg) calc(var(--edt-vig, 0.72) * 100%), transparent) 100%);
 }
 .edt-photo-open { position: absolute; inset: 0; background: none; border: none; cursor: pointer; }
 .edt-photo-open:disabled { cursor: default; }
@@ -7535,6 +7613,33 @@ video.edt-backdrop { width: 100%; height: 100%; display: block; }
   .edt-photo[data-fit='wide'] img,
   .edt-photo[data-fit='tall'] img { max-height: min(60svh, 560px); object-position: center; }
   .edt-side { font-size: clamp(56px, 6vw, 104px); top: 8%; }
+
+  /* WITH A TABLE the two-column split is a lie: the dish would drop onto a
+     table that lives in the OTHER column, which is exactly the desktop
+     «تلخبط» the owner reported. Keep the phone's stacked flow — the
+     arrangement he tuned — centred at a reading measure instead. */
+  .edt-sec[data-table] {
+    grid-template-columns: minmax(0, 1fr);
+    grid-template-rows: auto 1fr;
+    align-items: start;
+    max-width: 820px;
+    gap: 14px;
+    padding-block: 40px 56px;
+  }
+  .edt-sec[data-table] .edt-photo {
+    align-self: end;
+    align-items: flex-end;
+    width: 100%;
+    max-width: 680px;
+    margin-inline: auto;
+  }
+  .edt-sec[data-table] .edt-photo img { max-height: min(42dvh, 420px); object-position: bottom center; }
+  .edt-sec[data-table] .edt-main {
+    align-self: start;
+    width: 100%;
+    max-width: 680px;
+    margin-inline: auto;
+  }
 }
 
 /* ---- Editorial full-screen item stage (FLIP) ---- */
@@ -7728,6 +7833,9 @@ button.edt-pair:active { transform: scale(.98); }
 }
 .edt-table-art { position: absolute; inset: 0; }
 .edt-table-tint { position: absolute; inset: 0; }
+/* the venue's flat darkening veil («تعتيم أكثر») — strength arrives as inline
+   opacity from resolveTable().dim */
+.edt-table-dim { position: absolute; inset: 0; background: #000; }
 .edt-table-melt {
   position: absolute;
   inset: 0;
@@ -7741,7 +7849,9 @@ button.edt-pair:active { transform: scale(.98); }
 }
 .edt-table-edge[data-e='lit'] {
   background: linear-gradient(90deg, transparent, rgba(255, 214, 160, .34) 22%, rgba(255, 224, 176, .5) 50%, rgba(255, 214, 160, .34) 78%, transparent);
-  box-shadow: 0 1px 0 rgba(0, 0, 0, .45);
+  /* .45 read as one more dark line over a photo wall — the lip only needs a
+     hint of underside to sell the edge */
+  box-shadow: 0 1px 0 rgba(0, 0, 0, .26);
 }
 .edt-table-edge[data-e='soft'] {
   height: 7px;
@@ -7768,22 +7878,23 @@ button.edt-pair:active { transform: scale(.98); }
 .edt-stg-body[data-table] { position: relative; }
 
 /* ---- 3D / AR ---- */
+/* IN FLOW under the hero, never floated over it: absolute placement parked
+   this button on the dish photo itself (mid-left in RTL), covering the very
+   food it offers to show — «مكان الزر غير مناسب». */
 .edt-stg-ar {
-  position: absolute;
-  inset-inline-end: 12px;
-  bottom: 12px;
-  z-index: 4;
-  display: inline-flex;
+  position: relative;
+  display: flex;
+  width: fit-content;
+  margin: 12px auto 0;
   align-items: center;
   gap: 6px;
-  padding: 9px 14px;
+  padding: 9px 16px;
   border: 0;
   border-radius: 6px;
   font-size: 12.5px;
   font-weight: 800;
   color: #fff;
   cursor: pointer;
-  pointer-events: auto;
 }
 .edt-ar {
   position: fixed;
@@ -7807,6 +7918,14 @@ button.edt-pair:active { transform: scale(.98); }
   padding: 12px 18px calc(12px + env(safe-area-inset-bottom, 0px));
   border-top: 1px solid var(--edt-line, rgba(247, 242, 233, .14));
   background: var(--edt-bg, #100c0a);
+}
+/* over a venue wall the solid bar + hairline drew the same dark band the
+   category bar used to — frost it the same way, and let the room through */
+.edt-stg[data-wall] .edt-stg-bar {
+  border-top: none;
+  background: color-mix(in srgb, var(--edt-bg, #100c0a) 74%, transparent);
+  -webkit-backdrop-filter: blur(10px);
+  backdrop-filter: blur(10px);
 }
 .edt-stg-bar .stepper { border-color: var(--edt-edge, rgba(247, 242, 233, .4)); }
 .edt-stg-bar .stepper button { color: var(--edt-amber, #f5b942); }
@@ -7869,6 +7988,18 @@ button.edt-pair:active { transform: scale(.98); }
   .edt-stg-body { padding: 0 0 32px; max-width: 620px; margin-inline: 0; }
   .edt-stg-bar { width: 100%; max-width: 1280px; margin-inline: auto; padding-inline: clamp(24px, 4vw, 64px); }
   .edt-stg-x { inset-inline-start: 20px; top: 20px; }
+
+  /* the same table truth as the list: with a table under the record, the
+     side-by-side stage would seat the dish beside its own furniture — stack
+     and centre instead, exactly the phone arrangement the venue tuned */
+  .edt-stg[data-table] .edt-stg-scroll {
+    display: block;
+    max-width: 880px;
+    padding-inline: clamp(24px, 4vw, 48px);
+  }
+  .edt-stg[data-table] .edt-stg-media { position: static; }
+  .edt-stg[data-table] .edt-stg-hero { min-height: min(38dvh, 380px); }
+  .edt-stg[data-table] .edt-stg-body { max-width: 720px; margin-inline: auto; padding: 18px 22px 32px; }
 }
 
 /* ---- Editorial in the LIGHT theme ----

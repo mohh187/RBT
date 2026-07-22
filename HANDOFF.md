@@ -1,4 +1,4 @@
-# HANDOFF — حالة المشروع الكاملة (آخر تحديث: 2026-07-22)
+# HANDOFF — حالة المشروع الكاملة (آخر تحديث: 2026-07-22 — الجلسة الثالثة)
 
 ملف تسليم الجلسة. اقرأه أولاً في أي جلسة جديدة قبل لمس أي شيء.
 المنشأة الحيّة: **صاج السمك** — `rbt360sa.com/m/sajalsamak` — tenant id `5Eg401SLtIhqjaMAdrIg` — ثيم `editorial` — باقة enterprise.
@@ -13,15 +13,15 @@
 
 | النظام | الدوال | حقل التخزين | المحرّك | الواجهة |
 |---|---|---|---|---|
-| تركيب الصنف | `resolveComposition` / `bgStyle` / `imgStyle` / `bgVideoStyle` | حقول item (bg*/image*/list*/shadow*/effect/anim) | EditorialLayout + MenuView | Items.jsx «تركيب الصنف» |
+| تركيب الصنف | `resolveComposition` / `bgStyle` / `imgStyle` / `bgVideoStyle` — حدود حرة (scale 0.2-4، offset ±100، rot ±180) + `tilt` منظور rotateX (imageTilt/listTilt) | حقول item (bg*/image*/list*/shadow*/effect/anim/tilt) | EditorialLayout + MenuView | Items.jsx «تركيب الصنف» |
 | الطبقات (صور مفرّغة) | `resolveLayers` / `layerStyle` | `item.layers` (+`layersOff` للمحرّر فقط) | EditorialLayout `EdtLayers` | Items.jsx «عناصر مركّبة» (سحب) |
-| الجدار | `resolveWall` / `wallStyle` (+`wallPaint` مُصدَّر من الثيم) | `tenant.menuWall` (+`.header` للهيدر الطوبي) | EditorialLayout `EdtWall` | Settings «جدار المنيو» `set-menuwall` |
+| الجدار | `resolveWall` / `wallStyle` (+`wallPaint` مُصدَّر من الثيم) + `vignette` (ذوبان أسفل صورة الطبق — `--edt-vig`، صفر يلغيه) | `tenant.menuWall` (+`.header` للهيدر الطوبي) | EditorialLayout `EdtWall` | Settings «جدار المنيو» `set-menuwall` |
 | اتصال الأصناف | `resolveSections` | `tenant.menuSections` | `.edt-stage[data-sec]` + `sectionVars()` | Settings `set-menusections` |
 | الزينة المعلّقة v2 | `resolveDecor` / `decorStyle` (+`decorPlace`/`glowPaint` من الثيم) — مراسٍ جديدة `page-free` (يتحرك مع التمرير، صندوقه الصفحة كلها) و`screen` (مثبت على الشاشة، portal) + عمق ثلاثي `depth: back/front/top` (بديل front المشتق) + حجم حتى 150 | `tenant.menuDecor` | `EdtDecorZones` (الهيدر والشاشة عبر portal) | Settings `set-menudecor` |
 | الهيدر المخصص | `resolveMenuHeader` (mode ''/brick/image + scrim/blur/pos + إظهار logo/name/lang/theme) — brick يفوّض للجدار، والوضع '' يرجع لـ`menuWall.header` القديم | `tenant.menuHeader` | DinerBar (`.app-bar-img` + `--hd-*`) لكل الثيمات؛ الطوبي عبر `headerBrickVars` | Settings `set-menuheader` |
-| كساء الأزرار | `resolveButtons` (skin brick/image + radius/scrim/ink) + `buttonSkinVars` في الثيم | `tenant.menuButtons` | index.css `[data-btnskin]` على `.edt-open-btn`/`.edt-stg-add`/`.edt-chip.on`/`.edt-stg-ar` | Settings `set-menubuttons` |
+| كساء الأزرار | `resolveButtons` (skin brick/image + radius/scrim/ink + **scope** primary/all + **shape** ''/slab/pill/sharp/chamfer + **imgScale/imgX/imgY** لصورة الوجه) + `buttonSkinVars` في الثيم — slab («طوبة واحدة») يرسم طوبة من لون الجدار | `tenant.menuButtons` | index.css `[data-btnskin]` + `[data-btnscope='all']` (رقاقات/خيارات/عدّاد/إغلاق مع حلقة كهرمانية للمختار) + `[data-btnshape]` | Settings `set-menubuttons` |
 | لوح القراءة | `menuWall.panel` (0-1، الافتراضي 0.65) — بديل اللوح الأسود الصلب وهالته | ضمن `tenant.menuWall` | `--edt-panel` + color-mix في `::before` (مع fallback صلب) | شريط ضمن بطاقة الجدار |
-| **الطاولة** (فكرة المالك) | `resolveTable` / `tableStyle` / `tableLift` | `tenant.menuTable` | `EdtTable` في `.edt-main` و`.edt-stg-body` | Settings `set-menutable` |
+| **الطاولة** (فكرة المالك) | `resolveTable(tenant, {variant})` / `tableStyle` / `tableLift` + **تحكم حر** `x/y/w/h` (`tableFreeStyle`، origin أعلى-وسط فالمقعد لا ينزاح) + `dim` (تعتيم كامل) + `melt` (`tableMeltStops` — 0.5 = السلوك القديم) + **تخصيص نافذة الصنف** `menuTable.stage` جزئي (`TABLE_STAGE_KEYS` فقط؛ الخامة موحدة عمداً) | `tenant.menuTable` (+`.stage`) | `EdtTable` في `.edt-main` و`.edt-stg-body` (المسرح variant:'stage') | Settings `set-menutable` (مقبض «أين تضبط الآن؟» + زر توليد AI) |
 | ثيم الشريط | `CHROME_THEMES` في `systemThemes.js` | `tenant.chromeTheme` | `applyChrome` — **منيو الزبون فقط** (مفصول عن النظام عمداً) | Settings «لون الشريط» |
 | سطح/زينة الطبق القديمة | `dishProps.js` — **opt-in فقط** | `item.surface`/`item.props` (+`contactShadow`/`reflect`) | DishProps.jsx | Items.jsx «السطح والزينة» |
 
@@ -69,6 +69,18 @@
 8. **محرر الأصناف أعيد ترتيبه**: التسعير يضم المقاسات والإضافات فعلاً، قسم جديد «التفاصيل والوصف»، AR نقي، المفاتيح الإدارية في «متقدم» — والرقاقات تطابق أقسامها. **استوديو 3D يفتح فوق المحرر** (لا يغلقه) ويعيد روابط المجسم لنموذجه عبر formPatchRef.
 9. **Meshy جودة**: meshy-5 + quad + 150k مضلع + symmetry off + remesh + texture_prompt غذائي + **متعدد الصور** (كل لقطات المعرض حتى 4 عبر multi-image-to-3d) — نُشرت الدالة.
 
+**جلسة 2026-07-22 الثالثة (التحكم الحر الكامل):**
+1. **الأزرار**: scope «كل الأزرار» (رقاقات التصنيفات on/off + خيارات المقاسات + عدّادات الكمية + زر الإغلاق + طوب الإقران — المختار يبقى بحلقة كهرمانية inset)، shape (طوبة واحدة slab من لون جدار المنشأة/كبسولة/حاد/مشطوف chamfer clip-path)، imgScale/imgX/imgY لتكبير وتحريك الصورة داخل الوجه (على طوب الجدار يكبّر وحدة الطوب).
+2. **الطاولة الحرة**: x/y/w/h (transform، origin أعلى-وسط)، dim، melt، lift حتى 60 — وكلها قابلة للتخصيص **لنافذة الصنف وحدها** عبر `menuTable.stage` (مقبض في البطاقة + «ألغِ تخصيص النافذة»). المعاينة تستعمل `tableMeltStops`/`tableFreeStyle` نفسها.
+3. **الطبق الحر**: حدود التركيب اتسعت (scale 4x، إزاحة ±100%، دوران ±180°) + منزلق «الإمالة على السطح» (imageTilt، perspective rotateX) في المحرر.
+4. **سطح المكتب/التابلت**: مع الطاولة المفعّلة يعود التخطيط المكدّس الموسّط (كالجوال) بدل عمودين يفصلان الطبق عن طاولته — في القائمة (`.edt-sec[data-table]`) والمسرح (`.edt-stg[data-table]`) كليهما.
+5. **الخط الشفاف الداكن**: أُزيل حدّ+ظل catbar فوق الجدار، شريط السلة السفلي صار مصنفراً فوق الجدار بلا حد، vignette صار منزلق `menuWall.vignette` (صفر = لا شيء)، ظل حافة الطاولة المضاءة خُفف .45→.26.
+6. **زر AR**: خرج من فوق صورة الطبق إلى تدفق الصفحة تحت الصورة (وسط) — لا يغطي الطعام أبداً.
+7. **توليد طاولة بالذكاء**: دالة `generateTableImage` (Gemini `gemini-2.5-flash-image`، برومبت من لون/نمط/تشطيب الجدار + وصف اختياري، حد 30/شهر في `aiImageJobs`، تخزين `library/tables/`) + زر «ولّد طاولة تناسب الثيم» في بطاقة الطاولة يركّبها فوراً — **نُشرت** (غير مجرَّبة بنداء حي بعد؛ إن رفض النموذج جرّب برومبتاً أوضح أو افحص سجل الدالة).
+8. **خامات فوتوغرافية حقيقية** (طلب «أسطح واقعية بالكامل» اكتمل): 8 صور CC0 من ambientCG في `public/textures/` (المصادر في SOURCES.txt) طبقة سفلية تحت تدرجات الإضاءة نفسها في dishprops.css — selector مزدوج واحد يرقّي الطاولة وأسطح الأطباق معاً؛ فشل التحميل يرجع للتدرجات وحدها. (تحسين مؤجل: ضغط webp حين يتوفر sharp.)
+9. **مود البانر**: bannerFilter/bannerBlend/bannerTint+Amount تُقرأ في MenuView (صورة وفيديو) + عناصر تحكم في بطاقة البانر تعيد استعمال FILTERS/BLEND_MODES (تذكير: البانر لا يظهر في editorial).
+10. **شكر + تقييم عند الدفع**: حالة paid انضمت للإشعارات — واتساب (سطر حر بعد القالب داخل نافذة 24س) وإيميل بزر «قيّمنا على خرائط جوجل» من حقل `tenant.googleMapsUrl` الجديد (حقل في الإعدادات/الهوية) + `msgTemplates.thankYou` لنص مخصص — **نُشرت**.
+
 ## 5. حالة القنوات (واتساب/إيميل/AI)
 
 - **الإيميل:** يعمل. نطاق rbt360sa.com موثّق في Resend، المرسِل `notification@rbt360sa.com` (يصل ردّه للمالك عبر توجيه Cloudflare). قالب HTML جداول+UTF-8 صريح.
@@ -79,13 +91,12 @@
 
 ## 6. المعلَّق — بالترتيب المقترح للجلسة القادمة
 
-1. **خامات فوتوغرافية للطاولة والأسطح** (طلب المالك «أسطح واقعية بالكامل» نُفّذ نصفه): الجدران الفوتوغرافية صارت نظيفة، لكن خامات `dishprops.css` الثماني ما تزال CSS إجرائياً. المسار المقترح: نسج CC0 من ambientCG (خشب/رخام/أردواز/ستيل/كتان/خوص، ~1024px webp في public/textures/) تُركّب كـbackground-image تحت طبقات الإضاءة الحالية — selector مزدوج واحد يرقّي الطاولة وأسطح الأطباق معاً.
-2. **مود موحّد للخلفيات الأخرى**: فلتر/دمج/صبغة للبانر و`appBg`/`immersiveBg` — الجدار والهيدر يملكانها فعلاً. أضف `bannerFilter/bannerBlend/bannerTint*` تُقرأ في موضع رسم البانر في MenuView + بطاقة تعيد استعمال `FILTERS/BLEND_MODES`. (البانر لا يظهر في editorial — قلها للمالك.)
+1. ~~نشر~~ **تم**: hosting + `generateTableImage` (أُنشئت) + `onOrderCustomerNotify` (حُدّثت) نُشرت كلها 2026-07-22.
+2. **مود `appBg`/`immersiveBg`**: البانر أخذ فلتر/دمج/صبغة هذه الجلسة؛ الخلفيتان الأخريان ما زالتا بلا مود — نفس الوصفة (يُقرأ في MenuView + عناصر في بطاقتيهما).
 3. **معاينة جانبية على الشاشات الضيقة**: المعاينة اللحظية أُصلحت والعمودان يعملان ≥1000px؛ تحت ذلك ما تزال مكدسة فوق البطاقات — درج معاينة عائم للجوال إن اشتكى.
 4. **انزياح مرساة المسرح** ~7-9% بين محرّر الطبقات والمنيو على الجوال — وحّد المرساة إن اشتكى.
-5. **رسالة شكر عند paid + تقييم + زر خرائط جوجل** — البنية جاهزة (paid يطلق الإشعار)؛ أضف نص الشكر + رابط map للمنشأة (حقل tenant.googleMapsUrl غير موجود بعد).
-6. **إنتاج واتساب** (أعلاه) + قرار المالك في مفاتيح Moyasar الحية + إبطال رمز CI المسرّب (قديم ومازال معلقاً).
-7. تحسينات مؤجّلة موثّقة: ضغط نسيج المجسّم، فيديو خلفية iOS autoplay غير مُجرَّب، حدّ سطوع طاولة/جدار فاتحين، «صور بارزة» (embossed) للأصناف، مفاتيح إظهار/إخفاء لعناصر نافذة الصنف نفسها (سعرات/تحضير/مكونات…).
+5. **إنتاج واتساب** (أعلاه) + قرار المالك في مفاتيح Moyasar الحية + إبطال رمز CI المسرّب (قديم ومازال معلقاً).
+6. تحسينات مؤجّلة موثّقة: ضغط خامات public/textures إلى webp (~7.9MB jpg حالياً، تُحمَّل خامة واحدة فقط عند الاستعمال)، ضغط نسيج المجسّم، فيديو خلفية iOS autoplay غير مُجرَّب، حدّ سطوع طاولة/جدار فاتحين، «صور بارزة» (embossed) للأصناف، مفاتيح إظهار/إخفاء لعناصر نافذة الصنف نفسها (سعرات/تحضير/مكونات…).
 8. **ملاحظة توافق الثيمين**: كل قواعد هذه الجلسة تعتمد `--edt-bg` وtokens تنقلب في الفاتح تلقائياً؛ حجاب الأزرار/الهيدر داكن ثابت عمداً فوق الصور (الصورة نفسها في الوضعين). الطلب الأعم «نفس التصميم فاتحاً وداكناً لكل تخصيص» يحتاج جولة خاصة به.
 
 ## 7. سياسات تصميم مقرَّرة (لا تُنقض بلا سبب)
@@ -100,7 +111,7 @@
 
 ## 8. حقول Firestore الجديدة هذه الجلسة (كلها على مسار updateTenant/saveItem المسموح للمدير)
 
-`tenant`: menuWall (+`panel` الجديد), menuSections, menuDecor (+`depth` لكل قطعة), menuTable, menuHeader, menuButtons, chromeTheme, elementLibrary, و`skin.overrides.hidden` صار يضم `welcome`.
-`item`: layers, layersOff, surface, props, contactShadow, reflect, وكل حقول التركيب (bg*/image*/list*/shadow*/effect/anim).
-لم تُضف قواعد جديدة لهذه — تمرّ ضمن وثيقتي tenant/item القائمتين.
-دالة `imageTo3d` تقبل الآن `imageUrls[]` و`itemName` اختيارياً (مُنشرة).
+`tenant`: menuWall (+`panel` +`vignette`), menuSections, menuDecor (+`depth` لكل قطعة), menuTable (+`x/y/w/h/dim/melt` +`stage{}` جزئي), menuHeader, menuButtons (+`scope/shape/imgScale/imgX/imgY`), chromeTheme, elementLibrary, `googleMapsUrl`, `bannerFilter/bannerBlend/bannerTint/bannerTintAmount`, `msgTemplates.thankYou`, و`skin.overrides.hidden` صار يضم `welcome`.
+`item`: layers, layersOff, surface, props, contactShadow, reflect, وكل حقول التركيب (bg*/image*/list*/shadow*/effect/anim) + `imageTilt`/`listTilt`.
+لم تُضف قواعد جديدة لهذه — تمرّ ضمن وثيقتي tenant/item القائمتين. مجموعة `aiImageJobs` الجديدة تُكتب من الدالة (admin SDK) فقط.
+دالة `imageTo3d` تقبل `imageUrls[]` و`itemName` (مُنشرة). دالة `generateTableImage` جديدة (**نُشرت 2026-07-22**).

@@ -34,9 +34,9 @@ import {
   WALL_PATTERNS, WALL_FINISHES, WALL_RANGE, BLEND_MODES, FILTERS, resolveWall, wallStyle,
   SECTION_MODES, SECTION_RANGE, resolveSections,
   DECOR_ANCHORS, DECOR_MOTIONS, DECOR_RANGE, DECOR_DEPTHS, resolveDecor, decorStyle,
-  TABLE_KINDS, TABLE_MATERIALS, TABLE_EDGES, TABLE_RANGE, resolveTable, tableStyle,
+  TABLE_KINDS, TABLE_MATERIALS, TABLE_EDGES, TABLE_RANGE, TABLE_STAGE_KEYS, resolveTable, tableStyle, tableMeltStops, tableFreeStyle,
   HEADER_MODES, HEADER_RANGE, resolveMenuHeader,
-  BUTTON_SKINS, BUTTON_RANGE, resolveButtons,
+  BUTTON_SKINS, BUTTON_SCOPES, BUTTON_SHAPES, BUTTON_RANGE, resolveButtons,
 } from '../../lib/dishComposition.js'
 import SocialLinks from '../../components/SocialLinks.jsx'
 import StaffPreview from '../../components/StaffPreview.jsx'
@@ -146,6 +146,7 @@ const WALL_DEFAULTS = {
   mortar: WALL_RANGE.mortar.dflt, grout: WALL_RANGE.grout.dflt,
   tint: '', tintAmount: 0,
   panel: WALL_RANGE.panel.dflt,
+  vignette: WALL_RANGE.vignette.dflt,
   // Whether the menu's HEADER is built out of the same wall. It lives on
   // menuWall — not on its own top-level key — because it has no colours of its
   // own: it takes the bond, the clay and the mortar chosen right above it, so
@@ -162,6 +163,11 @@ const TABLE_DEFAULTS = {
   shade: TABLE_RANGE.shade.dflt, radius: TABLE_RANGE.radius.dflt,
   blur: 0, scale: TABLE_RANGE.scale.dflt, contact: TABLE_RANGE.contact.dflt,
   blend: 'normal', filter: '', tint: '', tintAmount: 0,
+  // free placement + strength dials (contract TABLE_RANGE): the bolted position
+  x: TABLE_RANGE.x.dflt, y: TABLE_RANGE.y.dflt, w: TABLE_RANGE.w.dflt, h: TABLE_RANGE.h.dflt,
+  dim: TABLE_RANGE.dim.dflt, melt: TABLE_RANGE.melt.dflt,
+  // per-place overrides for the opened-item window (TABLE_STAGE_KEYS only)
+  stage: {},
 }
 // Stored as ONE object at `tenant.menuHeader` — the top bar the venue owns:
 // its face (theme / the wall's brick / the venue's own photo) and which of its
@@ -174,17 +180,32 @@ const HEADER_DEFAULTS = {
 // buttons. Defaults mirror resolveButtons()'s fallbacks.
 const BUTTON_DEFAULTS = {
   skin: '', url: '', radius: BUTTON_RANGE.radius.dflt, scrim: BUTTON_RANGE.scrim.dflt, ink: 'light',
+  scope: 'primary', shape: '',
+  imgScale: BUTTON_RANGE.imgScale.dflt, imgX: BUTTON_RANGE.imgX.dflt, imgY: BUTTON_RANGE.imgY.dflt,
 }
 // [key, ar, en, unit] — bounded by TABLE_RANGE only. `lift` leads because it is
 // the dial the owner named: how far the dish sits down onto the table.
 const TABLE_SLIDERS = [
   ['lift', 'جلوس الطبق على الطاولة (مقدار النزول)', 'Seat the dish (drop onto the table)', 'pct'],
   ['shade', 'تعتيم الطاولة نحو الأسفل', 'Darkening toward the front', 'pct'],
+  ['dim', 'تعتيم كامل فوق السطح', 'Flat darkening over the surface', 'pct'],
+  ['melt', 'ذوبان السطح خلف النص', 'Melt into the canvas behind the text', 'pct'],
   ['contact', 'ظل التماس تحت الطبق', 'Contact shadow under the plate', 'pct'],
   ['radius', 'انحناء الحافة', 'Corner radius', 'px'],
   ['opacity', 'شفافية الطاولة', 'Table opacity', 'pct'],
   ['blur', 'تمويه', 'Blur', 'px'],
 ]
+// The FREE-PLACEMENT dials («تحكم حر بالطاولة»): move it, widen it, shorten it
+// against its bolted box. Kept apart from TABLE_SLIDERS so the card can group
+// them under their own heading — they answer a different question.
+const TABLE_FREE_SLIDERS = [
+  ['x', 'إزاحة يمين/يسار', 'Shift left/right', 'pct'],
+  ['y', 'إزاحة أعلى/أسفل', 'Shift up/down', 'pct'],
+  ['w', 'عرض الطاولة', 'Table width', 'pct'],
+  ['h', 'ارتفاع الطاولة', 'Table height', 'pct'],
+]
+// which slider keys may hold a DIFFERENT value inside the opened-item window
+const TABLE_STAGE_SET = new Set(TABLE_STAGE_KEYS)
 // A picker tile is deliberately painted with NO mood on it (no blur, no blend,
 // no tint, full opacity) and at a small unit size: the choice being made there
 // is the GEOMETRY, and a blur the venue set an hour ago would hide it.
@@ -200,6 +221,9 @@ const WALL_SLIDERS = [
   // black slab and its halo («الظل والخط الأسود»). 100% = the old bullet-proof
   // solid; 0% = no panel at all.
   ['panel', 'لوح القراءة خلف النصوص (قوة تعتيمه)', 'Reading panel behind the text', 'pct'],
+  // The melt at the foot of every dish photo — the last translucent dark band
+  // left on the room («خط شفاف داكن»). 0% removes it outright.
+  ['vignette', 'ذوبان أسفل صورة الطبق في الجدار', 'Melt under the dish photo', 'pct'],
 ]
 const wallSliderText = (unit, v) => (unit === 'pct' ? `${Math.round(v * 100)}%` : unit === 'x' ? `${Number(v).toFixed(2)}x` : `${Number(v)}px`)
 
@@ -664,6 +688,8 @@ export default function Settings() {
   const [descAr, setDescAr] = useState(tenant?.descAr || '')
   const [phone, setPhone] = useState(tenant?.phone || '')
   const [address, setAddress] = useState(tenant?.address || '')
+  // sent with the post-payment thank-you so guests can rate the venue
+  const [googleMapsUrl, setGoogleMapsUrl] = useState(tenant?.googleMapsUrl || '')
   const [currency, setCurrency] = useState(tenant?.currency || 'SAR')
   const initSkin = getSkin(tenant?.skin?.skinId)
   const initOv = tenant?.skin?.overrides || {}
@@ -702,6 +728,12 @@ export default function Settings() {
   const [bannerStyle, setBannerStyle] = useState(tenant?.bannerStyle || 'full')
   const [bannerVideoUrl, setBannerVideoUrl] = useState(tenant?.bannerVideoUrl || '')
   const [bannerFadeDir, setBannerFadeDir] = useState(tenant?.bannerFadeDir || 'bottom') // bottom | top | both | none
+  // the banner's MOOD — the same filter/blend/tint vocabulary the wall and the
+  // dish backdrops already speak (FILTERS / BLEND_MODES from the contract)
+  const [bannerFilter, setBannerFilter] = useState(tenant?.bannerFilter || '')
+  const [bannerBlend, setBannerBlend] = useState(tenant?.bannerBlend || 'normal')
+  const [bannerTint, setBannerTint] = useState(tenant?.bannerTint || '')
+  const [bannerTintAmount, setBannerTintAmount] = useState(tenant?.bannerTintAmount != null ? tenant.bannerTintAmount : 0)
   const [immersiveBgUrl, setImmersiveBgUrl] = useState(tenant?.immersiveBgUrl || '')
   const [immersiveBgVideoUrl, setImmersiveBgVideoUrl] = useState(tenant?.immersiveBgVideoUrl || '')
   const [immersiveBgOpacity, setImmersiveBgOpacity] = useState(tenant?.immersiveBgOpacity != null ? tenant.immersiveBgOpacity : 0.5)
@@ -1016,8 +1048,55 @@ export default function Settings() {
     setTblCfg(next)
     try { await saveNow({ menuTable: next }); updateTenantLocal({ menuTable: next }); toast.success(t('saved')) } catch (_) { toast.error(t('error')) }
   }
-  // The preview is the contract's own output — never a local approximation.
-  const tblResolved = useMemo(() => resolveTable({ menuTable: tblCfg }), [tblCfg])
+  // WHICH PLACE the sliders edit: the browsing list, or the opened-item window.
+  // The dish window's panel is far taller (variants, story, options), so the
+  // owner may seat the table differently there — the overrides live at
+  // menuTable.stage and only for TABLE_STAGE_KEYS; everything else stays one
+  // decision for one room.
+  const [tblPlace, setTblPlace] = useState('list')
+  const tblStageOver = tblCfg.stage && typeof tblCfg.stage === 'object' ? tblCfg.stage : {}
+  const writeTableAt = (patch, debounced) => {
+    if (tblPlace === 'stage') {
+      const stagePatch = {}
+      Object.keys(patch).forEach((k) => { if (TABLE_STAGE_SET.has(k)) stagePatch[k] = patch[k] })
+      if (Object.keys(stagePatch).length) { writeTable({ stage: { ...tblStageOver, ...stagePatch } }, debounced); return }
+    }
+    writeTable(patch, debounced)
+  }
+  const tblValueAt = (key) => {
+    if (tblPlace === 'stage' && tblStageOver[key] != null) return tblStageOver[key]
+    return tblCfg[key] != null ? tblCfg[key] : (TABLE_RANGE[key] ? TABLE_RANGE[key].dflt : 0)
+  }
+  // The preview is the contract's own output — never a local approximation —
+  // resolved for the place currently being edited.
+  const tblResolved = useMemo(() => resolveTable({ menuTable: tblCfg }, { variant: tblPlace }), [tblCfg, tblPlace])
+
+  // ===== AI TABLE («ولّد طاولة تناسب الثيم») =====
+  // The server (generateTableImage) writes the photograph from the room's own
+  // facts — wall colour, bond, finish, an optional hint — stores it in the
+  // venue library and returns the URL; picking it is one write to menuTable.
+  const [tblAiBusy, setTblAiBusy] = useState(false)
+  const [tblAiHint, setTblAiHint] = useState('')
+  const genTableAi = async () => {
+    if (tblAiBusy) return
+    setTblAiBusy(true)
+    try {
+      const [{ httpsCallable }, fb] = await Promise.all([import('firebase/functions'), import('../../lib/firebase.js')])
+      const res = await httpsCallable(fb.functions, 'generateTableImage')({
+        tenantId,
+        hint: tblAiHint.trim(),
+        wall: { color: wallCfg.color, pattern: wallCfg.pattern, finish: wallCfg.finish, url: wallCfg.pattern === 'image' ? wallCfg.url : '' },
+        venueName: name || tenant?.name || '',
+      })
+      const url = res?.data?.url
+      if (!url) throw new Error('no url')
+      await writeTable({ url, kind: 'image' })
+      toast.success(ar ? 'وُلّدت الطاولة ورُكّبت — عدّل جلوس الطبق عليها كما تحب' : 'Table generated and applied — tune the seating as you like')
+    } catch (err) {
+      const msg = err?.message || ''
+      toast.error(msg && !/internal/i.test(msg) ? msg : (ar ? 'تعذّر التوليد — جرّب مرة أخرى' : 'Generation failed — try again'))
+    } finally { setTblAiBusy(false) }
+  }
 
   // ===== THE TOP HEADER (tenant.menuHeader) =====
   // Same draft-free discipline as the wall.
@@ -1263,6 +1342,7 @@ export default function Settings() {
     chromeTheme: tenant?.chromeTheme || 'auto',
     skin: { skinId, overrides: skinOverrides }, themePreset: preset, themeColor: color, themeAccent: accent,
     bannerUrl, bannerVideoUrl, bannerFadeDir, bannerOpacity: Number(bannerOpacity), bannerPosition, bannerScale: Number(bannerScale), bannerGradient: Number(bannerGradient), bannerStyle,
+    bannerFilter, bannerBlend, bannerTint, bannerTintAmount: Number(bannerTintAmount) || 0,
     immersiveBgUrl, immersiveBgVideoUrl, immersiveBgOpacity: Number(immersiveBgOpacity), immersiveBgPosition, immersiveBgScale: Number(immersiveBgScale), immersiveFull,
     typo,
     bgGradient: gradientCss, bgImageUrl, bgVideoUrl: bgVideoUrl.trim(), watermarkUrl,
@@ -1406,6 +1486,7 @@ export default function Settings() {
   const currentAppearance = () => ({
     themePreset: preset, themeColor: color, themeAccent: accent,
     bannerUrl, bannerVideoUrl, bannerFadeDir, bannerOpacity, bannerPosition, bannerScale, bannerGradient, bannerStyle,
+    bannerFilter, bannerBlend, bannerTint, bannerTintAmount,
     immersiveBgUrl, immersiveBgVideoUrl, immersiveBgOpacity, immersiveBgPosition, immersiveBgScale, immersiveFull,
     bgImageUrl, bgVideoUrl, watermarkUrl, bgOpacity, bgPosition, bgScale,
     gradEnabled, gradC1, gradC2, gradAngle, typo,
@@ -1428,6 +1509,7 @@ export default function Settings() {
     if (ct.appearance) {
       setPreset(a.themePreset || 'custom')
       setBannerUrl(a.bannerUrl || ''); setBannerVideoUrl(a.bannerVideoUrl || ''); setBannerFadeDir(a.bannerFadeDir || 'bottom'); setBannerOpacity(a.bannerOpacity ?? 1); setBannerPosition(a.bannerPosition || 'center'); setBannerScale(a.bannerScale ?? 1); setBannerGradient(a.bannerGradient ?? 0.55); setBannerStyle(a.bannerStyle || 'full')
+      setBannerFilter(a.bannerFilter || ''); setBannerBlend(a.bannerBlend || 'normal'); setBannerTint(a.bannerTint || ''); setBannerTintAmount(a.bannerTintAmount ?? 0)
       setImmersiveBgUrl(a.immersiveBgUrl || ''); setImmersiveBgVideoUrl(a.immersiveBgVideoUrl || ''); setImmersiveBgOpacity(a.immersiveBgOpacity ?? 0.5); setImmersiveBgPosition(a.immersiveBgPosition || 'center'); setImmersiveBgScale(a.immersiveBgScale ?? 1); setImmersiveFull(a.immersiveFull === true)
       setBgImageUrl(a.bgImageUrl || ''); setBgVideoUrl(a.bgVideoUrl || ''); setWatermarkUrl(a.watermarkUrl || ''); setBgOpacity(a.bgOpacity ?? 0.15); setBgPosition(a.bgPosition || 'center'); setBgScale(a.bgScale ?? 1)
       setGradEnabled(a.gradEnabled === true); setGradC1(a.gradC1 || '#7c2d2d'); setGradC2(a.gradC2 || '#2a1212'); setGradAngle(a.gradAngle ?? 135)
@@ -1443,10 +1525,11 @@ export default function Settings() {
     setBusy(true)
     try {
       const patch = {
-        name: name.trim(), descAr: descAr.trim(), phone: phone.trim(), address: address.trim(), currency,
+        name: name.trim(), descAr: descAr.trim(), phone: phone.trim(), address: address.trim(), googleMapsUrl: googleMapsUrl.trim(), currency,
         skin: { skinId, overrides: skinOverrides }, themePreset: preset, themeColor: color, themeAccent: accent,
         logoUrl, coverUrl,
         bannerUrl, bannerVideoUrl, bannerFadeDir, bannerOpacity: Number(bannerOpacity), bannerPosition, bannerScale: Number(bannerScale), bannerGradient: Number(bannerGradient), bannerStyle,
+        bannerFilter, bannerBlend, bannerTint, bannerTintAmount: Number(bannerTintAmount) || 0,
         immersiveBgUrl, immersiveBgVideoUrl, immersiveBgOpacity: Number(immersiveBgOpacity), immersiveBgPosition, immersiveBgScale: Number(immersiveBgScale), immersiveFull,
         typo,
         bgImageUrl, bgVideoUrl: bgVideoUrl.trim(), watermarkUrl,
@@ -1685,6 +1768,11 @@ export default function Settings() {
               <div className="field grow" style={{ minWidth: 150 }}><label>{t('currency')}</label><select className="select" value={currency} onChange={(e) => setCurrency(e.target.value)}>{CURRENCIES.map((c) => <option key={c} value={c}>{c}</option>)}</select></div>
             </div>
             <div className="field"><label>{ar ? 'العنوان المطبوع' : 'Address'} <span className="faint">({t('optional')})</span></label><input className="input" value={address} onChange={(e) => setAddress(e.target.value)} /></div>
+            <div className="field">
+              <label>{ar ? 'رابط منشأتك على خرائط جوجل' : 'Google Maps link'} <span className="faint">({t('optional')})</span></label>
+              <input className="input" dir="ltr" inputMode="url" placeholder="https://maps.app.goo.gl/…" value={googleMapsUrl} onChange={(e) => setGoogleMapsUrl(e.target.value)} />
+              <span className="xs faint">{ar ? 'يُرسل مع رسالة الشكر بعد الدفع ليقيّمك عملاؤك على خرائط جوجل.' : 'Sent with the thank-you message after payment so guests can rate you on Google Maps.'}</span>
+            </div>
           </div>
           )}
 
@@ -3371,19 +3459,84 @@ export default function Settings() {
                           </div>
                         </div>
                       </div>
+
+                      {/* WHICH buttons wear it («كل الازرار وليس الاساسية فقط»)
+                          + the SHAPE of the face («طوبة واحدة او اي اشكال») */}
+                      <div className="row wrap" style={{ gap: 10, alignItems: 'flex-end' }}>
+                        <div className="field" style={{ minWidth: 200 }}>
+                          <label>{ar ? 'أي الأزرار تلبس الكساء؟' : 'Which buttons wear it?'}</label>
+                          <div className="segmented">
+                            {BUTTON_SCOPES.map((s) => (
+                              <button key={s.id} type="button" className={(btnCfg.scope || 'primary') === s.id ? 'active' : ''} onClick={() => writeButtons({ scope: s.id })}>{ar ? s.ar : s.en}</button>
+                            ))}
+                          </div>
+                        </div>
+                        <div className="field grow" style={{ minWidth: 220 }}>
+                          <label>{ar ? 'شكل الزر' : 'Button shape'}</label>
+                          <div className="row wrap" style={{ gap: 6 }}>
+                            {BUTTON_SHAPES.map((s) => {
+                              const on = (btnCfg.shape || '') === s.id
+                              return (
+                                <button key={s.id || 'radius'} type="button" className={`chip ${on ? 'active' : ''}`} aria-pressed={on}
+                                  onClick={() => writeButtons({ shape: s.id })}>{ar ? s.ar : s.en}</button>
+                              )
+                            })}
+                          </div>
+                        </div>
+                      </div>
+                      {(btnCfg.scope || 'primary') === 'all' && (
+                        <span className="xs faint">{ar ? 'يشمل رقاقات التصنيفات وخيارات المقاسات وأزرار الكمية وزر الإغلاق — المختار يبقى واضحاً بإطار كهرماني.' : 'Covers the category chips, size options, qty steppers and the close button — the selected one keeps an amber ring.'}</span>
+                      )}
+
+                      {/* the picture INSIDE the face («تكبير وتصغير الصورة داخل
+                          الزر»): zoom + which part shows. On the brick skin the
+                          same zoom scales the wall's unit. */}
+                      <div className="row wrap" style={{ gap: 10 }}>
+                        <div className="field grow" style={{ minWidth: 170 }}>
+                          <label>{ar ? (btnCfg.skin === 'image' ? 'حجم الصورة داخل الزر' : 'حجم وحدة الطوب داخل الزر') : 'Picture zoom inside the face'} · <span className="num">{Number(btnCfg.imgScale ?? 1).toFixed(2)}x</span></label>
+                          <input type="range" min={BUTTON_RANGE.imgScale.min} max={BUTTON_RANGE.imgScale.max} step={BUTTON_RANGE.imgScale.step} value={Number(btnCfg.imgScale ?? 1)} onChange={(e) => writeButtons({ imgScale: Number(e.target.value) }, true)} style={{ width: '100%' }} />
+                        </div>
+                        {btnCfg.skin === 'image' && (
+                          <>
+                            <div className="field grow" style={{ minWidth: 150 }}>
+                              <label>{ar ? 'موضع الصورة أفقياً' : 'Picture position X'} · <span className="num">{Math.round(Number(btnCfg.imgX ?? 50))}%</span></label>
+                              <input type="range" min={BUTTON_RANGE.imgX.min} max={BUTTON_RANGE.imgX.max} step={BUTTON_RANGE.imgX.step} value={Number(btnCfg.imgX ?? 50)} onChange={(e) => writeButtons({ imgX: Number(e.target.value) }, true)} style={{ width: '100%' }} />
+                            </div>
+                            <div className="field grow" style={{ minWidth: 150 }}>
+                              <label>{ar ? 'موضع الصورة عمودياً' : 'Picture position Y'} · <span className="num">{Math.round(Number(btnCfg.imgY ?? 50))}%</span></label>
+                              <input type="range" min={BUTTON_RANGE.imgY.min} max={BUTTON_RANGE.imgY.max} step={BUTTON_RANGE.imgY.step} value={Number(btnCfg.imgY ?? 50)} onChange={(e) => writeButtons({ imgY: Number(e.target.value) }, true)} style={{ width: '100%' }} />
+                            </div>
+                          </>
+                        )}
+                      </div>
                       <div className="row wrap" style={{ gap: 8, alignItems: 'center' }}>
                         <span className="xs faint bold">{ar ? 'معاينة:' : 'Preview:'}</span>
                         <span
                           aria-hidden="true"
-                          style={{
-                            display: 'inline-flex', alignItems: 'center', gap: 6, minHeight: 40, padding: '10px 20px',
-                            borderRadius: Number(btnCfg.radius) || 0, fontWeight: 800, fontSize: 13,
-                            color: btnCfg.ink === 'dark' ? '#24170e' : '#fff', textShadow: '0 1px 2px rgba(0,0,0,.4)',
-                            backgroundColor: '#5d3a24',
-                            ...(btnCfg.skin === 'image' && btnCfg.url
-                              ? { backgroundImage: `linear-gradient(rgba(14,9,6,${btnCfg.scrim}), rgba(14,9,6,${btnCfg.scrim})), url(${btnCfg.url})`, backgroundSize: 'cover', backgroundPosition: 'center' }
-                              : (() => { const f = wallFaceStyle(wallPainter, { ...wallCfg, ...(wallCfg.pattern === 'image' ? { scale: 1 } : { scale: Math.max(0.18, Math.min(0.5, (Number(wallCfg.scale) || 1) * 0.3)) }), opacity: 1, blur: 0, blend: 'normal', filter: '', tint: '', tintAmount: 0 }); return f ? { backgroundImage: `linear-gradient(rgba(14,9,6,${btnCfg.scrim}), rgba(14,9,6,${btnCfg.scrim})), ${f.backgroundImage}`, backgroundSize: `auto, ${f.backgroundSize}`, backgroundRepeat: `no-repeat, ${f.backgroundRepeat || 'repeat'}`, backgroundPosition: `center, ${f.backgroundPosition || 'center'}`, backgroundColor: f.backgroundColor } : {} })()),
-                          }}
+                          style={(() => {
+                            const zoom = Number(btnCfg.imgScale ?? 1)
+                            const shape = btnCfg.shape || ''
+                            const base = {
+                              display: 'inline-flex', alignItems: 'center', gap: 6, minHeight: 40, padding: '10px 20px',
+                              borderRadius: shape === 'pill' ? 999 : shape === 'sharp' || shape === 'chamfer' ? 0 : Number(btnCfg.radius) || 0,
+                              fontWeight: 800, fontSize: 13,
+                              color: btnCfg.ink === 'dark' ? '#24170e' : '#fff', textShadow: '0 1px 2px rgba(0,0,0,.4)',
+                              backgroundColor: '#5d3a24',
+                              ...(shape === 'chamfer' ? { clipPath: 'polygon(9px 0, calc(100% - 9px) 0, 100% 9px, 100% calc(100% - 9px), calc(100% - 9px) 100%, 9px 100%, 0 calc(100% - 9px), 0 9px)' } : {}),
+                              ...(shape === 'slab' ? { boxShadow: 'inset 0 1px 0 rgba(255,231,205,.3), inset 0 -2px 0 rgba(46,18,8,.34), 0 2px 0 rgba(46,18,8,.34)' } : {}),
+                            }
+                            if (btnCfg.skin === 'image' && btnCfg.url) {
+                              return {
+                                ...base,
+                                backgroundImage: `linear-gradient(rgba(14,9,6,${btnCfg.scrim}), rgba(14,9,6,${btnCfg.scrim})), url(${btnCfg.url})`,
+                                backgroundSize: zoom === 1 ? 'auto, cover' : `auto, ${Math.round(zoom * 100)}%`,
+                                backgroundRepeat: `no-repeat, ${zoom === 1 ? 'no-repeat' : 'repeat'}`,
+                                backgroundPosition: `center, ${Number(btnCfg.imgX ?? 50)}% ${Number(btnCfg.imgY ?? 50)}%`,
+                              }
+                            }
+                            const f = wallFaceStyle(wallPainter, { ...wallCfg, ...(wallCfg.pattern === 'image' ? { scale: 1 } : { scale: Math.max(0.1, Math.min(1.6, (Number(wallCfg.scale) || 1) * 0.3 * zoom)) }), opacity: 1, blur: 0, blend: 'normal', filter: '', tint: '', tintAmount: 0 })
+                            return f ? { ...base, backgroundImage: `linear-gradient(rgba(14,9,6,${btnCfg.scrim}), rgba(14,9,6,${btnCfg.scrim})), ${f.backgroundImage}`, backgroundSize: `auto, ${f.backgroundSize}`, backgroundRepeat: `no-repeat, ${f.backgroundRepeat || 'repeat'}`, backgroundPosition: `center, ${f.backgroundPosition || 'center'}`, backgroundColor: f.backgroundColor } : base
+                          })()}
                         >{ar ? 'أضِف إلى السلة' : 'Add to cart'}</span>
                       </div>
                     </>
@@ -3495,6 +3648,20 @@ export default function Settings() {
                     )}
                   </div>
 
+                  {/* AI TABLE — the server photographs a tabletop that matches
+                      the room (wall colour, bond, finish + the hint) and wires
+                      it straight into «صورتي». */}
+                  <div className="row wrap" style={{ gap: 8, alignItems: 'center' }}>
+                    <button type="button" className="btn btn-sm" disabled={tblAiBusy} onClick={genTableAi}>
+                      {tblAiBusy ? <span className="spinner" /> : <Icon name="sparkles" size={13} />} {ar ? 'ولّد طاولة تناسب الثيم بالذكاء' : 'Generate a matching table with AI'}
+                    </button>
+                    <input
+                      className="input" style={{ flex: '1 1 220px', minWidth: 180 }} maxLength={120}
+                      placeholder={ar ? 'وصف اختياري: خشب جوز داكن، رخام، خيزران…' : 'Optional hint: dark walnut, marble, rattan…'}
+                      value={tblAiHint} onChange={(e3) => setTblAiHint(e3.target.value)}
+                    />
+                  </div>
+
                   {tblCfg.kind === 'none' ? (
                     <p className="xs faint" style={{ margin: 0 }}>{ar ? 'بدون طاولة — اللوحة تبقى داكنة سادة كما كانت.' : 'No table — the panel stays plain dark as before.'}</p>
                   ) : (
@@ -3527,22 +3694,64 @@ export default function Settings() {
                         ))}
                       </div>
 
+                      {/* WHERE the sliders land: the browsing list, or the
+                          opened-item window. The window's panel is far taller,
+                          so it may hold different numbers (menuTable.stage) —
+                          «الطاولة لا تظهر بشكل مناسب عند فتح الصنف». */}
+                      <div className="row wrap" style={{ gap: 8, alignItems: 'center' }}>
+                        <span className="xs faint bold">{ar ? 'أين تضبط الآن؟' : 'Tuning which place?'}</span>
+                        <div className="segmented">
+                          <button type="button" className={tblPlace === 'list' ? 'active' : ''} onClick={() => setTblPlace('list')}>{ar ? 'قائمة التصفح' : 'Browsing list'}</button>
+                          <button type="button" className={tblPlace === 'stage' ? 'active' : ''} onClick={() => setTblPlace('stage')}>{ar ? 'نافذة الصنف' : 'Opened item'}</button>
+                        </div>
+                        {tblPlace === 'stage' && Object.keys(tblStageOver).length > 0 && (
+                          <button type="button" className="btn-link xs" onClick={() => writeTable({ stage: {} })}>{ar ? 'ألغِ تخصيص النافذة (اتبع القائمة)' : 'Clear window overrides'}</button>
+                        )}
+                        {tblPlace === 'stage' && (
+                          <span className="xs faint">{ar ? 'أي منزلق تحرّكه هنا يخص نافذة الصنف وحدها.' : 'Any slider you move here applies to the opened item only.'}</span>
+                        )}
+                      </div>
+
                       <div className="stack" style={{ gap: 8 }}>
                         {TABLE_SLIDERS.map(([key, la, le, unit]) => {
                           const R = TABLE_RANGE[key]
-                          const v = Number(tblCfg[key] != null ? tblCfg[key] : R.dflt)
+                          const v = Number(tblValueAt(key))
+                          const overridden = tblPlace === 'stage' && tblStageOver[key] != null
                           return (
                             <div key={key} className="field" style={{ gap: 2 }}>
-                              <label>{ar ? la : le} · <span className="num">{wallSliderText(unit, v)}</span></label>
-                              <input type="range" min={R.min} max={R.max} step={R.step} value={v} onChange={(e3) => writeTable({ [key]: Number(e3.target.value) }, true)} style={{ width: '100%' }} />
+                              <label>{ar ? la : le} · <span className="num">{wallSliderText(unit, v)}</span>{overridden ? <span className="xs" style={{ color: 'var(--brand)' }}> · {ar ? 'مخصص للنافذة' : 'window only'}</span> : null}</label>
+                              <input type="range" min={R.min} max={R.max} step={R.step} value={v} onChange={(e3) => writeTableAt({ [key]: Number(e3.target.value) }, true)} style={{ width: '100%' }} />
                             </div>
                           )
                         })}
                         {tblCfg.kind === 'image' && (
                           <div className="field" style={{ gap: 2 }}>
-                            <label>{ar ? 'حجم صورة الطاولة' : 'Photo scale'} · <span className="num">{wallSliderText('x', Number(tblCfg.scale) || 1)}</span></label>
-                            <input type="range" min={TABLE_RANGE.scale.min} max={TABLE_RANGE.scale.max} step={TABLE_RANGE.scale.step} value={Number(tblCfg.scale) || 1} onChange={(e3) => writeTable({ scale: Number(e3.target.value) }, true)} style={{ width: '100%' }} />
+                            <label>{ar ? 'حجم صورة الطاولة' : 'Photo scale'} · <span className="num">{wallSliderText('x', Number(tblValueAt('scale')) || 1)}</span></label>
+                            <input type="range" min={TABLE_RANGE.scale.min} max={TABLE_RANGE.scale.max} step={TABLE_RANGE.scale.step} value={Number(tblValueAt('scale')) || 1} onChange={(e3) => writeTableAt({ scale: Number(e3.target.value) }, true)} style={{ width: '100%' }} />
                           </div>
+                        )}
+                      </div>
+
+                      {/* FREE PLACEMENT — move and size the table against its
+                          bolted box («تحكم حر بالطاولة»). Per place, like the
+                          sliders above. */}
+                      <div className="stack" style={{ gap: 8, borderTop: '1px solid var(--border)', paddingTop: 10 }}>
+                        <span className="xs faint bold">{ar ? 'الموضع والحجم — تحكم حر' : 'Position & size — free control'}</span>
+                        <div className="row wrap" style={{ gap: 10 }}>
+                          {TABLE_FREE_SLIDERS.map(([key, la, le, unit]) => {
+                            const R = TABLE_RANGE[key]
+                            const v = Number(tblValueAt(key))
+                            const overridden = tblPlace === 'stage' && tblStageOver[key] != null
+                            return (
+                              <div key={key} className="field grow" style={{ gap: 2, minWidth: 150 }}>
+                                <label>{ar ? la : le} · <span className="num">{unit === 'pct' ? `${Math.round(v)}%` : v}</span>{overridden ? <span className="xs" style={{ color: 'var(--brand)' }}> · {ar ? 'مخصص' : 'window'}</span> : null}</label>
+                                <input type="range" min={R.min} max={R.max} step={R.step} value={v} onChange={(e3) => writeTableAt({ [key]: Number(e3.target.value) }, true)} style={{ width: '100%' }} />
+                              </div>
+                            )
+                          })}
+                        </div>
+                        {(Number(tblValueAt('x')) !== 0 || Number(tblValueAt('y')) !== 0 || Number(tblValueAt('w')) !== 100 || Number(tblValueAt('h')) !== 100) && (
+                          <button type="button" className="btn-link xs" onClick={() => writeTableAt({ x: 0, y: 0, w: 100, h: 100 })}>{ar ? 'أعد الطاولة لموضعها المثبت' : 'Back to the bolted position'}</button>
                         )}
                       </div>
 
@@ -3578,14 +3787,19 @@ export default function Settings() {
                             ? <img className="mtbl-dish" src={wallSample.imageUrl} alt="" style={{ transform: `translateY(${tblResolved ? tblResolved.lift : 0}%)` }} />
                             : <span className="mtbl-nodish">{ar ? 'أضف صورة لأي صنف لترى الجلوس' : 'Add a dish photo to see the seating'}</span>}
                           <div className="mtbl-panel">
-                            {tblResolved && (
-                              <span className="edt-table" aria-hidden="true" style={{ '--tbl-a': '16%', '--tbl-b': `${Math.round(34 + (tblResolved.shade || 0) * 36)}%`, '--tbl-contact': tblResolved.contact }}>
-                                <span className="edt-table-art" data-m={tblResolved.kind === 'material' ? tblResolved.material : undefined} style={tableStyle(tblResolved) || undefined} />
-                                <span className="mtbl-melt" />
-                                <span className="edt-table-edge" data-e={tblResolved.edge} />
-                                {tblResolved.contact > 0 ? <span className="edt-table-contact" /> : null}
-                              </span>
-                            )}
+                            {tblResolved && (() => {
+                              const stops = tableMeltStops(tblResolved)
+                              const free = tableFreeStyle(tblResolved)
+                              return (
+                                <span className="edt-table" aria-hidden="true" style={{ '--tbl-a': `${stops.a}%`, '--tbl-b': `${stops.b}%`, '--tbl-contact': tblResolved.contact, ...(free || {}) }}>
+                                  <span className="edt-table-art" data-m={tblResolved.kind === 'material' ? tblResolved.material : undefined} style={tableStyle(tblResolved) || undefined} />
+                                  {tblResolved.dim > 0 ? <span className="edt-table-dim" style={{ opacity: tblResolved.dim }} /> : null}
+                                  <span className="mtbl-melt" />
+                                  <span className="edt-table-edge" data-e={tblResolved.edge} />
+                                  {tblResolved.contact > 0 ? <span className="edt-table-contact" /> : null}
+                                </span>
+                              )
+                            })()}
                             <strong className="mtbl-name">{wallSample ? pickLang(wallSample, 'name', lang) : (ar ? 'اسم الصنف' : 'Dish name')}</strong>
                             <span className="mtbl-price num">{wallSample?.price || 46}</span>
                           </div>
@@ -3728,6 +3942,32 @@ export default function Settings() {
                     <div className="field"><label>{ar ? `قوّة الاندماج: ${Math.round(bannerGradient * 100)}%` : `Melt strength: ${Math.round(bannerGradient * 100)}%`}</label><input type="range" min="0" max="1" step="0.05" value={bannerGradient} onChange={(e) => setBannerGradient(Number(e.target.value))} style={{ width: '100%' }} /></div>
                     <BgPanPad value={bannerPosition} onChange={setBannerPosition} label={ar ? 'تحريك البانر (اسحب النقطة)' : 'Move banner (drag the dot)'} />
                     <div className="field"><label>{ar ? `التكبير: ${Number(bannerScale).toFixed(1)}×` : `Zoom: ${Number(bannerScale).toFixed(1)}×`}</label><input type="range" min="1" max="3" step="0.1" value={bannerScale} onChange={(e) => setBannerScale(Number(e.target.value))} style={{ width: '100%' }} /></div>
+                    {/* the banner's MOOD — the same filter/blend/tint the wall
+                        and the dish backdrops already have */}
+                    <div className="row wrap" style={{ gap: 10, borderTop: '1px solid var(--border)', paddingTop: 10 }}>
+                      <div className="field grow" style={{ minWidth: 150 }}>
+                        <label>{ar ? 'فلتر' : 'Filter'}</label>
+                        <select className="input" value={bannerFilter} onChange={(e) => setBannerFilter(e.target.value)}>
+                          {FILTERS.map((f) => <option key={f.id || 'none'} value={f.id}>{ar ? f.ar : f.en}</option>)}
+                        </select>
+                      </div>
+                      <div className="field grow" style={{ minWidth: 150 }}>
+                        <label>{ar ? 'الدمج مع الخلفية' : 'Blend'}</label>
+                        <select className="input" value={bannerBlend} onChange={(e) => setBannerBlend(e.target.value)}>
+                          {BLEND_MODES.map((b) => <option key={b.id} value={b.id}>{ar ? b.ar : b.en}</option>)}
+                        </select>
+                      </div>
+                      <label className="row" style={{ gap: 6, cursor: 'pointer', alignItems: 'center' }}>
+                        <span className="xs faint">{ar ? 'صبغة' : 'Tint'}</span>
+                        <input type="color" value={bannerTint || '#000000'} onChange={(e) => { setBannerTint(e.target.value); if (!(Number(bannerTintAmount) > 0)) setBannerTintAmount(0.2) }} style={{ width: 42, height: 32, border: '1px solid var(--border)', borderRadius: 8, background: 'none', cursor: 'pointer' }} aria-label={ar ? 'لون الصبغة' : 'Tint colour'} />
+                        {Number(bannerTintAmount) > 0 && (
+                          <>
+                            <input type="range" min="0" max="1" step="0.05" value={bannerTintAmount} onChange={(e) => setBannerTintAmount(Number(e.target.value))} style={{ width: 90 }} aria-label={ar ? 'قوة الصبغة' : 'Tint strength'} />
+                            <button type="button" className="btn btn-sm btn-outline" onClick={() => { setBannerTint(''); setBannerTintAmount(0) }}>{ar ? 'إزالة' : 'Remove'}</button>
+                          </>
+                        )}
+                      </label>
+                    </div>
                   </div>
                 )}
 

@@ -88,9 +88,17 @@ const str = (v, allowed, dflt) => (allowed.includes(String(v || '')) ? String(v 
 // Clamp ranges are the contract the editor's sliders must use. They live here so
 // the editor cannot offer a value the renderer would reject.
 export const RANGE = {
-  scale: { min: 0.4, max: 2.6, step: 0.05, dflt: 1 },
-  offset: { min: -50, max: 50, step: 1, dflt: 0 },   // percent of the photo box
-  rot: { min: -30, max: 30, step: 1, dflt: 0 },       // degrees
+  // The bounds are FREE-PLACEMENT wide on purpose («تحكم حر»): the owner seats
+  // the plate on the table himself — off-centre, upside-down, hanging half out
+  // of the box if that is the picture he wants. The old tight bounds (±50%,
+  // ±30°, 2.6x) were the reason he could not put the dish exactly where he
+  // pointed. Defaults are unchanged, so nothing moves for anyone else.
+  scale: { min: 0.2, max: 4, step: 0.05, dflt: 1 },
+  offset: { min: -100, max: 100, step: 0.5, dflt: 0 }, // percent of the photo box
+  rot: { min: -180, max: 180, step: 1, dflt: 0 },      // degrees
+  // perspective lean (rotateX): what lays a top-shot plate down onto a surface
+  // instead of leaving it pasted upright against the wall.
+  tilt: { min: -60, max: 60, step: 1, dflt: 0 },       // degrees
   blur: { min: 0, max: 24, step: 0.5, dflt: 0 },      // px
   opacity: { min: 0, max: 1, step: 0.05, dflt: 1 },
   bgOpacity: { min: 0, max: 1, step: 0.05, dflt: 0.5 },
@@ -263,6 +271,7 @@ export function resolveComposition(item, options) {
     x: num(variant === 'stage' ? it.imageX : (it.listX != null ? it.listX : it.imageX), 0, RANGE.offset.min, RANGE.offset.max),
     y: num(variant === 'stage' ? it.imageY : (it.listY != null ? it.listY : it.imageY), 0, RANGE.offset.min, RANGE.offset.max),
     rot: num(it.imageRot, 0, RANGE.rot.min, RANGE.rot.max),
+    tilt: num(variant === 'stage' ? it.imageTilt : (it.listTilt != null ? it.listTilt : it.imageTilt), 0, RANGE.tilt.min, RANGE.tilt.max),
     blend: str(it.imageBlend, BLEND_IDS, 'normal'),
     filter: filterCss(it.imageFilter),
     blur: num(it.imageBlur, 0, RANGE.blur.min, RANGE.blur.max),
@@ -316,9 +325,13 @@ export function bgStyle(bg) {
 export function imgStyle(img, shadow) {
   if (!img) return null
   const t = []
+  // perspective() must LEAD the list — it only applies to the functions after
+  // it, so appended at the end it would be a silent no-op.
+  if (img.tilt) t.push('perspective(900px)')
   if (img.x || img.y) t.push(`translate(${img.x}%, ${img.y}%)`)
   if (img.scale !== 1) t.push(`scale(${img.scale})`)
   if (img.rot) t.push(`rotate(${img.rot}deg)`)
+  if (img.tilt) t.push(`rotateX(${img.tilt}deg)`)
   const s = {}
   if (t.length) s.transform = t.join(' ')
   const filters = []
@@ -395,6 +408,11 @@ export const WALL_RANGE = {
   // rejected. Now it is a dial: 1 keeps text bullet-proof on a busy photo wall,
   // 0 removes the panel entirely and trusts the wall to be calm enough.
   panel: { min: 0, max: 1, step: 0.05, dflt: 0.65 },
+  // The melt at the FOOT of every dish photo. It was the last hard-coded dark
+  // smear left on the room — a translucent canvas-coloured band the owner kept
+  // reporting as «خط شفاف داكن» over his photo wall. Now it is his dial:
+  // 1 melts the photo's base into the canvas as before, 0 draws nothing at all.
+  vignette: { min: 0, max: 1, step: 0.05, dflt: 0.72 },
 }
 
 /**
@@ -425,6 +443,7 @@ export function resolveWall(tenant) {
     tint: String(t.tint || ''),
     tintAmount: num(t.tintAmount, 0, 0, 1),
     panel: num(t.panel, R.panel.dflt, 0, 1),
+    vignette: num(t.vignette, R.vignette.dflt, 0, 1),
     // Whether the menu HEADER is built from this same wall. It belongs here and
     // not on a key of its own because it has no colours of its own: the theme
     // takes this bond, this clay and this mortar, scales the unit down to the
@@ -531,22 +550,55 @@ export const TABLE_EDGE_IDS = TABLE_EDGES.map((e) => e.id)
 export const TABLE_RANGE = {
   // how far the dish photo drops onto the surface, as a percent of the photo's
   // own height. This is the "the dish must sit exactly on it" dial.
-  lift: { min: 0, max: 40, step: 0.5, dflt: 10 },
+  lift: { min: 0, max: 60, step: 0.5, dflt: 10 },
   opacity: { min: 0, max: 1, step: 0.05, dflt: 1 },
   shade: { min: 0, max: 1, step: 0.05, dflt: 0.35 }, // how far the surface darkens toward the front
   radius: { min: 0, max: 40, step: 1, dflt: 0 },
   blur: { min: 0, max: 20, step: 0.5, dflt: 0 },
   scale: { min: 0.5, max: 3, step: 0.05, dflt: 1 },  // image tables only
   contact: { min: 0, max: 1, step: 0.05, dflt: 0.5 }, // the shadow where dish meets table
+  // FREE PLACEMENT («تحكم حر بالطاولة»). The table used to be bolted to the
+  // details panel's own box; these four move and size it against that box, so
+  // the venue slides it, widens it, shortens it — wherever the furniture goes.
+  // All defaults are the bolted position, so nothing moves for a saved venue.
+  x: { min: -60, max: 60, step: 0.5, dflt: 0 },   // percent of the panel box, physical
+  y: { min: -60, max: 60, step: 0.5, dflt: 0 },
+  w: { min: 40, max: 180, step: 1, dflt: 100 },   // percent of the bolted width
+  h: { min: 30, max: 220, step: 1, dflt: 100 },
+  // A flat darkening veil over the surface («تعتيم أكثر») — separate from shade,
+  // which only darkens toward the front, and from tint, which recolours.
+  dim: { min: 0, max: 0.85, step: 0.05, dflt: 0 },
+  // How strongly the surface dissolves into the canvas where the words live.
+  // 0.5 is exactly the old hard-coded behaviour; lower shows more material,
+  // higher melts it away sooner. The venue owns its own readability trade-off,
+  // the same way it owns the reading panel.
+  melt: { min: 0, max: 1, step: 0.05, dflt: 0.5 },
 }
+
+// The keys a venue may override FOR THE OPENED-ITEM WINDOW alone
+// (tenant.menuTable.stage = partial object). The dish window's panel is far
+// taller than a list panel — variants, story, options — so the same numbers
+// cannot fit both: the owner reported the table «لا تظهر بشكل مناسب عند فتح
+// الصنف». Geometry and strength may differ per place; the material may not —
+// it is one room with one table.
+export const TABLE_STAGE_KEYS = ['x', 'y', 'w', 'h', 'lift', 'opacity', 'shade', 'dim', 'melt', 'contact', 'scale']
 
 /**
  * The table under the dish details. Reads the TENANT document, because it is one
  * room; a venue that wants a different table per dish can still override with the
  * per-item surface library.
  */
-export function resolveTable(tenant) {
-  const t = (tenant && tenant.menuTable) || {}
+export function resolveTable(tenant, options) {
+  const base = (tenant && tenant.menuTable) || {}
+  // The opened-item window may carry its own geometry (see TABLE_STAGE_KEYS).
+  // Merged BEFORE clamping so an override obeys exactly the same bounds.
+  const variant = options && options.variant === 'stage' ? 'stage' : 'list'
+  let t = base
+  if (variant === 'stage' && base.stage && typeof base.stage === 'object') {
+    const over = {}
+    TABLE_STAGE_KEYS.forEach((k) => { if (base.stage[k] != null) over[k] = base.stage[k] })
+    t = { ...base, ...over }
+  }
   let kind = str(t.kind, TABLE_KIND_IDS, 'none')
   if (kind === 'none') return null
   const url = String(t.url || '')
@@ -573,7 +625,52 @@ export function resolveTable(tenant) {
     filter: filterCss(t.filter),
     tint: String(t.tint || ''),
     tintAmount: num(t.tintAmount, 0, 0, 1),
+    x: num(t.x, R.x.dflt, R.x.min, R.x.max),
+    y: num(t.y, R.y.dflt, R.y.min, R.y.max),
+    w: num(t.w, R.w.dflt, R.w.min, R.w.max),
+    h: num(t.h, R.h.dflt, R.h.min, R.h.max),
+    dim: num(t.dim, R.dim.dflt, 0, R.dim.max),
+    melt: num(t.melt, R.melt.dflt, 0, 1),
   }
+}
+
+/**
+ * The free-placement transform for the table box. Null while the table is in
+ * its bolted position, so the untouched path stays byte-identical.
+ * The origin is the TOP CENTRE: the top edge is where the dish sits, so height
+ * grows DOWNWARD and the seat never drifts while the venue resizes. x/y are
+ * physical on purpose — the dial is symmetric and the owner drags until the
+ * furniture looks right; a logical flip would make the preview and the menu
+ * agree and the two sliders feel reversed, which is worse.
+ */
+const n3 = (v) => Math.round(v * 1000) / 1000
+export function tableFreeStyle(tb) {
+  if (!tb) return null
+  if (!tb.x && !tb.y && tb.w === 100 && tb.h === 100) return null
+  const t = []
+  if (tb.x || tb.y) t.push(`translate(${tb.x}%, ${tb.y}%)`)
+  if (tb.w !== 100 || tb.h !== 100) t.push(`scale(${n3(tb.w / 100)}, ${n3(tb.h / 100)})`)
+  return { transform: t.join(' '), transformOrigin: '50% 0%' }
+}
+
+/**
+ * Where the surface starts dissolving into the canvas, as the two stops of the
+ * melt gradient. ONE function for the theme and the settings preview — the
+ * bright-material special case lived only in the theme before, so the preview
+ * showed a linen table the menu would never draw.
+ * `melt` slides both stops: 0.5 is exactly the old hard-coded pair, 0 pushes
+ * the melt off the bottom (full material), 1 pulls it to the top (all canvas).
+ */
+export const TABLE_BRIGHT_IDS = ['linen', 'rattanMat']
+export function tableMeltStops(tb) {
+  if (!tb) return { a: 16, b: 52 }
+  const bright = tb.kind === 'image' || TABLE_BRIGHT_IDS.includes(tb.material)
+  const a0 = bright ? 6 : 16
+  const b0 = bright ? 30 : Math.round(34 + tb.shade * 36)
+  const shift = (0.5 - tb.melt) * 130
+  const a = Math.max(0, Math.min(140, a0 + shift))
+  const b = Math.max(a + 6, Math.min(190, b0 + shift))
+  return { a: Math.round(a), b: Math.round(b) }
 }
 
 /** Inline style for the table panel itself. */
@@ -794,9 +891,40 @@ export const BUTTON_SKINS = [
 ]
 export const BUTTON_SKIN_IDS = BUTTON_SKINS.map((b) => b.id)
 
+// Which buttons wear the skin. 'primary' is the original set (view dish, add
+// to cart, the active chip, the AR button); 'all' reaches EVERY control in the
+// menu — category chips, size/option choices, the pairing bricks, the qty
+// steppers and the close button — «كل الازرار وليس الاساسية فقط».
+export const BUTTON_SCOPES = [
+  { id: 'primary', ar: 'الأزرار الأساسية', en: 'Primary buttons' },
+  { id: 'all', ar: 'كل الأزرار', en: 'Every button' },
+]
+export const BUTTON_SCOPE_IDS = BUTTON_SCOPES.map((s) => s.id)
+
+// The SHAPE of the face, over whichever skin is chosen. 'slab' is the owner's
+// «طوبة واحدة»: the face is ONE laid brick — a flat clay fired from the wall's
+// own colour under the mortar's lit arris and shadowed bed — instead of a
+// wall pattern shrunk until the units blur. The others are honest geometry:
+// pill and sharp override the radius outright, chamfer cuts the corners.
+export const BUTTON_SHAPES = [
+  { id: '', ar: 'حسب الاستدارة', en: 'Radius only' },
+  { id: 'slab', ar: 'طوبة واحدة', en: 'One laid brick' },
+  { id: 'pill', ar: 'كبسولة', en: 'Pill' },
+  { id: 'sharp', ar: 'حاد بلا استدارة', en: 'Sharp' },
+  { id: 'chamfer', ar: 'زوايا مشطوفة', en: 'Chamfered corners' },
+]
+export const BUTTON_SHAPE_IDS = BUTTON_SHAPES.map((s) => s.id)
+
 export const BUTTON_RANGE = {
   radius: { min: 0, max: 28, step: 1, dflt: 12 },
   scrim: { min: 0, max: 1, step: 0.05, dflt: 0.35 }, // veil over the face so the label reads
+  // The picture INSIDE the face («تكبير وتصغير الصورة داخل الزر»): 1 = cover the
+  // face exactly; below zooms out (the picture tiles), above zooms in. The two
+  // offsets choose WHICH part of the picture shows when it is bigger than the
+  // face. On the brick skin the same dial scales the wall's unit instead.
+  imgScale: { min: 0.2, max: 4, step: 0.05, dflt: 1 },
+  imgX: { min: 0, max: 100, step: 1, dflt: 50 },
+  imgY: { min: 0, max: 100, step: 1, dflt: 50 },
 }
 
 export function resolveButtons(tenant) {
@@ -809,8 +937,13 @@ export function resolveButtons(tenant) {
   return {
     skin,
     url,
+    scope: str(b.scope, BUTTON_SCOPE_IDS, 'primary'),
+    shape: str(b.shape, BUTTON_SHAPE_IDS, ''),
     radius: num(b.radius, R.radius.dflt, R.radius.min, R.radius.max),
     scrim: num(b.scrim, R.scrim.dflt, 0, 1),
+    imgScale: num(b.imgScale, R.imgScale.dflt, R.imgScale.min, R.imgScale.max),
+    imgX: num(b.imgX, R.imgX.dflt, R.imgX.min, R.imgX.max),
+    imgY: num(b.imgY, R.imgY.dflt, R.imgY.min, R.imgY.max),
     // ink is decided by the renderer from the face; a manual override exists for
     // the one photo the heuristic will inevitably get wrong.
     ink: b.ink === 'dark' ? 'dark' : 'light',

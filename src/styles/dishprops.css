@@ -101,10 +101,16 @@
     radial-gradient(72% 58% at 50% 100%, rgba(255, 255, 255, .07), transparent 70%);
 }
 
-/* ---- the venue's own furniture (first three entries of SURFACES) ---- */
+/* ---- the venue's own furniture (first three entries of SURFACES) ----
 
-/* dark walnut table — the real thing: a deep red-brown board with wide plank
-   seams, close grain from the wood SVG overlay, and the SATIN sheen a waxed
+   PHOTOGRAPHIC BASE («أسطح واقعية بالكامل»). Every material now ends its layer
+   stack with a real CC0 photograph of that material (public/textures/, sources
+   in SOURCES.txt there) — the bottom layer of the same stack, so the gradients
+   above it keep doing what they always did: paint the room light, the seams,
+   the sheen and the downward darkening the melt depends on. If a photo fails
+   to load the gradients still paint alone, exactly the old look. */
+
+/* dark walnut table — a real walnut board photo under the SATIN sheen a waxed
    solid-wood top has (a broad, soft specular band, not a mirror). */
 .dp-root[data-surface='venueWalnut'] .dp-plane,
 .edt-table-art[data-m='venueWalnut'] {
@@ -113,11 +119,11 @@
     radial-gradient(116% 82% at 50% 3%, rgba(226, 158, 92, .26), transparent 62%),
     /* satin sheen: one wide low-contrast band, off-axis */
     linear-gradient(97deg, transparent 26%, rgba(255, 228, 190, .07) 47%, rgba(255, 228, 190, .04) 56%, transparent 74%),
-    /* plank seams, wider apart than the generic wood so the board reads solid */
-    repeating-linear-gradient(90.5deg, rgba(23, 11, 5, .20) 0 2px, transparent 2px 96px),
-    /* close grain */
-    repeating-linear-gradient(90.5deg, rgba(23, 11, 5, .085) 0 5px, rgba(255, 220, 180, .022) 5px 11px),
-    linear-gradient(180deg, rgba(84, 47, 25, 0) 0%, rgba(84, 47, 25, .60) 12%, rgba(63, 34, 17, .96) 44%, rgba(38, 20, 10, 1) 100%);
+    /* the downward darkening the melt depends on — now translucent enough for
+       the wood to read through its upper half */
+    linear-gradient(180deg, rgba(84, 47, 25, 0) 0%, rgba(63, 34, 17, .42) 12%, rgba(45, 24, 12, .78) 44%, rgba(38, 20, 10, .96) 100%),
+    url('/textures/venueWalnut.jpg') center top / 560px auto repeat;
+  background-color: #26140a;
 }
 .dp-root[data-surface='venueWalnut'] .dp-grain { opacity: .48; }
 .dp-root[data-surface='venueWalnut'] .dp-horizon {
@@ -137,20 +143,21 @@
 .edt-table-art[data-m='brickLedge'] {
   background-color: rgba(58, 30, 17, 1);
   background-image:
-    /* vertical mortar joints — only across the front course */
-    repeating-linear-gradient(90deg, rgba(150, 116, 88, .40) 0 3px, transparent 3px 62px),
-    /* the mortar bed under the top face, and the top face itself */
+    /* the mortar bed under the top face, and the top face itself — translucent
+       enough below the lip for the photographed course to read through */
     linear-gradient(180deg,
       rgba(120, 62, 34, 0) 0%,
       rgba(120, 62, 34, .52) 12%,
-      rgba(102, 51, 27, .95) 42%,
-      rgba(158, 118, 88, .85) 48%,
-      rgba(139, 66, 35, 1) 52%,
-      rgba(112, 51, 26, 1) 84%,
-      rgba(66, 30, 15, 1) 100%);
-  background-size: 62px 48%, 100% 100%;
-  background-position: 0 100%, 0 0;
-  background-repeat: repeat-x, no-repeat;
+      rgba(102, 51, 27, .8) 42%,
+      rgba(158, 118, 88, .7) 48%,
+      rgba(120, 56, 28, .45) 52%,
+      rgba(80, 36, 18, .55) 84%,
+      rgba(52, 24, 12, .82) 100%),
+    /* the real brick course, warmed by the layer above */
+    url('/textures/brickLedge.jpg');
+  background-size: 100% 100%, 340px auto;
+  background-position: 0 0, center bottom;
+  background-repeat: no-repeat, repeat;
 }
 .dp-root[data-surface='brickLedge'] .dp-grain { opacity: 0; }
 .dp-root[data-surface='brickLedge'] .dp-horizon {
@@ -163,9 +170,9 @@
 .dp-root[data-surface='rattanMat'] .dp-plane,
 .edt-table-art[data-m='rattanMat'] {
   background:
-    repeating-linear-gradient(90deg, rgba(255, 236, 200, .10) 0 4px, rgba(60, 38, 20, .16) 4px 9px),
-    repeating-linear-gradient(0deg, rgba(255, 236, 200, .07) 0 4px, rgba(60, 38, 20, .13) 4px 9px),
-    linear-gradient(180deg, rgba(146, 111, 66, 0) 0%, rgba(140, 106, 62, .58) 12%, rgba(112, 84, 48, .95) 44%, rgba(58, 41, 22, 1) 100%);
+    linear-gradient(180deg, rgba(146, 111, 66, 0) 0%, rgba(120, 90, 52, .38) 12%, rgba(86, 64, 36, .68) 44%, rgba(52, 37, 20, .92) 100%),
+    url('/textures/rattanMat.jpg') center top / 460px auto repeat;
+  background-color: #3a2a16;
 }
 .dp-root[data-surface='rattanMat'] .dp-grain { opacity: .5; }
 .dp-root[data-surface='rattanMat'] .dp-horizon { opacity: .55; }
@@ -173,17 +180,22 @@
 /* dark marble — cool stone, faint warm veining, a real sheen */
 .dp-root[data-surface='darkMarble'] .dp-plane,
 .edt-table-art[data-m='darkMarble'] {
+  /* the onyx photo is a light stone; the veil above it is what makes it the
+     DARK marble the picker promises, while the veining still reads through */
   background:
     radial-gradient(120% 84% at 50% 6%, rgba(168, 168, 186, .13), transparent 62%),
-    linear-gradient(180deg, rgba(40, 39, 44, 0) 0%, rgba(40, 39, 44, .58) 15%, rgba(31, 30, 35, .93) 44%, rgba(19, 18, 21, 1) 100%);
+    linear-gradient(180deg, rgba(40, 39, 44, .42) 0%, rgba(34, 33, 38, .68) 15%, rgba(26, 25, 30, .88) 44%, rgba(19, 18, 21, .97) 100%),
+    url('/textures/darkMarble.jpg') center top / 640px auto repeat;
+  background-color: #131215;
 }
 /* warm wood — plank grain plus the venue copper bouncing off it */
 .dp-root[data-surface='warmWood'] .dp-plane,
 .edt-table-art[data-m='warmWood'] {
   background:
     radial-gradient(110% 78% at 50% 4%, rgba(201, 119, 58, .20), transparent 64%),
-    repeating-linear-gradient(91deg, rgba(0, 0, 0, .07) 0 7px, rgba(255, 255, 255, .018) 7px 15px),
-    linear-gradient(180deg, rgba(60, 36, 20, 0) 0%, rgba(60, 36, 20, .62) 13%, rgba(47, 28, 15, .96) 46%, rgba(27, 16, 9, 1) 100%);
+    linear-gradient(180deg, rgba(60, 36, 20, 0) 0%, rgba(56, 33, 18, .4) 13%, rgba(42, 25, 13, .72) 46%, rgba(27, 16, 9, .94) 100%),
+    url('/textures/warmWood.jpg') center top / 520px auto repeat;
+  background-color: #1b1009;
 }
 .dp-root[data-surface='warmWood'] .dp-grain { opacity: .55; }
 .dp-root[data-surface='warmWood'] .dp-horizon {
@@ -194,8 +206,9 @@
 .edt-table-art[data-m='brushedSteel'] {
   background:
     linear-gradient(104deg, transparent 34%, rgba(255, 255, 255, .06) 50%, transparent 64%),
-    repeating-linear-gradient(180deg, rgba(255, 255, 255, .035) 0 1px, transparent 1px 3px),
-    linear-gradient(180deg, rgba(104, 109, 116, 0) 0%, rgba(98, 103, 110, .52) 13%, rgba(70, 74, 80, .93) 44%, rgba(37, 40, 44, 1) 100%);
+    linear-gradient(180deg, rgba(104, 109, 116, 0) 0%, rgba(80, 84, 90, .45) 13%, rgba(56, 59, 64, .78) 44%, rgba(37, 40, 44, .95) 100%),
+    url('/textures/brushedSteel.jpg') center top / 640px auto repeat;
+  background-color: #25282c;
 }
 .dp-root[data-surface='brushedSteel'] .dp-grain { opacity: .9; }
 .dp-root[data-surface='brushedSteel'] .dp-reflect {
@@ -207,18 +220,19 @@
 .dp-root[data-surface='slate'] .dp-plane,
 .edt-table-art[data-m='slate'] {
   background:
-    radial-gradient(72% 58% at 76% 34%, rgba(0, 0, 0, .38), transparent 66%),
-    radial-gradient(82% 62% at 28% 16%, rgba(255, 255, 255, .055), transparent 62%),
-    linear-gradient(180deg, rgba(50, 52, 55, 0) 0%, rgba(46, 48, 51, .58) 13%, rgba(33, 35, 37, .96) 46%, rgba(17, 18, 20, 1) 100%);
+    radial-gradient(82% 62% at 28% 16%, rgba(255, 255, 255, .05), transparent 62%),
+    linear-gradient(180deg, rgba(50, 52, 55, 0) 0%, rgba(40, 42, 45, .42) 13%, rgba(28, 30, 32, .74) 46%, rgba(17, 18, 20, .94) 100%),
+    url('/textures/slate.jpg') center top / 560px auto repeat;
+  background-color: #111214;
 }
 .dp-root[data-surface='slate'] .dp-horizon { opacity: .5; }
 /* linen — woven thread, soft folds, warm and light-swallowing */
 .dp-root[data-surface='linen'] .dp-plane,
 .edt-table-art[data-m='linen'] {
   background:
-    repeating-linear-gradient(90deg, rgba(255, 255, 255, .026) 0 2px, transparent 2px 4px),
-    repeating-linear-gradient(0deg, rgba(0, 0, 0, .05) 0 2px, transparent 2px 4px),
-    linear-gradient(180deg, rgba(84, 71, 58, 0) 0%, rgba(79, 67, 55, .56) 13%, rgba(60, 51, 41, .95) 46%, rgba(33, 27, 22, 1) 100%);
+    linear-gradient(180deg, rgba(84, 71, 58, 0) 0%, rgba(72, 60, 48, .4) 13%, rgba(54, 45, 36, .72) 46%, rgba(33, 27, 22, .93) 100%),
+    url('/textures/linen.jpg') center top / 440px auto repeat;
+  background-color: #211b16;
 }
 .dp-root[data-surface='linen'] .dp-grain { opacity: .8; }
 .dp-root[data-surface='linen'] .dp-horizon { opacity: .35; }

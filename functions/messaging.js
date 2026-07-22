@@ -163,7 +163,10 @@ const STATUS_AR = {
   accepted: 'تم قبول طلبك', preparing: 'جارٍ تحضير طلبك', ready: 'طلبك جاهز',
   served: 'تم تقديم طلبك', paid: 'تم استلام الدفع', cancelled: 'تم إلغاء طلبك', refunded: 'تم استرجاع مبلغ طلبك',
 }
-const NOTIFY_STATUSES = ['accepted', 'preparing', 'ready', 'served', 'cancelled', 'refunded']
+// 'paid' is the thank-you moment: the guest has finished and settled, so the
+// message that fires there says thank you, asks for a rating and hands them the
+// venue's Google Maps link (tenant.googleMapsUrl) — not just a status line.
+const NOTIFY_STATUSES = ['accepted', 'preparing', 'ready', 'served', 'paid', 'cancelled', 'refunded']
 
 // A WhatsApp template parameter. Meta REJECTS the whole message when a parameter
 // is empty or contains a newline/tab, so every value is collapsed to one line
@@ -239,6 +242,19 @@ const onOrderCustomerNotify = onDocumentUpdated('tenants/{tid}/orders/{oid}', as
   const totalText = money(after.total, after.currency)
   const { shown, hidden, count } = orderLines(after)
 
+  // THE THANK-YOU MOMENT. On 'paid' the guest is done: thank them by name, ask
+  // for a rating, and hand them the venue's Google Maps link if the venue set
+  // one (tenant.googleMapsUrl — the settings screen's «رابط خرائط جوجل»).
+  // msgTemplates.thankYou lets the venue write its own words.
+  const isPaid = after.status === 'paid'
+  const mapsUrl = /^https?:\/\//.test(String(tenant.googleMapsUrl || '')) ? String(tenant.googleMapsUrl).trim() : ''
+  const thankText = (tenant.msgTemplates && tenant.msgTemplates.thankYou)
+    ? fillTpl(tenant.msgTemplates.thankYou)
+    : `شكراً لك${after.customerName ? ` يا ${customerName}` : ''} على زيارتك لـ${venueName} — سعدنا بخدمتك ونتمنى أن يكون كل شيء نال رضاك.`
+  const rateLine = mapsUrl
+    ? `يسعدنا تقييمك لنا على خرائط جوجل: ${mapsUrl}`
+    : 'يسعدنا سماع رأيك في زيارتك القادمة.'
+
   if (phone && ch.whatsapp !== false) {
     // Venue's own approved template name wins; else the platform template.
     const tmpl = (creds && creds.templates && creds.templates.templateOrderUpdate) || process.env.WA_TEMPLATE_ORDER_UPDATE
@@ -252,6 +268,10 @@ const onOrderCustomerNotify = onDocumentUpdated('tenants/{tid}/orders/{oid}', as
         ? [customerName, waParam(venueName), waParam(code, '-'), waParam(statusText), waParam(totalText)]
         : [waParam(venueName), waParam(code, '-'), waParam(statusText)]
       await sendWhatsAppTemplate(phone, tmpl, lang, params, creds).catch(() => {})
+      // the thank-you words cannot ride inside an approved template's fixed
+      // body, so they follow as a free-form line (delivered inside the 24h
+      // service window; best effort, never blocks the status template)
+      if (isPaid) await sendWhatsAppText(phone, `${thankText}\n${rateLine}`, creds).catch(() => {})
     } else {
       // No approved template configured yet → best-effort free-form (24h window only).
       const lines = [
@@ -261,6 +281,7 @@ const onOrderCustomerNotify = onDocumentUpdated('tenants/{tid}/orders/{oid}', as
         `رقم الطلب: ${code || '-'}`,
         `الحالة: ${statusText}`,
         `الإجمالي: ${totalText}`,
+        ...(isPaid ? ['', thankText, rateLine] : []),
       ].join('\n')
       await sendWhatsAppText(phone, customText ? fillTpl(customText) : lines, creds).catch(() => {})
     }
@@ -283,6 +304,13 @@ const onOrderCustomerNotify = onDocumentUpdated('tenants/{tid}/orders/{oid}', as
         </tr>
       </table>` : ''
     const where = after.tableLabel ? `<p style="margin:0 0 6px;color:#5c6270;font-size:13px;">الطاولة: ${esc(after.tableLabel)}</p>` : ''
+    // the paid email carries the thank-you and, when the venue set one, a real
+    // Google-Maps rating button — the moment the guest is most likely to rate
+    const thanksBlock = isPaid ? `
+         <p style="margin:14px 0 8px;font-size:14px;">${esc(thankText)}</p>
+         ${mapsUrl
+    ? `<p style="margin:0 0 4px;"><a href="${esc(mapsUrl)}" style="display:inline-block;padding:10px 18px;background:#7c2d2d;color:#ffffff;border-radius:10px;text-decoration:none;font-weight:700;font-size:14px;">قيّمنا على خرائط جوجل</a></p>`
+    : `<p style="margin:0 0 4px;color:#5c6270;font-size:13px;">${esc(rateLine)}</p>`}` : ''
     await sendEmail({
       to: email, subject: `${venueName} — ${statusText} ${code}`.replace(/[\r\n]+/g, ' '),
       fromName: venueName, replyTo: tenant.contactEmail || undefined,
@@ -293,6 +321,7 @@ const onOrderCustomerNotify = onDocumentUpdated('tenants/{tid}/orders/{oid}', as
          <p style="margin:0 0 6px;color:#5c6270;font-size:13px;">رقم الطلب: <span dir="ltr">${esc(code || '-')}</span></p>
          ${where}
          ${table}
+         ${thanksBlock}
          <p style="margin:0;color:#5c6270;font-size:12.5px;">هذه رسالة آلية بخصوص طلبك لدى ${esc(venueName)}.</p>`,
         `${statusText} — ${venueName}`,
       ),

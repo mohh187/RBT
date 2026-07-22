@@ -1019,11 +1019,101 @@ const imageTo3d = onCall({ timeoutSeconds: 540, memory: '1GiB' }, async (request
   return { url, usdzUrl: usdzStoredUrl, remaining: Math.max(0, cap - monthJobs.length - 1), cap }
 })
 
+// ============ AI tabletop for the menu room (Gemini image) ============
+// «أضف الذكاء في مكان الطاولة»: the venue asks for a tabletop that matches its
+// room and gets a photograph written by the image model — steered by the wall's
+// own bond, finish and clay colour plus an optional hint — stored in the venue
+// library and returned as a URL the settings card wires straight into
+// tenant.menuTable as kind:'image'. Fail-soft honest like imageTo3d: without a
+// key the callable says exactly what to configure.
+const TABLE_WALL_WORDS = {
+  running: 'red-brown brick', stack: 'stack-bond brick', herringbone: 'herringbone brick',
+  basket: 'basketweave brick', roman: 'long roman brick', stone: 'rustic stone',
+  plaster: 'warm plaster', wood: 'wood-panelled',
+}
+const generateTableImage = onCall({ timeoutSeconds: 120, memory: '512MiB' }, async (request) => {
+  const key = process.env.GEMINI_API_KEY || process.env.VITE_GEMINI_API_KEY
+  if (!key) {
+    throw new HttpsError('failed-precondition',
+      'توليد صور الطاولات يحتاج GEMINI_API_KEY في functions/.env ثم إعادة نشر الدوال.')
+  }
+  const { tenantId, hint, wall } = request.data || {}
+  if (!tenantId) throw new HttpsError('invalid-argument', 'tenantId required')
+  const uid = request.auth && request.auth.uid
+  if (!uid) throw new HttpsError('unauthenticated', 'sign in')
+  const db = getFirestore()
+  const uSnap = await db.collection('users').doc(uid).get()
+  const u = uSnap.exists ? uSnap.data() : {}
+  if (u.tenantId !== tenantId || !['owner', 'manager'].includes(u.role)) throw new HttpsError('permission-denied', 'managers only')
+  // Credit protection, same shape as imageTo3d: image generation burns platform
+  // credit, so a modest monthly cap per venue.
+  const CAP = 30
+  const monthStart = new Date()
+  monthStart.setDate(1); monthStart.setHours(0, 0, 0, 0)
+  const jobs = await db.collection(`tenants/${tenantId}/aiImageJobs`)
+    .where('createdAt', '>=', monthStart).get().catch(() => null)
+  const used = jobs ? jobs.size : 0
+  if (used >= CAP) {
+    throw new HttpsError('resource-exhausted', `اكتمل حد توليد الصور لهذا الشهر (${CAP} صورة). يتجدد مطلع الشهر.`)
+  }
+
+  const w = wall && typeof wall === 'object' ? wall : {}
+  const clean = (s, n) => String(s || '').replace(/[\r\n"]+/g, ' ').trim().slice(0, n)
+  const roomWord = TABLE_WALL_WORDS[String(w.pattern || '')] || ''
+  const prompt = [
+    'A photorealistic photograph of an EMPTY restaurant tabletop surface filling the whole frame edge to edge,',
+    'seen straight-on and slightly from the front, like a dining table directly in front of the camera,',
+    clean(hint, 120) ? `surface style: ${clean(hint, 120)},` : 'surface style: dark walnut wood with warm natural grain,',
+    roomWord ? `belonging to a ${roomWord}-walled room with warm amber lantern light,` : 'belonging to a warm brick-walled room with amber lantern light,',
+    /^#[0-9a-fA-F]{3,8}$/.test(String(w.color || '')) ? `the room's wall clay colour is about ${w.color},` : '',
+    'soft warm side lighting, fine texture detail,',
+    'strictly empty: no plates, no food, no cutlery, no people, no hands, no text, no watermark,',
+    'horizontal, evenly lit, usable as a clean background surface under food photography',
+  ].filter(Boolean).join(' ')
+
+  const endpoint = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-image:generateContent?key=${key}`
+  const res = await fetch(endpoint, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      contents: [{ parts: [{ text: prompt }] }],
+      generationConfig: { responseModalities: ['TEXT', 'IMAGE'] },
+    }),
+  })
+  const body = await res.json().catch(() => null)
+  if (!res.ok) {
+    console.error('generateTableImage provider error', { status: res.status, body: JSON.stringify(body || {}).slice(0, 300) })
+    throw new HttpsError('internal', 'مزود الصور رفض الطلب — أعد المحاولة بعد قليل.')
+  }
+  // the image arrives inline, base64, camelCase or snake_case depending on the
+  // serving stack — accept both rather than betting on one
+  const parts = (body && body.candidates && body.candidates[0] && body.candidates[0].content && body.candidates[0].content.parts) || []
+  const imgPart = parts.find((p) => (p.inlineData && p.inlineData.data) || (p.inline_data && p.inline_data.data))
+  const inline = imgPart ? (imgPart.inlineData || imgPart.inline_data) : null
+  if (!inline || !inline.data) throw new HttpsError('internal', 'النموذج لم يرجع صورة — جرّب وصفاً أوضح للخامة.')
+  const mime = inline.mimeType || inline.mime_type || 'image/png'
+  const ext = mime.includes('jpeg') ? 'jpg' : mime.includes('webp') ? 'webp' : 'png'
+  const buf = Buffer.from(inline.data, 'base64')
+  const bucket = getStorage().bucket()
+  const stamp = Date.now()
+  const path = `tenants/${tenantId}/library/tables/ai-${stamp}.${ext}`
+  const token = nodeCrypto.randomUUID()
+  await bucket.file(path).save(buf, {
+    metadata: { contentType: mime, metadata: { firebaseStorageDownloadTokens: token } },
+  })
+  const url = `https://firebasestorage.googleapis.com/v0/b/${bucket.name}/o/${encodeURIComponent(path)}?alt=media&token=${token}`
+  await db.collection(`tenants/${tenantId}/aiImageJobs`).add({
+    kind: 'table', by: uid, url, hint: clean(hint, 120), createdAt: FieldValue.serverTimestamp(),
+  }).catch(() => {})
+  return { url, remaining: Math.max(0, CAP - used - 1), cap: CAP }
+})
+
 module.exports = {
   generateMonthlyInvoices,
   setPlatformRole,
   startPlanSubscription,
   imageTo3d,
+  generateTableImage,
   requestVenueExport,
   createPayIntent,
   issueFreeTicket,
