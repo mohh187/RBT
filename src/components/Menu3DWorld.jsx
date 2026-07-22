@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { createPortal } from 'react-dom'
 import { usePortalRoot } from './PortalRoot.jsx'
+import { useScrollLock } from '../lib/scrollLock.js'
 import { pickLang } from '../lib/i18n.jsx'
 import Icon from './Icon.jsx'
 import ItemFx from './ItemFx.jsx'
@@ -104,12 +105,7 @@ export default function Menu3DWorld({ open, onClose, items = [], cats = [], lang
   }, [open])
 
   // Lock the page behind the overlay.
-  useEffect(() => {
-    if (!open) return undefined
-    const prev = document.body.style.overflow
-    document.body.style.overflow = 'hidden'
-    return () => { document.body.style.overflow = prev }
-  }, [open])
+  useScrollLock(open)
 
   // Active slide = the one covering most of the rail. IntersectionObserver keeps
   // this cheap (no scroll listener) and is what gates the WebGL context budget.

@@ -19,6 +19,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { createPortal } from 'react-dom'
 import AdSurface from './ads/AdSurface.jsx'
 import { usePortalRoot } from './PortalRoot.jsx'
+import { useScrollLock } from '../lib/scrollLock.js'
 import { deviceKey } from '../lib/device.js'
 import {
   watchAds, pickAd, markSeen, readSeen, sessionId, noteVisit,
@@ -106,12 +107,7 @@ export default function AdPopup({
   // A popup or fullscreen ad owns the screen while it is up, so the page behind
   // it must not scroll. A banner deliberately does not lock anything — leaving
   // the menu usable is the entire point of that placement.
-  useEffect(() => {
-    if (!shown || shown.kind === 'banner') return undefined
-    const prev = document.body.style.overflow
-    document.body.style.overflow = 'hidden'
-    return () => { document.body.style.overflow = prev }
-  }, [shown])
+  useScrollLock(!!shown && shown.kind !== 'banner')
 
   // ---- scroll depth ----
   useEffect(() => {

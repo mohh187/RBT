@@ -2,6 +2,7 @@ import { useEffect } from 'react'
 import { createPortal } from 'react-dom'
 import { useI18n } from '../lib/i18n.jsx'
 import { usePortalRoot } from './PortalRoot.jsx'
+import { useScrollLock } from '../lib/scrollLock.js'
 import Icon from './Icon.jsx'
 
 // Bottom sheet (mobile-first modal). Renders nothing when !open.
@@ -10,15 +11,12 @@ import Icon from './Icon.jsx'
 export default function Sheet({ open, onClose, title, children, footer, tall = false, full = false, className = '', windowStyle = {}, bgNode }) {
   const { t } = useI18n()
   const portalRoot = usePortalRoot()
+  useScrollLock(open)
   useEffect(() => {
     if (!open) return
     const onKey = (e) => e.key === 'Escape' && onClose?.()
     document.addEventListener('keydown', onKey)
-    document.body.style.overflow = 'hidden'
-    return () => {
-      document.removeEventListener('keydown', onKey)
-      document.body.style.overflow = ''
-    }
+    return () => document.removeEventListener('keydown', onKey)
   }, [open, onClose])
 
   if (!open) return null

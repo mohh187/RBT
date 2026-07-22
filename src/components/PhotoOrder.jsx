@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react'
 import { createPortal } from 'react-dom'
 import { usePortalRoot } from './PortalRoot.jsx'
+import { useScrollLock } from '../lib/scrollLock.js'
 import { pickLang } from '../lib/i18n.jsx'
 import Icon from './Icon.jsx'
 import { Price } from './Riyal.jsx'
@@ -127,13 +128,12 @@ export default function PhotoOrder({ open, onClose, items = [], allItems = null,
 
   useEffect(() => { if (!open) reset() }, [open])
 
+  useScrollLock(open)
   useEffect(() => {
     if (!open) return undefined
     const onKey = (e) => { if (e.key === 'Escape') onClose?.() }
     document.addEventListener('keydown', onKey)
-    const prev = document.body.style.overflow
-    document.body.style.overflow = 'hidden'
-    return () => { document.removeEventListener('keydown', onKey); document.body.style.overflow = prev }
+    return () => document.removeEventListener('keydown', onKey)
   }, [open, onClose])
 
   const onFile = async (e) => {

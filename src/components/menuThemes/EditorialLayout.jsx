@@ -30,6 +30,7 @@ import ItemFx from '../ItemFx.jsx'
 import { Stepper, Empty } from '../ui.jsx'
 import { Price } from '../Riyal.jsx'
 import { usePortalRoot } from '../PortalRoot.jsx'
+import { useScrollLock } from '../../lib/scrollLock.js'
 import { hasStory } from '../DishStory.jsx'
 import { offerForItem, discountedPrice, itemOfferLabel } from '../../lib/offers.js'
 // Surface + garnish scatter behind the dish cutout (see lib/dishProps.js).
@@ -1665,12 +1666,11 @@ export function EditorialItemStage({ item, tenant = null, currency, onClose, onA
   }
 
   // Scroll lock + Escape while the stage is up.
+  useScrollLock(true)
   useEffect(() => {
-    const prev = document.documentElement.style.overflow
-    document.documentElement.style.overflow = 'hidden'
     const onKey = (e) => { if (e.key === 'Escape') close() }
     window.addEventListener('keydown', onKey)
-    return () => { document.documentElement.style.overflow = prev; window.removeEventListener('keydown', onKey) }
+    return () => window.removeEventListener('keydown', onKey)
   }, []) // eslint-disable-line react-hooks/exhaustive-deps
 
   useEffect(() => () => clearTimeout(addedTimer.current), [])

@@ -2,6 +2,7 @@ import { useCallback, useEffect, useRef, useState } from 'react'
 import { createPortal } from 'react-dom'
 import Icon from './Icon.jsx'
 import { usePortalRoot } from './PortalRoot.jsx'
+import { useScrollLock } from '../lib/scrollLock.js'
 
 // Universal fullscreen file viewer — pro replacement for the simple Lightbox
 // (which stays untouched for back-compat). Handles image (pinch/wheel zoom +
@@ -149,12 +150,7 @@ export default function Viewer({ open, items = [], index = 0, onClose, onIndexCh
   }, [open, requestClose, go, rtl])
 
   // body scroll lock while open
-  useEffect(() => {
-    if (!open) return
-    const prev = document.body.style.overflow
-    document.body.style.overflow = 'hidden'
-    return () => { document.body.style.overflow = prev }
-  }, [open])
+  useScrollLock(open)
 
   // reset per item / per open
   useEffect(() => {

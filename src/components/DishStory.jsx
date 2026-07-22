@@ -1,6 +1,7 @@
 import { useEffect } from 'react'
 import { createPortal } from 'react-dom'
 import { usePortalRoot } from './PortalRoot.jsx'
+import { useScrollLock } from '../lib/scrollLock.js'
 import { pickLang } from '../lib/i18n.jsx'
 import Icon from './Icon.jsx'
 
@@ -48,16 +49,12 @@ export default function DishStory({ open, onClose, item, tenant, lang = 'ar' }) 
   const root = usePortalRoot()
   const on = !!(open && hasStory(item))
 
+  useScrollLock(on)
   useEffect(() => {
     if (!on) return undefined
-    const prev = document.body.style.overflow
-    document.body.style.overflow = 'hidden'
     const onKey = (e) => { if (e.key === 'Escape') onClose?.() }
     window.addEventListener('keydown', onKey)
-    return () => {
-      document.body.style.overflow = prev
-      window.removeEventListener('keydown', onKey)
-    }
+    return () => window.removeEventListener('keydown', onKey)
   }, [on, onClose])
 
   if (!on || !root) return null

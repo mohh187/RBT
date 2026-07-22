@@ -2,6 +2,7 @@ import { useCallback, useEffect, useRef, useState } from 'react'
 import { createPortal } from 'react-dom'
 import Icon from '../Icon.jsx'
 import { usePortalRoot } from '../PortalRoot.jsx'
+import { useScrollLock } from '../../lib/scrollLock.js'
 
 // Fullscreen image inspector for the generation log: wheel / pinch / button zoom,
 // drag to pan, double-tap to toggle, Escape to close. Transform is written
@@ -81,13 +82,9 @@ export default function GenImageZoom({ src, alt = '', onClose }) {
       else if (e.key === '0') zoomTo(1)
     }
     document.addEventListener('keydown', onKey)
-    const prev = document.body.style.overflow
-    document.body.style.overflow = 'hidden'
-    return () => {
-      document.removeEventListener('keydown', onKey)
-      document.body.style.overflow = prev
-    }
+    return () => document.removeEventListener('keydown', onKey)
   }, [onClose, zoomTo])
+  useScrollLock(true)
 
   useEffect(() => () => { if (raf.current) cancelAnimationFrame(raf.current) }, [])
 

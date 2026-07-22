@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react'
 import { createPortal } from 'react-dom'
 import { usePortalRoot } from './PortalRoot.jsx'
+import { useScrollLock } from '../lib/scrollLock.js'
 import { pickLang } from '../lib/i18n.jsx'
 import Icon from './Icon.jsx'
 import { Stepper } from './ui.jsx'
@@ -152,13 +153,12 @@ export default function VoiceWaiter({ open, onClose, items = [], allItems = null
     return undefined
   }, [open])
 
+  useScrollLock(open)
   useEffect(() => {
     if (!open) return undefined
     const onKey = (e) => { if (e.key === 'Escape') { shutdown(); onClose?.() } }
     document.addEventListener('keydown', onKey)
-    const prev = document.body.style.overflow
-    document.body.style.overflow = 'hidden'
-    return () => { document.removeEventListener('keydown', onKey); document.body.style.overflow = prev }
+    return () => document.removeEventListener('keydown', onKey)
   }, [open, onClose])
 
   // ---- the pipeline (shared by voice AND the typed fallback) ----------------

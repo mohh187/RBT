@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from 'react'
 import { createPortal } from 'react-dom'
 import { usePortalRoot } from './PortalRoot.jsx'
+import { useScrollLock } from '../lib/scrollLock.js'
 import { pickLang } from '../lib/i18n.jsx'
 import Icon from './Icon.jsx'
 import { Price } from './Riyal.jsx'
@@ -62,16 +63,12 @@ export default function CompareItems({ open, onClose, items = [], preselected = 
     setQ('')
   }, [open])
 
+  useScrollLock(open)
   useEffect(() => {
     if (!open) return undefined
-    const prev = document.body.style.overflow
-    document.body.style.overflow = 'hidden'
     const onKey = (e) => { if (e.key === 'Escape') onClose?.() }
     window.addEventListener('keydown', onKey)
-    return () => {
-      document.body.style.overflow = prev
-      window.removeEventListener('keydown', onKey)
-    }
+    return () => window.removeEventListener('keydown', onKey)
   }, [open, onClose])
 
   const list = useMemo(() => picked.map((id) => byId[id]).filter(Boolean), [picked, byId])

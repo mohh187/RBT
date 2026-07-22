@@ -5,6 +5,7 @@
 import { useEffect, useState } from 'react'
 import { createPortal } from 'react-dom'
 import { usePortalRoot } from './PortalRoot.jsx'
+import { useScrollLock } from '../lib/scrollLock.js'
 import Icon from './Icon.jsx'
 import { Price } from './Riyal.jsx'
 import { fmtNum } from '../lib/format.js'
@@ -84,15 +85,12 @@ export default function YearWrapped({ open, onClose, stats, venueName = '', lang
   const portalRoot = usePortalRoot()
   const [toast, setToast] = useState('')
 
+  useScrollLock(open)
   useEffect(() => {
     if (!open) return undefined
     const onKey = (e) => e.key === 'Escape' && onClose?.()
     document.addEventListener('keydown', onKey)
-    document.body.style.overflow = 'hidden'
-    return () => {
-      document.removeEventListener('keydown', onKey)
-      document.body.style.overflow = ''
-    }
+    return () => document.removeEventListener('keydown', onKey)
   }, [open, onClose])
 
   useEffect(() => {
