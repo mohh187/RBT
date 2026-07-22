@@ -963,7 +963,7 @@ export default function MenuView({ tenant, tenantId, items, categories, offers =
     // special dishes — data-film + --feat-film carry the venue's plaster dial
     // (resolveFeatured; 0 = attribute absent, byte-identical)
     special: () => (special.length > 0 && !search.trim() && !isHidden('special') && menuLayout !== 'storefront' ? (
-      <div className="container special-sec" data-menu-layout={menuLayout} data-featured-style={tenant?.featuredStyle || 'soft'} data-film={featured.film > 0 ? '1' : undefined} style={{ marginTop: 'var(--sp-4)', ...(featured.film > 0 ? { '--feat-film': featured.film } : {}) }}>
+      <div className="container special-sec" data-menu-layout={menuLayout} data-featured-style={tenant?.featuredStyle || 'soft'} data-film={featured.film > 0 ? '1' : undefined} style={{ marginTop: 'var(--sp-4)', ...(featured.film > 0 ? { '--feat-film': featured.film } : {}), ...(featured.scale !== 1 ? { '--feat-scale': featured.scale } : {}) }}>
         <div className="special-head">
           <Icon name={featuredMode === 'auto' ? 'flame' : 'star'} size={16} />
           <strong>{featuredMode === 'auto' ? (lang === 'ar' ? 'الأكثر طلباً' : 'Best sellers') : t('specialDishes')}</strong>

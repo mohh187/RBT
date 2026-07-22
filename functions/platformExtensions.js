@@ -925,19 +925,26 @@ const imageTo3d = onCall({ timeoutSeconds: 540, memory: '1GiB' }, async (request
   // Meshy credits, so venues get a monthly cap (tenant.ar3dMonthly, default 20,
   // platform console edits it) + max 2 conversions per item per month.
   const AR3D_DEFAULT_MONTHLY = 20
-  const cap = Math.max(0, Number(td.ar3dMonthly) || AR3D_DEFAULT_MONTHLY)
-  const monthStart = new Date()
-  monthStart.setDate(1); monthStart.setHours(0, 0, 0, 0)
-  const jobsSnap = await db.collection(`tenants/${tenantId}/ar3dJobs`)
-    .where('createdAt', '>=', monthStart).get().catch(() => null)
-  const monthJobs = jobsSnap ? jobsSnap.docs.map((d) => d.data()).filter((j) => j.status === 'done' || j.status === 'running') : []
-  if (monthJobs.length >= cap) {
-    throw new HttpsError('resource-exhausted',
-      `اكتمل حد التحويلات الواقعية لهذا الشهر (${cap} تحويلاً). يتجدد الحد مطلع الشهر، أو تواصل مع المنصة لرفعه.`)
-  }
-  if (itemId && monthJobs.filter((j) => j.itemId === itemId).length >= 2) {
-    throw new HttpsError('resource-exhausted',
-      'هذا الصنف حُوِّل مرتين هذا الشهر — الحد تحويلان لكل صنف شهرياً حمايةً للرصيد. عدِّل صورة الصنف جيداً قبل إعادة المحاولة الشهر القادم.')
+  // TEMPORARY open-generation switch: tenant.ar3dUnlimited === true skips the
+  // venue-monthly AND per-item caps (platform sets/clears it in Firestore —
+  // restoring the caps is a data flip, no deploy). The Meshy provider-balance
+  // guard below stays live either way; that wallet is still the real wall.
+  const uncapped = td.ar3dUnlimited === true
+  if (!uncapped) {
+    const cap = Math.max(0, Number(td.ar3dMonthly) || AR3D_DEFAULT_MONTHLY)
+    const monthStart = new Date()
+    monthStart.setDate(1); monthStart.setHours(0, 0, 0, 0)
+    const jobsSnap = await db.collection(`tenants/${tenantId}/ar3dJobs`)
+      .where('createdAt', '>=', monthStart).get().catch(() => null)
+    const monthJobs = jobsSnap ? jobsSnap.docs.map((d) => d.data()).filter((j) => j.status === 'done' || j.status === 'running') : []
+    if (monthJobs.length >= cap) {
+      throw new HttpsError('resource-exhausted',
+        `اكتمل حد التحويلات الواقعية لهذا الشهر (${cap} تحويلاً). يتجدد الحد مطلع الشهر، أو تواصل مع المنصة لرفعه.`)
+    }
+    if (itemId && monthJobs.filter((j) => j.itemId === itemId).length >= 2) {
+      throw new HttpsError('resource-exhausted',
+        'هذا الصنف حُوِّل مرتين هذا الشهر — الحد تحويلان لكل صنف شهرياً حمايةً للرصيد. عدِّل صورة الصنف جيداً قبل إعادة المحاولة الشهر القادم.')
+    }
   }
   // Fail-soft provider-balance guard: warn out loudly before burning a task on
   // an empty Meshy wallet (endpoint shape may change — never block on it).

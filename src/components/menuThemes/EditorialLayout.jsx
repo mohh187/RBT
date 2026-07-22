@@ -1355,7 +1355,7 @@ export default function EditorialLayout({ tenant = null, cats, itemsByCat, visib
                 key={it.id} it={it} idx={i} catLabel={catName(it.categoryId)}
                 currency={currency} offers={offers} lang={lang} t={t} onOpen={onOpen}
                 allItems={allItems} onQuickAdd={onQuickAdd} showPairings={showPairings}
-                table={table} dishShadow={shadows ? shadows.dish : 1}
+                table={table} dishShadow={shadows ? shadows.dish : 1} tenant={tenant}
               />
             ))}
           </div>
@@ -1366,7 +1366,15 @@ export default function EditorialLayout({ tenant = null, cats, itemsByCat, visib
   )
 }
 
-function EdtSection({ it, idx, catLabel, currency, offers, lang, t, onOpen, allItems = [], onQuickAdd = null, showPairings = true, table = null, dishShadow = 1 }) {
+function EdtSection({ it, idx, catLabel, currency, offers, lang, t, onOpen, allItems = [], onQuickAdd = null, showPairings = true, table = null, dishShadow = 1, tenant = null }) {
+  // «التحكم في الطاولة بشكل مستقل لكل صنف»: a dish carrying item.table gets
+  // its own resolve (every key falling back to the room's), everyone else
+  // shares the room table the parent resolved once.
+  const ownTblKey = it.table && typeof it.table === 'object' ? JSON.stringify(it.table) : ''
+  const secTable = useMemo(
+    () => (ownTblKey ? resolveTable(tenant, { variant: 'list', item: it }) : table),
+    [ownTblKey, table] // eslint-disable-line react-hooks/exhaustive-deps
+  )
   const ref = useRef(null)
   const { fit, bind, nodeRef, onLoad } = useImgFit()
   const [inview, setInview] = useState(false)
@@ -1430,7 +1438,7 @@ function EdtSection({ it, idx, catLabel, currency, offers, lang, t, onOpen, allI
   }
 
   return (
-    <section ref={ref} data-idx={idx} data-item-id={it.id} data-fit={fit || undefined} data-table={table ? '1' : undefined} className={`edt-sec ${inview ? 'in' : ''} ${out ? 'is-out' : ''}`}>
+    <section ref={ref} data-idx={idx} data-item-id={it.id} data-fit={fit || undefined} data-table={secTable ? '1' : undefined} className={`edt-sec ${inview ? 'in' : ''} ${out ? 'is-out' : ''}`}>
       <span className="edt-side" aria-hidden="true">{catLabel}</span>
       <div className="edt-photo" data-fit={fit || undefined} data-dp-contact={dpShadow(it)} data-dp-reflect={dpReflect(it)}>
         <span className="edt-glow" aria-hidden="true" />
@@ -1440,14 +1448,14 @@ function EdtSection({ it, idx, catLabel, currency, offers, lang, t, onOpen, allI
         <DishProps item={dpItem} active={inview} catName={catLabel} />
         <EdtBackdrop bg={comp.bg} />
         <EdtLayers list={comp.layers.behind} />
-        <EdtDish comp={comp} src={it.imageUrl} anim={animAttr(comp)} bind={bind} onLoad={onLoad} fallback={64} lift={table ? table.lift : 0} />
+        <EdtDish comp={comp} src={it.imageUrl} anim={animAttr(comp)} bind={bind} onLoad={onLoad} fallback={64} lift={secTable ? secTable.lift : 0} />
         <EdtLayers list={comp.layers.front} />
         <span className="edt-vignette" aria-hidden="true" />
         <button type="button" className="edt-photo-open" onClick={open} aria-label={name} tabIndex={-1} disabled={out} />
         {it.hotspots?.length ? <Suspense fallback={null}><DishHotspots hotspots={it.hotspots} /></Suspense> : null}
       </div>
       <div className="edt-main">
-        <EdtTable tb={table} />
+        <EdtTable tb={secTable} />
         <h2 className="edt-name">{name}</h2>
         <div className="edt-price">
           <Price value={price} currency={currency} lang={lang} />
@@ -1572,7 +1580,10 @@ export function EditorialItemStage({ item, tenant = null, currency, onClose, onA
   const secVars = sectionVars(resolveSections(tenant))
   // The stage variant: the same table, but the venue may have re-seated it for
   // this far taller panel (menuTable.stage — see TABLE_STAGE_KEYS).
-  const table = useMemo(() => resolveTable(tenant, { variant: 'stage' }), [JSON.stringify(tenant && tenant.menuTable) || '']) // eslint-disable-line react-hooks/exhaustive-deps
+  const table = useMemo(
+    () => resolveTable(tenant, { variant: 'stage', item }),
+    [JSON.stringify(tenant && tenant.menuTable) || '', JSON.stringify(item && item.table) || ''] // eslint-disable-line react-hooks/exhaustive-deps
+  )
   // The venue's ordering + placement of the panel's text blocks (menuStage).
   // Null for untouched venues -> stageBlockProps returns null for every id and
   // the order IS the source sequence: today's exact DOM, attribute-free.

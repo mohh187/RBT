@@ -855,6 +855,7 @@ export default function Settings() {
   const [bannerScrim, setBannerScrim] = useState(tenant?.bannerScrim != null ? tenant.bannerScrim : BANNER_RANGE.scrim.dflt)
   // plaster film behind the featured cards (room mode's companion dial)
   const [featuredFilm, setFeaturedFilm] = useState(tenant?.featuredFilm != null ? tenant.featuredFilm : FEATURED_RANGE.film.dflt)
+  const [featuredScale, setFeaturedScale] = useState(tenant?.featuredScale != null ? tenant.featuredScale : FEATURED_RANGE.scale.dflt)
   // the banner's MOOD — the same filter/blend/tint vocabulary the wall and the
   // dish backdrops already speak (FILTERS / BLEND_MODES from the contract)
   const [bannerFilter, setBannerFilter] = useState(tenant?.bannerFilter || '')
@@ -1667,6 +1668,7 @@ export default function Settings() {
     socialStyle: tenant?.socialStyle, welcomeStyle: tenant?.welcomeStyle, catNavStyle: tenant?.catNavStyle,
     featuredMode: tenant?.featuredMode, featuredCount: tenant?.featuredCount, featuredStyle: tenant?.featuredStyle,
     featuredFilm: Number(featuredFilm) || 0,
+    featuredScale: Number(featuredScale) || 1,
   }
 
   const onPick = (e, kind) => { const file = e.target.files?.[0]; e.target.value = ''; if (file) setCropState({ file, kind }) }
@@ -1797,7 +1799,7 @@ export default function Settings() {
     themePreset: preset, themeColor: color, themeAccent: accent,
     bannerUrl, bannerVideoUrl, bannerVideoTrim, bannerFadeDir, bannerOpacity, bannerPosition, bannerScale, bannerGradient, bannerStyle,
     bannerFilter, bannerBlend, bannerTint, bannerTintAmount,
-    bannerMelt, bannerMeltLen, bannerScrim, featuredFilm,
+    bannerMelt, bannerMeltLen, bannerScrim, featuredFilm, featuredScale,
     immersiveBgUrl, immersiveBgVideoUrl, immersiveBgVideoTrim, immersiveBgOpacity, immersiveBgPosition, immersiveBgScale, immersiveFull,
     bgImageUrl, bgVideoUrl, bgVideoTrim, watermarkUrl, bgOpacity, bgPosition, bgScale,
     gradEnabled, gradC1, gradC2, gradAngle, typo,
@@ -1821,7 +1823,7 @@ export default function Settings() {
       setPreset(a.themePreset || 'custom')
       setBannerUrl(a.bannerUrl || ''); setBannerVideoUrl(a.bannerVideoUrl || ''); setBannerVideoTrim(a.bannerVideoTrim || null); setBannerFadeDir(a.bannerFadeDir || 'bottom'); setBannerOpacity(a.bannerOpacity ?? 1); setBannerPosition(a.bannerPosition || 'center'); setBannerScale(a.bannerScale ?? 1); setBannerGradient(a.bannerGradient ?? 0.55); setBannerStyle(a.bannerStyle || 'full')
       setBannerFilter(a.bannerFilter || ''); setBannerBlend(a.bannerBlend || 'normal'); setBannerTint(a.bannerTint || ''); setBannerTintAmount(a.bannerTintAmount ?? 0)
-      setBannerMelt(a.bannerMelt ?? BANNER_RANGE.melt.dflt); setBannerMeltLen(a.bannerMeltLen ?? BANNER_RANGE.meltLen.dflt); setBannerScrim(a.bannerScrim ?? BANNER_RANGE.scrim.dflt); setFeaturedFilm(a.featuredFilm ?? FEATURED_RANGE.film.dflt)
+      setBannerMelt(a.bannerMelt ?? BANNER_RANGE.melt.dflt); setBannerMeltLen(a.bannerMeltLen ?? BANNER_RANGE.meltLen.dflt); setBannerScrim(a.bannerScrim ?? BANNER_RANGE.scrim.dflt); setFeaturedFilm(a.featuredFilm ?? FEATURED_RANGE.film.dflt); setFeaturedScale(a.featuredScale ?? FEATURED_RANGE.scale.dflt)
       setImmersiveBgUrl(a.immersiveBgUrl || ''); setImmersiveBgVideoUrl(a.immersiveBgVideoUrl || ''); setImmersiveBgVideoTrim(a.immersiveBgVideoTrim || null); setImmersiveBgOpacity(a.immersiveBgOpacity ?? 0.5); setImmersiveBgPosition(a.immersiveBgPosition || 'center'); setImmersiveBgScale(a.immersiveBgScale ?? 1); setImmersiveFull(a.immersiveFull === true)
       setBgImageUrl(a.bgImageUrl || ''); setBgVideoUrl(a.bgVideoUrl || ''); setBgVideoTrim(a.bgVideoTrim || null); setWatermarkUrl(a.watermarkUrl || ''); setBgOpacity(a.bgOpacity ?? 0.15); setBgPosition(a.bgPosition || 'center'); setBgScale(a.bgScale ?? 1)
       setGradEnabled(a.gradEnabled === true); setGradC1(a.gradC1 || '#7c2d2d'); setGradC2(a.gradC2 || '#2a1212'); setGradAngle(a.gradAngle ?? 135)
@@ -1842,7 +1844,7 @@ export default function Settings() {
         logoUrl, coverUrl,
         bannerUrl, bannerVideoUrl, bannerVideoTrim, bannerFadeDir, bannerOpacity: Number(bannerOpacity), bannerPosition, bannerScale: Number(bannerScale), bannerGradient: Number(bannerGradient), bannerStyle,
         bannerFilter, bannerBlend, bannerTint, bannerTintAmount: Number(bannerTintAmount) || 0,
-        bannerMelt: Number(bannerMelt) || 0, bannerMeltLen: Number(bannerMeltLen), bannerScrim: Number(bannerScrim), featuredFilm: Number(featuredFilm) || 0,
+        bannerMelt: Number(bannerMelt) || 0, bannerMeltLen: Number(bannerMeltLen), bannerScrim: Number(bannerScrim), featuredFilm: Number(featuredFilm) || 0, featuredScale: Number(featuredScale) || 1,
         immersiveBgUrl, immersiveBgVideoUrl, immersiveBgVideoTrim, immersiveBgOpacity: Number(immersiveBgOpacity), immersiveBgPosition, immersiveBgScale: Number(immersiveBgScale), immersiveFull,
         typo,
         bgImageUrl, bgVideoUrl: bgVideoUrl.trim(), bgVideoTrim, watermarkUrl,
@@ -3137,6 +3139,8 @@ export default function Settings() {
                     <div className="field">
                       <label>{ar ? `لوح خفيف خلف البطاقات (لوضع الغرفة): ${Math.round(Number(featuredFilm) * 100)}%` : `Plaster film behind the cards (room mode): ${Math.round(Number(featuredFilm) * 100)}%`}</label>
                       <input type="range" min={FEATURED_RANGE.film.min} max={FEATURED_RANGE.film.max} step={FEATURED_RANGE.film.step} value={Number(featuredFilm)} onChange={(e) => setFeaturedFilm(Number(e.target.value))} style={{ width: '100%' }} />
+                      <label>{ar ? `حجم بطاقات المميزة (تكبير/تصغير): ${Math.round(Number(featuredScale) * 100)}%` : `Featured card size (zoom): ${Math.round(Number(featuredScale) * 100)}%`}</label>
+                      <input type="range" min={FEATURED_RANGE.scale.min} max={FEATURED_RANGE.scale.max} step={FEATURED_RANGE.scale.step} value={Number(featuredScale)} onChange={(e) => setFeaturedScale(Number(e.target.value))} style={{ width: '100%' }} />
                       <span className="xs faint">{ar ? 'يجعل الأطباق المفرّغة مقروءة فوق جدار مصوّر. يُعاين فوراً ويُحفظ مع زر الحفظ.' : 'Keeps cutout dishes readable over a photo wall. Previews live; commits with Save.'}</span>
                     </div>
                     <p className="xs faint" style={{ margin: 0 }}>
@@ -4637,6 +4641,14 @@ export default function Settings() {
                         <button key={v || 'dflt'} type="button" className={`chip${(((stgCfg.blocks || {})[stgBlockId]?.align) || '') === v ? ' active' : ''}`} onClick={() => writeStageBlock(stgBlockId, { align: v })}>{ar ? la : le}</button>
                       ))}
                     </div>
+                    {stgBlockId === 'ar' && (
+                      <div className="row wrap" style={{ gap: 8, alignItems: 'center' }}>
+                        <span className="xs faint bold">{ar ? 'موضع الزر' : 'Button position'}</span>
+                        {[['', 'تحت الصورة', 'Under the photo'], ['wall', 'على الجدار فوق الصورة', 'On the wall above the photo']].map(([v, la, le]) => (
+                          <button key={v || 'flow'} type="button" className={`chip${(((stgCfg.blocks || {})[stgBlockId]?.pos) || '') === v ? ' active' : ''}`} onClick={() => writeStageBlock('ar', { pos: v })}>{ar ? la : le}</button>
+                        ))}
+                      </div>
+                    )}
                     {[['dx', 'إزاحة أفقية — موجبها جهة بداية القراءة', 'Inline shift (logical)', '%'], ['dy', 'إزاحة رأسية', 'Vertical shift', 'px']].map(([key, la, le, unit]) => {
                       const R = STAGE_TEXT_RANGE[key]
                       const v = Number((stgCfg.blocks || {})[stgBlockId]?.[key] ?? R.dflt)

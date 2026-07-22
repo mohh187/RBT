@@ -3609,10 +3609,12 @@ body[data-theme='dark'] .pos-fullscreen[data-systheme='glass'] { background: var
 .special-row::-webkit-scrollbar { display: none; }
 /* Frameless by default: no card box/border/background — the product photo floats
    on the page with a soft shadow, matching the theme instead of fighting it. */
-.special-card { position: relative; flex: 0 0 118px; background: transparent; border: 0; border-radius: 0; padding: 6px 2px 4px; text-align: center; box-shadow: none; transition: transform var(--dur-fast); }
+/* --feat-scale («تكبير وتصغير الأصناف المميزة», tenant.featuredScale): ONE
+   multiplier over the tile width and its photo — var absent = 1 = today. */
+.special-card { position: relative; flex: 0 0 calc(118px * var(--feat-scale, 1)); background: transparent; border: 0; border-radius: 0; padding: 6px 2px 4px; text-align: center; box-shadow: none; transition: transform var(--dur-fast); }
 .special-card:active { transform: scale(.96); }
-.special-card img { width: 96px; height: 96px; border-radius: 20px; object-fit: cover; margin: 0 auto 9px; display: block; box-shadow: 0 10px 22px rgba(0, 0, 0, .16); }
-.special-ph { width: 96px; height: 96px; border-radius: 20px; margin: 0 auto 9px; background: var(--surface-2); display: grid; place-items: center; color: var(--text-muted); box-shadow: 0 10px 22px rgba(0, 0, 0, .10); }
+.special-card img { width: calc(96px * var(--feat-scale, 1)); height: calc(96px * var(--feat-scale, 1)); border-radius: 20px; object-fit: cover; margin: 0 auto 9px; display: block; box-shadow: 0 10px 22px rgba(0, 0, 0, .16); }
+.special-ph { width: calc(96px * var(--feat-scale, 1)); height: calc(96px * var(--feat-scale, 1)); border-radius: 20px; margin: 0 auto 9px; background: var(--surface-2); display: grid; place-items: center; color: var(--text-muted); box-shadow: 0 10px 22px rgba(0, 0, 0, .10); }
 /* corner badge: gold star (manual pick) or a rank number (auto best-sellers) */
 .special-badge { position: absolute; top: 8px; inset-inline-start: 8px; min-width: 20px; height: 20px; padding: 0 5px; border-radius: var(--r-pill); display: inline-flex; align-items: center; justify-content: center; font-size: 11px; font-weight: 800; box-shadow: var(--sh-1); z-index: 1; }
 .special-rank { background: var(--brand); color: var(--on-brand); }
@@ -8136,6 +8138,23 @@ button.edt-pair:active { transform: scale(.98); }
 /* the AR button centres via margin auto today; release it per align */
 .edt-stg [data-blk-align='start'].edt-stg-ar { margin-inline-start: var(--sblk-dx, 0%); margin-inline-end: auto; }
 .edt-stg [data-blk-align='end'].edt-stg-ar { margin-inline-start: auto; margin-inline-end: 0; }
+/* «ارفع فوق يكون في النص في الجدار»: pos 'wall' lifts the 3D button out of the
+   flow onto the brick ABOVE the dish — centred on the media box top, dy still
+   nudges it, and it can never sit on the food. The media box is made a
+   containing block on MOBILE ONLY: desktop already positions it (sticky in
+   the two-column stage; the data-table static case falls back to the stage
+   root, i.e. pinned to the window top — same wall zone visually). */
+@media (max-width: 899.98px) {
+  .edt-stg .edt-stg-media { position: relative; }
+}
+.edt-stg [data-blk-pos='wall'].edt-stg-ar {
+  position: absolute;
+  top: calc(16px + var(--sblk-dy, 0px));
+  inset-inline: 0;
+  width: fit-content;
+  margin-inline: auto;
+  z-index: 3;
+}
 
 /* ---- 3D / AR ---- */
 /* IN FLOW under the hero, never floated over it: absolute placement parked

@@ -43,6 +43,8 @@ import {
   BLEND_MODES, FILTERS, ANIMS, FX, RANGE, resolveComposition, bgStyle, imgStyle,
   imgTiltBoxStyle, normalizeVideoTrim,
   LAYER_DEPTHS, LAYER_MOTIONS, LAYER_RANGE, normalizeLayer, layerStyle,
+  TABLE_KINDS, TABLE_KIND_IDS, TABLE_MATERIALS, TABLE_MATERIAL_IDS,
+  TABLE_EDGES, TABLE_EDGE_IDS, TABLE_RANGE, TABLE_STAGE_KEYS,
 } from '../../lib/dishComposition.js'
 import '../../styles/appearance.css'
 
@@ -63,6 +65,11 @@ const blank = () => ({
   // carries its own lighting is the «ظل غبي» the owner reported, and it is his
   // call to make per dish, not the theme's. See styles/dishprops.css.
   surface: '', props: null, contactShadow: false, reflect: false,
+  // per-item table override (lib/dishComposition.js resolveTable): null = the
+  // room's menuTable decides, a partial object = this dish's own table, and
+  // { kind: 'none' } = no table under this one dish. Sparse like the composer:
+  // an item nobody touched stores nothing (see cleanItemTable / tablePayload).
+  table: null,
 })
 
 // The garnish half of the item document, read back into the flat shape the
@@ -329,6 +336,66 @@ function layersPayload(layers, original) {
   if (on.length || orig.layers !== undefined) out.layers = on
   if (off.length || orig.layersOff !== undefined) out.layersOff = off
   return out
+}
+
+// ------------------------------------------------------ the per-item table --
+//
+// «التحكم في الطاولة بشكل مستقل لكل صنف». resolveTable(tenant, {variant, item})
+// merges item.table — a PARTIAL object — over the room's menuTable, every
+// absent key falling back to the room. The whole feature therefore rides on
+// sparseness: this cleaner keeps ONLY the keys the owner really set, clamped
+// to TABLE_RANGE and validated against the contract catalogues, and collapses
+// an empty result to null so switching to «مستقلة» and touching nothing stores
+// nothing at all.
+const TABLE_ITEM_NUM_KEYS = ['lift', 'opacity', 'shade', 'radius', 'blur', 'scale', 'contact', 'x', 'y', 'w', 'h', 'dim', 'melt', 'meltBottom', 'veil']
+const tblNum = (v, key) => {
+  const R = TABLE_RANGE[key]
+  const n = Number(v)
+  if (!R || !Number.isFinite(n)) return null
+  return Number(Math.min(R.max, Math.max(R.min, n)).toFixed(3))
+}
+function cleanItemTable(raw) {
+  if (!raw || typeof raw !== 'object') return null
+  const out = {}
+  if (TABLE_KIND_IDS.includes(raw.kind)) out.kind = raw.kind
+  if (TABLE_MATERIAL_IDS.includes(raw.material)) out.material = raw.material
+  if (TABLE_EDGE_IDS.includes(raw.edge)) out.edge = raw.edge
+  if (typeof raw.url === 'string' && raw.url.trim()) out.url = raw.url.trim()
+  TABLE_ITEM_NUM_KEYS.forEach((k) => {
+    if (raw[k] == null) return
+    const n = tblNum(raw[k], k)
+    if (n != null) out[k] = n
+  })
+  // A stored stage{} sub-object (the opened-item window's own geometry) is
+  // preserved through a round-trip even though this editor does not write it:
+  // dropping it on save would silently undo an override written elsewhere.
+  if (raw.stage && typeof raw.stage === 'object') {
+    const st = {}
+    TABLE_STAGE_KEYS.forEach((k) => {
+      if (raw.stage[k] == null) return
+      if (k === 'extend') {
+        if (raw.stage[k] === true) st[k] = true
+        return
+      }
+      const n = tblNum(raw.stage[k], k)
+      if (n != null) st[k] = n
+    })
+    if (Object.keys(st).length) out.stage = st
+  }
+  return Object.keys(out).length ? out : null
+}
+
+// What the table section contributes to the save payload. Same sparse-emission
+// discipline as composePayload(): no key at all while this dish has no table
+// AND the stored document carries none; an explicit null once one is stored
+// and the owner returned the dish to the room's table, so the clear sticks.
+// The orig check is `== null`, not `=== undefined`: the editor's form defaults
+// seed `table: null` (blank()), so an untouched item arrives here with null —
+// and it must still gain no key.
+function tablePayload(form, original) {
+  const cleaned = cleanItemTable(form && form.table)
+  if (cleaned === null && (original || {}).table == null) return {}
+  return { table: cleaned }
 }
 
 export default function Items() {
@@ -750,6 +817,7 @@ function EditorTabs({ lang }) {
     ['ie-compose', lang === 'ar' ? 'تركيب الصنف' : 'Composition'],
     ['ie-layers', lang === 'ar' ? 'عناصر مركّبة' : 'Placed elements'],
     ['ie-dish', lang === 'ar' ? 'السطح والزينة' : 'Surface & garnish'],
+    ['ie-table', lang === 'ar' ? 'طاولة الصنف' : 'Item table'],
     ['ie-pricing', lang === 'ar' ? 'التسعير والإضافات' : 'Pricing & add-ons'],
     ['ie-info', lang === 'ar' ? 'التفاصيل والوصف' : 'Details'],
     ['ie-ar', lang === 'ar' ? '3D وAR' : '3D & AR'],
@@ -826,6 +894,8 @@ function ItemEditor({ tenantId, cats, currency, value, onClose, onSaved, onDelet
       if (target === 'extra') set('images', [...(form.images || []), url])
       // a NEW backdrop must not inherit the previous clip's trim window
       else if (target === 'bg') setForm((s) => ({ ...s, bgUrl: url, bgKind: 'image', bgVideoTrim: null }))
+      // this dish's own tabletop photo — landing one IS choosing the image kind
+      else if (target === 'table') setForm((s) => ({ ...s, table: { ...(s.table && typeof s.table === 'object' ? s.table : {}), kind: 'image', url } }))
       else set('imageUrl', url)
     } catch (_) {
       toast.error(lang === 'ar' ? 'تعذّر رفع الصورة' : 'Upload failed')
@@ -1100,6 +1170,8 @@ function ItemEditor({ tenantId, cats, currency, value, onClose, onSaved, onDelet
     layers: (layers || []).filter((l) => !l.hidden).map(writeLayer),
     surface: dpOn ? (form.surface || '') : '',
     props: dpPropsValue,
+    // the per-item table, exactly as save() will write it ({} collapses to null)
+    table: cleanItemTable(form.table),
     contactShadow: dpOn && !!dpSurface && !!form.contactShadow,
     reflect: dpOn && dpReflective && !!form.reflect,
     available: true,
@@ -1197,6 +1269,11 @@ function ItemEditor({ tenantId, cats, currency, value, onClose, onSaved, onDelet
         // with the switched-off ones parked in `layersOff` so they stop drawing
         // without being lost.
         ...layersPayload(layers, origRef.current),
+        // «طاولة هذا الصنف» — the per-item table override, in exactly the
+        // partial shape resolveTable() merges over the room's menuTable.
+        // Sparse: no key while nothing is set and nothing is stored; null to
+        // clear a stored table back to «طاولة الغرفة».
+        ...tablePayload(form, origRef.current),
         // dish styling layer, in the exact shape lib/dishProps.js reads back.
         // Never `undefined` on either key — Firestore rejects that outright.
         surface: form.surface || '',
@@ -1621,6 +1698,13 @@ function ItemEditor({ tenantId, cats, currency, value, onClose, onSaved, onDelet
             </div>
           )}
         </div>
+
+        <EditorSection id="ie-table" title={lang === 'ar' ? 'طاولة هذا الصنف' : 'This dish’s table'} />
+        <ItemTableEditor
+          form={form} setForm={setForm} lang={lang} tenant={tnt} uploading={uploading}
+          onPickImage={(e) => onPick(e, 'table')}
+          onEditImage={() => setCropState({ src: (form.table && form.table.url) || '', target: 'table' })}
+        />
 
         <EditorSection id="ie-pricing" title={lang === 'ar' ? 'التسعير والمقاسات والإضافات' : 'Pricing, sizes & add-ons'} />
         <div className="row" style={{ gap: 'var(--sp-3)' }}>
@@ -2132,6 +2216,186 @@ function CompositionEditor({ form, setForm, lang, uploading, variant, setVariant
         <p className="xs faint" style={{ margin: 0 }}>
           {ar ? 'زر «إعادة الحركة» في لوح المعاينة الحية يعيد تشغيل حركة الظهور.' : 'The Replay button on the live preview pane re-runs the entrance.'}
         </p>
+      </CxGroup>
+    </div>
+  )
+}
+
+// ======================================== «طاولة هذا الصنف» (item.table) ====
+//
+// The per-item table override. resolveTable(tenant, { variant, item }) merges
+// item.table — a PARTIAL object — over the room's menuTable, so this editor
+// writes ONLY the keys the owner actually moves; every untouched dial keeps
+// following the room, live. Three master states: follow the room (table
+// absent), an independent table (a partial the controls tune), or no table for
+// this one dish (kind:'none'). Every option and bound comes from the contract
+// catalogues (TABLE_KINDS / TABLE_MATERIALS / TABLE_EDGES / TABLE_RANGE) and
+// the value a slider SHOWS is the EFFECTIVE one — item override, else the
+// room, else the contract default — so what the owner reads here is what
+// resolveTable() will paint. Labels mirror the Settings table card, one
+// vocabulary for the two halves of the same furniture.
+
+// [key, ar, en, format] — lift/x/y/w/h are raw percents, the 0..1 dials render
+// as percent, scale (image tables) as a multiplier. Bounds are read from
+// TABLE_RANGE at render time, never from a local number.
+const TBL_ITEM_SLIDERS = [
+  ['lift', 'جلوس الطبق على الطاولة (مقدار النزول)', 'Seat the dish (drop onto the table)', cxOff],
+  ['melt', 'ذوبان علوي — السطح خلف النص', 'Top melt behind the text', cxPct],
+  ['meltBottom', 'ذوبان الحافة السفلية', 'Bottom-edge melt', cxPct],
+  ['veil', 'حجاب القراءة (لوح فوق السطح لوضوح النص)', 'Reading veil over the surface', cxPct],
+  ['dim', 'تعتيم كامل فوق السطح', 'Flat darkening over the surface', cxPct],
+  ['opacity', 'شفافية الطاولة', 'Table opacity', cxPct],
+  ['x', 'إزاحة يمين/يسار', 'Shift left/right', cxOff],
+  ['y', 'إزاحة أعلى/أسفل', 'Shift up/down', cxOff],
+  ['w', 'عرض الطاولة', 'Table width', cxOff],
+  ['h', 'ارتفاع الطاولة', 'Table height', cxOff],
+]
+const TBL_SCALE_SLIDER = ['scale', 'حجم صورة الطاولة', 'Photo scale', cxTimes]
+
+function ItemTableEditor({ form, setForm, lang, tenant, uploading, onPickImage, onEditImage }) {
+  const ar = lang === 'ar'
+  const room = tenant && tenant.menuTable && typeof tenant.menuTable === 'object' ? tenant.menuTable : {}
+  const own = form.table && typeof form.table === 'object' ? form.table : null
+  const mode = own == null ? 'room' : (own.kind === 'none' ? 'off' : 'own')
+  // the value actually in force: the item's override, else the room's, else
+  // the contract default — clamped the same way resolveTable() clamps it.
+  const eff = (k) => {
+    const R = TABLE_RANGE[k]
+    const v = own && own[k] != null ? own[k] : room[k]
+    const n = Number(v)
+    if (!Number.isFinite(n)) return R.dflt
+    return Math.min(R.max, Math.max(R.min, n))
+  }
+  const effKind = (own && TABLE_KIND_IDS.includes(own.kind) ? own.kind : '')
+    || (TABLE_KIND_IDS.includes(room.kind) ? room.kind : 'none')
+  const effUrl = String((own && own.url != null ? own.url : room.url) || '')
+  const patchTable = (o) => setForm((f) => ({ ...f, table: { ...(f.table && typeof f.table === 'object' ? f.table : {}), ...o } }))
+  // Un-setting DELETES the key rather than writing ''/null: resolveTable merges
+  // the raw object, and an empty-string kind or edge would override the room's
+  // value only to fail validation and land on the contract default — the
+  // opposite of «اتبع الغرفة».
+  const unsetKey = (k) => setForm((f) => {
+    if (!f.table || typeof f.table !== 'object' || f.table[k] === undefined) return f
+    const t = { ...f.table }
+    delete t[k]
+    return { ...f, table: t }
+  })
+  // Switching to «بدون طاولة» keeps the tuned keys under kind:'none' (inert to
+  // the renderer) so flipping back to «مستقلة» restores them; only «طاولة
+  // الغرفة» truly discards the dish's own numbers.
+  const setMode = (m) => setForm((f) => {
+    const cur = f.table && typeof f.table === 'object' ? f.table : null
+    if (m === 'room') return { ...f, table: null }
+    if (m === 'off') return { ...f, table: { ...(cur || {}), kind: 'none' } }
+    const t = { ...(cur || {}) }
+    if (t.kind === 'none') delete t.kind
+    return { ...f, table: t }
+  })
+  const modes = [
+    ['room', ar ? 'طاولة الغرفة' : 'The room table'],
+    ['own', ar ? 'طاولة مستقلة' : 'Independent table'],
+    ['off', ar ? 'بدون طاولة لهذا الصنف' : 'No table for this dish'],
+  ]
+  const over = (k) => (own && own[k] != null ? (ar ? ' — مخصص' : ' — custom') : '')
+  const sliders = [TBL_ITEM_SLIDERS[0], ...(effKind === 'image' ? [TBL_SCALE_SLIDER] : []), ...TBL_ITEM_SLIDERS.slice(1)]
+  return (
+    <div className="stack" style={{ gap: 10, marginBottom: 'var(--sp-3)' }}>
+      <CxGroup icon="grid" title={ar ? 'طاولة هذا الصنف' : 'This dish’s table'}
+        resetLabel={ar ? 'إرجاع لطاولة الغرفة' : 'Back to the room table'} onReset={() => setMode('room')}
+        hint={ar
+          ? 'اللوح الذي يحمل اسم الصنف وسعره يُرسم كطاولة (ثيم «المجلة الداكنة»). افتراضياً يتبع هذا الصنف طاولة الغرفة المضبوطة في الاستوديو — وهنا تفرده بطاولة مستقلة أو تحرمه منها وحده.'
+          : 'The panel carrying this dish’s name and price paints as a table (dark editorial theme). By default the dish follows the room table from the studio; here it can carry its own — or none at all.'}>
+        <div className="row" style={{ gap: 6, flexWrap: 'wrap' }}>
+          {modes.map(([id, label]) => (
+            <button key={id} type="button" className={`chip ${mode === id ? 'active' : ''}`} aria-pressed={mode === id} onClick={() => setMode(id)}>{label}</button>
+          ))}
+        </div>
+
+        {mode === 'room' && (
+          <p className="xs faint" style={{ margin: 0 }}>
+            {ar ? 'يتبع هذا الصنف طاولة الغرفة كما ضُبطت في الاستوديو («غرفة المنيو»).' : 'This dish follows the room table exactly as tuned in the studio.'}
+          </p>
+        )}
+        {mode === 'off' && (
+          <p className="xs faint" style={{ margin: 0 }}>
+            {ar ? 'لا طاولة تحت هذا الصنف وحده — يبقى لوحه داكناً سادة ولو كانت للغرفة طاولة.' : 'No table under this one dish — its panel stays plain even while the room has a table.'}
+          </p>
+        )}
+
+        {mode === 'own' && (
+          <div className="stack" style={{ gap: 9 }}>
+            <div className="row" style={{ gap: 6, flexWrap: 'wrap', alignItems: 'center' }}>
+              <span className="xs faint bold">{ar ? 'نوع الطاولة' : 'Table kind'}</span>
+              {TABLE_KINDS.filter((k) => k.id !== 'none').map((k) => {
+                const on = !!own && own.kind === k.id
+                return (
+                  <button key={k.id} type="button" className={`chip ${on ? 'active' : ''}`} aria-pressed={on}
+                    onClick={() => (on ? unsetKey('kind') : patchTable({ kind: k.id }))}>
+                    {ar ? k.ar : k.en}
+                  </button>
+                )
+              })}
+              {!(own && own.kind) && <span className="xs faint">{ar ? 'حسب الغرفة' : 'following the room'}</span>}
+            </div>
+
+            {effKind === 'material' && (
+              <CxSelect lang={lang} label={ar ? 'الخامة' : 'Material'}
+                options={[{ id: '', ar: 'حسب الغرفة', en: 'Follow the room' }, ...TABLE_MATERIALS]}
+                value={(own && own.material) || ''}
+                onChange={(v) => (v ? patchTable({ material: v, kind: 'material' }) : unsetKey('material'))} />
+            )}
+
+            {effKind === 'image' && (
+              <div className="stack" style={{ gap: 6 }}>
+                <div className="row" style={{ gap: 6, flexWrap: 'wrap', alignItems: 'center' }}>
+                  <label className="btn btn-sm btn-outline" style={{ cursor: 'pointer' }}>
+                    <Icon name="image" size={13} /> {ar ? 'رفع صورة طاولة لهذا الصنف' : 'Upload a tabletop photo'}
+                    <input hidden type="file" accept="image/*" onChange={onPickImage} />
+                  </label>
+                  {own && own.url ? (
+                    <button type="button" className="btn btn-sm btn-outline" onClick={onEditImage}>
+                      <Icon name="search" size={13} /> {ar ? 'قص وتأطير' : 'Crop'}
+                    </button>
+                  ) : null}
+                  {own && own.url ? (
+                    <button type="button" className="btn-link xs" style={{ color: 'var(--danger)' }} onClick={() => unsetKey('url')}>
+                      {ar ? 'إزالة الصورة (ارجع لصورة الغرفة)' : 'Remove (back to the room photo)'}
+                    </button>
+                  ) : null}
+                  {uploading && <span className="spinner" style={{ flex: 'none' }} />}
+                </div>
+                <div className="field" style={{ marginBottom: 0 }}>
+                  <label>{ar ? 'رابط صورة الطاولة' : 'Tabletop photo URL'}</label>
+                  <input className="input" dir="ltr" placeholder={room.url ? String(room.url) : 'https://…'}
+                    value={(own && own.url != null ? own.url : '')}
+                    onChange={(e) => (e.target.value ? patchTable({ kind: 'image', url: e.target.value }) : unsetKey('url'))} />
+                </div>
+                {!effUrl && (
+                  <p className="xs faint" style={{ margin: 0 }}>
+                    {ar ? 'لا صورة بعد — سيرسم المنيو الخامة المختارة بدلاً منها حتى تضع صورة.' : 'No photo yet — the menu falls back to the chosen material until one is set.'}
+                  </p>
+                )}
+              </div>
+            )}
+
+            <CxSelect lang={lang} label={ar ? 'حافة الطاولة' : 'Table edge'}
+              options={[{ id: '', ar: 'حسب الغرفة', en: 'Follow the room' }, ...TABLE_EDGES]}
+              value={(own && own.edge) || ''}
+              onChange={(v) => (v ? patchTable({ edge: v }) : unsetKey('edge'))} />
+
+            {sliders.map(([key, la, le, format]) => (
+              <CxSlider key={key} label={`${ar ? la : le}${over(key)}`} format={format}
+                min={TABLE_RANGE[key].min} max={TABLE_RANGE[key].max} step={TABLE_RANGE[key].step}
+                value={eff(key)} onChange={(v) => patchTable({ [key]: v })} />
+            ))}
+
+            <p className="xs faint" style={{ margin: 0 }}>
+              {ar
+                ? 'القيم غير المضبوطة تتبع طاولة الغرفة. نافذة الصنف ترث تخصيصات النافذة من الغرفة أيضاً.'
+                : 'Unset values follow the room table. The item window also inherits the room’s window overrides.'}
+            </p>
+          </div>
+        )}
       </CxGroup>
     </div>
   )

@@ -657,7 +657,25 @@ export const TABLE_STAGE_KEYS = ['x', 'y', 'w', 'h', 'lift', 'opacity', 'shade',
  * per-item surface library.
  */
 export function resolveTable(tenant, options) {
-  const base = (tenant && tenant.menuTable) || {}
+  const room = (tenant && tenant.menuTable) || {}
+  // PER-ITEM TABLE («التحكم في الطاولة بشكل مستقل لكل صنف»). The one-room-
+  // one-table policy was the default until the owner asked for the opposite
+  // outright — a dish may now carry its OWN table (item.table, partial):
+  // every key falls back to the room's table, stage sub-objects merge too,
+  // and everything passes the same clamps. Absent item.table = the room
+  // decides, exactly as before.
+  const own = options && options.item && options.item.table && typeof options.item.table === 'object'
+    ? options.item.table
+    : null
+  const base = own
+    ? {
+      ...room,
+      ...own,
+      ...(own.stage || room.stage
+        ? { stage: { ...(room.stage && typeof room.stage === 'object' ? room.stage : {}), ...(own.stage && typeof own.stage === 'object' ? own.stage : {}) } }
+        : {}),
+    }
+    : room
   // The opened-item window may carry its own geometry (see TABLE_STAGE_KEYS).
   // Merged BEFORE clamping so an override obeys exactly the same bounds.
   const variant = options && options.variant === 'stage' ? 'stage' : 'list'
@@ -1312,10 +1330,14 @@ export const FEATURED_RANGE = {
   // engine default 0 = nothing changes for any saved venue (the studio seeds a
   // subtle value only when room mode is switched on)
   film: { min: 0, max: 1, step: 0.05, dflt: 0 },
+  // «تكبير وتصغير الأصناف المميزة»: one multiplier over the featured tile's
+  // width (the photo and text scale with their card). 1 = today exactly.
+  scale: { min: 0.6, max: 1.8, step: 0.05, dflt: 1 },
 }
 
 export const resolveFeatured = (tenant) => ({
   film: num(tenant && tenant.featuredFilm, FEATURED_RANGE.film.dflt, 0, 1),
+  scale: num(tenant && tenant.featuredScale, FEATURED_RANGE.scale.dflt, FEATURED_RANGE.scale.min, FEATURED_RANGE.scale.max),
 })
 
 // ------------------------------------------------- the home page order ----
@@ -1404,6 +1426,10 @@ export const STAGE_BLOCK_IDS = STAGE_BLOCKS.map((b) => b.id)
 // the photo, outside the panel's flow.
 export const STAGE_PLACE_ONLY_IDS = ['ar']
 export const STAGE_ALIGN_IDS = ['', 'start', 'center', 'end'] // '' = today's alignment
+// Where the 3D button STANDS: in flow under the photo ('' — today), or lifted
+// onto the wall above the dish («ارفع فوق يكون في النص في الجدار») — absolute,
+// centred on the brick, dy still nudges it.
+export const STAGE_AR_POS_IDS = ['', 'wall']
 
 export const STAGE_TEXT_RANGE = {
   dx: { min: -40, max: 40, step: 0.5, dflt: 0 }, // % of panel width, LOGICAL inline
@@ -1426,8 +1452,9 @@ export function resolveStageBlocks(tenant) {
     const align = str(b.align, STAGE_ALIGN_IDS, '')
     const dx = num(b.dx, R.dx.dflt, R.dx.min, R.dx.max)
     const dy = num(b.dy, R.dy.dflt, R.dy.min, R.dy.max)
-    if (!align && !dx && !dy) return
-    blocks[id] = { align, dx, dy }
+    const pos = id === 'ar' ? str(b.pos, STAGE_AR_POS_IDS, '') : ''
+    if (!align && !dx && !dy && !pos) return
+    blocks[id] = { align, dx, dy, pos }
   })
   const raw = Array.isArray(s.order) ? s.order : []
   const saved = raw
@@ -1446,6 +1473,7 @@ export function stageBlockProps(sb, id) {
   if (!b) return null
   const p = { 'data-blk': id }
   if (b.align) p['data-blk-align'] = b.align
+  if (b.pos) p['data-blk-pos'] = b.pos
   const st = {}
   if (b.dx) st['--sblk-dx'] = `${b.dx}%`
   if (b.dy) st['--sblk-dy'] = `${b.dy}px`
