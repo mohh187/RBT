@@ -27,7 +27,10 @@ export function lockScroll() {
   b.right = '0'
   b.width = '100%'
   b.overflow = 'hidden'
-  document.documentElement.style.overflow = 'hidden'
+  // Y only: an all-axes 'hidden' would override the stylesheet's
+  // `overflow-x: clip` on <html> — clip is what makes sideways root scroll
+  // impossible even programmatically (scrollIntoView etc.), keep it intact.
+  document.documentElement.style.overflowY = 'hidden'
 }
 
 export function unlockScroll() {
@@ -41,7 +44,7 @@ export function unlockScroll() {
   b.right = ''
   b.width = ''
   b.overflow = ''
-  document.documentElement.style.overflow = ''
+  document.documentElement.style.overflowY = ''
   // pinning zeroed the scroller — put the diner back exactly where they were,
   // instantly (smooth scroll here would look like the page sliding on close)
   const html = document.documentElement
@@ -57,5 +60,22 @@ export function useScrollLock(active = true) {
     if (!active) return undefined
     lockScroll()
     return unlockScroll
+  }, [active])
+}
+
+// Pin a scroller's X axis at 0. The dish compositions deliberately PAINT past
+// the screen edges (oversized hero, extended table, steam FX), and those boxes
+// feed the scroller's sideways scrollable area even under overflow-x: hidden —
+// hidden stops touch panning but any stray scrollIntoView/focus could still
+// shift the pane and leave it stuck there (the «الطاولة تتحرك» drift). This
+// guard makes X immovable regardless of source, vertical scroll untouched.
+export function usePinnedX(ref, active = true) {
+  useEffect(() => {
+    const el = ref.current
+    if (!active || !el) return undefined
+    el.scrollLeft = 0
+    const onScroll = () => { if (el.scrollLeft) el.scrollLeft = 0 }
+    el.addEventListener('scroll', onScroll, { passive: true })
+    return () => el.removeEventListener('scroll', onScroll)
   }, [active])
 }

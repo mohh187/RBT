@@ -2456,6 +2456,10 @@ body[data-glass-ripple='3'] [data-systheme='glass'] :is(.card, .pos-tile, .kds-t
 .sheet-body {
   padding: var(--sp-4);
   overflow-y: auto;
+  /* with only overflow-y set, X computes to auto too — any child poking past
+     the edge (negative-inset decor, wide media) made the sheet horizontally
+     draggable on touch. clip = never sideways, inner scroll-x rails unaffected. */
+  overflow-x: clip;
   /* Stop a fling inside the sheet from chaining out and scrolling the page
      behind it once the sheet hits its top/bottom — the give-away that a "modal"
      is really just a tall div on a web page. */
@@ -7827,7 +7831,15 @@ video.edt-backdrop { width: 100%; height: 100%; display: block; }
   backdrop-filter: blur(6px);
 }
 .edt-stg-x:hover { border-color: var(--edt-amber, #f5b942); }
-.edt-stg-scroll { flex: 1; overflow-y: auto; scrollbar-width: none; -ms-overflow-style: none; }
+/* overflow-x is load-bearing: with only overflow-y set, the X axis computed
+   to auto, and the extended table's negative insets made the stage
+   HORIZONTALLY draggable — a diagonal thumb-drag panned the whole record
+   sideways, clipping the text at one edge («الطاولة تتحرك حتى عند فتح
+   الصنف»). Next to overflow-y:auto a `clip` here would compute to hidden
+   anyway, so hidden it is (blocks touch panning); the overflow SOURCE is
+   removed at .edt-stg-body below, which is what makes programmatic sideways
+   scroll impossible too. */
+.edt-stg-scroll { flex: 1; overflow-y: auto; overflow-x: hidden; scrollbar-width: none; -ms-overflow-style: none; }
 .edt-stg-scroll::-webkit-scrollbar { width: 0; height: 0; }
 .edt-stg-media { width: 100%; }
 /* The whole dish, centred, never cropped: object-fit was 'cover' inside a fixed

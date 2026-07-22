@@ -30,7 +30,7 @@ import ItemFx from '../ItemFx.jsx'
 import { Stepper, Empty } from '../ui.jsx'
 import { Price } from '../Riyal.jsx'
 import { usePortalRoot } from '../PortalRoot.jsx'
-import { useScrollLock } from '../../lib/scrollLock.js'
+import { useScrollLock, usePinnedX } from '../../lib/scrollLock.js'
 import { hasStory } from '../DishStory.jsx'
 import { offerForItem, discountedPrice, itemOfferLabel } from '../../lib/offers.js'
 // Surface + garnish scatter behind the dish cutout (see lib/dishProps.js).
@@ -1535,6 +1535,7 @@ export function EditorialItemStage({ item, tenant = null, currency, onClose, onA
   const ar = lang === 'ar'
   const portalRoot = usePortalRoot()
   const heroRef = useRef(null)
+  const scrollRef = useRef(null)
   const closingRef = useRef(false)
   const addedTimer = useRef(0)
   const { fit, bind, onLoad } = useImgFit()
@@ -1665,8 +1666,11 @@ export function EditorialItemStage({ item, tenant = null, currency, onClose, onA
     setTimeout(onClose, reduced ? 180 : 280)
   }
 
-  // Scroll lock + Escape while the stage is up.
+  // Scroll lock + Escape while the stage is up; the record scroller's X axis
+  // is pinned — the oversized dish/table/FX paint past the screen on purpose
+  // and must never turn that bleed into a sideways drag.
   useScrollLock(true)
+  usePinnedX(scrollRef, true)
   useEffect(() => {
     const onKey = (e) => { if (e.key === 'Escape') close() }
     window.addEventListener('keydown', onKey)
@@ -1859,7 +1863,7 @@ export function EditorialItemStage({ item, tenant = null, currency, onClose, onA
           fallback tile, because the dial that governs it is the same one. */}
       <span className="edt-wall-fade" aria-hidden="true" />
       <button type="button" className="edt-stg-x" onClick={close} aria-label={t('close')}><Icon name="close" size={20} /></button>
-      <div className="edt-stg-scroll">
+      <div className="edt-stg-scroll" ref={scrollRef}>
         <div className="edt-stg-media">
           <div className="edt-stg-hero" ref={heroRef} data-fit={fit || undefined} data-dp-contact={dpShadow(item)} data-dp-reflect={dpReflect(item)}>
             <span className="edt-glow" aria-hidden="true" />
