@@ -886,8 +886,12 @@ const imageTo3d = onCall({ timeoutSeconds: 540, memory: '1GiB' }, async (request
     throw new HttpsError('failed-precondition',
       'خدمة المجسمات الواقعية تحتاج تفعيلاً: أنشئ حساباً في meshy.ai وضع MESHY_API_KEY في functions/.env ثم أعد نشر الدوال.')
   }
-  const { tenantId, itemId, imageUrl } = request.data || {}
+  const { tenantId, itemId, imageUrl, imageUrls, itemName } = request.data || {}
   if (!tenantId || !imageUrl) throw new HttpsError('invalid-argument', 'tenantId + imageUrl required')
+  // Every gallery shot the item has (deduped, capped at Meshy's 4): more views
+  // = real geometry instead of a guessed back side, which is half of why the
+  // old models read as toys.
+  const views = [...new Set([imageUrl, ...(Array.isArray(imageUrls) ? imageUrls : [])].filter((u) => typeof u === 'string' && /^https?:\/\//.test(u)))].slice(0, 4)
   const uid = request.auth && request.auth.uid
   if (!uid) throw new HttpsError('unauthenticated', 'sign in')
   const db = getFirestore()
@@ -931,11 +935,35 @@ const imageTo3d = onCall({ timeoutSeconds: 540, memory: '1GiB' }, async (request
     }
   } catch (e) { if (e instanceof HttpsError) throw e }
 
-  // 1) create the conversion task
-  const create = await fetch('https://api.meshy.ai/openapi/v1/image-to-3d', {
+  // 1) create the conversion task.
+  // QUALITY PARAMETERS, each for a stated reason — the defaults produced
+  // game-piece models the owner rejected («ظاهرة انها لعبة»):
+  //   * ai_model meshy-5     — the account default was an older generation;
+  //   * topology quad + should_remesh — clean shading instead of faceted lumps;
+  //   * target_polycount     — the default is far too coarse for food close-ups;
+  //   * symmetry_mode off    — food is never symmetric; forcing symmetry is
+  //     exactly what stamps that toy look onto a plated dish;
+  //   * texture_prompt       — steers the texturing model toward photographic
+  //     food surfaces rather than stylized art.
+  // With more than one gallery shot the multi-image endpoint is used, so the
+  // model's far side is built from a real photo instead of invented.
+  const quality = {
+    ai_model: 'meshy-5',
+    topology: 'quad',
+    target_polycount: 150000,
+    symmetry_mode: 'off',
+    should_remesh: true,
+    should_texture: true,
+    enable_pbr: true,
+    texture_prompt: `photorealistic restaurant dish${itemName ? `: ${String(itemName).slice(0, 80)}` : ''}, real food photography surface detail, natural appetizing colors, glossy sauce and oil highlights, 4k`,
+  }
+  const multi = views.length > 1
+  const endpoint = multi ? 'https://api.meshy.ai/openapi/v1/multi-image-to-3d' : 'https://api.meshy.ai/openapi/v1/image-to-3d'
+  const payload = multi ? { image_urls: views, ...quality } : { image_url: imageUrl, ...quality }
+  const create = await fetch(endpoint, {
     method: 'POST',
     headers: { Authorization: `Bearer ${key}`, 'Content-Type': 'application/json' },
-    body: JSON.stringify({ image_url: imageUrl, should_texture: true, enable_pbr: true, topology: 'triangle' }),
+    body: JSON.stringify(payload),
   }).then((r) => r.json()).catch((e) => ({ _err: String(e && e.message) }))
   const taskId = create && create.result
   if (!taskId) throw new HttpsError('internal', 'تعذر بدء التحويل: ' + JSON.stringify(create || {}).slice(0, 160))
@@ -948,7 +976,7 @@ const imageTo3d = onCall({ timeoutSeconds: 540, memory: '1GiB' }, async (request
   let usdzUrl = ''
   for (let i = 0; i < 48; i++) {
     await sleepMs(10000)
-    const s = await fetch(`https://api.meshy.ai/openapi/v1/image-to-3d/${taskId}`, {
+    const s = await fetch(`${endpoint}/${taskId}`, {
       headers: { Authorization: `Bearer ${key}` },
     }).then((r) => r.json()).catch(() => null)
     const st = s && s.status

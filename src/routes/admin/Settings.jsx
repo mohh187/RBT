@@ -33,8 +33,10 @@ import { SYSTEM_THEMES, THEMEABLE_SECTIONS, sectionSystemTheme, systemThemeAttr,
 import {
   WALL_PATTERNS, WALL_FINISHES, WALL_RANGE, BLEND_MODES, FILTERS, resolveWall, wallStyle,
   SECTION_MODES, SECTION_RANGE, resolveSections,
-  DECOR_ANCHORS, DECOR_MOTIONS, DECOR_RANGE, resolveDecor, decorStyle,
+  DECOR_ANCHORS, DECOR_MOTIONS, DECOR_RANGE, DECOR_DEPTHS, resolveDecor, decorStyle,
   TABLE_KINDS, TABLE_MATERIALS, TABLE_EDGES, TABLE_RANGE, resolveTable, tableStyle,
+  HEADER_MODES, HEADER_RANGE, resolveMenuHeader,
+  BUTTON_SKINS, BUTTON_RANGE, resolveButtons,
 } from '../../lib/dishComposition.js'
 import SocialLinks from '../../components/SocialLinks.jsx'
 import StaffPreview from '../../components/StaffPreview.jsx'
@@ -118,7 +120,7 @@ const SECTIONS = [
 // Sections whose cards are rendered from the shared venue-setup column below.
 const SETUP_SECTIONS = ['identity', 'experience', 'ops', 'system']
 // Menu elements the venue can show/hide — [key, ar, en]
-const HIDEABLE = [['offers', 'زر العروض', 'Offers button'], ['events', 'الفعاليات', 'Events'], ['reservations', 'الحجوزات', 'Reservations'], ['promos', 'شريط العروض', 'Promos strip'], ['special', 'الأصناف المميّزة', 'Featured'], ['search', 'البحث', 'Search'], ['viewToggle', 'زر طريقة العرض', 'View toggle'], ['notifications', 'جرس الإشعارات', 'Notifications'], ['social', 'أيقونات التواصل', 'Social icons'], ['stories', 'الاستوري', 'Stories'], ['profile', 'زر البروفايل والأخبار', 'Profile button'], ['covers', 'أغلفة الفئات (واجهة العرض)', 'Category covers (Spotlight)'], ['pairings', 'توصيات «يُطلب معه»', 'Pairings'], ['bottomNav', 'القائمة السفلية كاملة', 'Bottom navigation bar']]
+const HIDEABLE = [['offers', 'زر العروض', 'Offers button'], ['events', 'الفعاليات', 'Events'], ['reservations', 'الحجوزات', 'Reservations'], ['promos', 'شريط العروض', 'Promos strip'], ['special', 'الأصناف المميّزة', 'Featured'], ['search', 'البحث', 'Search'], ['viewToggle', 'زر طريقة العرض', 'View toggle'], ['notifications', 'جرس الإشعارات', 'Notifications'], ['social', 'أيقونات التواصل', 'Social icons'], ['stories', 'الاستوري', 'Stories'], ['profile', 'زر البروفايل والأخبار', 'Profile button'], ['covers', 'أغلفة الفئات (واجهة العرض)', 'Category covers (Spotlight)'], ['pairings', 'توصيات «يُطلب معه»', 'Pairings'], ['bottomNav', 'القائمة السفلية كاملة', 'Bottom navigation bar'], ['welcome', 'بطاقة الترحيب والولاء', 'Welcome & loyalty card']]
 // Per-element typography control — [key, ar, en, defaultPx]
 const TYPO_ELEMENTS = [['header', 'الهيدر', 'Header', 16], ['hero', 'اسم الكافيه', 'Venue name', 28], ['desc', 'الوصف', 'Description', 14], ['item', 'اسم الصنف', 'Item name', 15], ['price', 'السعر', 'Price', 16]]
 
@@ -143,6 +145,7 @@ const WALL_DEFAULTS = {
   blend: 'normal', filter: '', blur: WALL_RANGE.blur.dflt,
   mortar: WALL_RANGE.mortar.dflt, grout: WALL_RANGE.grout.dflt,
   tint: '', tintAmount: 0,
+  panel: WALL_RANGE.panel.dflt,
   // Whether the menu's HEADER is built out of the same wall. It lives on
   // menuWall — not on its own top-level key — because it has no colours of its
   // own: it takes the bond, the clay and the mortar chosen right above it, so
@@ -159,6 +162,18 @@ const TABLE_DEFAULTS = {
   shade: TABLE_RANGE.shade.dflt, radius: TABLE_RANGE.radius.dflt,
   blur: 0, scale: TABLE_RANGE.scale.dflt, contact: TABLE_RANGE.contact.dflt,
   blend: 'normal', filter: '', tint: '', tintAmount: 0,
+}
+// Stored as ONE object at `tenant.menuHeader` — the top bar the venue owns:
+// its face (theme / the wall's brick / the venue's own photo) and which of its
+// elements exist. Defaults mirror resolveMenuHeader()'s fallbacks.
+const HEADER_DEFAULTS = {
+  mode: '', url: '', scrim: HEADER_RANGE.scrim.dflt, blur: 0, pos: 'center',
+  logo: true, name: true, lang: true, theme: true,
+}
+// Stored as ONE object at `tenant.menuButtons` — the skin of the menu's action
+// buttons. Defaults mirror resolveButtons()'s fallbacks.
+const BUTTON_DEFAULTS = {
+  skin: '', url: '', radius: BUTTON_RANGE.radius.dflt, scrim: BUTTON_RANGE.scrim.dflt, ink: 'light',
 }
 // [key, ar, en, unit] — bounded by TABLE_RANGE only. `lift` leads because it is
 // the dial the owner named: how far the dish sits down onto the table.
@@ -181,6 +196,10 @@ const WALL_SLIDERS = [
   ['scale', 'حجم وحدة الطوب', 'Unit size', 'x'],
   ['opacity', 'ظهور الجدار', 'Wall opacity', 'pct'],
   ['blur', 'تنعيم الجدار', 'Wall blur', 'px'],
+  // The reading panel behind the words — the dial that replaced the hard-coded
+  // black slab and its halo («الظل والخط الأسود»). 100% = the old bullet-proof
+  // solid; 0% = no panel at all.
+  ['panel', 'لوح القراءة خلف النصوص (قوة تعتيمه)', 'Reading panel behind the text', 'pct'],
 ]
 const wallSliderText = (unit, v) => (unit === 'pct' ? `${Math.round(v * 100)}%` : unit === 'x' ? `${Number(v).toFixed(2)}x` : `${Number(v)}px`)
 
@@ -281,6 +300,7 @@ const makeDecor = (url, kind, name) => ({
   glow: 0,
   glowColor: '#f5b942',
   flip: false,
+  depth: 'front',
   front: true,
 })
 
@@ -309,7 +329,9 @@ function readDecorRow(raw, i) {
     glow: decNum(raw.glow, 'glow'),
     glowColor: String(raw.glowColor || '#f5b942'),
     flip: !!raw.flip,
-    front: raw.front !== false,
+    // depth supersedes the old front boolean; old rows resolve front:false -> back
+    depth: decId(raw.depth, DECOR_DEPTHS, raw.front === false ? 'back' : 'front'),
+    front: raw.depth ? raw.depth !== 'back' : raw.front !== false,
   }
 }
 const readDecor = (tenantDoc) => (Array.isArray(tenantDoc?.menuDecor) ? tenantDoc.menuDecor : [])
@@ -335,7 +357,8 @@ const writeDecorRow = (d) => ({
   glow: decNum(d.glow, 'glow'),
   glowColor: String(d.glowColor || '#f5b942'),
   flip: !!d.flip,
-  front: d.front !== false,
+  depth: decId(d.depth, DECOR_DEPTHS, d.front === false ? 'back' : 'front'),
+  front: d.depth ? d.depth !== 'back' : d.front !== false,
 })
 
 // ---- WHERE decorStyle() STOPS AND THE THEME TAKES OVER ---------------------
@@ -472,11 +495,13 @@ const SEARCH_INDEX = [
   { keys: ['حجم النص', 'النصوص', 'typography'], tab: 'studio', aSec: 'colors', ar: 'أحجام وألوان النصوص', en: 'Text sizes & colours' },
   { keys: ['البانر', 'بانر', 'banner'], tab: 'studio', aSec: 'media', ar: 'البانر العلوي', en: 'Top banner' },
   { keys: ['الفيديو', 'فيديو', 'خلفية', 'العلامة المائية', 'مائية', 'video', 'watermark', 'gradient'], tab: 'studio', aSec: 'media', ar: 'خلفيات المنيو والفيديو', en: 'Menu backgrounds & video' },
-  { keys: ['الطوب', 'طوب', 'الجدار', 'جدار', 'الحائط', 'حائط', 'اللحام', 'لحام', 'المونة', 'مونة', 'حجر', 'بلاستر', 'خشب', 'brick', 'wall', 'mortar', 'grout', 'stone', 'plaster', 'wood'], tab: 'studio', aSec: 'media', at: 'set-menuwall', ar: 'جدار المنيو (الطوب والخلفية)', en: 'Menu wall (brick & backdrop)' },
-  { keys: ['هيدر الطوب', 'الهيدر الطوبي', 'شريط الطوب', 'brick header', 'header brick'], tab: 'studio', aSec: 'media', at: 'set-menuwall', ar: 'الهيدر من نفس الطوب', en: 'Brick header' },
-  { keys: ['الطاولة', 'طاولة', 'طاولة الصنف', 'سطح الطبق', 'table', 'tabletop', 'dish table'], tab: 'studio', aSec: 'media', at: 'set-menutable', ar: 'طاولة الصنف (تحت الطبق)', en: 'Dish table (under the plate)' },
-  { keys: ['الفاصل', 'فاصل', 'الفواصل', 'الفراغ بين الاصناف', 'الفراغ بين الأصناف', 'اتصال', 'متصل', 'بطاقات', 'خط فاصل', 'ارتفاع الصنف', 'seam', 'gap', 'divider', 'cards', 'continuity', 'sections'], tab: 'studio', aSec: 'media', at: 'set-menusections', ar: 'الفاصل بين صنف وصنف', en: 'The join between two dishes' },
-  { keys: ['الزينة', 'زينة', 'فانوس', 'فوانيس', 'زخرفة', 'زخارف', 'تعليق', 'معلقات', 'نجفة', 'لوحة', 'نبتة', 'decor', 'decoration', 'lantern', 'ornament', 'hang'], tab: 'studio', aSec: 'media', at: 'set-menudecor', ar: 'زينة الغرفة (فوانيس ومعلّقات)', en: 'Room decoration (lanterns & hung objects)' },
+  { keys: ['الطوب', 'طوب', 'الجدار', 'جدار', 'الحائط', 'حائط', 'اللحام', 'لحام', 'المونة', 'مونة', 'حجر', 'بلاستر', 'خشب', 'brick', 'wall', 'mortar', 'grout', 'stone', 'plaster', 'wood'], tab: 'studio', aSec: 'room', at: 'set-menuwall', ar: 'جدار المنيو (الطوب والخلفية)', en: 'Menu wall (brick & backdrop)' },
+  { keys: ['الهيدر العلوي', 'هيدر بصورة', 'صورة الهيدر', 'عناصر الهيدر', 'شريط علوي', 'custom header', 'header image'], tab: 'studio', aSec: 'room', at: 'set-menuheader', ar: 'الهيدر العلوي — وجهه وعناصره', en: 'Top header — face & elements' },
+  { keys: ['ازرار المنيو', 'أزرار المنيو', 'زر طوب', 'ازرار طوب', 'أزرار طوب', 'كساء الازرار', 'كساء الأزرار', 'button skin', 'brick buttons'], tab: 'studio', aSec: 'room', at: 'set-menubuttons', ar: 'أزرار المنيو — طوب أو صورتك', en: 'Menu buttons — brick or your photo' },
+  { keys: ['هيدر الطوب', 'الهيدر الطوبي', 'شريط الطوب', 'brick header', 'header brick'], tab: 'studio', aSec: 'room', at: 'set-menuheader', ar: 'الهيدر من نفس الطوب', en: 'Brick header' },
+  { keys: ['الطاولة', 'طاولة', 'طاولة الصنف', 'سطح الطبق', 'table', 'tabletop', 'dish table'], tab: 'studio', aSec: 'room', at: 'set-menutable', ar: 'طاولة الصنف (تحت الطبق)', en: 'Dish table (under the plate)' },
+  { keys: ['الفاصل', 'فاصل', 'الفواصل', 'الفراغ بين الاصناف', 'الفراغ بين الأصناف', 'اتصال', 'متصل', 'بطاقات', 'خط فاصل', 'ارتفاع الصنف', 'seam', 'gap', 'divider', 'cards', 'continuity', 'sections'], tab: 'studio', aSec: 'room', at: 'set-menusections', ar: 'الفاصل بين صنف وصنف', en: 'The join between two dishes' },
+  { keys: ['الزينة', 'زينة', 'فانوس', 'فوانيس', 'زخرفة', 'زخارف', 'تعليق', 'معلقات', 'نجفة', 'لوحة', 'نبتة', 'decor', 'decoration', 'lantern', 'ornament', 'hang'], tab: 'studio', aSec: 'room', at: 'set-menudecor', ar: 'زينة الغرفة (فوانيس ومعلّقات)', en: 'Room decoration (lanterns & hung objects)' },
   { keys: ['الاندماج', 'اندماج', 'تدرج', 'fade', 'melt'], tab: 'studio', aSec: 'media', ar: 'اندماج البانر', en: 'Banner melt' },
   { keys: ['تفاصيل الصنف', 'شاشة الصنف', 'صورة الصنف', 'item details'], tab: 'studio', aSec: 'details', ar: 'شاشة تفاصيل الصنف', en: 'Item details screen' },
   { keys: ['الخلفية الفنية', 'فنية', 'لوحة', 'art'], tab: 'studio', aSec: 'details', ar: 'الخلفية الفنية', en: 'Art backdrop' },
@@ -884,7 +909,7 @@ export default function Settings() {
   // by one generation instead of breaking the card.
   const [decorPlacer, setDecorPlacer] = useState(null)
   const [decorGlow, setDecorGlow] = useState(null)
-  const wallCardLive = tab === 'studio' && aSec === 'media'
+  const wallCardLive = tab === 'studio' && (aSec === 'room' || aSec === 'media')
   useEffect(() => {
     if (!wallCardLive || wallPainter || wallPainterGone) return undefined
     let alive = true
@@ -952,6 +977,23 @@ export default function Settings() {
   }, [wallPainter, wallCfgKey]) // eslint-disable-line react-hooks/exhaustive-deps
   const wallFileRef = useRef(null)
   const onWallFile = (e) => { const file = e.target.files?.[0]; e.target.value = ''; if (file) setCropState({ file, kind: 'wall' }) }
+  // «إزالة فواصل التكرار»: reprocess the CURRENT wall photo into a true tile
+  // (lib/seamless.js cross-fades each edge into its opposite), upload the
+  // result and point the wall at it. The original stays in the library.
+  const [wallSeamBusy, setWallSeamBusy] = useState(false)
+  const fixWallSeams = async () => {
+    if (!wallCfg.url || wallSeamBusy) return
+    setWallSeamBusy(true)
+    try {
+      const { makeSeamless } = await import('../../lib/seamless.js')
+      const blob = await makeSeamless(wallCfg.url)
+      const url = await uploadImage(tenantId, new File([blob], 'wall-seamless.webp', { type: 'image/webp' }), 'branding')
+      await writeWall({ url, pattern: 'image' })
+      toast.success(ar ? 'صارت الصورة متصلة بلا فواصل' : 'The photo now tiles seamlessly')
+    } catch (_) {
+      toast.error(ar ? 'تعذّرت المعالجة — جرّب رفع الصورة من جديد' : 'Processing failed — try re-uploading the photo')
+    } finally { setWallSeamBusy(false) }
+  }
   // The sample dish laid over the live preview is one of the venue's OWN items,
   // so readability is judged against a real photograph and a real name length.
   const wallSample = useMemo(() => allItems.find((it) => it.imageUrl) || allItems[0] || null, [allItems])
@@ -976,6 +1018,61 @@ export default function Settings() {
   }
   // The preview is the contract's own output — never a local approximation.
   const tblResolved = useMemo(() => resolveTable({ menuTable: tblCfg }), [tblCfg])
+
+  // ===== THE TOP HEADER (tenant.menuHeader) =====
+  // Same draft-free discipline as the wall.
+  const [hdrCfg, setHdrCfg] = useState(() => ({ ...HEADER_DEFAULTS, ...(tenant?.menuHeader || {}) }))
+  const hdrSavedKey = JSON.stringify(tenant?.menuHeader || null)
+  useEffect(() => { setHdrCfg({ ...HEADER_DEFAULTS, ...(tenant?.menuHeader || {}) }) }, [hdrSavedKey]) // eslint-disable-line react-hooks/exhaustive-deps
+  const writeHeader = async (patch, debounced) => {
+    const next = { ...hdrCfg, ...patch }
+    setHdrCfg(next)
+    if (debounced) { commitPosBg({ menuHeader: next }); return }
+    try { await saveNow({ menuHeader: next }); updateTenantLocal({ menuHeader: next }); toast.success(t('saved')) } catch (_) { toast.error(t('error')) }
+  }
+  const resetHeader = async () => {
+    const next = { ...HEADER_DEFAULTS }
+    setHdrCfg(next)
+    try { await saveNow({ menuHeader: next }); updateTenantLocal({ menuHeader: next }); toast.success(t('saved')) } catch (_) { toast.error(t('error')) }
+  }
+  const [hdrBusy, setHdrBusy] = useState(false)
+  const onHeaderFile = async (e) => {
+    const file = e.target.files?.[0]; e.target.value = ''
+    if (!file) return
+    setHdrBusy(true)
+    try {
+      const small = await shrinkImage(file, 1600, 0.85)
+      const url = await uploadImage(tenantId, small, 'branding')
+      await writeHeader({ url, mode: 'image' })
+    } catch (_) { toast.error(ar ? 'تعذّر رفع الصورة (فعّل Storage)' : 'Upload failed (enable Storage)') } finally { setHdrBusy(false) }
+  }
+
+  // ===== THE BUTTON SKIN (tenant.menuButtons) =====
+  const [btnCfg, setBtnCfg] = useState(() => ({ ...BUTTON_DEFAULTS, ...(tenant?.menuButtons || {}) }))
+  const btnSavedKey = JSON.stringify(tenant?.menuButtons || null)
+  useEffect(() => { setBtnCfg({ ...BUTTON_DEFAULTS, ...(tenant?.menuButtons || {}) }) }, [btnSavedKey]) // eslint-disable-line react-hooks/exhaustive-deps
+  const writeButtons = async (patch, debounced) => {
+    const next = { ...btnCfg, ...patch }
+    setBtnCfg(next)
+    if (debounced) { commitPosBg({ menuButtons: next }); return }
+    try { await saveNow({ menuButtons: next }); updateTenantLocal({ menuButtons: next }); toast.success(t('saved')) } catch (_) { toast.error(t('error')) }
+  }
+  const resetButtons = async () => {
+    const next = { ...BUTTON_DEFAULTS }
+    setBtnCfg(next)
+    try { await saveNow({ menuButtons: next }); updateTenantLocal({ menuButtons: next }); toast.success(t('saved')) } catch (_) { toast.error(t('error')) }
+  }
+  const [btnBusy, setBtnBusy] = useState(false)
+  const onButtonFile = async (e) => {
+    const file = e.target.files?.[0]; e.target.value = ''
+    if (!file) return
+    setBtnBusy(true)
+    try {
+      const small = await shrinkImage(file, 800, 0.85)
+      const url = await uploadImage(tenantId, small, 'branding')
+      await writeButtons({ url, skin: 'image' })
+    } catch (_) { toast.error(ar ? 'تعذّر رفع الصورة (فعّل Storage)' : 'Upload failed (enable Storage)') } finally { setBtnBusy(false) }
+  }
 
   // ===== HOW DISHES ARE JOINED (tenant.menuSections) =====
   // Same draft-free discipline as the wall: discrete picks save at once, the
@@ -1170,6 +1267,24 @@ export default function Settings() {
     typo,
     bgGradient: gradientCss, bgImageUrl, bgVideoUrl: bgVideoUrl.trim(), watermarkUrl,
     bgOpacity: Number(bgOpacity), bgPosition, bgScale: Number(bgScale),
+    // THE ROOM, live. These are the cards' own working states — not the saved
+    // tenant — so the preview repaints on every slider tick instead of waiting
+    // for the 400ms debounce to land. Their absence here is precisely why the
+    // wall/table/seams/decor cards looked dead in the big preview.
+    // Each streams ONLY once the tenant actually has the field: the card states
+    // are seeded from DEFAULTS (a running-bond wall, a walnut table), and
+    // streaming those unconditionally would preview a room the venue never
+    // configured. The cards save instantly, so the field exists from the very
+    // first touch onward.
+    ...(tenant?.menuWall ? { menuWall: wallCfg } : {}),
+    ...(tenant?.menuTable ? { menuTable: tblCfg } : {}),
+    ...(tenant?.menuSections ? { menuSections: secCfg } : {}),
+    ...(tenant?.menuDecor ? { menuDecor: decor.map(writeDecorRow) } : {}),
+    ...(tenant?.menuHeader ? { menuHeader: hdrCfg } : {}),
+    ...(tenant?.menuButtons ? { menuButtons: btnCfg } : {}),
+    // instant-saved singles the frame should also follow without a reload
+    socialStyle: tenant?.socialStyle, welcomeStyle: tenant?.welcomeStyle, catNavStyle: tenant?.catNavStyle,
+    featuredMode: tenant?.featuredMode, featuredCount: tenant?.featuredCount, featuredStyle: tenant?.featuredStyle,
   }
 
   const onPick = (e, kind) => { const file = e.target.files?.[0]; e.target.value = ''; if (file) setCropState({ file, kind }) }
@@ -1965,7 +2080,7 @@ export default function Settings() {
                     [(ar ? 'التخطيط: ' : 'Layout: ') + (ar ? (LAYOUT_LABELS[ovLayout] || ovLayout) : (LAYOUT_LABELS_EN[ovLayout] || ovLayout)), 'elements'],
                     [(ar ? 'البانر: ' : 'Banner: ') + (bannerVideoUrl ? (ar ? 'فيديو' : 'video') : bannerUrl ? (ar ? 'صورة' : 'image') : (ar ? 'بدون' : 'none')), 'media'],
                     [(ar ? 'الاندماج: ' : 'Melt: ') + ((FADE_LABELS[bannerFadeDir] || FADE_LABELS.bottom)[ar ? 0 : 1]), 'media'],
-                    [(ar ? 'الجدار: ' : 'Wall: ') + (() => { const p = WALL_PATTERNS.find((x) => x.id === wallCfg.pattern) || WALL_PATTERNS[0]; return ar ? p.ar : p.en })(), 'media'],
+                    [(ar ? 'الجدار: ' : 'Wall: ') + (() => { const p = WALL_PATTERNS.find((x) => x.id === wallCfg.pattern) || WALL_PATTERNS[0]; return ar ? p.ar : p.en })(), 'room'],
                   ].map(([lbl, sec], i) => (
                     <span key={sec + i} className="row" style={{ gap: 6, alignItems: 'center', flex: 'none' }}>
                       {i > 0 && <span className="faint">·</span>}
@@ -1974,7 +2089,7 @@ export default function Settings() {
                   ))}
                 </div>
                 <div className="row" style={{ gap: 6, flexWrap: 'wrap', alignItems: 'center' }}>
-                  {[['theme', 'sparkles', ar ? 'الثيم' : 'Theme'], ['elements', 'settings', ar ? 'المكونات والعناصر' : 'Elements'], ['colors', 'penLine', ar ? 'الألوان والنصوص' : 'Colors & text'], ['media', 'image', ar ? 'الخلفيات والوسائط' : 'Media'], ['details', 'eye', ar ? 'التفاصيل والتواصل' : 'Details & social'], ['staff', 'cashier', ar ? 'الكاشير والمطبخ' : 'Cashier & kitchen'], ['pinlock', 'key', ar ? 'شاشة القفل' : 'Lock screen']].map(([id, ic, lbl]) => (
+                  {[['theme', 'sparkles', ar ? 'الثيم' : 'Theme'], ['room', 'layers', ar ? 'غرفة المنيو' : 'The room'], ['elements', 'settings', ar ? 'المكونات والعناصر' : 'Elements'], ['colors', 'penLine', ar ? 'الألوان والنصوص' : 'Colors & text'], ['media', 'image', ar ? 'الخلفيات والوسائط' : 'Media'], ['details', 'eye', ar ? 'التفاصيل والتواصل' : 'Details & social'], ['staff', 'cashier', ar ? 'الكاشير والمطبخ' : 'Cashier & kitchen'], ['pinlock', 'key', ar ? 'شاشة القفل' : 'Lock screen']].map(([id, ic, lbl]) => (
                     <button key={id} className={`chip ${aSec === id ? 'active' : ''}`} style={{ flex: 'none' }} onClick={() => setASec(id)}><Icon name={ic} size={14} /> {lbl}</button>
                   ))}
                   {/* studio-wide undo/redo (also Ctrl+Z / Ctrl+Y) — histVer keeps counts fresh */}
@@ -2806,23 +2921,67 @@ export default function Settings() {
                 </div>
 
                 {/* 4. Show/Hide elements checklist */}
-                <div className="card card-pad stack" style={{ gap: 10 }}>
-                  <strong className="small"><Icon name="bell" size={14} style={{ verticalAlign: 'middle' }} /> {ar ? 'عناصر المنيو المعروضة والنشطة' : 'Show / Hide Active Elements'}</strong>
-                  <p className="xs faint">{ar ? 'اضغط لإخفاء أو تفعيل أي قسم من صفحة الزوار الخارجية مباشرة.' : 'Tap any element to toggle its visibility on the customer page.'}</p>
-                  <div className="row wrap" style={{ gap: 6 }}>
-                    {HIDEABLE.map(([key, la, le]) => {
-                      const on = !ovHidden.includes(key)
-                      return (
-                        <button 
-                          key={key} 
-                          className={`chip ${on ? 'active' : ''}`}
-                          style={{ borderRadius: 10 }}
-                          onClick={() => setOvHidden((h) => h.includes(key) ? h.filter((x) => x !== key) : [...h, key])}
-                        >
-                          <Icon name={on ? 'check' : 'close'} size={12} /> {ar ? la : le}
-                        </button>
-                      )
-                    })}
+                <div id="set-hidematrix" className="card card-pad stack" style={{ gap: 12 }}>
+                  <strong className="small"><Icon name="eye" size={14} style={{ verticalAlign: 'middle' }} /> {ar ? 'إظهار وإخفاء كل شيء — مصفوفة عناصر المنيو' : 'Show / hide everything — the menu element matrix'}</strong>
+                  <p className="xs faint" style={{ margin: 0 }}>
+                    {ar
+                      ? 'كل عنصر وزر وميزة في صفحة الزبون من مكان واحد. الأخضر ظاهر، والرمادي مخفي. مجموعات العناصر تُحفظ مع زر «حفظ» أسفل الشاشة، وأزرار «التجارب التفاعلية» تُحفظ فوراً.'
+                      : 'Every element, button and feature of the guest page from one place. Green = shown, grey = hidden. The element groups persist with the Save button below; the interactive experiences save instantly.'}
+                  </p>
+                  {[
+                    [ar ? 'الواجهة والأدوات' : 'Chrome & tools', ['search', 'viewToggle', 'stories', 'social', 'profile', 'notifications', 'welcome']],
+                    [ar ? 'الأقسام والمحتوى' : 'Sections & content', ['promos', 'special', 'covers', 'pairings']],
+                    [ar ? 'الطلب والتنقل' : 'Ordering & navigation', ['offers', 'events', 'reservations', 'bottomNav']],
+                  ].map(([glbl, keys]) => (
+                    <div key={glbl} className="stack" style={{ gap: 6 }}>
+                      <span className="xs faint bold">{glbl}</span>
+                      <div className="row wrap" style={{ gap: 6 }}>
+                        {HIDEABLE.filter(([k]) => keys.includes(k)).map(([key, la, le]) => {
+                          const on = !ovHidden.includes(key)
+                          return (
+                            <button
+                              key={key}
+                              className={`chip ${on ? 'active' : ''}`}
+                              style={{ borderRadius: 10 }}
+                              onClick={() => setOvHidden((h) => h.includes(key) ? h.filter((x) => x !== key) : [...h, key])}
+                            >
+                              <Icon name={on ? 'check' : 'close'} size={12} /> {ar ? la : le}
+                            </button>
+                          )
+                        })}
+                      </div>
+                    </div>
+                  ))}
+                  <div className="stack" style={{ gap: 6, borderTop: '1px solid var(--border)', paddingTop: 10 }}>
+                    <span className="xs faint bold">{ar ? 'التجارب التفاعلية (تُحفظ فوراً)' : 'Interactive experiences (save instantly)'}</span>
+                    <div className="row wrap" style={{ gap: 6 }}>
+                      {[
+                        ['gamesEnabled', 'الألعاب والتحديات', 'Games & challenges'],
+                        ['voiceWaiterEnabled', 'اطلب بصوتك', 'Voice ordering'],
+                        ['photoOrderEnabled', 'اطلب بالصورة', 'Order by photo'],
+                        ['menu3dEnabled', 'العالم ثلاثي الأبعاد', '3D world'],
+                        ['compareEnabled', 'قارن الأصناف', 'Compare dishes'],
+                        ['sharedCartEnabled', 'طلب الطاولة معاً', 'Shared table cart'],
+                        ['voiceMenuEnabled', 'قراءة المنيو صوتياً', 'Voice menu reader'],
+                        ['waiterCallEnabled', 'نداء النادل', 'Waiter call'],
+                      ].map(([key, la, le]) => {
+                        const on = tenant?.[key] !== false
+                        return (
+                          <button
+                            key={key}
+                            className={`chip ${on ? 'active' : ''}`}
+                            style={{ borderRadius: 10 }}
+                            onClick={async () => {
+                              const patch = { [key]: !on }
+                              try { await saveNow(patch); updateTenantLocal(patch); toast.success(t('saved')) } catch (_) { toast.error(t('error')) }
+                            }}
+                          >
+                            <Icon name={on ? 'check' : 'close'} size={12} /> {ar ? la : le}
+                          </button>
+                        )
+                      })}
+                    </div>
+                    <span className="xs faint">{ar ? 'هذه نفس مفاتيح تبويب «تجربة العميل» — أي تغيير هنا يظهر هناك والعكس.' : 'Same switches as the “Customer experience” tab — a change here shows there and vice versa.'}</span>
                   </div>
                 </div>
 
@@ -2865,7 +3024,12 @@ export default function Settings() {
                 </div>
 
                 </div>
-                <div style={{ display: aSec === 'media' ? 'contents' : 'none' }}>
+                {/* ============ THE ROOM («غرفة المنيو») — its own sub-tab. The wall,
+                    the header, the buttons, the table, the seams and the hung
+                    decor are ONE mental model (the venue dressing its room), and
+                    burying them between the banner and the watermark is what made
+                    the studio feel scattered. ============ */}
+                <div style={{ display: aSec === 'room' ? 'contents' : 'none' }}>
                 {/* 6b. THE MENU WALL — the brick backdrop the dishes hang on.
                     Every key of tenant.menuWall is here: bond, finish, clay and
                     mortar colours, joint width and contrast, size, opacity,
@@ -2931,10 +3095,19 @@ export default function Settings() {
                   </div>
 
                   {wallCfg.pattern === 'image' && (
-                    <div className="row wrap" style={{ gap: 8, alignItems: 'center' }}>
-                      <button type="button" className="btn btn-sm btn-outline" onClick={() => wallFileRef.current?.click()}><Icon name="upload" size={13} /> {ar ? 'تغيير صورة الجدار' : 'Change the wall image'}</button>
-                      <button type="button" className="btn-link xs" onClick={() => setLibPick({ kind: 'image', apply: (url) => writeWall({ url, pattern: 'image' }) })}>{ar ? 'من المكتبة' : 'From library'}</button>
-                      <span className="xs faint">{ar ? 'الصورة تغطّي الشاشة كاملة عند الحجم 1.00x، وتتكرّر كبلاط عند أي حجم آخر.' : 'The photo covers the screen at 1.00x and tiles at any other size.'}</span>
+                    <div className="stack" style={{ gap: 6 }}>
+                      <div className="row wrap" style={{ gap: 8, alignItems: 'center' }}>
+                        <button type="button" className="btn btn-sm btn-outline" onClick={() => wallFileRef.current?.click()}><Icon name="upload" size={13} /> {ar ? 'تغيير صورة الجدار' : 'Change the wall image'}</button>
+                        <button type="button" className="btn-link xs" onClick={() => setLibPick({ kind: 'image', apply: (url) => writeWall({ url, pattern: 'image' }) })}>{ar ? 'من المكتبة' : 'From library'}</button>
+                        <button type="button" className="btn btn-sm btn-outline" disabled={wallSeamBusy || !wallCfg.url} onClick={fixWallSeams}>
+                          {wallSeamBusy ? <span className="spinner" /> : <Icon name="sparkles" size={13} />} {ar ? 'إزالة فواصل التكرار' : 'Remove tiling seams'}
+                        </button>
+                      </div>
+                      <span className="xs faint">
+                        {ar
+                          ? 'الصورة تغطّي الشاشة كاملة عند الحجم 1.00x وتتكرّر كبلاط عند أي حجم آخر. إن ظهرت خطوط قصّ عند التكرار اضغط «إزالة فواصل التكرار» — نذيب حواف الصورة في بعضها فتتصل بلا خط.'
+                          : 'The photo covers the screen at 1.00x and tiles at any other size. If cut lines show where it repeats, tap “Remove tiling seams” — the edges are melted into each other so the tile joins without a line.'}
+                      </span>
                     </div>
                   )}
 
@@ -2968,6 +3141,12 @@ export default function Settings() {
                     <p className="xs faint" style={{ margin: 0 }}>{ar ? 'الجدار مطفأ — يعرض الثيم لوحته الداكنة السادة خلف الأطباق.' : 'The wall is off — the theme shows its plain dark canvas behind the dishes.'}</p>
                   ) : (
                     <>
+                      {/* A photograph carries its own age; the procedural finish
+                          passes are for the drawn bonds only — over a photo they
+                          painted dark stains, which is what the owner reported.
+                          The engine skips them for photos, so offering the tiles
+                          here would be offering a lie. */}
+                      {wallCfg.pattern !== 'image' && (
                       <div className="stack" style={{ gap: 6 }}>
                         <span className="xs faint bold">{ar ? 'حالة السطح (التشطيب)' : 'Finish — the surface condition'}</span>
                         <div className="mwall-grid">
@@ -2983,6 +3162,7 @@ export default function Settings() {
                           })}
                         </div>
                       </div>
+                      )}
 
                       <div className="row wrap" style={{ gap: 16, alignItems: 'center', borderTop: '1px solid var(--border)', paddingTop: 10 }}>
                         <label className="row" style={{ gap: 6, cursor: 'pointer', alignItems: 'center' }}>
@@ -2999,6 +3179,9 @@ export default function Settings() {
 
                       <div className="stack" style={{ gap: 8 }}>
                         {WALL_SLIDERS.map(([key, la, le, unit]) => {
+                          // a photograph has no joints — offering the joint dials
+                          // over it would move numbers that change nothing
+                          if (wallCfg.pattern === 'image' && (key === 'grout' || key === 'mortar')) return null
                           const R = WALL_RANGE[key]
                           const v = Number(wallCfg[key] != null ? wallCfg[key] : R.dflt)
                           return (
@@ -3053,6 +3236,155 @@ export default function Settings() {
                           </div>
                         </div>
                         <span className="xs faint">{ar ? 'اقرأ اسم الطبق وسعره فوق الجدار: إن صعبت القراءة قلّل «ظهور الجدار» أو زد «تنعيم الجدار».' : 'Read the dish name and price over the wall: if that is hard, lower “Wall opacity” or raise “Wall blur”.'}</span>
+                      </div>
+                    </>
+                  )}
+                </div>
+
+                {/* 6b2. THE TOP HEADER (tenant.menuHeader) — the venue's own bar:
+                    its face (theme / the wall's brick / the venue's photo) and
+                    which of its elements exist. The image mode works in EVERY
+                    theme; the brick mode delegates its colours to the wall. */}
+                <div id="set-menuheader" className="card card-pad stack" style={{ gap: 12 }}>
+                  <div className="row-between wrap" style={{ gap: 8, alignItems: 'center' }}>
+                    <strong className="small"><Icon name="layers" size={14} style={{ verticalAlign: 'middle' }} /> {ar ? 'الهيدر العلوي — وجهه وعناصره' : 'Top header — its face and elements'}</strong>
+                    <button type="button" className="btn-link xs" onClick={resetHeader}><Icon name="reload" size={12} /> {ar ? 'إرجاع الافتراضي' : 'Reset to default'}</button>
+                  </div>
+                  <p className="xs faint" style={{ margin: 0 }}>
+                    {ar
+                      ? 'الشريط العلوي للمنيو صار ملكك: البسه صورة من عندك تحت طبقة تعتيم تضمن قراءة الاسم، أو ابنه من طوب الجدار نفسه، وقرّر أي عناصره تظهر. وضع «صورتي» يعمل مع كل الثيمات.'
+                      : 'The menu’s top bar is yours now: dress it in your own photo under a readability veil, build it from the wall’s own brick, and decide which of its elements exist. The photo mode works with every theme.'}
+                  </p>
+                  <input type="file" accept="image/*" hidden id="set-menuheader-file" onChange={onHeaderFile} />
+                  <div className="row wrap" style={{ gap: 6, alignItems: 'center' }}>
+                    <span className="xs faint bold">{ar ? 'وجه الهيدر' : 'The face'}</span>
+                    {HEADER_MODES.map((m) => {
+                      const on = (hdrCfg.mode || '') === m.id || (!hdrCfg.mode && m.id === 'brick' && wallCfg.header === true)
+                      return (
+                        <button key={m.id || 'theme'} type="button" className={`chip ${on ? 'active' : ''}`} aria-pressed={on}
+                          onClick={() => {
+                            if (m.id === 'image' && !hdrCfg.url) { document.getElementById('set-menuheader-file')?.click(); return }
+                            writeHeader({ mode: m.id })
+                            // «حسب الثيم» must actually return the theme's bar: the old
+                            // brick checkbox on the wall card would otherwise win the
+                            // fallback and the choice here would look dead
+                            if (m.id === '' && wallCfg.header === true) writeWall({ header: false })
+                          }}>{ar ? m.ar : m.en}</button>
+                      )
+                    })}
+                    {hdrBusy && <span className="spinner" />}
+                  </div>
+                  {hdrCfg.mode === 'image' && hdrCfg.url && (
+                    <>
+                      <div className="row wrap" style={{ gap: 8, alignItems: 'center' }}>
+                        <span className="mwall-face" style={{ width: 120, height: 40, borderRadius: 8, backgroundImage: `linear-gradient(rgba(10,6,4,${hdrCfg.scrim}), rgba(10,6,4,${hdrCfg.scrim})), url(${hdrCfg.url})`, backgroundSize: 'cover', backgroundPosition: hdrCfg.pos || 'center' }} aria-hidden="true" />
+                        <button type="button" className="btn btn-sm btn-outline" onClick={() => document.getElementById('set-menuheader-file')?.click()}><Icon name="upload" size={13} /> {ar ? 'تغيير الصورة' : 'Change the photo'}</button>
+                        <button type="button" className="btn-link xs" onClick={() => setLibPick({ kind: 'image', apply: (url) => writeHeader({ url, mode: 'image' }) })}>{ar ? 'من المكتبة' : 'From library'}</button>
+                      </div>
+                      <div className="field" style={{ gap: 2 }}>
+                        <label>{ar ? 'تعتيم فوق الصورة (لقراءة الاسم)' : 'Veil over the photo'} · <span className="num">{Math.round(hdrCfg.scrim * 100)}%</span></label>
+                        <input type="range" min={HEADER_RANGE.scrim.min} max={HEADER_RANGE.scrim.max} step={HEADER_RANGE.scrim.step} value={Number(hdrCfg.scrim)} onChange={(e) => writeHeader({ scrim: Number(e.target.value) }, true)} style={{ width: '100%' }} />
+                      </div>
+                      <div className="field" style={{ gap: 2 }}>
+                        <label>{ar ? 'تنعيم الصورة' : 'Photo blur'} · <span className="num">{Number(hdrCfg.blur)}px</span></label>
+                        <input type="range" min={HEADER_RANGE.blur.min} max={HEADER_RANGE.blur.max} step={HEADER_RANGE.blur.step} value={Number(hdrCfg.blur)} onChange={(e) => writeHeader({ blur: Number(e.target.value) }, true)} style={{ width: '100%' }} />
+                      </div>
+                      <div className="field" style={{ gap: 2, maxWidth: 240 }}>
+                        <label>{ar ? 'موضع الصورة داخل الشريط' : 'Photo position'}</label>
+                        <select className="select" value={hdrCfg.pos || 'center'} onChange={(e) => writeHeader({ pos: e.target.value })}>
+                          <option value="top">{ar ? 'أعلى الصورة' : 'Top'}</option>
+                          <option value="center">{ar ? 'وسطها' : 'Centre'}</option>
+                          <option value="bottom">{ar ? 'أسفلها' : 'Bottom'}</option>
+                        </select>
+                      </div>
+                    </>
+                  )}
+                  <div className="stack" style={{ gap: 6, borderTop: '1px solid var(--border)', paddingTop: 10 }}>
+                    <span className="xs faint bold">{ar ? 'عناصر الهيدر — أظهر ما تريد فقط' : 'Header elements — keep only what you want'}</span>
+                    <div className="row wrap" style={{ gap: 12 }}>
+                      {[['logo', ar ? 'الشعار' : 'Logo'], ['name', ar ? 'اسم المنشأة' : 'Venue name'], ['lang', ar ? 'زر اللغة' : 'Language button'], ['theme', ar ? 'زر الوضع الفاتح/الداكن' : 'Light/dark button']].map(([k, lbl]) => (
+                        <label key={k} className="row" style={{ gap: 6, cursor: 'pointer', alignItems: 'center' }}>
+                          <input type="checkbox" checked={hdrCfg[k] !== false} onChange={(e) => writeHeader({ [k]: e.target.checked })} style={{ width: 20, height: 20 }} />
+                          <span className="xs">{lbl}</span>
+                        </label>
+                      ))}
+                    </div>
+                    <span className="xs faint">{ar ? 'إخفاء زر اللغة أو الوضع يخفيه عن الزبون نهائياً — أبقهما إن كان جمهورك يستعملهما.' : 'Hiding the language or theme button removes it for guests entirely — keep them if your guests use them.'}</span>
+                  </div>
+                </div>
+
+                {/* 6b3. THE BUTTON SKIN (tenant.menuButtons) — the menu's action
+                    buttons dressed in the venue's wall or its own photo. */}
+                <div id="set-menubuttons" className="card card-pad stack" style={{ gap: 12 }}>
+                  <div className="row-between wrap" style={{ gap: 8, alignItems: 'center' }}>
+                    <strong className="small"><Icon name="shapes" size={14} style={{ verticalAlign: 'middle' }} /> {ar ? 'أزرار المنيو — طوب أو صورتك' : 'Menu buttons — brick or your photo'}</strong>
+                    <button type="button" className="btn-link xs" onClick={resetButtons}><Icon name="reload" size={12} /> {ar ? 'إرجاع الافتراضي' : 'Reset to default'}</button>
+                  </div>
+                  <p className="xs faint" style={{ margin: 0 }}>
+                    {ar
+                      ? 'أزرار «اعرض الطبق» و«أضِف إلى السلة» والتصنيف النشط تلبس ما تختاره هنا: طوب الجدار نفسه بلونه ولحامه، أو صورة من عندك تحت طبقة تعتيم خفيفة ليبقى النص مقروءاً.'
+                      : 'The “View dish” / “Add to cart” buttons and the active category chip wear what you choose here: the wall’s own brick, or your own photo under a light veil so the label stays readable.'}
+                  </p>
+                  {ovLayout !== 'editorial' && (
+                    <p className="xs" style={{ margin: 0, color: 'var(--warning)' }}>
+                      {ar ? 'كساء الأزرار يظهر في ثيم «المجلة الداكنة» فقط، وتخطيط المنيو الحالي غيره. ' : 'The button skin shows in the “Dark Editorial” theme only, and your layout is currently different. '}
+                      <button type="button" className="btn-link" style={{ fontSize: 'inherit', fontWeight: 700 }} onClick={() => setASec('elements')}>{ar ? 'تغيير التخطيط' : 'Change the layout'}</button>
+                    </p>
+                  )}
+                  <input type="file" accept="image/*" hidden id="set-menubuttons-file" onChange={onButtonFile} />
+                  <div className="row wrap" style={{ gap: 6, alignItems: 'center' }}>
+                    <span className="xs faint bold">{ar ? 'الكساء' : 'The skin'}</span>
+                    {BUTTON_SKINS.map((s) => {
+                      const on = (btnCfg.skin || '') === s.id
+                      return (
+                        <button key={s.id || 'theme'} type="button" className={`chip ${on ? 'active' : ''}`} aria-pressed={on}
+                          onClick={() => {
+                            if (s.id === 'image' && !btnCfg.url) { document.getElementById('set-menubuttons-file')?.click(); return }
+                            writeButtons({ skin: s.id })
+                          }}>{ar ? s.ar : s.en}</button>
+                      )
+                    })}
+                    {btnBusy && <span className="spinner" />}
+                  </div>
+                  {btnCfg.skin && (
+                    <>
+                      {btnCfg.skin === 'image' && btnCfg.url && (
+                        <div className="row wrap" style={{ gap: 8, alignItems: 'center' }}>
+                          <button type="button" className="btn btn-sm btn-outline" onClick={() => document.getElementById('set-menubuttons-file')?.click()}><Icon name="upload" size={13} /> {ar ? 'تغيير الصورة' : 'Change the photo'}</button>
+                          <button type="button" className="btn-link xs" onClick={() => setLibPick({ kind: 'image', apply: (url) => writeButtons({ url, skin: 'image' }) })}>{ar ? 'من المكتبة' : 'From library'}</button>
+                        </div>
+                      )}
+                      <div className="row wrap" style={{ gap: 10 }}>
+                        <div className="field grow" style={{ minWidth: 170 }}>
+                          <label>{ar ? 'استدارة الزوايا' : 'Corner radius'} · <span className="num">{Number(btnCfg.radius)}px</span></label>
+                          <input type="range" min={BUTTON_RANGE.radius.min} max={BUTTON_RANGE.radius.max} step={BUTTON_RANGE.radius.step} value={Number(btnCfg.radius)} onChange={(e) => writeButtons({ radius: Number(e.target.value) }, true)} style={{ width: '100%' }} />
+                        </div>
+                        <div className="field grow" style={{ minWidth: 170 }}>
+                          <label>{ar ? 'تعتيم فوق الوجه (لقراءة النص)' : 'Veil over the face'} · <span className="num">{Math.round(btnCfg.scrim * 100)}%</span></label>
+                          <input type="range" min={BUTTON_RANGE.scrim.min} max={BUTTON_RANGE.scrim.max} step={BUTTON_RANGE.scrim.step} value={Number(btnCfg.scrim)} onChange={(e) => writeButtons({ scrim: Number(e.target.value) }, true)} style={{ width: '100%' }} />
+                        </div>
+                        <div className="field" style={{ minWidth: 140 }}>
+                          <label>{ar ? 'لون النص' : 'Label ink'}</label>
+                          <div className="segmented">
+                            <button type="button" className={btnCfg.ink !== 'dark' ? 'active' : ''} onClick={() => writeButtons({ ink: 'light' })}>{ar ? 'فاتح' : 'Light'}</button>
+                            <button type="button" className={btnCfg.ink === 'dark' ? 'active' : ''} onClick={() => writeButtons({ ink: 'dark' })}>{ar ? 'داكن' : 'Dark'}</button>
+                          </div>
+                        </div>
+                      </div>
+                      <div className="row wrap" style={{ gap: 8, alignItems: 'center' }}>
+                        <span className="xs faint bold">{ar ? 'معاينة:' : 'Preview:'}</span>
+                        <span
+                          aria-hidden="true"
+                          style={{
+                            display: 'inline-flex', alignItems: 'center', gap: 6, minHeight: 40, padding: '10px 20px',
+                            borderRadius: Number(btnCfg.radius) || 0, fontWeight: 800, fontSize: 13,
+                            color: btnCfg.ink === 'dark' ? '#24170e' : '#fff', textShadow: '0 1px 2px rgba(0,0,0,.4)',
+                            backgroundColor: '#5d3a24',
+                            ...(btnCfg.skin === 'image' && btnCfg.url
+                              ? { backgroundImage: `linear-gradient(rgba(14,9,6,${btnCfg.scrim}), rgba(14,9,6,${btnCfg.scrim})), url(${btnCfg.url})`, backgroundSize: 'cover', backgroundPosition: 'center' }
+                              : (() => { const f = wallFaceStyle(wallPainter, { ...wallCfg, ...(wallCfg.pattern === 'image' ? { scale: 1 } : { scale: Math.max(0.18, Math.min(0.5, (Number(wallCfg.scale) || 1) * 0.3)) }), opacity: 1, blur: 0, blend: 'normal', filter: '', tint: '', tintAmount: 0 }); return f ? { backgroundImage: `linear-gradient(rgba(14,9,6,${btnCfg.scrim}), rgba(14,9,6,${btnCfg.scrim})), ${f.backgroundImage}`, backgroundSize: `auto, ${f.backgroundSize}`, backgroundRepeat: `no-repeat, ${f.backgroundRepeat || 'repeat'}`, backgroundPosition: `center, ${f.backgroundPosition || 'center'}`, backgroundColor: f.backgroundColor } : {} })()),
+                          }}
+                        >{ar ? 'أضِف إلى السلة' : 'Add to cart'}</span>
                       </div>
                     </>
                   )}
@@ -3173,7 +3505,10 @@ export default function Settings() {
                             const on = tblCfg.material === m.id
                             return (
                               <button key={m.id} type="button" className="dpx-surface" data-on={on ? 'true' : 'false'} aria-pressed={on}
-                                onClick={() => writeTable({ material: m.id })}>
+                                onClick={() => writeTable({ material: m.id, kind: 'material' })}>
+                                {/* picking a material IS choosing the material table — the
+                                    live venue once sat on kind:'image' with no photo and the
+                                    menu drew no table at all */}
                                 <span className="dpx-chip" data-s={m.id} />
                                 <span className="dpx-surface-name">{ar ? m.ar : m.en}</span>
                               </button>
@@ -3280,6 +3615,8 @@ export default function Settings() {
                   />
                 </div>
 
+                </div>
+                <div style={{ display: aSec === 'media' ? 'contents' : 'none' }}>
                 {/* 7. Custom gradient builders */}
                 <div className="card card-pad stack" style={{ gap: 10 }}>
                   <label className="row-between" style={{ cursor: 'pointer' }}>
@@ -4671,6 +5008,10 @@ const DECOR_BOXES = [
   ['page-top-end', 'page'],
   ['page-bottom-start', 'page'],
   ['page-bottom-end', 'page'],
+  // free placement: the box IS the whole page, so x/y are shares of the page
+  ['page-free', 'page'],
+  // screen-pinned: the box is the whole schematic screen (viewport)
+  ['screen', 'screen'],
 ]
 const decorAnchorLabel = (id, ar) => {
   const a = DECOR_ANCHORS.find((x) => x.id === id) || DECOR_ANCHORS[0]
@@ -4960,6 +5301,10 @@ function DecorCard({
               </div>
               {boxesFor('page', true)}
             </div>
+            {/* screen-pinned pieces ride over the whole schematic, exactly as
+                they ride the real viewport */}
+            {boxesFor('screen', false)}
+            {boxesFor('screen', true)}
           </div>
         </div>
         <span className="xs faint">
@@ -4988,7 +5333,8 @@ function DecorCard({
                   <span className="mdx-rowtext">
                     <b>{d.name || (ar ? 'قطعة زينة' : 'Decoration')}</b>
                     <span className="xs faint num">
-                      {decorAnchorLabel(d.anchor, ar)} · {d.w}% · {d.rot}°{d.front ? '' : (ar ? ' · خلف المنيو' : ' · behind')}
+                      {decorAnchorLabel(d.anchor, ar)} · {d.w}% · {d.rot}°
+                      {d.depth === 'back' ? (ar ? ' · على الخلفية' : ' · on the wall') : d.depth === 'top' ? (ar ? ' · فوق كل شيء' : ' · above all') : ''}
                     </span>
                   </span>
                 </button>
@@ -5054,9 +5400,23 @@ function DecorControls({ ar, d, onChange, onCrop }) {
         <div className="row wrap" style={{ gap: 6 }}>
           {DECOR_ANCHORS.map((a) => (
             <button key={a.id} type="button" className={`chip ${d.anchor === a.id ? 'active' : ''}`} aria-pressed={d.anchor === a.id}
-              onClick={() => onChange({ anchor: a.id })}>{ar ? a.ar : a.en}</button>
+              onClick={() => {
+                const o = { anchor: a.id }
+                // jumping into a whole-page/whole-screen box from a corner slot
+                // would leave the piece at x=8/y=24 of a huge box — recentre it
+                const free = a.id === 'page-free' || a.id === 'screen'
+                const wasFree = d.anchor === 'page-free' || d.anchor === 'screen'
+                if (free && !wasFree) { o.x = 50; o.y = a.id === 'screen' ? 78 : 10; o.w = Math.max(d.w, 14) }
+                if (a.id === 'screen' && d.depth === 'back') { o.depth = 'front'; o.front = true }
+                onChange(o)
+              }}>{ar ? a.ar : a.en}</button>
           ))}
         </div>
+        <span className="xs faint">
+          {ar
+            ? '«حر في الصفحة» يضع القطعة في أي نقطة من صفحة المنيو وتتحرك مع التمرير كأنها أثاث الغرفة. «ثابت على الشاشة» يثبّتها أمامك والمنيو يمر تحتها.'
+            : '“Anywhere on the page” stands the piece at any point of the menu page and it rides the scroll like furniture. “Pinned to the screen” keeps it in place while the menu scrolls under it.'}
+        </span>
       </div>
 
       <div className="stack" style={{ gap: 8 }}>
@@ -5073,14 +5433,30 @@ function DecorControls({ ar, d, onChange, onCrop }) {
         })}
       </div>
 
+      <div className="stack" style={{ gap: 6 }}>
+        <span className="xs faint bold">{ar ? 'العمق — أين تقف في الغرفة' : 'Depth — where it stands in the room'}</span>
+        <div className="row wrap" style={{ gap: 6 }}>
+          {DECOR_DEPTHS.map((z) => {
+            const blocked = d.anchor === 'screen' && z.id === 'back'
+            return (
+              <button key={z.id} type="button" className={`chip ${d.depth === z.id ? 'active' : ''}`} aria-pressed={d.depth === z.id}
+                disabled={blocked}
+                title={blocked ? (ar ? 'القطعة المثبتة على الشاشة لا يمكن أن تكون خلف المحتوى' : 'A screen-pinned piece cannot sit behind the content') : ''}
+                onClick={() => onChange({ depth: z.id, front: z.id !== 'back' })}>{ar ? z.ar : z.en}</button>
+            )
+          })}
+        </div>
+        <span className="xs faint">
+          {ar
+            ? '«على الخلفية» تلصقها بالجدار خلف الأصناف، و«أمام المحتوى» تجعلها تطفو فوقها، و«فوق كل شيء» ترفعها فوق الأشرطة الثابتة نفسها.'
+            : '“On the wall” slips it behind the dishes, “in front” floats it over them, and “above everything” clears even the sticky bars.'}
+        </span>
+      </div>
+
       <div className="row wrap" style={{ gap: 16, alignItems: 'center' }}>
         <label className="row" style={{ gap: 6, cursor: 'pointer', alignItems: 'center' }}>
           <input type="checkbox" checked={!!d.flip} onChange={(e) => onChange({ flip: e.target.checked })} style={{ width: 20, height: 20 }} />
           <span className="xs">{ar ? 'اقلبها أفقياً' : 'Flip horizontally'}</span>
-        </label>
-        <label className="row" style={{ gap: 6, cursor: 'pointer', alignItems: 'center' }}>
-          <input type="checkbox" checked={d.front !== false} onChange={(e) => onChange({ front: e.target.checked })} style={{ width: 20, height: 20 }} />
-          <span className="xs">{ar ? 'أمام المنيو (أطفئه لتصير خلفه)' : 'In front of the menu (off = behind it)'}</span>
         </label>
       </div>
 

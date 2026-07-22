@@ -390,6 +390,11 @@ export const WALL_RANGE = {
   blur: { min: 0, max: 30, step: 0.5, dflt: 0 },
   mortar: { min: 0, max: 1, step: 0.05, dflt: 0.5 },  // joint contrast
   grout: { min: 1, max: 8, step: 0.5, dflt: 3 },      // joint width, px at scale 1
+  // The readability panel behind the words. It used to be a hard-coded solid
+  // slab with a 16px-spread shadow — the "black box with a halo" the owner
+  // rejected. Now it is a dial: 1 keeps text bullet-proof on a busy photo wall,
+  // 0 removes the panel entirely and trusts the wall to be calm enough.
+  panel: { min: 0, max: 1, step: 0.05, dflt: 0.65 },
 }
 
 /**
@@ -419,6 +424,7 @@ export function resolveWall(tenant) {
     grout: num(t.grout, R.grout.dflt, R.grout.min, R.grout.max),
     tint: String(t.tint || ''),
     tintAmount: num(t.tintAmount, 0, 0, 1),
+    panel: num(t.panel, R.panel.dflt, 0, 1),
     // Whether the menu HEADER is built from this same wall. It belongs here and
     // not on a key of its own because it has no colours of its own: the theme
     // takes this bond, this clay and this mortar, scales the unit down to the
@@ -541,10 +547,15 @@ export const TABLE_RANGE = {
  */
 export function resolveTable(tenant) {
   const t = (tenant && tenant.menuTable) || {}
-  const kind = str(t.kind, TABLE_KIND_IDS, 'none')
+  let kind = str(t.kind, TABLE_KIND_IDS, 'none')
   if (kind === 'none') return null
   const url = String(t.url || '')
-  if (kind === 'image' && !url) return null
+  // "My own photo" with no photo yet falls back to the chosen material instead
+  // of disappearing: the live venue had kind:'image', url:'' with a fully tuned
+  // slate table, and the menu silently rendered a bare black panel. A venue that
+  // configured lift/shade/material has clearly decided to HAVE a table; the
+  // missing upload must not undo that decision.
+  if (kind === 'image' && !url) kind = 'material'
   const R = TABLE_RANGE
   return {
     kind,
@@ -608,8 +619,25 @@ export const DECOR_ANCHORS = [
   { id: 'page-top-end', ar: 'أعلى الصفحة — نهاية', en: 'Page top end' },
   { id: 'page-bottom-start', ar: 'أسفل الصفحة — بداية', en: 'Page bottom start' },
   { id: 'page-bottom-end', ar: 'أسفل الصفحة — نهاية', en: 'Page bottom end' },
+  // The two the owner actually asked for once the slots proved too coarse:
+  // 'page-free' rides WITH the page (x/y are percent of the whole scroll), so a
+  // pot can stand beside the third dish and stay there; 'screen' is pinned to
+  // the viewport and does not move while the menu scrolls under it.
+  { id: 'page-free', ar: 'حر في الصفحة — يتحرك مع التمرير', en: 'Anywhere on the page' },
+  { id: 'screen', ar: 'ثابت على الشاشة — لا يتحرك', en: 'Pinned to the screen' },
 ]
 export const DECOR_ANCHOR_IDS = DECOR_ANCHORS.map((a) => a.id)
+
+// Where the piece sits in the room's depth. Replaces the old front/back
+// boolean: 'back' slips behind the menu content onto the wall itself, 'front'
+// floats over the content, 'top' clears even the sticky bars (a lamp hanging
+// over everything). The old `front` field still resolves for saved documents.
+export const DECOR_DEPTHS = [
+  { id: 'back', ar: 'على الخلفية — خلف المحتوى', en: 'On the wall, behind content' },
+  { id: 'front', ar: 'أمام المحتوى', en: 'In front of content' },
+  { id: 'top', ar: 'فوق كل شيء', en: 'Above everything' },
+]
+export const DECOR_DEPTH_IDS = DECOR_DEPTHS.map((d) => d.id)
 
 // A hanging object should swing a little; a standing one should not. `hang`
 // swings from its TOP edge, which is what makes a lantern read as suspended
@@ -626,7 +654,7 @@ export const DECOR_MOTION_IDS = DECOR_MOTIONS.map((m) => m.id)
 export const DECOR_RANGE = {
   x: { min: -20, max: 120, step: 0.5, dflt: 8 },   // percent across its anchor box
   y: { min: -40, max: 140, step: 0.5, dflt: 0 },
-  w: { min: 3, max: 90, step: 0.5, dflt: 16 },     // percent of the anchor's smaller side
+  w: { min: 3, max: 150, step: 0.5, dflt: 16 },    // percent of the anchor's smaller side
   rot: { min: -180, max: 180, step: 1, dflt: 0 },
   opacity: { min: 0, max: 1, step: 0.05, dflt: 1 },
   glow: { min: 0, max: 1, step: 0.05, dflt: 0 },   // warm halo behind it, for lamps
@@ -638,11 +666,18 @@ export function normalizeDecor(raw) {
   const url = String(raw.url || '')
   if (!url) return null
   const R = DECOR_RANGE
+  const anchor = str(raw.anchor, DECOR_ANCHOR_IDS, 'header-start')
+  // depth supersedes the old boolean; old documents resolve front:false -> back.
+  let depth = str(raw.depth, DECOR_DEPTH_IDS, raw.front === false ? 'back' : 'front')
+  // A screen-pinned piece cannot go behind the content: position:fixed cannot
+  // slide under the page without leaving the stacking context, so it would
+  // simply vanish. Clamp instead of lying.
+  if (anchor === 'screen' && depth === 'back') depth = 'front'
   return {
     id: String(raw.id || url).slice(0, 80),
     url,
     kind: raw.kind === 'model' ? 'model' : 'image',
-    anchor: str(raw.anchor, DECOR_ANCHOR_IDS, 'header-start'),
+    anchor,
     x: num(raw.x, R.x.dflt, R.x.min, R.x.max),
     y: num(raw.y, R.y.dflt, R.y.min, R.y.max),
     w: num(raw.w, R.w.dflt, R.w.min, R.w.max),
@@ -655,7 +690,8 @@ export function normalizeDecor(raw) {
     glow: num(raw.glow, R.glow.dflt, 0, 1),
     glowColor: String(raw.glowColor || '#f5b942'),
     flip: !!raw.flip,
-    front: raw.front !== false, // above the menu by default; a lamp hangs in front
+    depth,
+    front: depth !== 'back', // kept for old readers; derived, never stored apart
   }
 }
 
@@ -665,7 +701,12 @@ export function resolveDecor(tenant) {
   const all = raw.map(normalizeDecor).filter(Boolean).slice(0, 16)
   const byAnchor = {}
   for (const d of all) (byAnchor[d.anchor] = byAnchor[d.anchor] || []).push(d)
-  return { all, byAnchor, header: all.filter((d) => d.anchor.startsWith('header-')) }
+  return {
+    all,
+    byAnchor,
+    header: all.filter((d) => d.anchor.startsWith('header-')),
+    screen: all.filter((d) => d.anchor === 'screen'),
+  }
 }
 
 /** Inline style for one hung decoration. */
@@ -691,3 +732,87 @@ export function decorStyle(d) {
 
 /** True when the item has any composition worth rendering a backdrop layer for. */
 export const hasBackdrop = (comp) => !!(comp && comp.bg)
+
+// ------------------------------------------------------------ the top header --
+//
+// The venue owns its header. Before this, the bar's face was chosen from fixed
+// chrome presets plus one special case (brick reusing the wall); the owner asked
+// to hang his OWN image there and to decide which of the bar's elements exist.
+// Stored on `tenant.menuHeader`; the brick mode still delegates its colours to
+// `menuWall` (that decision lives there — see resolveWall.header).
+
+export const HEADER_MODES = [
+  { id: '', ar: 'حسب الثيم', en: 'Theme default' },
+  { id: 'brick', ar: 'من جدار المنيو', en: 'From the menu wall' },
+  { id: 'image', ar: 'صورتي', en: 'My own image' },
+]
+export const HEADER_MODE_IDS = HEADER_MODES.map((h) => h.id)
+
+export const HEADER_RANGE = {
+  scrim: { min: 0, max: 1, step: 0.05, dflt: 0.55 }, // dark veil so the bar's text survives any photo
+  blur: { min: 0, max: 20, step: 0.5, dflt: 0 },
+}
+
+/**
+ * The menu's top bar. `show` lists the bar's own elements; hiding the venue
+ * name does not hide the bar. Back-compatible: a venue that only ever ticked
+ * the old brick-header checkbox (menuWall.header) resolves to mode 'brick'.
+ */
+export function resolveMenuHeader(tenant) {
+  const h = (tenant && tenant.menuHeader) || {}
+  let mode = str(h.mode, HEADER_MODE_IDS, '')
+  if (!mode && tenant && tenant.menuWall && tenant.menuWall.header === true) mode = 'brick'
+  const url = String(h.url || '')
+  if (mode === 'image' && !url) mode = ''
+  const R = HEADER_RANGE
+  return {
+    mode,
+    url,
+    scrim: num(h.scrim, R.scrim.dflt, 0, 1),
+    blur: num(h.blur, 0, R.blur.min, R.blur.max),
+    pos: String(h.pos || 'center'),
+    show: {
+      logo: h.logo !== false,
+      name: h.name !== false,
+      lang: h.lang !== false,
+      theme: h.theme !== false,
+    },
+  }
+}
+
+// ----------------------------------------------------------- button skins ----
+//
+// The menu's action buttons (add to cart, the + steppers, the cart bar). The
+// owner asked to shape them like the room: brick like his wall, or faced with
+// his own photo. One tenant-level decision — a menu where every button dresses
+// differently reads as broken, so there is deliberately no per-item override.
+
+export const BUTTON_SKINS = [
+  { id: '', ar: 'حسب الثيم', en: 'Theme default' },
+  { id: 'brick', ar: 'طوب من الجدار', en: 'Brick from the wall' },
+  { id: 'image', ar: 'صورتي', en: 'My own image' },
+]
+export const BUTTON_SKIN_IDS = BUTTON_SKINS.map((b) => b.id)
+
+export const BUTTON_RANGE = {
+  radius: { min: 0, max: 28, step: 1, dflt: 12 },
+  scrim: { min: 0, max: 1, step: 0.05, dflt: 0.35 }, // veil over the face so the label reads
+}
+
+export function resolveButtons(tenant) {
+  const b = (tenant && tenant.menuButtons) || {}
+  let skin = str(b.skin, BUTTON_SKIN_IDS, '')
+  const url = String(b.url || '')
+  if (skin === 'image' && !url) skin = ''
+  if (!skin) return null
+  const R = BUTTON_RANGE
+  return {
+    skin,
+    url,
+    radius: num(b.radius, R.radius.dflt, R.radius.min, R.radius.max),
+    scrim: num(b.scrim, R.scrim.dflt, 0, 1),
+    // ink is decided by the renderer from the face; a manual override exists for
+    // the one photo the heuristic will inevitably get wrong.
+    ink: b.ink === 'dark' ? 'dark' : 'light',
+  }
+}

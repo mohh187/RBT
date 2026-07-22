@@ -335,6 +335,9 @@ export default function Items() {
   const can3d = planAllows(tenant, 'ar3d')
   const [batchOpen, setBatchOpen] = useState(false)
   const [studioItem, setStudioItem] = useState(null)
+  // Registered by the open ItemEditor so the 3D studio can push fresh model
+  // urls into its form while both sheets are up (see the studio's onChange).
+  const editorPatchRef = useRef(null)
 
   useEffect(() => { setTpl(sectionTemplate(tenant, 'menu')) }, [tenant])
 
@@ -652,13 +655,17 @@ export default function Items() {
         </div>
       )}
 
+      {/* the editor STAYS OPEN under the studio — closing it on onOpenStudio is
+          what made «العودة لنافذة الصنف» impossible: the studio's X landed the
+          owner back on the items list with the editing session gone */}
       {open && (
         <ItemEditor
           tenantId={tenantId} cats={cats} currency={currency} value={editing} items={items}
           onClose={() => setOpen(false)}
           onSaved={() => { setOpen(false); toast.success(t('saved')) }}
           onDeleted={() => { setOpen(false); toast.success(t('deleted')) }}
-          onOpenStudio={(it) => { setOpen(false); setStudioItem(it) }}
+          onOpenStudio={(it) => setStudioItem(it)}
+          formPatchRef={editorPatchRef}
         />
       )}
 
@@ -678,6 +685,10 @@ export default function Items() {
             try {
               if (studioItem.id) await saveItem(tenantId, studioItem.id, patch)
               setStudioItem((s) => (s ? { ...s, ...patch } : s))
+              // the editor may still be open UNDER the studio — its form must
+              // learn the new model urls, or its own Save would write the stale
+              // ones back over what the studio just produced
+              editorPatchRef.current?.(patch)
             } catch (_) { toast.error(t('error')) }
           }}
         />
@@ -711,13 +722,16 @@ function EditorSection({ title, first, id }) {
 // Sticky jump-chips inside the item editor sheet: one long form (state never
 // unmounts) organized by anchors — a chip scrolls its section into view.
 function EditorTabs({ lang }) {
+  // Chip labels MATCH their sections now: sizes and add-ons genuinely live under
+  // the pricing anchor, details/description have their own, and AR holds only AR.
   const tabs = [
     ['ie-basics', lang === 'ar' ? 'الأساسي' : 'Basics'],
     ['ie-images', lang === 'ar' ? 'الصور' : 'Images'],
     ['ie-compose', lang === 'ar' ? 'تركيب الصنف' : 'Composition'],
     ['ie-layers', lang === 'ar' ? 'عناصر مركّبة' : 'Placed elements'],
     ['ie-dish', lang === 'ar' ? 'السطح والزينة' : 'Surface & garnish'],
-    ['ie-pricing', lang === 'ar' ? 'المقاسات والإضافات' : 'Sizes & mods'],
+    ['ie-pricing', lang === 'ar' ? 'التسعير والإضافات' : 'Pricing & add-ons'],
+    ['ie-info', lang === 'ar' ? 'التفاصيل والوصف' : 'Details'],
     ['ie-ar', lang === 'ar' ? '3D وAR' : '3D & AR'],
     ['ie-recipe', lang === 'ar' ? 'الوصفة والمخزون' : 'Recipe'],
     ['ie-advanced', lang === 'ar' ? 'متقدم' : 'Advanced'],
@@ -745,7 +759,7 @@ function SortableItem({ id, children }) {
   return <div ref={setNodeRef} style={style}>{children({ ...listeners, ...attributes })}</div>
 }
 
-function ItemEditor({ tenantId, cats, currency, value, onClose, onSaved, onDeleted, onOpenStudio, items = [] }) {
+function ItemEditor({ tenantId, cats, currency, value, onClose, onSaved, onDeleted, onOpenStudio, items = [], formPatchRef = null }) {
   const { t, lang } = useI18n()
   const { can } = useAuth()
   // Price fields lock without the edit_prices cap — the staffer can still fix
@@ -757,6 +771,14 @@ function ItemEditor({ tenantId, cats, currency, value, onClose, onSaved, onDelet
   const [uploading, setUploading] = useState(false)
   const [cropState, setCropState] = useState(null)
   const [materials, setMaterials] = useState([])
+  // The 3D studio opens ON TOP of this sheet and saves model urls on its own;
+  // it pushes them here through this ref so a later Save cannot write the
+  // stale urls back over the studio's work.
+  useEffect(() => {
+    if (!formPatchRef) return undefined
+    formPatchRef.current = (patch) => setForm((f) => ({ ...f, ...patch }))
+    return () => { formPatchRef.current = null }
+  }, [formPatchRef])
   // The placed cut-outs live OUTSIDE `form` on purpose: `form` carries the raw
   // document shape (a layer's `filter` there is a CSS string once it has been
   // through the renderer), while the editor needs the preset ID and a per-layer
@@ -849,7 +871,13 @@ function ItemEditor({ tenantId, cats, currency, value, onClose, onSaved, onDelet
     if (!form.imageUrl) { toast.error(lang === 'ar' ? 'أضف صورة للصنف أولاً' : 'Add a photo first'); return }
     setReal3dSec(0)
     try {
-      const res = await httpsCallable(functions, 'imageTo3d', { timeout: 540000 })({ tenantId, itemId: form.id || '', imageUrl: form.imageUrl })
+      const res = await httpsCallable(functions, 'imageTo3d', { timeout: 540000 })({
+        tenantId, itemId: form.id || '', imageUrl: form.imageUrl,
+        // every gallery shot goes along: more views = a real back side instead
+        // of a guessed one (the server caps at the provider's 4)
+        imageUrls: form.images || [],
+        itemName: form.nameEn || form.nameAr || '',
+      })
       const url = res?.data?.url
       if (!url) throw new Error(lang === 'ar' ? 'لم يصل رابط المجسم' : 'No model URL returned')
       set('model3dUrl', url)
@@ -1545,7 +1573,7 @@ function ItemEditor({ tenantId, cats, currency, value, onClose, onSaved, onDelet
           )}
         </div>
 
-        <EditorSection id="ie-pricing" title={lang === 'ar' ? 'التسعير والمقاسات' : 'Pricing & sizes'} />
+        <EditorSection id="ie-pricing" title={lang === 'ar' ? 'التسعير والمقاسات والإضافات' : 'Pricing, sizes & add-ons'} />
         <div className="row" style={{ gap: 'var(--sp-3)' }}>
           <div className="field grow">
             <label className="row" style={{ gap: 5 }}>{t('price')} ({currency}){!canPrice && <Icon name="lock" size={12} className="faint" />}</label>
@@ -1572,45 +1600,28 @@ function ItemEditor({ tenantId, cats, currency, value, onClose, onSaved, onDelet
           <span className="xs faint" style={{ paddingBottom: 8 }}>{lang === 'ar' ? 'اتركهما فارغين ليظهر دائماً — مثال: فطور 06:00 حتى 11:30 يختفي تلقائياً بعدها.' : 'Leave empty for always — e.g. breakfast 06:00-11:30 auto-hides after.'}</span>
         </div>
 
-        {/* AR — عرض الصنف على طاولة العميل */}
-        <EditorSection id="ie-ar" title={lang === 'ar' ? 'الواقع المعزز AR' : 'Augmented reality'} />
-        <div className="stack" style={{ gap: 8 }}>
-          <p className="xs faint" style={{ margin: 0 }}>
-            {lang === 'ar'
-              ? 'زر «اعرضه على طاولتك» في المنيو يفتح الكاميرا ويضع الصنف على الطاولة فعلياً (أندرويد وآيفون بلا تطبيق). «مجسم من الصورة» يبني ستاند واقعي من صورة الصنف مقصوصة الخلفية تلقائياً، ولنموذج ثلاثي الأبعاد كامل ارفع ملف .glb أو .usdz جاهزاً.'
-              : 'The menu AR button places the item on the real table (Android/iOS, no app). Generate a standee from the photo, or upload a full .glb/.usdz model.'}
-          </p>
-          <div className="row" style={{ gap: 8, flexWrap: 'wrap', alignItems: 'center' }}>
-            <button type="button" className="btn btn-sm btn-outline" disabled={!!arBusy} onClick={genArStandee}>
-              <Icon name="sparkles" size={13} /> {arBusy === 'bg' ? (lang === 'ar' ? 'يقصّ الخلفية…' : 'Cutting bg…') : arBusy === 'glb' ? (lang === 'ar' ? 'يبني المجسم…' : 'Building…') : (lang === 'ar' ? 'مجسم من الصورة' : 'Standee from photo')}
-            </button>
-            <label className="btn btn-sm btn-outline" style={{ cursor: 'pointer' }}>
-              <Icon name="upload" size={13} /> {arBusy === 'upload' ? (lang === 'ar' ? 'يرفع…' : 'Uploading…') : (lang === 'ar' ? 'رفع نموذج GLB/USDZ' : 'Upload GLB/USDZ')}
-              <input type="file" accept=".glb,.usdz" hidden onChange={onPickModel} disabled={!!arBusy} />
-            </label>
-            {can3d ? (
-              <button type="button" className="btn btn-sm btn-primary" disabled={real3dSec >= 0 || !!arBusy} onClick={genReal3d}
-                title={lang === 'ar' ? 'يحوّل صورة الصنف إلى مجسم ثلاثي الأبعاد واقعي كامل بالذكاء (1-8 دقائق)' : 'AI-convert the photo to a full realistic 3D mesh'}>
-                <Icon name="sparkles" size={13} /> {real3dSec >= 0 ? (lang === 'ar' ? `يحوّل واقعياً… ${real3dSec} ث` : `Converting… ${real3dSec}s`) : (lang === 'ar' ? 'تحويل واقعي 3D' : 'Realistic 3D')}
-              </button>
-            ) : (
-              <span className="badge badge-gold" title={lang === 'ar' ? 'التحويل الواقعي الكامل ميزة الباقة المتكاملة' : 'Realistic conversion is an Enterprise perk'}>
-                <Icon name="lock" size={11} /> {lang === 'ar' ? 'تحويل واقعي 3D — الباقة المتكاملة' : 'Realistic 3D — Enterprise'}
-              </span>
-            )}
-            {form.arStandeeUrl && <span className="badge badge-success"><Icon name="check" size={11} /> {lang === 'ar' ? 'مجسم الصورة جاهز' : 'Standee ready'}</span>}
-            {form.model3dUrl && <span className="badge badge-success"><Icon name="check" size={11} /> {lang === 'ar' ? 'نموذج 3D مرفوع' : '3D model set'}</span>}
-            {(form.arStandeeUrl || form.model3dUrl) && form.id && onOpenStudio && (
-              <button type="button" className="btn btn-sm btn-outline" style={{ color: 'var(--brand)' }} onClick={() => onOpenStudio({ ...form })}>
-                <Icon name="layers" size={13} /> {lang === 'ar' ? 'عرض المجسم في الاستوديو' : 'Open 3D studio'}
-              </button>
-            )}
-            {(form.arStandeeUrl || form.model3dUrl) && (
-              <button type="button" className="btn-link xs" style={{ color: 'var(--danger)' }} onClick={() => { set('arStandeeUrl', ''); set('model3dUrl', ''); set('model3dUsdzUrl', '') }}>{lang === 'ar' ? 'إزالة' : 'Clear'}</button>
-            )}
+        {/* variants (single-select size, replaces base price) — they belong WITH
+            the price, not buried under AR where the chip that promised
+            «المقاسات والإضافات» could never scroll to them */}
+        <div className="field">
+          <div className="row-between">
+            <label>{t('variants')} <span className="faint xs">({lang === 'ar' ? 'حجم/نوع — يستبدل السعر' : 'size — replaces price'})</span></label>
+            <button className="btn btn-sm btn-outline" onClick={addVariant}>+ {t('addVariant')}</button>
           </div>
+          {(form.variants || []).map((v, i) => (
+            <div key={i} className="row" style={{ gap: 6, marginTop: 6 }}>
+              <input className="input" placeholder={lang === 'ar' ? 'الاسم' : 'Name'} value={v.nameAr} onChange={(e) => setVariant(i, 'nameAr', e.target.value)} />
+              <input className="input num" style={{ maxWidth: 90 }} type="number" placeholder={t('price')} value={v.price} disabled={!canPrice} onChange={(e) => setVariant(i, 'price', e.target.value)} />
+              <button className="icon-btn" onClick={() => delVariant(i)}><Icon name="close" size={16} /></button>
+            </div>
+          ))}
         </div>
 
+        {/* modifier groups (add-ons, add to price) — the other half of the same
+            promise, moved out of «متقدم» where it sat alone */}
+        <ModifierGroupsEditor groups={form.modifierGroups || []} onChange={(g) => set('modifierGroups', g)} currency={currency} materials={materials} />
+
+        <EditorSection id="ie-info" title={lang === 'ar' ? 'التفاصيل والوصف' : 'Details & description'} />
         <div className="row" style={{ gap: 'var(--sp-3)' }}>
           <div className="field grow">
             <label>{t('prepTime')}</label>
@@ -1685,7 +1696,73 @@ function ItemEditor({ tenantId, cats, currency, value, onClose, onSaved, onDelet
           <input className="input" placeholder={lang === 'ar' ? 'مثال: يحتوي مكسرات · يحتوي جلوتين' : 'e.g. contains nuts'} value={form.kdsWarning || ''} onChange={(e) => set('kdsWarning', e.target.value)} />
         </div>
 
-        <div className="row" style={{ gap: 'var(--sp-4)' }}>
+        {/* AR — عرض الصنف على طاولة العميل. ONLY the 3D/AR tools live here now:
+            prep time, rating, category, description and the admin toggles used
+            to pile into this section until it was a 150-line grab-bag the chips
+            lied about. */}
+        <EditorSection id="ie-ar" title={lang === 'ar' ? 'الواقع المعزز AR' : 'Augmented reality'} />
+        <div className="stack" style={{ gap: 8 }}>
+          <p className="xs faint" style={{ margin: 0 }}>
+            {lang === 'ar'
+              ? 'زر «اعرضه على طاولتك» في المنيو يفتح الكاميرا ويضع الصنف على الطاولة فعلياً (أندرويد وآيفون بلا تطبيق). «مجسم من الصورة» يبني ستاند واقعي من صورة الصنف مقصوصة الخلفية تلقائياً، ولنموذج ثلاثي الأبعاد كامل ارفع ملف .glb أو .usdz جاهزاً.'
+              : 'The menu AR button places the item on the real table (Android/iOS, no app). Generate a standee from the photo, or upload a full .glb/.usdz model.'}
+          </p>
+          <div className="row" style={{ gap: 8, flexWrap: 'wrap', alignItems: 'center' }}>
+            <button type="button" className="btn btn-sm btn-outline" disabled={!!arBusy} onClick={genArStandee}>
+              <Icon name="sparkles" size={13} /> {arBusy === 'bg' ? (lang === 'ar' ? 'يقصّ الخلفية…' : 'Cutting bg…') : arBusy === 'glb' ? (lang === 'ar' ? 'يبني المجسم…' : 'Building…') : (lang === 'ar' ? 'مجسم من الصورة' : 'Standee from photo')}
+            </button>
+            <label className="btn btn-sm btn-outline" style={{ cursor: 'pointer' }}>
+              <Icon name="upload" size={13} /> {arBusy === 'upload' ? (lang === 'ar' ? 'يرفع…' : 'Uploading…') : (lang === 'ar' ? 'رفع نموذج GLB/USDZ' : 'Upload GLB/USDZ')}
+              <input type="file" accept=".glb,.usdz" hidden onChange={onPickModel} disabled={!!arBusy} />
+            </label>
+            {can3d ? (
+              <button type="button" className="btn btn-sm btn-primary" disabled={real3dSec >= 0 || !!arBusy} onClick={genReal3d}
+                title={lang === 'ar' ? 'يحوّل صورة الصنف إلى مجسم ثلاثي الأبعاد واقعي كامل بالذكاء (1-8 دقائق)' : 'AI-convert the photo to a full realistic 3D mesh'}>
+                <Icon name="sparkles" size={13} /> {real3dSec >= 0 ? (lang === 'ar' ? `يحوّل واقعياً… ${real3dSec} ث` : `Converting… ${real3dSec}s`) : (lang === 'ar' ? 'تحويل واقعي 3D' : 'Realistic 3D')}
+              </button>
+            ) : (
+              <span className="badge badge-gold" title={lang === 'ar' ? 'التحويل الواقعي الكامل ميزة الباقة المتكاملة' : 'Realistic conversion is an Enterprise perk'}>
+                <Icon name="lock" size={11} /> {lang === 'ar' ? 'تحويل واقعي 3D — الباقة المتكاملة' : 'Realistic 3D — Enterprise'}
+              </span>
+            )}
+            {form.arStandeeUrl && <span className="badge badge-success"><Icon name="check" size={11} /> {lang === 'ar' ? 'مجسم الصورة جاهز' : 'Standee ready'}</span>}
+            {form.model3dUrl && <span className="badge badge-success"><Icon name="check" size={11} /> {lang === 'ar' ? 'نموذج 3D مرفوع' : '3D model set'}</span>}
+            {(form.arStandeeUrl || form.model3dUrl) && form.id && onOpenStudio && (
+              <button type="button" className="btn btn-sm btn-outline" style={{ color: 'var(--brand)' }} onClick={() => onOpenStudio({ ...form })}>
+                <Icon name="layers" size={13} /> {lang === 'ar' ? 'عرض المجسم في الاستوديو' : 'Open 3D studio'}
+              </button>
+            )}
+            {(form.arStandeeUrl || form.model3dUrl) && (
+              <button type="button" className="btn-link xs" style={{ color: 'var(--danger)' }} onClick={() => { set('arStandeeUrl', ''); set('model3dUrl', ''); set('model3dUsdzUrl', '') }}>{lang === 'ar' ? 'إزالة' : 'Clear'}</button>
+            )}
+          </div>
+        </div>
+
+        <EditorSection id="ie-recipe" title={lang === 'ar' ? 'الوصفة والمخزون' : 'Recipe & inventory'} />
+        {/* recipe / BOM — links raw materials consumed per variant (deducted on sale) */}
+        <div className="field">
+          <label>{lang === 'ar' ? 'الوصفة (المخزون)' : 'Recipe (inventory)'} <span className="faint xs">({lang === 'ar' ? 'استهلاك المواد الخام لكل حجم' : 'raw-material usage per size'})</span></label>
+          <RecipeEditor lang={lang} variants={form.variants || []} materials={materials} recipe={form.recipe || []} variantRecipes={form.variantRecipes || {}} onChange={({ recipe, variantRecipes }) => setForm((f) => ({ ...f, recipe, variantRecipes }))} />
+        </div>
+
+        {/* ingredients — no emoji entry (hard rule); the menu shows the name's initial */}
+        <div className="field">
+          <div className="row-between">
+            <label>{t('ingredients')}</label>
+            <button className="btn btn-sm btn-outline" onClick={addIng}>+ {t('addIngredient')}</button>
+          </div>
+          {(form.ingredients || []).map((x, i) => (
+            <div key={i} className="row" style={{ gap: 6, marginTop: 6 }}>
+              <input className="input" placeholder={lang === 'ar' ? 'المكوّن (مثال: حليب)' : 'Ingredient (e.g. milk)'} value={x.nameAr} onChange={(e) => setIng(i, 'nameAr', e.target.value)} />
+              <button className="icon-btn" onClick={() => delIng(i)}><Icon name="close" size={16} /></button>
+            </div>
+          ))}
+        </div>
+
+        <EditorSection id="ie-advanced" title={lang === 'ar' ? 'خيارات متقدمة' : 'Advanced options'} />
+        {/* the admin switches: availability, loyalty, featuring, promo tag and
+            stock tracking — decisions ABOUT the item, not content OF it */}
+        <div className="row" style={{ gap: 'var(--sp-4)', flexWrap: 'wrap' }}>
           <label className="row" style={{ gap: 8, cursor: 'pointer' }}>
             <input type="checkbox" checked={form.available !== false} onChange={(e) => set('available', e.target.checked)} style={{ width: 20, height: 20 }} />
             <span className="small">{t('available')}</span>
@@ -1715,46 +1792,6 @@ function ItemEditor({ tenantId, cats, currency, value, onClose, onSaved, onDelet
           </label>
           {form.trackStock && <p className="xs faint" style={{ width: '100%' }}>{lang === 'ar' ? 'تُدار الكمية من قسم «المخزون» (العمليات).' : 'Quantity is managed in the Inventory section (Operations).'}</p>}
         </div>
-
-        {/* variants (single-select size, replaces base price) */}
-        <div className="field">
-          <div className="row-between">
-            <label>{t('variants')} <span className="faint xs">({lang === 'ar' ? 'حجم/نوع — يستبدل السعر' : 'size — replaces price'})</span></label>
-            <button className="btn btn-sm btn-outline" onClick={addVariant}>+ {t('addVariant')}</button>
-          </div>
-          {(form.variants || []).map((v, i) => (
-            <div key={i} className="row" style={{ gap: 6, marginTop: 6 }}>
-              <input className="input" placeholder={lang === 'ar' ? 'الاسم' : 'Name'} value={v.nameAr} onChange={(e) => setVariant(i, 'nameAr', e.target.value)} />
-              <input className="input num" style={{ maxWidth: 90 }} type="number" placeholder={t('price')} value={v.price} disabled={!canPrice} onChange={(e) => setVariant(i, 'price', e.target.value)} />
-              <button className="icon-btn" onClick={() => delVariant(i)}><Icon name="close" size={16} /></button>
-            </div>
-          ))}
-        </div>
-
-        <EditorSection id="ie-recipe" title={lang === 'ar' ? 'الوصفة والمخزون' : 'Recipe & inventory'} />
-        {/* recipe / BOM — links raw materials consumed per variant (deducted on sale) */}
-        <div className="field">
-          <label>{lang === 'ar' ? 'الوصفة (المخزون)' : 'Recipe (inventory)'} <span className="faint xs">({lang === 'ar' ? 'استهلاك المواد الخام لكل حجم' : 'raw-material usage per size'})</span></label>
-          <RecipeEditor lang={lang} variants={form.variants || []} materials={materials} recipe={form.recipe || []} variantRecipes={form.variantRecipes || {}} onChange={({ recipe, variantRecipes }) => setForm((f) => ({ ...f, recipe, variantRecipes }))} />
-        </div>
-
-        {/* ingredients — no emoji entry (hard rule); the menu shows the name's initial */}
-        <div className="field">
-          <div className="row-between">
-            <label>{t('ingredients')}</label>
-            <button className="btn btn-sm btn-outline" onClick={addIng}>+ {t('addIngredient')}</button>
-          </div>
-          {(form.ingredients || []).map((x, i) => (
-            <div key={i} className="row" style={{ gap: 6, marginTop: 6 }}>
-              <input className="input" placeholder={lang === 'ar' ? 'المكوّن (مثال: حليب)' : 'Ingredient (e.g. milk)'} value={x.nameAr} onChange={(e) => setIng(i, 'nameAr', e.target.value)} />
-              <button className="icon-btn" onClick={() => delIng(i)}><Icon name="close" size={16} /></button>
-            </div>
-          ))}
-        </div>
-
-        <EditorSection id="ie-advanced" title={lang === 'ar' ? 'خيارات متقدمة' : 'Advanced options'} />
-        {/* modifier groups (add-ons, add to price) */}
-        <ModifierGroupsEditor groups={form.modifierGroups || []} onChange={(g) => set('modifierGroups', g)} currency={currency} materials={materials} />
       </div>
     </Sheet>
   )
@@ -2926,7 +2963,7 @@ function Batch3dSheet({ tenantId, items, lang, onClose, onOpenStudio }) {
         const it = queue[my]
         setStatus((s) => ({ ...s, [it.id]: { state: 'run', sec: 0 } }))
         try {
-          const res = await httpsCallable(functions, 'imageTo3d', { timeout: 540000 })({ tenantId, itemId: it.id, imageUrl: it.imageUrl })
+          const res = await httpsCallable(functions, 'imageTo3d', { timeout: 540000 })({ tenantId, itemId: it.id, imageUrl: it.imageUrl, imageUrls: it.images || [], itemName: it.nameEn || it.nameAr || '' })
           const url = res?.data?.url || ''
           setStatus((s) => ({ ...s, [it.id]: { state: 'done', url } }))
         } catch (e) {

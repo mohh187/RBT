@@ -208,12 +208,38 @@
    rendered inside the menu could never sit in front of an app bar at z-index
    100, whatever z-index it was given. */
 .edt-dec-zone[data-anchor^='header-'] { position: fixed; top: 0; }
-.edt-dec-zone[data-anchor^='header-'][data-front='1'] { z-index: 101; }
-.edt-dec-zone[data-anchor^='header-'][data-front='0'] { z-index: 99; }
+.edt-dec-zone[data-anchor^='header-'][data-depth='top'] { z-index: 102; }
+.edt-dec-zone[data-anchor^='header-'][data-depth='front'] { z-index: 101; }
+.edt-dec-zone[data-anchor^='header-'][data-depth='back'] { z-index: 99; }
 .edt-dec-zone[data-anchor^='page-top-'] { top: 0; }
 .edt-dec-zone[data-anchor^='page-bottom-'] { bottom: 0; }
-.edt-dec-zone[data-anchor^='page-'][data-front='1'] { z-index: 3; }
-.edt-dec-zone[data-anchor^='page-'][data-front='0'] { z-index: -1; }
+/* the three depth tiers (contract DECOR_DEPTHS): back slips onto the wall
+   under the content, front floats over it, top clears even the sticky
+   category bar (z 12) while staying under the app bar (z 100) */
+.edt-dec-zone[data-anchor^='page-'][data-depth='top'] { z-index: 40; }
+.edt-dec-zone[data-anchor^='page-'][data-depth='front'] { z-index: 3; }
+.edt-dec-zone[data-anchor^='page-'][data-depth='back'] { z-index: -1; }
+
+/* FREE PLACEMENT («حر في الصفحة»): the anchor box is the WHOLE page, so x/y
+   are percentages of the entire scroll — the piece stands where the venue put
+   it and rides the scroll like furniture. The 170px cap is meaningless here;
+   cqmin resolves against the page (its width, on anything taller than wide),
+   so the size dial finally reaches genuinely BIG. */
+.edt-dec-zone[data-anchor='page-free'] {
+  inset: 0;
+  height: auto;
+}
+
+/* SCREEN-PINNED («ثابت على الشاشة»): fixed to the viewport, the menu scrolls
+   under it. Portalled next to the app bar, so 'front' sits over the content
+   but under the bar, and 'top' clears the bar itself. */
+.edt-dec-zone[data-anchor='screen'] {
+  position: fixed;
+  inset: 0;
+  height: auto;
+}
+.edt-dec-zone[data-anchor='screen'][data-depth='front'] { z-index: 50; }
+.edt-dec-zone[data-anchor='screen'][data-depth='top'] { z-index: 102; }
 
 .edt-dec {
   position: absolute;

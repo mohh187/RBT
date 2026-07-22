@@ -1124,6 +1124,10 @@
 .mdx-box[data-anchor^='header-'] { top: 0; }
 .mdx-box[data-anchor^='page-top-'] { top: 0; }
 .mdx-box[data-anchor^='page-bottom-'] { bottom: 0; }
+/* the free box IS its whole region (the page, or the whole schematic screen),
+   mirroring the real zones in menuwall.css */
+.mdx-box[data-anchor='page-free'],
+.mdx-box[data-anchor='screen'] { inset: 0; height: auto; }
 .mdx-box[data-layer='back'] { z-index: 1; }
 .mdx-box[data-layer='front'] { z-index: 3; }
 /* the zone only announces itself while something inside it is selected — seven

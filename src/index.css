@@ -6974,6 +6974,13 @@ body:has(.sd2-root) .toast-wrap { z-index: 840; }
    to wash the bottom of the plate in canvas colour. Offset this way it dies out
    inside the section's own gap, where the vignette is already melting the photo
    into the plaster anyway. */
+/* STRENGTH IS THE VENUE'S DIAL NOW (--edt-panel, from menuWall.panel). The
+   solid slab + 16px-spread halo read as «ظل وخط أسود وحدود» over the live
+   venue's photo wall — a black box framing every paragraph. At 1 the panel is
+   the old bullet-proof solid; at the default it is a soft veil the wall
+   breathes through; at 0 it is gone and the venue accepts its own contrast.
+   The plain background line stays first so an engine without color-mix()
+   falls back to the SAFE solid, never to nothing. */
 .edt-wrap[data-wall] .edt-main::before,
 .edt-stg[data-wall] .edt-stg-body::before {
   content: '';
@@ -6983,7 +6990,16 @@ body:has(.sd2-root) .toast-wrap { z-index: 840; }
   pointer-events: none;
   border-radius: 18px;
   background: var(--edt-bg);
-  box-shadow: 0 10px 26px 16px var(--edt-bg);
+  background: color-mix(in srgb, var(--edt-bg) calc(var(--edt-panel, .65) * 100%), transparent);
+  box-shadow: 0 8px 22px 12px color-mix(in srgb, var(--edt-bg) calc(var(--edt-panel, .65) * 82%), transparent);
+}
+/* With a TABLE under the words the panel's outward halo is what drew the dark
+   frame around the furniture: the table's own edge should end it crisply — it
+   is a table top, not a glow. The veil itself stays underneath, because a
+   venue can set the table semi-transparent and the words still need plaster. */
+.edt-wrap[data-wall] .edt-sec[data-table] .edt-main::before,
+.edt-stg[data-wall] .edt-stg-body[data-table]::before {
+  box-shadow: none;
 }
 /* the stage scrolls its body UP past the wall's fade, so it needs the same
    plaster and a positioning context to hang it from */
@@ -7001,6 +7017,16 @@ body:has(.sd2-root) .toast-wrap { z-index: 840; }
   background: var(--edt-bg);
   border-bottom: 1px solid var(--edt-line);
   box-shadow: 0 14px 18px -10px var(--edt-bg);
+}
+/* Over a venue wall the solid bar + canvas-coloured shadow drew a black band
+   across the brick. Let the wall show through a frosted bar instead, and cast
+   a REAL shadow (small, neutral) rather than a smear of canvas colour. The
+   solid background above remains the fallback for engines without blur. */
+.edt-wrap[data-wall] .edt-catbar {
+  background: color-mix(in srgb, var(--edt-bg) 74%, transparent);
+  -webkit-backdrop-filter: blur(10px);
+  backdrop-filter: blur(10px);
+  box-shadow: 0 8px 16px -12px rgba(0, 0, 0, .4);
 }
 .edt-cats {
   display: flex;
@@ -7300,6 +7326,25 @@ body:has(.sd2-root) .toast-wrap { z-index: 840; }
 }
 .edt-open-btn:disabled { opacity: .5; cursor: default; }
 
+/* ---- THE VENUE'S BUTTON SKIN (resolveButtons + buttonSkinVars) ----
+   «اتحكم في الازرار لتكون طوب او صورة». When tenant.menuButtons is set the
+   engine stamps data-btnskin + --edt-btn-* vars on the wrap and the stage, and
+   every primary action button dresses in the venue's own wall or photo. The
+   default brick tokens above remain untouched for everyone else. */
+.edt-wrap[data-btnskin] .edt-open-btn,
+.edt-wrap[data-btnskin] .edt-chip.on,
+.edt-stg[data-btnskin] .edt-stg-add:not(:disabled),
+.edt-stg[data-btnskin] .edt-stg-ar {
+  color: var(--edt-btn-ink, #fff);
+  border-radius: var(--edt-btn-r, 12px);
+  background-color: var(--edt-btn-color, var(--edt-brick-mid));
+  background-image: var(--edt-btn-img);
+  background-size: var(--edt-btn-size);
+  background-repeat: var(--edt-btn-rep);
+  background-position: var(--edt-btn-pos);
+  text-shadow: 0 1px 2px rgba(0, 0, 0, .4);
+}
+
 /* The photo now LEADS the section, still melting into the canvas at its foot so
    the table recedes into the plaster the words sit on. The box HUGS the picture
    instead of letterboxing it into one fixed frame: cutouts here range from
@@ -7356,6 +7401,11 @@ body:has(.sd2-root) .toast-wrap { z-index: 840; }
 .edt-vignette {
   position: absolute; inset: 0; pointer-events: none;
   background: linear-gradient(180deg, transparent 86%, var(--edt-bg) 100%);
+}
+/* Over a venue wall the full-strength melt read as a black band under every
+   dish. The wall is the room now — the photo may meet it more honestly. */
+.edt-wrap[data-wall] .edt-vignette {
+  background: linear-gradient(180deg, transparent 90%, color-mix(in srgb, var(--edt-bg) 72%, transparent) 100%);
 }
 .edt-photo-open { position: absolute; inset: 0; background: none; border: none; cursor: pointer; }
 .edt-photo-open:disabled { cursor: default; }
@@ -7898,7 +7948,7 @@ button.edt-pair:active { transform: scale(.98); }
   box-shadow:
     inset 0 1px 0 rgba(255, 231, 205, .22),
     inset 0 -2px 0 rgba(46, 18, 8, .45),
-    0 6px 16px -6px rgba(46, 18, 8, .5);
+    0 4px 10px -7px rgba(46, 18, 8, .38);
   backdrop-filter: none;
 }
 [data-edt-head='brick'] .app-bar .db-brand strong { text-shadow: 0 1px 2px rgba(46, 18, 8, .55); }
@@ -7914,6 +7964,43 @@ button.edt-pair:active { transform: scale(.98); }
   background: rgba(46, 18, 8, .45) !important;
   color: #ffffff;
 }
+
+/* ---- THE VENUE'S IMAGE HEADER (resolveMenuHeader mode 'image') ----
+   Any theme, any venue: DinerBar stamps .app-bar-img plus --hd-* vars and the
+   bar wears the venue's own photograph. The photo and its veil live on
+   pseudo-elements so the photo can blur without smearing the bar's text; the
+   veil is what makes white ink safe on any picture. */
+.app-bar.app-bar-img {
+  overflow: hidden;
+  color: #ffffff;
+  border-bottom: 1px solid rgba(0, 0, 0, .35);
+  box-shadow: 0 4px 10px -7px rgba(0, 0, 0, .4);
+}
+.app-bar.app-bar-img::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  z-index: -2;
+  background-image: var(--hd-img);
+  background-size: cover;
+  background-position: var(--hd-pos, center);
+  filter: blur(var(--hd-blur, 0px));
+  transform: scale(1.06); /* hides the blur's transparent rim */
+}
+.app-bar.app-bar-img::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  z-index: -1;
+  background: rgba(10, 6, 4, var(--hd-scrim, .55));
+}
+.app-bar.app-bar-img .icon-btn {
+  color: #ffffff;
+  border: 1px solid rgba(255, 255, 255, .38);
+  background: rgba(0, 0, 0, .3);
+}
+.app-bar.app-bar-img .db-brand strong { text-shadow: 0 1px 2px rgba(0, 0, 0, .55); }
+.app-bar.app-bar-img .db-brand .dot { background: rgba(0, 0, 0, .35) !important; color: #ffffff; }
 
 @media (prefers-reduced-motion: reduce) {
   .edt-ing li, .edt-stg-ing li { transition: none; animation: none; opacity: 1; transform: none; }

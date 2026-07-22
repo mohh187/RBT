@@ -788,7 +788,7 @@ export default function MenuView({ tenant, tenantId, items, categories, offers =
         </div>
       )}
 
-      {(memberCard?.active || savedCustomer || !regDismissed) && !search.trim() && (
+      {(memberCard?.active || savedCustomer || !regDismissed) && !search.trim() && !isHidden('welcome') && (
         <div className="container" data-welcome-style={tenant?.welcomeStyle || 'tinted'} style={{ paddingTop: 8, paddingBottom: 4 }}>
           {memberCard?.active && tenant?.slug ? (
             <a className="welcome-card" href={`/mcard/${tenant.slug}/${memberCard.token}`} style={{ textDecoration: 'none', color: 'inherit', cursor: 'pointer', borderColor: (TIER_META[memberCard.tier] || {}).color }}>

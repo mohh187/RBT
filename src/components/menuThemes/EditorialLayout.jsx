@@ -42,6 +42,7 @@ import {
   resolveWall, wallStyle, layerStyle,
   resolveSections, resolveDecor, decorStyle,
   resolveTable, tableStyle,
+  resolveMenuHeader, resolveButtons,
 } from '../../lib/dishComposition.js'
 import { loadModelViewer } from '../../lib/ar3d.js'
 import '../../styles/menuwall.css'
@@ -563,8 +564,15 @@ export function wallPaint(w) {
     const t = toRgb(w.tint, null)
     if (t) layers.push({ i: `linear-gradient(0deg, ${rgbaOf(t, w.tintAmount)}, ${rgbaOf(t, w.tintAmount)})`, s: '100% 100%', r: 'no-repeat', p: 'center' })
   }
-  layers.push(...finishOverlays(w, base, mortar, mortarRaw))
-  if (w.pattern === 'plaster') layers.push(...plasterOverlays(w, base, mortar))
+  // A photograph already carries its own age, dirt and grain. The finish passes
+  // exist to bring the drawn bonds to life; laid over a real photo their dark
+  // radial patches read as stains smeared on the venue's own picture — which is
+  // exactly what the owner reported. A photo wall therefore takes NO overlays;
+  // its mood comes from filter/tint/blend, which stay fully available.
+  if (w.pattern !== 'image') {
+    layers.push(...finishOverlays(w, base, mortar, mortarRaw))
+    if (w.pattern === 'plaster') layers.push(...plasterOverlays(w, base, mortar))
+  }
 
   const imgs = layers.map((l) => l.i)
   const sizes = layers.map((l) => l.s)
@@ -648,15 +656,10 @@ const sectionVars = (s) => ({
 // ===========================================================================
 
 const HEADER_SCRIM = 'rgba(46,18,8,.62)'
-// Goes through the contract like everything else — resolveWall() now carries
-// `header`, so the theme has no raw tenant reads left. resolveWall returns null
-// when the room wall is off, hence the fallback read for the "brick header with
-// no room wall" case, which the block below deliberately supports.
-const headerBrickOn = (tenant) => {
-  const w = resolveWall(tenant)
-  if (w) return w.header
-  return !!(tenant && tenant.menuWall && tenant.menuWall.header)
-}
+// Goes through the contract like everything else. resolveMenuHeader() owns the
+// decision now (tenant.menuHeader.mode, falling back to the original
+// menuWall.header checkbox), so old venues keep their brick bar untouched.
+const headerBrickOn = (tenant) => resolveMenuHeader(tenant).mode === 'brick'
 // A venue can ask for a brick header with the room wall switched OFF. The toggle
 // still has to do something, so it falls back to the contract's own default clay
 // rather than silently doing nothing.
@@ -682,6 +685,43 @@ function headerBrickVars(wall) {
     '--edt-hd-pos': `center, ${p.backgroundPosition}`,
     '--edt-hd-color': p.backgroundColor,
   }
+}
+
+// ---- the venue's BUTTON SKIN (resolveButtons) ----
+// «اتحكم في الازرار لتكون طوب او صورة». The face is painted exactly the way the
+// brick header is: the venue's OWN wall paint scaled to button size — or the
+// venue's own photo — under a veil that keeps the label readable. The vars land
+// on .edt-wrap / .edt-stg and the .edt-* block of index.css dresses the actual
+// buttons; the two halves of the feature meet only through these properties.
+function buttonSkinVars(btn, wall) {
+  if (!btn) return null
+  const veil = `linear-gradient(0deg, rgba(14,9,6,${n2(btn.scrim)}), rgba(14,9,6,${n2(btn.scrim)}))`
+  const out = {
+    '--edt-btn-r': `${btn.radius}px`,
+    '--edt-btn-ink': btn.ink === 'dark' ? '#24170e' : '#ffffff',
+  }
+  if (btn.skin === 'image') {
+    out['--edt-btn-img'] = `${veil}, url("${String(btn.url).replace(/["\\]/g, '')}")`
+    out['--edt-btn-size'] = 'auto, cover'
+    out['--edt-btn-rep'] = 'no-repeat, no-repeat'
+    out['--edt-btn-pos'] = 'center, center'
+    return out
+  }
+  // brick: a photo wall covers the face whole; a drawn bond scales its unit
+  // down, else one brick fills the whole button and stops reading as brick.
+  const src = wall || HEADER_FALLBACK_WALL
+  const p = wallPaint({
+    ...src,
+    scale: src.pattern === 'image' ? 1 : clampNum(src.scale * 0.3, 0.18, 0.5),
+    opacity: 1, blur: 0, blend: 'normal', filter: '',
+  })
+  if (!p) return null
+  out['--edt-btn-img'] = `${veil}, ${p.backgroundImage}`
+  out['--edt-btn-size'] = `auto, ${p.backgroundSize}`
+  out['--edt-btn-rep'] = `no-repeat, ${p.backgroundRepeat}`
+  out['--edt-btn-pos'] = `center, ${p.backgroundPosition}`
+  out['--edt-btn-color'] = p.backgroundColor
+  return out
 }
 
 // ---- the venue's OWN hung objects (resolveDecor / decorStyle) ----
@@ -779,22 +819,25 @@ function EdtDecorPiece({ d, mv, rtl }) {
   )
 }
 
-// One zone per anchor and per depth. Two zones rather than one because `front`
-// is per piece and the zone is what carries the stacking level: a lantern in
-// FRONT of the app bar and a pot BEHIND the menu cannot be children of the same
-// stacking context.
+// One zone per anchor and per depth. Separate zones rather than one because the
+// depth is per piece and the zone is what carries the stacking level: a lantern
+// in FRONT of the app bar and a pot BEHIND the menu cannot be children of the
+// same stacking context. The three tiers are the contract's DECOR_DEPTHS —
+// back (on the wall, under the content), front (over the content) and top
+// (clear of even the sticky bars).
+const DEPTH_TIERS = ['back', 'front', 'top']
 function EdtDecorZones({ anchors, byAnchor, mv, rtl }) {
   const out = []
   anchors.forEach((a) => {
     const list = byAnchor[a] || []
     if (!list.length) return
-    ;[true, false].forEach((front) => {
-      const part = list.filter((d) => !!d.front === front)
+    DEPTH_TIERS.forEach((depth) => {
+      const part = list.filter((d) => d.depth === depth)
       if (!part.length) return
       out.push(
         <span
-          key={`${a}-${front ? 'f' : 'b'}`} className="edt-dec-zone"
-          data-anchor={a} data-front={front ? '1' : '0'} aria-hidden="true"
+          key={`${a}-${depth}`} className="edt-dec-zone"
+          data-anchor={a} data-depth={depth} aria-hidden="true"
         >
           {part.map((d, i) => <EdtDecorPiece key={`${d.id}-${i}`} d={d} mv={mv} rtl={rtl} />)}
         </span>,
@@ -805,7 +848,8 @@ function EdtDecorZones({ anchors, byAnchor, mv, rtl }) {
 }
 
 const HEADER_ANCHORS = ['header-start', 'header-center', 'header-end']
-const PAGE_ANCHORS = ['page-top-start', 'page-top-end', 'page-bottom-start', 'page-bottom-end']
+const PAGE_ANCHORS = ['page-top-start', 'page-top-end', 'page-bottom-start', 'page-bottom-end', 'page-free']
+const SCREEN_ANCHORS = ['screen']
 
 // <model-viewer> is a custom element that has to be registered before it renders
 // anything at all, and it is heavy — so it is imported only when the venue has
@@ -1064,9 +1108,17 @@ export default function EditorialLayout({ tenant = null, cats, itemsByCat, visib
 
   // The objects the venue has hung. Header pieces are portalled: the app bar is
   // not inside this component and .edt-wrap is an isolated stacking context, so
-  // a piece rendered here could never sit in front of the bar.
+  // a piece rendered here could never sit in front of the bar. Screen-pinned
+  // pieces are portalled for the same reason — position:fixed inside the wrap's
+  // isolation would pin to the wrap, not to the viewport.
   const decor = useMemo(() => resolveDecor(tenant), [JSON.stringify(tenant && tenant.menuDecor) || '']) // eslint-disable-line react-hooks/exhaustive-deps
   const mv = useModelViewer(decor.all.some((d) => d.kind === 'model'))
+
+  // The venue's button skin — vars stamped on the wrap, index.css dresses the
+  // buttons themselves.
+  const btnKey = JSON.stringify(tenant && tenant.menuButtons) || ''
+  const btn = useMemo(() => resolveButtons(tenant), [btnKey]) // eslint-disable-line react-hooks/exhaustive-deps
+  const btnVars = useMemo(() => buttonSkinVars(btn, wall), [btn, wallKey]) // eslint-disable-line react-hooks/exhaustive-deps
 
   // THE BRICK HEADER, dressed from outside (see headerBrickVars above).
   const headOn = headerBrickOn(tenant)
@@ -1110,11 +1162,17 @@ export default function EditorialLayout({ tenant = null, cats, itemsByCat, visib
   }, [flat])
 
   return (
-    <div className="edt-wrap" data-wall={wallAttr} style={{ '--edt-top': stickyTop, ...secVars }}>
+    <div
+      className="edt-wrap" data-wall={wallAttr} data-btnskin={btn ? btn.skin : undefined}
+      style={{ '--edt-top': stickyTop, ...secVars, ...(wall ? { '--edt-panel': wall.panel } : {}), ...(btnVars || {}) }}
+    >
       <EdtWall wall={wall} />
       <EdtDecorZones anchors={PAGE_ANCHORS} byAnchor={decor.byAnchor} mv={mv} rtl={rtl} />
       {portalRoot && decor.header.length
         ? createPortal(<EdtDecorZones anchors={HEADER_ANCHORS} byAnchor={decor.byAnchor} mv={mv} rtl={rtl} />, portalRoot)
+        : null}
+      {portalRoot && decor.screen.length
+        ? createPortal(<EdtDecorZones anchors={SCREEN_ANCHORS} byAnchor={decor.byAnchor} mv={mv} rtl={rtl} />, portalRoot)
         : null}
       {/* opaque sticky bar (outer) + its own scroller (inner): dish content can
           never bleed through the chips, and the fade lives outside the scroller */}
@@ -1344,6 +1402,11 @@ export function EditorialItemStage({ item, tenant = null, currency, onClose, onA
   // surface along, so it reads the venue's number too.
   const secVars = sectionVars(resolveSections(tenant))
   const table = useMemo(() => resolveTable(tenant), [JSON.stringify(tenant && tenant.menuTable) || '']) // eslint-disable-line react-hooks/exhaustive-deps
+  // the same button skin as the list — the stage is a portal, so the wrap's
+  // custom properties cannot cascade into it and are stamped again here
+  const btnKey = JSON.stringify(tenant && tenant.menuButtons) || ''
+  const btn = useMemo(() => resolveButtons(tenant), [btnKey]) // eslint-disable-line react-hooks/exhaustive-deps
+  const btnVars = useMemo(() => buttonSkinVars(btn, wall), [btn, wallKey]) // eslint-disable-line react-hooks/exhaustive-deps
   // 3D / AR: the whole reason an enterprise venue generates models — and this
   // stage never offered them, so from this theme they were unreachable. The
   // viewer library is loaded only when the guest actually asks for it.
@@ -1459,7 +1522,11 @@ export function EditorialItemStage({ item, tenant = null, currency, onClose, onA
 
   if (!portalRoot) return null
   return createPortal(
-    <div className={`edt-stg ${closing ? 'closing' : ''}`} data-wall={wallAttr} style={secVars} role="dialog" aria-modal="true" aria-label={name}>
+    <div
+      className={`edt-stg ${closing ? 'closing' : ''}`} data-wall={wallAttr} data-btnskin={btn ? btn.skin : undefined}
+      style={{ ...secVars, ...(wall ? { '--edt-panel': wall.panel } : {}), ...(btnVars || {}) }}
+      role="dialog" aria-modal="true" aria-label={name}
+    >
       <EdtWall wall={wall} />
       {/* the stage paints its own plaster fade over the room: it used to live in
           the element's background, where a wall CHILD covered it and its

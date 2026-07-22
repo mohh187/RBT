@@ -79,7 +79,7 @@ export default function ModelStudio({ open, onClose, tenantId, item, onChange })
     if (!window.confirm(ar ? 'إعادة التوليد ستستبدل المجسم الحالي، وقد تستغرق من 1 إلى 8 دقائق. متابعة؟' : 'Regenerating replaces the current model and can take 1-8 minutes. Continue?')) return
     setRegenSec(0)
     try {
-      const res = await httpsCallable(functions, 'imageTo3d', { timeout: 540000 })({ tenantId, itemId: item.id || '', imageUrl: item.imageUrl })
+      const res = await httpsCallable(functions, 'imageTo3d', { timeout: 540000 })({ tenantId, itemId: item.id || '', imageUrl: item.imageUrl, imageUrls: item.images || [], itemName: item.nameEn || item.nameAr || '' })
       const url = res?.data?.url
       if (!url) throw new Error(ar ? 'لم يصل رابط المجسم' : 'No model URL returned')
       onChange?.({ model3dUrl: url, model3dUsdzUrl: res?.data?.usdzUrl || '' })
