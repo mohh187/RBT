@@ -1759,6 +1759,21 @@ export function watchTickets(tid, cb) {
 export async function setTicketStatus(tid, id, status) {
   return updateDoc(subDoc(tid, 'tickets', id), { status, checkedInAt: status === 'used' ? serverTimestamp() : null })
 }
+// Atomic check-in: admit a ticket ONLY if it is still 'valid'. Two staff (or a
+// double-tap) scanning the same pass can't both pass — the transaction rejects
+// the second with 'already-used'. Throws on any non-valid current status.
+export async function checkInTicket(tid, id) {
+  const ref = subDoc(tid, 'tickets', id)
+  return runTransaction(db, async (tx) => {
+    const snap = await tx.get(ref)
+    if (!snap.exists()) throw new Error('not-found')
+    const cur = snap.data().status
+    if (cur === 'used') throw new Error('already-used')
+    if (cur !== 'valid') throw new Error('not-valid')
+    tx.update(ref, { status: 'used', checkedInAt: serverTimestamp() })
+    return true
+  })
+}
 export function watchTicket(tid, id, cb) {
   return onSnapshot(subDoc(tid, 'tickets', id), (d) => cb(d.exists() ? { id: d.id, ...d.data() } : null), () => cb(null))
 }
@@ -1814,6 +1829,20 @@ export function watchReservations(tid, cb) {
 }
 export async function setReservationStatus(tid, id, status, extra = {}) {
   return updateDoc(subDoc(tid, 'reservations', id), { status, ...extra, updatedAt: serverTimestamp() })
+}
+// Atomic reservation check-in: mark 'done' ONLY if still confirmed/seated —
+// blocks a second scan of the same booking from double-admitting.
+export async function checkInReservation(tid, id) {
+  const ref = subDoc(tid, 'reservations', id)
+  return runTransaction(db, async (tx) => {
+    const snap = await tx.get(ref)
+    if (!snap.exists()) throw new Error('not-found')
+    const cur = snap.data().status
+    if (cur === 'done') throw new Error('already-used')
+    if (!['confirmed', 'requested', 'seated'].includes(cur)) throw new Error('not-valid')
+    tx.update(ref, { status: 'done', updatedAt: serverTimestamp() })
+    return true
+  })
 }
 export async function listReservations(tid, max = 100) {
   const s = await getDocs(query(sub(tid, 'reservations'), orderBy('createdAt', 'desc'), limit(max)))

@@ -5,8 +5,8 @@ import { useAuth } from '../../lib/auth.jsx'
 import { useI18n } from '../../lib/i18n.jsx'
 import { useToast } from '../../components/Toast.jsx'
 import Icon from '../../components/Icon.jsx'
-import { getTicket, getReservation, setTicketStatus, setReservationStatus, getMemberByToken } from '../../lib/db.js'
-import { chime } from '../../lib/notify.js'
+import { getTicket, getReservation, checkInTicket, checkInReservation, getMemberByToken } from '../../lib/db.js'
+import { chime, beep, vibrate } from '../../lib/notify.js'
 import { unlockAudio } from '../../lib/sounds.js'
 import { orderNumber } from '../../lib/format.js'
 import { TIER_META } from '../../lib/membership.js'
@@ -70,19 +70,21 @@ export default function Scanner() {
     if (handledRef.current) return // ignore the ~10fps frame flood — one scan only
     handledRef.current = true
     await stop()
+    // a rejected scan must be unmistakable without looking at the screen
+    const fail = () => { setResult({ ok: false }); beep(320, 0.25); vibrate([200]) }
     const p = parseScan(text)
-    if (!p) { setResult({ ok: false }); return }
+    if (!p) { fail(); return }
     if (p.type === 'member') {
       const member = await getMemberByToken(tenantId, p.token).catch(() => null)
-      if (!member?.active) { setResult({ ok: false }); return }
+      if (!member?.active) { fail(); return }
       chime()
       setResult({ ok: true, type: 'member', member })
       return
     }
-    if (!['ticket', 'reservation'].includes(p.kind)) { setResult({ ok: false }); return }
+    if (!['ticket', 'reservation'].includes(p.kind)) { fail(); return }
     const getter = p.kind === 'ticket' ? getTicket : getReservation
     const doc = await getter(tenantId, p.id).catch(() => null)
-    if (!doc || doc.qrToken !== p.token) { setResult({ ok: false }); return }
+    if (!doc || doc.qrToken !== p.token) { fail(); return }
     chime()
     setResult({ ok: true, type: 'pass', kind: p.kind, doc })
   }
@@ -107,12 +109,15 @@ export default function Scanner() {
     if (!result?.ok) return
     setBusy(true)
     try {
-      if (result.kind === 'ticket') await setTicketStatus(tenantId, result.doc.id, 'used')
-      else await setReservationStatus(tenantId, result.doc.id, 'done')
+      if (result.kind === 'ticket') await checkInTicket(tenantId, result.doc.id)
+      else await checkInReservation(tenantId, result.doc.id)
       setResult({ ...result, doc: { ...result.doc, status: result.kind === 'ticket' ? 'used' : 'done' } })
       toast.success(t('checkedIn'))
-    } catch (_) {
-      toast.error(t('error'))
+    } catch (e) {
+      // an already-admitted pass is a distinct, important message — not a generic error
+      toast.error(String(e?.message).includes('already-used')
+        ? (lang === 'ar' ? 'دخل مسبقاً — لا يمكن استخدامه مرتين' : 'Already checked in — cannot be reused')
+        : t('error'))
     } finally {
       setBusy(false)
     }

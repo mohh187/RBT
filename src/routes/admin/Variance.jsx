@@ -23,7 +23,10 @@ export default function Variance() {
   }, [tenantId])
 
   const rows = useMemo(() => {
-    const counts = (moves || []).filter((m) => m.type === 'count' && m.reason !== 'restore')
+    // Only GENUINE physical counts. countStock writes a type:'count' move with no
+    // `reason`; production writes type:'count' reason:'produce' (+yield) and would
+    // otherwise be summed as a phantom surplus. Absence of `reason` is the tell.
+    const counts = (moves || []).filter((m) => m.type === 'count' && !m.reason)
     const byMat = {}
     counts.forEach((c) => { byMat[c.materialId] = (byMat[c.materialId] || 0) + (c.qty || 0) })
     return Object.entries(byMat)

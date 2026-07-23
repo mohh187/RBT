@@ -48,13 +48,21 @@ export default function Kds() {
   const seeded = useRef(false)
   const prevStatus = useRef(null) // Map(id → {status, code}) for the activity diff
   useTick()
+  // KDS screens run 24/7 — recompute the midnight boundary when the calendar day
+  // rolls over so "Done today" / avg-prep reset at 00:00 instead of freezing at
+  // whatever day the screen was first opened.
+  const [dayKey, setDayKey] = useState(() => new Date().toDateString())
+  useEffect(() => {
+    const iv = setInterval(() => { const k = new Date().toDateString(); setDayKey((p) => (p === k ? p : k)) }, 60000)
+    return () => clearInterval(iv)
+  }, [])
 
   // resync ONLY when the saved template value changes — any other tenant write
   // (a studio tweak, counters) must not snap back a manually chosen board
   const savedTpl = sectionTemplate(tenant, 'kds')
   useEffect(() => { setTpl(savedTpl) }, [savedTpl])
   useEffect(() => { if (!tenantId) return; return watchActiveOrders(tenantId, setOrders) }, [tenantId])
-  useEffect(() => { if (!tenantId) return; return watchOrdersSince(tenantId, startOfToday(), setToday) }, [tenantId])
+  useEffect(() => { if (!tenantId) return; return watchOrdersSince(tenantId, startOfToday(), setToday) }, [tenantId, dayKey])
   useEffect(() => { if (!tenantId) return; return watchCategories(tenantId, setCats) }, [tenantId])
   useEffect(() => { if (!tenantId) return; return watchItems(tenantId, setItems) }, [tenantId])
 

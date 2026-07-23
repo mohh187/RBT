@@ -355,7 +355,7 @@ export default function MenuView({ tenant, tenantId, items, categories, offers =
   // Time-windowed items (breakfast 06:00-11:30 …): outside the window the item
   // vanishes from the menu entirely. Window may wrap midnight (22:00-03:00).
   // A minute tick re-evaluates so the switch happens live without a reload.
-  const [, setClockTick] = useState(0)
+  const [clockTick, setClockTick] = useState(0)
   useEffect(() => {
     const hasWindows = (items || []).some((i) => i.availableFrom && i.availableTo)
     if (!hasWindows) return undefined
@@ -370,7 +370,9 @@ export default function MenuView({ tenant, tenantId, items, categories, offers =
     const d = new Date(); const cur = d.getHours() * 60 + d.getMinutes()
     return from <= to ? (cur >= from && cur < to) : (cur >= from || cur < to)
   }
-  const allActive = useMemo(() => (items || []).filter((i) => i.active !== false && inTimeWindow(i)), [items]) // eslint-disable-line react-hooks/exhaustive-deps
+  // clockTick is a real dep: the minute tick must recompute time-windowed items,
+  // otherwise a scheduled item never appears/vanishes without a manual reload.
+  const allActive = useMemo(() => (items || []).filter((i) => i.active !== false && inTimeWindow(i)), [items, clockTick]) // eslint-disable-line react-hooks/exhaustive-deps
   const matchSearch = (i, q) => `${i.nameAr} ${i.nameEn}`.toLowerCase().includes(q)
 
   const visibleItems = useMemo(() => {
