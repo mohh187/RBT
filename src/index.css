@@ -7270,6 +7270,14 @@ body:has(.edt-roombg) .venue-bg { display: none; }
   overflow: hidden;
   padding: 14px var(--edt-pad) 30px;
   scroll-margin-top: calc(var(--edt-top, 0px) + 62px);
+  /* CRASH GUARD: a full menu is 50+ one-screen dish sections. Without this every
+     one is painted and composited at once — on iOS the WKWebView blows its memory
+     ceiling and the tab dies ("A problem repeatedly occurred"). content-visibility
+     lets the engine skip rendering off-screen sections entirely; the `auto`
+     intrinsic size remembers each section's real height once seen, so the
+     scrollbar and FLIP origins stay exact and there is no scroll jump. */
+  content-visibility: auto;
+  contain-intrinsic-size: auto var(--edt-h, 92svh);
   /* the lantern pool that lights this dish. It is the ROOM's light, not the
      dimming, so it lives here and the fade layer below cannot touch it. */
   background-image: radial-gradient(74% 40% at 20% 3%, var(--edt-lamp), transparent 76%);

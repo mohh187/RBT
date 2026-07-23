@@ -883,6 +883,12 @@ export const glowPaint = (d) => `radial-gradient(50% 50% at 50% 50%, ${rgbaOf(to
 // reduced-motion block cannot reach behavior inside its shadow DOM — sampled
 // at render time, same precedent as AdPopup.
 const prefersStill = () => { try { return window.matchMedia('(prefers-reduced-motion: reduce)').matches } catch (_) { return false } }
+// On phones an always-spinning <model-viewer> keeps a WebGL render loop hot for
+// the life of the page; two of them plus a background video used to push iOS's
+// WKWebView over its memory ceiling and kill the tab. On a narrow viewport the
+// decor still renders, but idle (no continuous auto-rotate) so the context can
+// be paged out.
+const isNarrow = () => { try { return window.matchMedia('(max-width: 820px)').matches } catch (_) { return false } }
 
 function EdtDecorPiece({ d, mv, rtl }) {
   const { place, blend, dur } = decorPlace(d, rtl)
@@ -908,8 +914,8 @@ function EdtDecorPiece({ d, mv, rtl }) {
           ? (mv ? (
             <model-viewer
               class="edt-dec-mv" data-motion={spin3d ? undefined : motion} style={art} src={d.url}
-              interaction-prompt="none" loading="eager" disable-zoom="" disable-tap=""
-              {...(spin3d && !prefersStill() ? { 'auto-rotate': '', 'rotation-per-second': decorSpinRate(d) } : {})}
+              interaction-prompt="none" loading="lazy" disable-zoom="" disable-tap=""
+              {...(spin3d && !prefersStill() && !isNarrow() ? { 'auto-rotate': '', 'rotation-per-second': decorSpinRate(d) } : {})}
             />
           ) : null)
           : <img className="edt-dec-img" data-motion={motion} style={art} src={d.url} alt="" decoding="async" />}
