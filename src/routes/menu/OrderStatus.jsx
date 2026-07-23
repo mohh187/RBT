@@ -74,14 +74,16 @@ export default function OrderStatus() {
 
   useEffect(() => {
     let unsub
+    let alive = true
     resolveSlug(slug).then((id) => {
+      if (!alive) return // unmounted before the slug resolved — don't subscribe
       setTid(id)
       if (id) {
         unsub = watchOrder(id, orderId, setOrder)
         getTenant(id).then(setVenue).catch(() => {})
       } else setOrder(null)
-    })
-    return () => unsub && unsub()
+    }).catch(() => { if (alive) setOrder(null) }) // a transient slug-lookup reject must not spin forever
+    return () => { alive = false; unsub && unsub() }
   }, [slug, orderId])
 
   // Notify the diner when the status advances (skip first load).

@@ -1237,6 +1237,7 @@ export default function MenuView({ tenant, tenantId, items, categories, offers =
       {eventsOpen && (
         <EventsSheet
           tenantId={tenantId} currency={currency}
+          onlinePay={tenant?.onlinePayment?.enabled === true}
           onClose={() => setEventsOpen(false)}
           onBooked={(id) => { setEventsOpen(false); navigate(`/pass/${tenant?.slug}/ticket/${id}`) }}
         />

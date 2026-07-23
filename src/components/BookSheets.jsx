@@ -6,7 +6,8 @@ import Icon from './Icon.jsx'
 import { Empty, Spinner, Stepper } from './ui.jsx'
 import { Price } from './Riyal.jsx'
 import { watchEvents, createTicket, createReservation } from '../lib/db.js'
-import { getLocalCustomer, setLocalCustomer } from '../lib/customer.js'
+import { getLocalCustomer, setLocalCustomer, addMyPass } from '../lib/customer.js'
+import { startPayment, issueFreeTicket } from '../lib/payments.js'
 
 function fmtDate(ts, lang) {
   const d = ts?.toDate ? ts.toDate() : ts ? new Date(ts) : null
@@ -15,7 +16,7 @@ function fmtDate(ts, lang) {
 }
 
 // Events list + ticket booking as a bottom sheet (opens instantly, no page load).
-export function EventsSheet({ tenantId, currency = 'SAR', onClose, onBooked }) {
+export function EventsSheet({ tenantId, currency = 'SAR', onlinePay = false, onClose, onBooked }) {
   const { t, lang } = useI18n()
   const [events, setEvents] = useState(null)
   const [active, setActive] = useState(null)
@@ -23,7 +24,7 @@ export function EventsSheet({ tenantId, currency = 'SAR', onClose, onBooked }) {
   useEffect(() => { if (tenantId) return watchEvents(tenantId, setEvents) }, [tenantId])
   const published = useMemo(() => (events || []).filter((e) => e.status === 'published'), [events])
 
-  if (active) return <BookTicketSheet event={active} tenantId={tenantId} currency={currency} onClose={() => setActive(null)} onBooked={onBooked} />
+  if (active) return <BookTicketSheet event={active} tenantId={tenantId} currency={currency} onlinePay={onlinePay} onClose={() => setActive(null)} onBooked={onBooked} />
 
   return (
     <Sheet open onClose={onClose} title={t('events')}>
@@ -50,7 +51,7 @@ export function EventsSheet({ tenantId, currency = 'SAR', onClose, onBooked }) {
   )
 }
 
-function BookTicketSheet({ event, tenantId, currency, onClose, onBooked }) {
+function BookTicketSheet({ event, tenantId, currency, onlinePay = false, onClose, onBooked }) {
   const { t, lang } = useI18n()
   const toast = useToast()
   const local = getLocalCustomer()
@@ -60,16 +61,33 @@ function BookTicketSheet({ event, tenantId, currency, onClose, onBooked }) {
   const [phone, setPhone] = useState(local?.phone || '')
   const [busy, setBusy] = useState(false)
 
+  // Mirrors the hardened PublicEvents flow: a FREE ticket is issued server-side
+  // (which re-verifies price==0), a PAID ticket is created 'pending' and only
+  // becomes 'valid' after the payment webhook. The old path here called
+  // createTicket with no pending flag → status 'valid', which the diner-create
+  // rule rejects (only 'pending' allowed) so EVERY booking failed, and if the
+  // rule ever loosened it would have been a free paid-ticket self-issue.
   const book = async () => {
     if (!name.trim() && !phone.trim()) { toast.error(lang === 'ar' ? 'أدخل الاسم أو الجوال' : 'Enter name or phone'); return }
     setBusy(true)
+    const price = Number(type.price) || 0
     try {
+      if (price <= 0) {
+        const res = await issueFreeTicket({ tenantId, eventId: event.id, typeKey: type.key, name: name.trim(), phone: phone.trim() })
+        addMyPass(tenantId, { id: res.id, code: res.code, kind: 'ticket', title: pickLang(event, 'title', lang) })
+        setLocalCustomer({ name: name.trim(), phone: phone.trim() })
+        onBooked(res.id)
+        return
+      }
+      if (!onlinePay) { toast.error(lang === 'ar' ? 'الدفع الإلكتروني غير مفعّل لهذه الفعالية' : 'Online payment is not enabled for this event'); setBusy(false); return }
       const res = await createTicket(tenantId, {
         eventId: event.id, eventTitleAr: event.titleAr || '', eventTitleEn: event.titleEn || '',
         startsAt: event.startsAt || null, typeKey: type.key, typeName: pickLang(type, 'name', lang),
-        price: Number(type.price) || 0, name: name.trim(), phone: phone.trim(),
-      })
-      onBooked(res.id)
+        price, name: name.trim(), phone: phone.trim(),
+      }, { pending: true })
+      addMyPass(tenantId, { id: res.id, code: res.code, kind: 'ticket', title: pickLang(event, 'title', lang) })
+      setLocalCustomer({ name: name.trim(), phone: phone.trim() })
+      try { await startPayment('ticket', tenantId, res.id); return } catch (_) { toast.error(lang === 'ar' ? 'تعذّر فتح صفحة الدفع — تذكرتك محفوظة' : 'Could not open payment — your ticket is saved'); setBusy(false) }
     } catch (_) {
       toast.error(t('error')); setBusy(false)
     }

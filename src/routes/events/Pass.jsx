@@ -37,13 +37,15 @@ export default function Pass() {
 
   useEffect(() => {
     let unsub
+    let alive = true
     resolveSlug(slug).then((resolved) => {
+      if (!alive) return
       setTid(resolved)
       if (!resolved) { setDoc(null); return }
       const watch = kind === 'ticket' ? watchTicket : watchReservation
       unsub = watch(resolved, id, setDoc)
-    })
-    return () => unsub && unsub()
+    }).catch(() => { if (alive) setDoc(null) }) // transient slug reject must not hang the pass on a spinner
+    return () => { alive = false; unsub && unsub() }
   }, [slug, kind, id])
 
   useEffect(() => {

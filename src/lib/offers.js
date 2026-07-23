@@ -37,12 +37,16 @@ export function isOfferActive(offer, now = new Date()) {
 }
 
 // Base amount an offer applies to within the cart.
+// A targeted scope with an empty/unknown target yields base 0 (offer does not
+// apply) rather than falling through to the full subtotal — otherwise a
+// mis-saved "item"/"category" offer with no target silently discounts the whole
+// cart. This also neutralizes any bad offers already persisted.
 function offerBase(offer, cart, subtotal) {
-  if (offer.scope === 'category' && offer.categoryId) {
-    return cart.filter((l) => l.categoryId === offer.categoryId).reduce((s, l) => s + l.unitPrice * l.qty, 0)
+  if (offer.scope === 'category') {
+    return offer.categoryId ? cart.filter((l) => l.categoryId === offer.categoryId).reduce((s, l) => s + l.unitPrice * l.qty, 0) : 0
   }
-  if (offer.scope === 'item' && offer.itemId) {
-    return cart.filter((l) => l.itemId === offer.itemId).reduce((s, l) => s + l.unitPrice * l.qty, 0)
+  if (offer.scope === 'item') {
+    return offer.itemId ? cart.filter((l) => l.itemId === offer.itemId).reduce((s, l) => s + l.unitPrice * l.qty, 0) : 0
   }
   return subtotal
 }

@@ -65,6 +65,18 @@ service cloud.firestore {
       return isSignedIn()
         && exists(/databases/$(database)/documents/platformAdmins/$(request.auth.uid));
     }
+    // Platform super-admin. Role tiers (support/analyst) are meant to be
+    // read/support-scoped; only a superAdmin may mutate tenants or fan out
+    // platform-wide writes. A doc with NO `role` field is the original bootstrap
+    // super (same convention as the setPlatformRole callable), so the first admin
+    // keeps full power. isPlatformAdmin() stays the READ gate everywhere.
+    function platformAdminDoc() {
+      return get(/databases/$(database)/documents/platformAdmins/$(request.auth.uid)).data;
+    }
+    function isPlatformSuper() {
+      return isPlatformAdmin()
+        && (!('role' in platformAdminDoc()) || platformAdminDoc().role == 'superAdmin');
+    }
 
     // ---- per-user profile ----
     match /users/{uid} {
@@ -72,8 +84,30 @@ service cloud.firestore {
       // account (support: fix a broken role/tenant binding).
       allow read: if isSignedIn() && (request.auth.uid == uid || isPlatformAdmin());
       allow update, delete: if isPlatformAdmin();
-      // On signup the user creates their own bootstrap profile (no tenant yet, or self-claimed owner).
-      allow create: if isSignedIn() && request.auth.uid == uid;
+      // On signup the user creates their own bootstrap profile. The body must NOT
+      // seed a privileged binding out of thin air: an unconstrained create was a
+      // full tenant-takeover hole — any signed-up user could write their own
+      // users doc with {tenantId:'<victim>', role:'owner'} and every authz helper
+      // (isMember/isManager/roleIn) trusts that doc. The elaborate update-rule
+      // guards below were bypassed because a fresh account writes those values in
+      // its FIRST write (a create), not an update. Mirror the same invariants on
+      // create: bootstrap (no privileged keys — the real createUserProfile path),
+      // OR owner self-onboard proven by the tenant named in the same tx, OR an
+      // invite claim that matches a staffInvite for this email.
+      allow create: if isSignedIn() && request.auth.uid == uid
+        && (
+          !request.resource.data.keys().hasAny(['role', 'tenantId', 'caps'])
+          || (request.resource.data.role == 'owner'
+              && request.resource.data.tenantId != null
+              && !request.resource.data.keys().hasAny(['caps'])
+              && getAfter(/databases/$(database)/documents/tenants/$(request.resource.data.tenantId)).data.ownerUid == uid)
+          || (request.resource.data.role != 'owner'
+              && request.resource.data.tenantId != null
+              && !request.resource.data.keys().hasAny(['caps'])
+              && exists(/databases/$(database)/documents/staffInvites/$(request.resource.data.email))
+              && get(/databases/$(database)/documents/staffInvites/$(request.resource.data.email)).data.tenantId == request.resource.data.tenantId
+              && get(/databases/$(database)/documents/staffInvites/$(request.resource.data.email)).data.role == request.resource.data.role)
+        );
       // `caps` (per-staffer capability overrides) is manager-owned — a staffer must
       // NOT be able to self-grant capabilities by writing their own users doc.
       // (role/tenantId already protected; caps was the privilege-escalation hole.)
@@ -161,19 +195,21 @@ service cloud.firestore {
       // settings-domain cap (appearance / loyalty / campaigns / integrations /
       // settings) may also save — but NEVER roleCaps (self-escalation via the
       // role-defaults mirror) or the messaging quota counters.
-      allow update: if isPlatformAdmin()
+      allow update: if isPlatformSuper()
         || (isManager(tid)
             && !request.resource.data.diff(resource.data).affectedKeys()
                  .hasAny(['plan', 'planStatus', 'planExpiresAt', 'active', 'suspendReason', 'platformNote', 'ownerUid', 'features']))
         || ((hasCap(tid, 'manage_settings') || hasCap(tid, 'manage_appearance') || hasCap(tid, 'manage_loyalty') || hasCap(tid, 'manage_campaigns') || hasCap(tid, 'manage_integrations'))
             && !request.resource.data.diff(resource.data).affectedKeys()
                  .hasAny(['plan', 'planStatus', 'planExpiresAt', 'active', 'suspendReason', 'platformNote', 'ownerUid', 'features', 'roleCaps', 'msgsSent', 'msgCapMonthly']));
-      allow delete: if roleIn(tid, ['owner']) || isPlatformAdmin();
+      allow delete: if roleIn(tid, ['owner']) || isPlatformSuper();
 
-      // Platform admins get full read/write over every tenant subcollection
-      // (support, oversight, and account control from the central console).
+      // Platform admins READ every tenant subcollection (support & oversight from
+      // the console); only a superAdmin may WRITE tenant data — a support/analyst
+      // tier must not be able to mutate another venue's orders/menu/customers.
       match /{document=**} {
-        allow read, write: if isPlatformAdmin();
+        allow read: if isPlatformAdmin();
+        allow write: if isPlatformSuper();
       }
 
       // ---- menu catalogue: public read; manager OR a staffer granted manage_menu ----
@@ -868,7 +904,9 @@ service cloud.firestore {
     // Global announcements queue — a Cloud Function fans each doc out to every
     // (matching) venue's announcements board.
     match /platformBroadcasts/{id} {
-      allow read, write: if isPlatformAdmin();
+      // A broadcast fans out to EVERY venue — creating one is a superAdmin action.
+      allow read: if isPlatformAdmin();
+      allow write: if isPlatformSuper();
     }
 
     // Daily cross-venue rollups — written by the scheduled Cloud Function.

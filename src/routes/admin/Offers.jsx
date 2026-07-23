@@ -105,6 +105,10 @@ export default function Offers() {
 
   const save = async () => {
     if (!form.nameAr?.trim() && !form.nameEn?.trim()) return
+    // A targeted offer with no target chosen used to fall through to a cart-wide
+    // discount (offerBase returns the whole subtotal). Refuse to save it.
+    if (form.scope === 'item' && !form.itemId) { toast.error(lang === 'ar' ? 'اختر الصنف المستهدف للعرض' : 'Pick the target item for this offer'); return }
+    if (form.scope === 'category' && !form.categoryId) { toast.error(lang === 'ar' ? 'اختر التصنيف المستهدف للعرض' : 'Pick the target category for this offer'); return }
     await saveOffer(tenantId, form.id, {
       nameAr: (form.nameAr || '').trim(),
       nameEn: (form.nameEn || '').trim(),

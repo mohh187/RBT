@@ -59,8 +59,11 @@ function isOfferActive(offer, now) {
   return true
 }
 function offerBase(offer, cart, subtotal) {
-  if (offer.scope === 'category' && offer.categoryId) return cart.filter((l) => l.categoryId === offer.categoryId).reduce((s, l) => s + l.unitPrice * l.qty, 0)
-  if (offer.scope === 'item' && offer.itemId) return cart.filter((l) => l.itemId === offer.itemId).reduce((s, l) => s + l.unitPrice * l.qty, 0)
+  // Targeted scope with no target -> base 0 (offer does not apply). Without this
+  // an item/category offer saved with a blank target discounts the WHOLE cart,
+  // and this server validator would VALIDATE that over-discount. Mirrors src/lib/offers.js.
+  if (offer.scope === 'category') return offer.categoryId ? cart.filter((l) => l.categoryId === offer.categoryId).reduce((s, l) => s + l.unitPrice * l.qty, 0) : 0
+  if (offer.scope === 'item') return offer.itemId ? cart.filter((l) => l.itemId === offer.itemId).reduce((s, l) => s + l.unitPrice * l.qty, 0) : 0
   return subtotal
 }
 function discountOf(offer, base) {
@@ -769,6 +772,12 @@ exports.platformImpersonate = onCall(async (request) => {
   const db = getFirestore()
   const adminSnap = await db.doc(`platformAdmins/${request.auth.uid}`).get()
   if (!adminSnap.exists) throw new HttpsError('permission-denied', 'Platform admins only.')
+  // Impersonation (signing in AS a venue owner) is the platform's most dangerous
+  // capability — gate it to superAdmin. An admin doc with no role field is the
+  // original bootstrap super (same convention as setPlatformRole); support/analyst
+  // tiers are read/support-only and must NOT be able to impersonate.
+  const impRole = (adminSnap.data() || {}).role
+  if (impRole && impRole !== 'superAdmin') throw new HttpsError('permission-denied', 'Super admins only.')
   const tid = request.data && request.data.tid
   if (!tid) throw new HttpsError('invalid-argument', 'tid is required.')
   const t = await db.doc(`tenants/${tid}`).get()

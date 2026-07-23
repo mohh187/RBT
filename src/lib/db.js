@@ -970,6 +970,14 @@ function scaledMemberDiscount(prev, newSubtotal) {
   return pct > 0 ? Math.round(newSubtotal * pct) : (prev.memberDiscount || 0)
 }
 
+// Single source of truth for an active order's total after an edit. Every
+// discount kind must be subtracted here — compDiscount used to be omitted, so a
+// manager comp silently reappeared in the total on the next add/qty/void edit
+// and the customer was re-charged the comped amount.
+function editedTotal(prev, subtotal, memberDiscount) {
+  return Math.max(0, subtotal - (prev.discount || 0) - (prev.loyaltyDiscount || 0) - memberDiscount - (prev.compDiscount || 0))
+}
+
 // Append items to an active order and recompute totals (running tab / forgotten item).
 export async function addOrderItems(tid, id, newItems, { actor = '' } = {}) {
   const ref = subDoc(tid, 'orders', id)
@@ -980,7 +988,7 @@ export async function addOrderItems(tid, id, newItems, { actor = '' } = {}) {
     const items = [...(d.items || []), ...(newItems || [])]
     const subtotal = items.reduce((s, l) => s + (l.lineTotal || (l.unitPrice || 0) * (l.qty || 1)), 0)
     const memberDiscount = scaledMemberDiscount(d, subtotal)
-    const total = Math.max(0, subtotal - (d.discount || 0) - (d.loyaltyDiscount || 0) - memberDiscount)
+    const total = editedTotal(d, subtotal, memberDiscount)
     const hist = d.statusHistory || []
     tx.update(ref, { items, subtotal, total, memberDiscount, statusHistory: [...hist, { status: d.status, at: Date.now(), by: actor, edit: 'add-items' }], updatedAt: serverTimestamp() })
   })
@@ -998,7 +1006,7 @@ export async function setOrderItemQty(tid, id, index, qty, { actor = '' } = {}) 
     const items = (d.items || []).map((l, i) => (i === index ? { ...l, qty: q, lineTotal: (l.unitPrice || 0) * q } : l))
     const subtotal = items.reduce((s, l) => s + (l.lineTotal || (l.unitPrice || 0) * (l.qty || 1)), 0)
     const memberDiscount = scaledMemberDiscount(d, subtotal)
-    const total = Math.max(0, subtotal - (d.discount || 0) - (d.loyaltyDiscount || 0) - memberDiscount)
+    const total = editedTotal(d, subtotal, memberDiscount)
     const hist = d.statusHistory || []
     tx.update(ref, { items, subtotal, total, memberDiscount, statusHistory: [...hist, { status: d.status, at: Date.now(), by: actor, edit: 'qty' }], updatedAt: serverTimestamp() })
   })
@@ -1014,7 +1022,7 @@ export async function voidOrderItem(tid, id, index, { actor = '' } = {}) {
     const items = (d.items || []).filter((_, i) => i !== index)
     const subtotal = items.reduce((s, l) => s + (l.lineTotal || (l.unitPrice || 0) * (l.qty || 1)), 0)
     const memberDiscount = scaledMemberDiscount(d, subtotal)
-    const total = Math.max(0, subtotal - (d.discount || 0) - (d.loyaltyDiscount || 0) - memberDiscount)
+    const total = editedTotal(d, subtotal, memberDiscount)
     const hist = d.statusHistory || []
     tx.update(ref, { items, subtotal, total, memberDiscount, statusHistory: [...hist, { status: d.status, at: Date.now(), by: actor, edit: 'void-item' }], updatedAt: serverTimestamp() })
   })

@@ -42,13 +42,15 @@ export default function VenueProfile() {
 
   useEffect(() => {
     let unsub
+    let alive = true
     resolveSlug(slug).then((id) => {
+      if (!alive) return
       setTid(id)
       if (!id) { setPosts([]); return }
       getTenant(id).then(setVenue).catch(() => {})
       unsub = watchPublishedPosts(id, setPosts)
-    })
-    return () => unsub && unsub()
+    }).catch(() => { if (alive) setPosts([]) }) // transient slug reject must not hang on a spinner
+    return () => { alive = false; unsub && unsub() }
   }, [slug])
 
   const shown = useMemo(() => {

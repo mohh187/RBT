@@ -46,6 +46,16 @@ async function requirePlatformAdmin(db, auth) {
   return snap
 }
 
+// Stricter gate for the highest-impact platform actions (cross-tenant data
+// export, etc.). A doc with no `role` field is the bootstrap superAdmin (same
+// convention as setPlatformRole); support/analyst tiers are rejected.
+async function requireSuperAdmin(db, auth) {
+  const snap = await requirePlatformAdmin(db, auth)
+  const role = (snap.data() || {}).role
+  if (role && role !== 'superAdmin') throw new HttpsError('permission-denied', 'Super admins only.')
+  return snap
+}
+
 // The current billing period as YYYY-MM in the platform timezone.
 function currentPeriod() {
   return new Date().toLocaleDateString('en-CA', { timeZone: 'Asia/Riyadh' }).slice(0, 7)
@@ -170,7 +180,9 @@ const setPlatformRole = onCall(async (request) => {
 // ---------------------------------------------------------------------------
 const requestVenueExport = onCall(async (request) => {
   const db = getFirestore()
-  const callerSnap = await requirePlatformAdmin(db, request.auth)
+  // Exporting an entire venue's data is super-admin only (support/analyst tiers
+  // must not be able to exfiltrate a tenant's full dataset).
+  const callerSnap = await requireSuperAdmin(db, request.auth)
   const tid = request.data && request.data.tid
   if (!tid) throw new HttpsError('invalid-argument', 'tid is required.')
 

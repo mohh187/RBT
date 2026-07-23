@@ -1281,23 +1281,24 @@ ul {
    the attribute also sits on the portal root, body or preview frame). All
    token-mixed so each of the 31 skins keeps its own palette; intensity comes
    from the menu-scope sliders (glassFxBy.menu). ===== */
+/* NOTE: no backdrop-filter on these REPEATED list elements. A menu can show
+   dozens–hundreds of cards/chips/buttons at once; a real per-element blur means
+   the GPU re-samples the background behind every one of them on every scroll
+   frame → severe jank on mobile, breaking the native-app feel. The translucent
+   color-mix fill below already reads as frosted glass at zero compositing cost.
+   The genuine backdrop-filter is reserved for the fixed chrome (bars/search/fab)
+   and the single visible .sheet. */
 [data-menuglass='full'] :is(.food-card, .showcase-card, .cl-row, .store-card, .special-card, .store-hero-item) {
   background: color-mix(in srgb, var(--surface) calc(var(--glass-alpha) * 100%), transparent);
-  backdrop-filter: blur(calc(var(--glass-blur) * 0.75)) saturate(var(--glass-sat));
-  -webkit-backdrop-filter: blur(calc(var(--glass-blur) * 0.75)) saturate(var(--glass-sat));
   border-color: color-mix(in srgb, var(--border) 55%, transparent);
   box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.22), var(--sh-1);
 }
 [data-menuglass='full'] :is(.chip, .otype-chip, .side-cat, .icon-btn, .stepper, .cat-circle, .social-links a) {
   background: color-mix(in srgb, var(--surface) calc(var(--glass-alpha) * 100%), transparent);
-  backdrop-filter: blur(calc(var(--glass-blur) * 0.5)) saturate(var(--glass-sat));
-  -webkit-backdrop-filter: blur(calc(var(--glass-blur) * 0.5)) saturate(var(--glass-sat));
   border-color: color-mix(in srgb, var(--border) 55%, transparent);
 }
 [data-menuglass='full'] .btn:not(.menu-grad):not(.btn-primary):not(.btn-success):not(.btn-danger) {
   background: color-mix(in srgb, var(--surface) calc(var(--glass-alpha) * 100%), transparent);
-  backdrop-filter: blur(calc(var(--glass-blur) * 0.5)) saturate(var(--glass-sat));
-  -webkit-backdrop-filter: blur(calc(var(--glass-blur) * 0.5)) saturate(var(--glass-sat));
   border-color: color-mix(in srgb, var(--border) 55%, transparent);
   box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.35), var(--sh-1);
 }
@@ -1305,8 +1306,6 @@ ul {
 [data-menuglass='full'] :is(.menu-grad, .btn-primary, .store-add, .cl-add) {
   background: color-mix(in srgb, var(--brand) 84%, transparent);
   border: 1px solid color-mix(in srgb, var(--brand) 40%, transparent);
-  backdrop-filter: blur(calc(var(--glass-blur) * 0.5)) saturate(var(--glass-sat));
-  -webkit-backdrop-filter: blur(calc(var(--glass-blur) * 0.5)) saturate(var(--glass-sat));
   box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.3), var(--sh-1);
 }
 /* portaled sheets: cart, notifications, item detail — slightly milkier + deeper
@@ -2687,7 +2686,11 @@ body[data-glass-ripple='3'] [data-systheme='glass'] :is(.card, .pos-tile, .kds-t
 .pos-fullscreen {
   position: fixed;
   inset: 0;
-  z-index: var(--z-sheet, 310);
+  /* Below the backdrop/sheet layer (300/310) but above page chrome + FAB (<=120),
+     so <Sheet>s opened over the POS (item, held orders, open item) get their dim
+     scrim AND tap-outside-to-close back — the opaque POS at z-sheet used to paint
+     over the backdrop and swallow the outside tap. */
+  z-index: 200;
   background: var(--bg);
   color: var(--text);
   display: flex;
