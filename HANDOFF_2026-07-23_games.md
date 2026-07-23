@@ -1,85 +1,59 @@
-# HANDOFF — 2026-07-23 (deep audit fixes + iOS crash + games track)
+# HANDOFF — 2026-07-23 (مساءً) — security batch + games batch shipped
 
-Read this first, then `HANDOFF.md` (sajalsamak contract map) and memory `MEMORY.md`.
-Live venue for testing: **صاج السمك** — `rbt360sa.com/m/sajalsamak` — tenant `5Eg401SLtIhqjaMAdrIg` — theme `editorial` — enterprise. Firebase project **menu-88996**.
-
-Everything below is **committed AND deployed** to production unless marked otherwise.
+Read this first, then memory `MEMORY.md`. Live venue: **صاج السمك** — `rbt360sa.com/m/sajalsamak` — tenant `5Eg401SLtIhqjaMAdrIg` — Firebase **menu-88996**.
+Everything below is committed; batch 1 (`41b1f13`) is DEPLOYED (hosting+rules+functions); batch 2 (`8a2f3f6`, games) hosting deploy was running at handoff time — verify `npx firebase deploy --only hosting` finished, retry if the transient IAM ActAs error hit.
 
 ---
 
-## 1. What shipped this session (all live)
+## 1. Batch 1 — bugs + the four deferred security items (DONE, deployed)
 
-**iOS menu crash + item-open glitches (the owner's top complaint) — FIXED & DEPLOYED:**
-- Root cause, confirmed in a real 390px mobile browser: the editorial menu paints **56 full-screen dish sections at once** + **2 `<model-viewer>` WebGL contexts** (the 3D wall lantern + wooden plank) + a bg video → exceeds iOS WKWebView memory → "A problem repeatedly occurred". The 3D pieces showed `loaded:false` on mobile — pure cost, never visible.
-- Fixes: `content-visibility:auto` + `contain-intrinsic-size` on `.edt-sec` (index.css); **no `<model-viewer>` at all on mobile** (`isNarrow()` = max-width:820 in EditorialLayout.jsx — glow-only placeholder shown; 3D stays desktop/tablet) and the ~450KB model-viewer runtime isn't even imported on phones; bg video paused while the item stage is open; `translateZ(0)` repaint kick on stage open to kill the iOS "table not straight until you scroll" compositing lag; horizontal pin (`usePinnedX` in scrollLock.js) so the oversized dish/table can't drag sideways. Measured JS heap 50MB→33MB, 0 WebGL contexts on mobile.
+**«وجبة بلطي» table jump (owner report):** the only بلطي item with a real photo (1600×1600 webp, ~206KB) — late decode grew the stage hero after open and the painted table below slid down. Fixed in `EditorialLayout.jsx`: per-URL natural-ratio cache (`IMG_RATIO`, the list's measurements prime the stage) + `aspect-ratio` reservation on the stage img before decode + the iOS translateZ composite kick re-arms on late load (`loadTick`). NOT reproduced on-device — owner should confirm on the iPhone.
 
-**Deep multi-agent audit (139 agents, 78 verified findings) — ~60 fixed & DEPLOYED across the session.** Full detail in memory `audit-2026-07-23-deep-multiagent.md` (rounds 1–3). Highlights: CRITICAL tenant-takeover rule (users create), cashier-discount auto-cancel, offer over-discount, loyalty reversal (pointsAwarded), atomic ticket/reservation check-in, paid-event oversell guard, **store-hours ordering gate** (new `src/lib/ordering.js` + `tenant.ordersPaused` toggle in Settings menu-mode section, enforced client+server+rules, default-off), KDS resilience + midnight rollover, inventory (materials low-stock, produceMaterial sufficiency), cash-drawer tips, geminiProxy rate-limit + model allowlist, drag-reorder rollback, tier-progress bar, PrizeWheel idle-rAF battery fix, and many more.
+**«قصتنا وأخبارنا» intermittent white page:** two fixes in `main.jsx`: `vite:preloadError` → one throttled reload (stale hashed chunks after each deploy were the likely cause) + a root `RootErrorBoundary` (bilingual recovery card, reports via `reportBoundaryError` → platformErrors). Root cause is a class fix — applies to every lazy route.
 
-**Deploy note:** `firebase deploy` twice hit a **transient** Google Cloud `iam.serviceAccounts.ActAs` / "failed to get project" error mid-session — retrying succeeded. Account `moh.idris.18@gmail.com` has access to menu-88996. If it recurs, just retry.
+**platformNote/customPrice off the public tenant doc:** new platform-only collection `platformVenueMeta/{tid}` (`note`, `customPrice`; rules: read isPlatformAdmin, write isPlatformSuper). Console reads/writes repointed (VenueDetail note editor, PlanEditor rows via `watchAllVenueMeta`, platformConfig.setCustomPrice, platformAiActions venue_details). **Self-healing migration** `migrateVenueMetaOnce` runs inside `watchAllTenants` — first console screen load as superAdmin moves legacy fields off tenant docs (deleteField) — verify it ran (console.info `[platform] moved private meta off N tenant doc(s)`). Bonus real bug fixed: `generateMonthlyInvoices` (functions/platformExtensions.js) **now bills customPrice** — it silently ignored it before.
 
----
+**Driver field guard + customers allowlist (firestore.rules, deployed):** orders update — role `driver` restricted to `hasOnly(['delivery','updatedAt'])` (matches every DriverPortal write incl. COD + geo). customers — non-staff create/update now strict `hasOnly(['name','phone','source','registeredAt','updatedAt'])` + size bounds; verified the ONLY anonymous writer is `registerCustomer` (MenuView join / GamesCenter gate / JoinRoom); `upsertCustomerOnOrder` import in MenuView is dead code (never called by diners).
 
-## 2. Games track — the CURRENT task (in progress)
+**PIN salting:** new `functions/staffSecurity.js`: `verifyStaffPin` (scrypt + per-record salt in client-unreadable `tenants/{tid}/staffPins/{uid}`, 5 fails → 60s lock, legacy sha256 fallback + lazy upgrade on first success), `setStaffPinSecure` (manager set/clear, writes `hasPin` flag on staff doc), `migrateStaffPins` (sweep legacy pinHash off peer-readable staff docs — AdminLayout fires it once per manager session). Client: `pin.js` rewritten to callables; PinLock verifies server-side; Settings PIN tab uses the callable; `hasPin` added to staff-doc self-write deny lists. NOTE: unlock now needs network; stale clients that predate this build lose the PIN list after migration until they reload (accepted — operational guard, not crypto).
 
-Owner's plan (their words): **improve/fix each game to fully professional quality, UI and everything.** Order requested:
-1. **Wist (الوِست)** ← START HERE. Reference quality bar: the iOS app **"Whist Cards" (Sudanese Whist)** `apps.apple.com/us/app/whist-cards/id1581872524`.
-2. then **Ludo**, then **Jackaroo**.
-3. then **add a NEW game "حريق" (Haree'a / Fire)** — a popular Gulf card game (not yet built).
+**Caps-mirror drift:** `onStaffDocCreated` trigger seeds `staff/{uid}.caps` from role defaults + tenant.roleCaps the moment the doc is created (ROLE_CAPS duplicated in staffSecurity.js — KEEP IN SYNC with src/lib/permissions.js). healStaffCapsMirrors stays as the safety net for roleCaps edits.
 
-**Legal guardrail (important):** implement the *game rules + UX conventions* faithfully, but **design our own visuals** — do NOT copy the reference app's proprietary artwork/branding/exact pixel layout. Game rules aren't copyrightable; their assets are.
+## 2. Batch 2 — games (committed `8a2f3f6`)
 
-### Reference app "Whist Cards" — features to match (from its store page)
-Sudanese Whist, 4 players in partnerships. Solo vs **AI with difficulty levels**; casual + rated online lobbies; **in-app tutorial** (bidding/trump/trick-taking, AR+EN); leaderboards + weekly champions; achievements; themes/card-sets/avatars store; voice + text chat + emojis in rooms; match auto-save, spectating, QR invite, locked rooms.
+**NEW GAME «الحريق» (Hareeg 14)** — `src/components/games/Haree.jsx`, registered in games.js (`haree`, 2–4 players, multiplayer). Own original implementation of the traditional rules (rules researched from public sources; no assets/text copied from any app): 2 decks + 4 jokers, deal 14 (opener 15, no draw), open ≥51, sets/runs with jokers (≥2 naturals), extend any table meld after opening, cover-discard forbidden (with all-covers escape so it is deadlock-free), burn at 31, last-standing wins; modes «حريق 14» (values) / «عدّ الورق» (count) picked by host in lobby; deterministic stock reshuffle from round seed; void round when the deck truly dries. Bot in gameBots.js (`hareeBotMove` — every candidate re-validated through reduce, cannot stall). CSS `.hr-*` appended to cardgames.css. **Not yet play-tested in a browser** — do a solo-bot run first thing next session.
 
-### Our Wist today (`src/components/games/Wist.jsx`, 996 lines) — already strong
-- Pure total `reduce(state, move, room)` rulebook (illegal/out-of-turn = no-op); seeded PRNG deal (never Math.random inside reduce); runs inside the lead's Firestore transaction so a tampered client can't force an illegal card.
-- Implements **Wist 41** family (Tarneeb-41 skeleton): 4 seats, partners opposite (0+2 vs 1+3), auction 7–13, kaboot=13 (±26), trump named by winner, defenders always score their tricks, first to 41. The file header deliberately picks ONE coherent ruleset — **do not blend variants** (it warns why).
-- Three modes: remote room, local hot-seat (pass-the-phone with a privacy curtain), solo vs 3 bots. Bots in `src/lib/gameBots.js` (`wistBotMove`, ~line 567) — they only ever submit moves re-validated through `reduce`, read only their own seat's hand.
-- SVG suits/cards (no emoji/glyphs — hard rule), Latin digits only, RTL. CSS in `src/styles/cardgames.css` (831 lines, shared by all card games: `.cg-*`, Wist-specific `.wst-*`).
+**21 verified bugs found by 4 audit agents, 18 fixed** (one implementation agent, all one-line-spec'd):
+- Plumbing: startGame reseats seats contiguously + honors firstSeat (Dominoes' first deal used to FREEZE most rooms — turn.seat=0 vs highest-double opener); allowOutOfTurn broadened (resign/draw/deal/next/skips); **rematch on ended rooms now restarts via startGame** (was silently dead for every game; gameRoom's ended-room rejection removed for host restart, winnerSeat/endedAt cleared); wist/jackaroo partnership wins credited by `seat % 2` in socialPlay.
+- Ludo: invited-guest crash pre-start (unseeded `state:{}` → tokens guard), sixStreak leak on finish-on-six, roll now re-stamps turn.startedAt (mid-move force-skip window).
+- Chess: vs-bot resign during bot's turn awarded the HUMAN the win (actor attribution), rematch rounds now report scores (reportedRef re-arm), flip-pin releases in hot-seat.
+- Dominoes: settle paths return `turn:null` (round rollover no longer hangs on an absent seat), deterministic reseed in reduce (Math.random impurity), bot-save no longer resumes as hot-seat, `.bgm-ends` direction:ltr (RTL taps hit the wrong end), matchEnd rematch button host-only in MP.
+- Jackaroo: seatless remote mount no longer shows seat 0's hand; forceSkip anti-stall added (mirrors Ludo — disconnect used to brick the room forever).
 
-### Concrete improvement plan for Wist (not yet started — do these next)
-1. **Bot difficulty levels** (reference highlights this). `wistBotMove` in gameBots.js has bidding estimate + trick logic but no difficulty tier. Add easy/normal/hard (e.g. hard: track played cards / count trumps / signal partner; easy: looser bids, random-ish discards). Thread a difficulty prop from the hub → Wist → `botMoveFor`.
-2. **Contract progress tracker** — show the bidding side "needs X, has Y" live during play (clarity the reference praises). Data is in `st.highBid.n`, `st.tricksWon`.
-3. **Card sounds + play animation** — use `src/lib/notify.js` (beep) or add a light card-flick sound; animate a played card from the hand to its trick slot (`.wst-played at-*`). Games feel pro with feedback.
-4. **Turn timeout** in remote play — `turnOf` sets `deadlineAt:null`; a staller freezes the room. Consider a soft auto-play/auto-pass after N s (host-driven, like other games if any).
-5. **In-app tutorial** — we have `RULES_AR/RULES_EN` text; consider a short 3–4 step interactive first-run overlay. Lower priority than 1–3.
-6. **UI polish** — bigger felt table, clearer turn glow, trick-win highlight, partner/opponent color coding, responsive on small phones.
-Verify each change by building (`npx vite build`) and, ideally, driving the game in a browser (solo-bot mode auto-deals, so it's reachable without a room).
+**Deliberately NOT done (audit findings left):** Jackaroo board runs clockwise while its header says counter-clockwise (visual-only internal inconsistency — flipping geometry on the live venue needs owner eyes, fix = mirror x in cellXY/laneXY/baseXY); the ~30 polish items (B-lists) below.
 
-### Then Ludo (`Ludo.jsx` 1127) and Jackaroo (`Jackaroo.jsx` 1203)
-Same architecture (pure reduce + gameBots + cardgames/boardgames CSS). Audit them for real bugs first, then polish UI + AI. Jackaroo (جكارو) is the marble/pegs+cards game; Ludo is the classic. Both are the most complex → most bug-prone.
+## 3. NEXT — the polish pass toward the reference apps (owner's explicit bar)
 
-### Then build "حريق" (new)
-Popular Gulf trick-taking/shedding card game. Create `src/components/games/Haree.jsx` following the game contract (see `src/lib/games.js` header): component renders ONLY the play area; the hub (`GamesCenter.jsx`) owns title/score/close; report via `onScore`, persist via `onProgress`/`resumeState`; support solo bots via `gameBots.js`. Register it in `src/lib/games.js` (lazy `load`, id, name AR/EN, category, art). Reuse `cardgames.css`. Confirm the exact "حريق" ruleset with the owner before coding (it varies).
+Owner wants the five games at commercial-app level «بالحرف وبنفس الطريقة والواجهات» — legal line already agreed in-session: same RULES + feature parity + UX conventions, OWN visuals (never copy their art/branding). Reference features per store pages: bot difficulty levels, timers, sounds, animations, tutorials, leaderboards, private rooms (rooms exist), chat/emotes (NO emojis — our icon set), spectate.
+Top of the backlog (full ranked B-lists are in this session's four audit reports — re-derivable, or just implement):
+1. **Sounds** — zero audio in ALL games today; one small WebAudio blip module (move/capture/deal/win + mute toggle), wire into each game's existing state-change effects.
+2. **Turn timers visible** — registry `turnMs` (~45s) for ludo/jackaroo/dominoes/haree + countdown ring on the active seat + skip affordances (forceSkip patterns now exist in Ludo + Jackaroo).
+3. **Bot difficulty levels** (easy/normal/hard) — thread `level` through solo intent → ctx; per-game heuristic tiers (chess 2-ply on hard; wist card-counting hard tier per original plan).
+4. **Animations** — dice cycle, piece glide (chess overlay transform), marble path-following (jackaroo), domino snap, card flight (wist/haree).
+5. Auto-move single-option (ludo), auto-draw loop (dominoes), captured-tray sort + end dialogs (chess), pip reveal + round history (dominoes), 7-split clarity + J/7 target rings (jackaroo), Wist improvement list from previous handoff (contract tracker, timeout, tutorial).
 
----
+## 4. Also pending from before
+- Wist polish list (bot tiers, contract tracker, sounds, timeout, tutorial) — previous handoff section still valid.
+- Deferred audit leftovers: Settings draft-colour cleanup, scrollAffordance debounce, MenuView hero re-render, key={i} lists.
+- Big multi-week gaps (ZATCA-2, payment routing, franchise, delivery aggregators, split-check, wallet, payroll) — memory `audit-2026-07-23-deep-multiagent`.
 
-## 3. Games architecture cheat-sheet
-- Registry: `src/lib/games.js` — each game `{ id, name, category, load: () => import(...) }`, lazy-loaded. 23 games today; categories: cafe/restaurant/seafood/sweets/lounge/perfume.
-- Hub shell: `src/components/GamesCenter.jsx` (1289) — promo→browse→gate(name/phone)→play; owns chrome; `useScrollLock(open)` already locks the menu behind it (the audit's "no scroll lock" finding was stale). Rewards come only from `gameRewards.js` (never invents a reward the venue didn't configure).
-- Multiplayer rooms: `src/lib/gameRoom.js` (watchRoom/applyMove/heartbeat), `RoomLobby.jsx`, `src/routes/JoinRoom.jsx`.
-- Bots/solo: `src/lib/gameBots.js` (per-game move fns + `botLabel`, `BOT_DELAY_MS`, `takeSoloIntent`).
-- Admin: `src/routes/admin/GamesHub.jsx`, `GuestPlay.jsx` (which games a venue enables).
-- HARD RULES everywhere: NO emojis (Icon.jsx/SVG only), NO Arabic-Indic digits (`fmt` uses `ar-SA-u-nu-latn`), NO visible scrollbars.
-
----
-
-## 4. Deferred audit items (NOT done — risky/large, do deliberately, never rushed on the live venue)
-From `audit-2026-07-23-deep-multiagent.md`:
-- `firestore.rules` — move `platformNote`/`customPrice` off the world-readable tenant doc (needs data migration + repoint console reads/writes); driver order-field guard (role-based order rules); customers key-allowlist (blocked: diner `upsertCustomerOnOrder` writes loyalty fields — allowlist would break it).
-- Unsalted 4-digit PIN (`src/lib/pin.js`) — needs a callable verify + move `pinHash` off the peer-readable staff doc + migration.
-- Caps-mirror drift (new delegated-cap staffer blocked until a manager reloads) — needs a staff-create Cloud Function to seed caps.
-- A few low perf/cosmetic: Settings draft-colour cleanup-on-unmount, scrollAffordance MutationObserver debounce, MenuView hero re-render, `key={i}` reorderable lists.
-
-**Big GAPS = multi-week projects, several gated on external merchant/partner accounts:** ZATCA Phase-2 e-invoicing, per-venue payment routing/settlement ledger, franchise/multi-branch, delivery-aggregator ingestion, split-check, prepaid wallet/gift cards, payroll/WPS/GOSI. Report artifact + the 60 suggestions are catalogued in the audit memory.
-
----
-
-## 5. How to deploy (owner's account already logged in)
+## 5. Deploy/verify checklist for next session
 ```
-npx vite build                                  # always build first, green required
-npx firebase deploy --only hosting              # client (safe, easily rolled back)
-npx firebase deploy --only firestore:rules      # after rules edits (dry-run first)
-npx firebase deploy --only functions            # after functions/ edits (slow; retry on transient ActAs error)
+npx vite build                       # green required
+npx firebase deploy --only hosting   # batch 2 if not confirmed deployed
 ```
-Commit style: Arabic subject, `Co-Authored-By: Claude Opus 4.8 <noreply@anthropic.com>`. Branch is `main`.
+- Play a solo Haree round vs bots end-to-end (deal → open 51 → extend → cover block → burn → match end).
+- Open a 2-phone Dominoes room (the old freeze scenario) + a Chess room rematch + draw-accept.
+- Confirm بلطي on the owner's iPhone; confirm قصتنا page after this deploy (old clients need one reload).
+- Platform console once as superAdmin (runs both self-heals: venue-meta migration + PIN sweep on venue admin).
+Commit style: Arabic subject; branch main.
