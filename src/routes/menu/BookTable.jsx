@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react'
 import { useParams } from 'react-router-dom'
-import { resolveSlug, getTenant, listTables, createReservation } from '../../lib/db.js'
+import { resolveSlug, getTenant, listTables, createReservation, findReservationConflict } from '../../lib/db.js'
 import { useI18n } from '../../lib/i18n.jsx'
 import { FullSpinner, Empty } from '../../components/ui.jsx'
 import Icon from '../../components/Icon.jsx'
@@ -37,9 +37,20 @@ export default function BookTable() {
 
   const submit = async () => {
     if (!name.trim() || !phone.trim() || busy) return
+    const tb = (state.tables || []).find((x) => x.id === tableId)
+    // capacity: don't seat a party the table can't hold
+    const seats = Number(tb?.seats) || 0
+    if (tb && seats > 0 && Number(party) > seats) {
+      toast.error(lang === 'ar' ? `تتسع هذه الطاولة لـ ${seats} — اختر طاولة أكبر أو قلّل العدد` : `This table seats ${seats} — pick a larger table or reduce the party`)
+      return
+    }
     setBusy(true)
     try {
-      const tb = (state.tables || []).find((x) => x.id === tableId)
+      // conflict: same table already reserved for this date+time
+      if (tableId && await findReservationConflict(state.tid, { tableId, date, time }).catch(() => false)) {
+        toast.error(lang === 'ar' ? 'هذه الطاولة محجوزة في هذا الوقت — اختر وقتاً أو طاولة أخرى' : 'That table is already booked at this time — pick another time or table')
+        setBusy(false); return
+      }
       const res = await createReservation(state.tid, { kind: 'table', tableId: tableId || null, tableLabel: tb?.label || '', name: name.trim(), phone: phone.trim(), partySize: Number(party) || 1, date, time })
       setDone(res)
     } catch (_) { toast.error(lang === 'ar' ? 'تعذّر إرسال الحجز — حاول مرة أخرى' : 'Booking failed — try again') } finally { setBusy(false) }

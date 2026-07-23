@@ -92,7 +92,12 @@ const generateMonthlyInvoices = onSchedule(
           : (d.planExpiresAt ? new Date(d.planExpiresAt) : null)
         if (exp && exp < now) return
 
-        const plan = d.plan || 'menu'
+        // Resolve the default mismatch: the app grants an UNSET plan full
+        // (enterprise) features as a trial, so a venue with no plan assigned is
+        // not a billable subscription — don't auto-invoice it at the lowest tier.
+        // Billing begins only once the platform assigns an explicit plan.
+        if (!d.plan) return
+        const plan = d.plan
         const amount = Number(prices[plan]) || 0
 
         // Idempotency: one invoice per tenant per period.
@@ -641,16 +646,42 @@ async function settleFromPayment(db, payment) {
     const rRef = db.doc(`tenants/${tid}/reservations/${intent.refId}`)
     const rSnap = await rRef.get().catch(() => null)
     const rd = rSnap && rSnap.exists ? rSnap.data() : {}
-    await rRef.set({ depositStatus: 'paid', status: 'confirmed', paymentRef: payment.id, paidAt: FieldValue.serverTimestamp() }, { merge: true }).catch(() => {})
-    const rec = await receiptForSimple(db, tid, { kind: 'booking', refId: intent.refId, buyerName: rd.name || '', buyerPhone: rd.phone || '', label: 'عربون حجز', amount: (Number(intent.amount) || 0) / 100, providerRef: payment.id }).catch(() => null)
-    if (rec && rd.phone) await notifyReceipt(rec.tenant, rd.phone, { code: rd.code || '', total: rec.total, currency: rec.currency, link: invoiceLink(tid, rec.id) })
+    if (['cancelled', 'declined', 'done'].includes(rd.status)) {
+      // the venue already closed this booking — record the deposit for a manual
+      // refund but do NOT resurrect it to 'confirmed'.
+      await rRef.set({ depositStatus: 'paid', refundDue: true, paymentRef: payment.id, paidAt: FieldValue.serverTimestamp() }, { merge: true }).catch(() => {})
+      await writeAudit(db, { kind: 'payment', action: 'bookingDepositAfterClose', tenantId: tid, refId: intent.refId, providerRef: payment.id })
+    } else {
+      await rRef.set({ depositStatus: 'paid', status: 'confirmed', paymentRef: payment.id, paidAt: FieldValue.serverTimestamp() }, { merge: true }).catch(() => {})
+      const rec = await receiptForSimple(db, tid, { kind: 'booking', refId: intent.refId, buyerName: rd.name || '', buyerPhone: rd.phone || '', label: 'عربون حجز', amount: (Number(intent.amount) || 0) / 100, providerRef: payment.id }).catch(() => null)
+      if (rec && rd.phone) await notifyReceipt(rec.tenant, rd.phone, { code: rd.code || '', total: rec.total, currency: rec.currency, link: invoiceLink(tid, rec.id) })
+    }
   } else if (intent.kind === 'ticket') {
     const tRef = db.doc(`tenants/${tid}/tickets/${intent.refId}`)
     const tSnap = await tRef.get().catch(() => null)
     const td = tSnap && tSnap.exists ? tSnap.data() : {}
-    await tRef.set({ status: 'valid', paidOnline: true, paymentRef: payment.id, paidAt: FieldValue.serverTimestamp() }, { merge: true }).catch(() => {})
-    const rec = await receiptForSimple(db, tid, { kind: 'ticket', refId: intent.refId, buyerName: td.name || '', buyerPhone: td.phone || '', label: td.typeName ? `تذكرة: ${td.typeName}` : 'تذكرة', amount: (Number(intent.amount) || 0) / 100, providerRef: payment.id }).catch(() => null)
-    if (rec && td.phone) await notifyReceipt(rec.tenant, td.phone, { code: td.code || '', total: rec.total, currency: rec.currency, link: invoiceLink(tid, rec.id) })
+    // Capacity: a paid ticket must not oversell a limited event. Count issued
+    // (valid/used) tickets and, if full, hold this one for a manual refund
+    // rather than admitting an over-capacity guest.
+    let full = false
+    if (td.eventId) {
+      const ev = await db.doc(`tenants/${tid}/events/${td.eventId}`).get().catch(() => null)
+      const evd = ev && ev.exists ? ev.data() : {}
+      const type = (evd.ticketTypes || []).find((t) => t.key === td.typeKey) || {}
+      const cap = Number(type.capacity ?? evd.capacity) || 0
+      if (cap > 0) {
+        const cnt = await db.collection(`tenants/${tid}/tickets`).where('eventId', '==', td.eventId).where('status', 'in', ['valid', 'used']).count().get().catch(() => null)
+        if (cnt && cnt.data().count >= cap) full = true
+      }
+    }
+    if (full) {
+      await tRef.set({ status: 'refund_due', paidOnline: true, oversold: true, paymentRef: payment.id, paidAt: FieldValue.serverTimestamp() }, { merge: true }).catch(() => {})
+      await writeAudit(db, { kind: 'payment', action: 'ticketOversold', tenantId: tid, refId: intent.refId, providerRef: payment.id })
+    } else {
+      await tRef.set({ status: 'valid', paidOnline: true, paymentRef: payment.id, paidAt: FieldValue.serverTimestamp() }, { merge: true }).catch(() => {})
+      const rec = await receiptForSimple(db, tid, { kind: 'ticket', refId: intent.refId, buyerName: td.name || '', buyerPhone: td.phone || '', label: td.typeName ? `تذكرة: ${td.typeName}` : 'تذكرة', amount: (Number(intent.amount) || 0) / 100, providerRef: payment.id }).catch(() => null)
+      if (rec && td.phone) await notifyReceipt(rec.tenant, td.phone, { code: td.code || '', total: rec.total, currency: rec.currency, link: invoiceLink(tid, rec.id) })
+    }
   }
   // #6 Saved card (opt-in): if the payer ticked "save card", Moyasar returns a
   // reusable token in payment.source.token. Store it SERVER-ONLY (the client never

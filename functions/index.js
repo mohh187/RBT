@@ -388,6 +388,25 @@ exports.geminiProxy = onCall(async (request) => {
   }
 
   const { model, body } = request.data
+  // Never forward an arbitrary client-chosen model to the platform-wide key.
+  const ALLOWED_MODELS = ['gemini-2.5-flash', 'gemini-2.5-pro', 'gemini-2.0-flash', 'gemini-1.5-flash', 'gemini-1.5-pro']
+  const safeModel = ALLOWED_MODELS.includes(model) ? model : 'gemini-2.5-flash'
+  // Per-tenant burst limit (one reused counter doc/minute) — a runaway client or
+  // abusive tenant can't rack up unbounded cost on the shared Gemini key.
+  const tid = userData.tenantId
+  if (tid) {
+    const minute = Math.floor(Date.now() / 60000)
+    const rlRef = db.doc(`tenants/${tid}/private/aiRate`)
+    const over = await db.runTransaction(async (tx) => {
+      const s = await tx.get(rlRef)
+      const d = s.exists ? s.data() : {}
+      const count = d.minute === minute ? (d.count || 0) : 0
+      if (count >= 30) return true
+      tx.set(rlRef, { minute, count: count + 1 }, { merge: true })
+      return false
+    }).catch(() => false)
+    if (over) throw new HttpsError('resource-exhausted', 'AI rate limit reached — try again in a minute.')
+  }
   // Load Gemini API Key from server environment variables
   const apiKey = process.env.GEMINI_API_KEY || process.env.VITE_GEMINI_API_KEY
   if (!apiKey) {
@@ -410,7 +429,7 @@ exports.geminiProxy = onCall(async (request) => {
     outBody.generationConfig = { ...(outBody.generationConfig || {}), thinkingConfig: { thinkingBudget: 0 } }
   }
 
-  const url = `https://generativelanguage.googleapis.com/v1beta/models/${model || 'gemini-2.5-flash'}:generateContent?key=${apiKey}`
+  const url = `https://generativelanguage.googleapis.com/v1beta/models/${safeModel}:generateContent?key=${apiKey}`
   const post = (payload) => fetch(url, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
@@ -895,8 +914,14 @@ exports.activityCleanup = onSchedule({ schedule: '0 4 * * *', timeZone: 'Asia/Ri
       if (snap.size < 400) return
     }
   }
-  await prune('platformActivity', 'at', new Date(Date.now() - 60 * 86400000))
-  await prune('platformErrors', 'at', new Date(Date.now() - 30 * 86400000), ['status', '==', 'resolved'])
+  // Honor the retention policy the admin set in the Compliance screen
+  // (platformConfig/retention) instead of hardcoded windows.
+  const cfgSnap = await db.doc('platformConfig/retention').get().catch(() => null)
+  const cfg = cfgSnap && cfgSnap.exists ? cfgSnap.data() : {}
+  const activityDays = Number(cfg.activityDays) > 0 ? Number(cfg.activityDays) : 60
+  const errorDays = Number(cfg.errorDays) > 0 ? Number(cfg.errorDays) : 30
+  await prune('platformActivity', 'at', new Date(Date.now() - activityDays * 86400000))
+  await prune('platformErrors', 'at', new Date(Date.now() - errorDays * 86400000), ['status', '==', 'resolved'])
 })
 
 // Subscription lifecycle: expire overdue plans, and REACTIVATE renewed ones

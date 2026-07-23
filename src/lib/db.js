@@ -1848,6 +1848,14 @@ export async function listReservations(tid, max = 100) {
   const s = await getDocs(query(sub(tid, 'reservations'), orderBy('createdAt', 'desc'), limit(max)))
   return s.docs.map((d) => ({ id: d.id, ...d.data() }))
 }
+// Is a table already booked for the same date+time by an ACTIVE reservation?
+// Single-equality query (no composite index) then filter date/time/status in JS.
+export async function findReservationConflict(tid, { tableId, date, time }) {
+  if (!tableId || !date) return false
+  const ACTIVE = ['requested', 'confirmed', 'seated']
+  const s = await getDocs(query(sub(tid, 'reservations'), where('tableId', '==', tableId)))
+  return s.docs.some((d) => { const r = d.data(); return r.date === date && r.time === time && ACTIVE.includes(r.status) })
+}
 export function watchReservation(tid, id, cb) {
   return onSnapshot(subDoc(tid, 'reservations', id), (d) => cb(d.exists() ? { id: d.id, ...d.data() } : null), () => cb(null))
 }
