@@ -472,8 +472,15 @@ export default function Items() {
     const next = arrayMove(list, ids.indexOf(active.id), ids.indexOf(over.id))
     const setIds = new Set(ids)
     let k = 0
+    const prev = items // snapshot for rollback
     setItems(items.map((it) => (setIds.has(it.id) ? next[k++] : it)))
-    await Promise.all(next.map((it, idx) => (it.sortOrder !== idx ? saveItem(tenantId, it.id, { sortOrder: idx }) : null)).filter(Boolean))
+    try {
+      await Promise.all(next.map((it, idx) => (it.sortOrder !== idx ? saveItem(tenantId, it.id, { sortOrder: idx }) : null)).filter(Boolean))
+    } catch (_) {
+      // a failed write must not leave the UI showing an order the DB never took
+      setItems(prev)
+      toast.error(t('error'))
+    }
   }
   const onDragEnd = ({ active, over }) => reorderList(shown, active, over)
   const sectionDragEnd = (list) => ({ active, over }) => reorderList(list, active, over)

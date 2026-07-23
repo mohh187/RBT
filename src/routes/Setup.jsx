@@ -5,7 +5,7 @@ import { useI18n } from '../lib/i18n.jsx'
 import { useToast } from '../components/Toast.jsx'
 import Icon from '../components/Icon.jsx'
 import MenuPreview from '../components/MenuPreview.jsx'
-import { updateTenant, createTable, saveCategory } from '../lib/db.js'
+import { updateTenant, createTable, saveCategory, listCategories } from '../lib/db.js'
 import { uploadImage } from '../lib/storage.js'
 import { SYSTEM_THEMES, glassVars, systemThemeAttr } from '../lib/systemThemes.js'
 
@@ -35,12 +35,21 @@ export default function Setup() {
   const [seeded, setSeeded] = useState(false)
 
   if (tenant?.setupDone) return <Navigate to="/admin" replace />
-  if (!tenant) return null
+  // tenantId exists but the tenant doc failed to load (deleted/permission) — a
+  // bare `return null` was a blank white screen with no way forward.
+  if (!tenant) return (
+    <div className="container page stack center" style={{ gap: 'var(--sp-3)', textAlign: 'center', paddingTop: 'var(--sp-8)' }}>
+      <Icon name="warning" size={40} style={{ color: 'var(--danger)' }} />
+      <strong style={{ fontSize: 'var(--fs-lg)' }}>{ar ? 'تعذّر تحميل منشأتك' : 'Could not load your venue'}</strong>
+      <p className="muted small">{ar ? 'حدّث الصفحة، وإن استمرت المشكلة أعد الدخول.' : 'Refresh the page; if it persists, sign in again.'}</p>
+      <button className="btn btn-primary" onClick={() => window.location.reload()}>{ar ? 'تحديث' : 'Refresh'}</button>
+    </div>
+  )
 
   const STEPS = [ar ? 'الهوية' : 'Identity', ar ? 'الأرقام' : 'Numbers', ar ? 'المظهر' : 'Look', ar ? 'التفعيل' : 'Activate']
 
   const persist = async (patch) => {
-    try { await updateTenant(tenantId, patch); updateTenantLocal(patch) } catch (_) { toast.error(t('error')) }
+    try { await updateTenant(tenantId, patch); updateTenantLocal(patch); return true } catch (_) { toast.error(t('error')); return false }
   }
 
   const onLogo = async (e) => {
@@ -59,10 +68,16 @@ export default function Setup() {
     if (step === 1 && !seeded) {
       setBusy(true)
       try {
+        // Onboarding may have already seeded a sample menu with these exact
+        // category names — skip name-collisions so Setup doesn't duplicate them.
+        const existing = await listCategories(tenantId).catch(() => [])
+        const norm = (s) => (s || '').trim().replace(/\s+/g, ' ').toLowerCase()
+        const have = new Set(existing.map((c) => norm(c.nameAr)))
+        const newCats = cats.filter((c) => !have.has(norm(c)))
         await Promise.all([
           ...Array.from({ length: Math.min(40, Math.max(0, Number(tablesN) || 0)) }, (_, i) =>
             createTable(tenantId, { label: `${ar ? 'طاولة' : 'Table'} ${i + 1}`, seats: 4 })),
-          ...cats.map((c, i) => saveCategory(tenantId, null, { nameAr: c, nameEn: '', sortOrder: i })),
+          ...newCats.map((c, i) => saveCategory(tenantId, null, { nameAr: c, nameEn: '', sortOrder: existing.length + i })),
         ])
         setSeeded(true)
       } catch (_) { toast.error(t('error')) } finally { setBusy(false) }
@@ -73,7 +88,8 @@ export default function Setup() {
   const activate = async () => {
     setBusy(true)
     try {
-      await persist({ setupDone: true })
+      // don't declare "you're live" and leave if the write actually failed
+      if (!(await persist({ setupDone: true }))) return
       toast.success(ar ? 'مبروك! منشأتك جاهزة' : 'Congrats — you are live')
       navigate('/admin', { replace: true })
     } finally { setBusy(false) }

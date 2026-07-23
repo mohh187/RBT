@@ -43,7 +43,8 @@ export default function MemberCard() {
   const prog = nextTierProgress(policy, card.pointsLifetime || 0, card.totalOrders ?? null)
   const worth = pointsToDiscount(policy, card.points || 0)
   const currency = tenant?.currency || 'SAR'
-  const pct = prog ? Math.min(100, Math.round(((prog.have || 0) / (prog.need || 1)) * 100)) : 100
+  // measure progress WITHIN the current band (floor→need), not from zero
+  const pct = prog ? Math.min(100, Math.round((((prog.have || 0) - (prog.floor || 0)) / Math.max(1, (prog.need || 1) - (prog.floor || 0))) * 100)) : 100
   const nextMeta = prog ? TIER_META[prog.next] : null
 
   return (

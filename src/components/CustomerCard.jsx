@@ -141,7 +141,8 @@ function MemberSection({ ar, lang, currency, policy, m, eligible, totalOrders = 
   const meta = TIER_META[m.tier] || TIER_META.silver
   const prog = nextTierProgress(policy, m.pointsLifetime || 0, totalOrders)
   const worth = pointsToDiscount(policy, m.points || 0)
-  const pct = prog ? Math.min(100, Math.round(((prog.have || 0) / (prog.need || 1)) * 100)) : 100
+  // progress within the current band (floor→need), not from zero
+  const pct = prog ? Math.min(100, Math.round((((prog.have || 0) - (prog.floor || 0)) / Math.max(1, (prog.need || 1) - (prog.floor || 0))) * 100)) : 100
   return (
     <div className="card card-pad stack" style={{ gap: 8, borderColor: meta.color }}>
       <div className="row-between">

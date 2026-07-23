@@ -9,7 +9,7 @@ import { authErrorMessage } from '../lib/authErrors.js'
 export default function Signup() {
   const { t, lang } = useI18n()
   const ar = lang === 'ar'
-  const { signup, user, tenantId, loading } = useAuth()
+  const { signup, user, tenantId, loading, isPlatformAdmin } = useAuth()
   const navigate = useNavigate()
   const [name, setName] = useState('')
   const [email, setEmail] = useState('')
@@ -29,7 +29,7 @@ export default function Signup() {
   }, [params])
 
   if (loading) return <FullSpinner />
-  if (user) return <Navigate to={tenantId ? '/admin' : '/onboarding'} replace />
+  if (user) return <Navigate to={tenantId ? '/admin' : isPlatformAdmin ? '/platform' : '/onboarding'} replace />
 
   const submit = async (e) => {
     e.preventDefault()

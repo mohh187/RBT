@@ -142,5 +142,8 @@ export function nextTierProgress(policy, pointsLifetime = 0, totalOrders = null)
   const next = TIER_ORDER[idx + 1]
   const need = byOrders ? (policy.tiers[next].minOrders ?? 0) : policy.tiers[next].minPoints
   const have = byOrders ? totalOrders : pointsLifetime
-  return { next, need, have, remaining: Math.max(0, need - have), by: byOrders ? 'orders' : 'points' }
+  // floor = the CURRENT tier's threshold, so a progress bar can measure the band
+  // (floor→need) instead of from zero (which overstated progress within a band).
+  const floor = byOrders ? (policy.tiers[cur]?.minOrders ?? 0) : (policy.tiers[cur]?.minPoints ?? 0)
+  return { next, need, have, floor, remaining: Math.max(0, need - have), by: byOrders ? 'orders' : 'points' }
 }

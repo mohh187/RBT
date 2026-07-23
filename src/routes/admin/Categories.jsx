@@ -44,8 +44,14 @@ export default function Categories() {
     if (!over || active.id === over.id) return
     const ids = cats.map((c) => c.id)
     const next = arrayMove(cats, ids.indexOf(active.id), ids.indexOf(over.id))
+    const prev = cats // snapshot for rollback
     setCats(next) // optimistic
-    await Promise.all(next.map((c, idx) => (c.sortOrder !== idx ? saveCategory(tenantId, c.id, { sortOrder: idx }) : null)).filter(Boolean))
+    try {
+      await Promise.all(next.map((c, idx) => (c.sortOrder !== idx ? saveCategory(tenantId, c.id, { sortOrder: idx }) : null)).filter(Boolean))
+    } catch (_) {
+      setCats(prev)
+      toast.error(t('error'))
+    }
   }
 
   // Cover image → crop (wide) → upload → set on the category form.
