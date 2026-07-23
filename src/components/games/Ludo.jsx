@@ -517,6 +517,9 @@ const T = {
     bot: 'الكمبيوتر',
     place: 'المركز',
     winner: 'الفائز',
+    yourDie: 'زهرك',
+    blockedHint: 'قطعة عليها حاجز: خانتها يحتلّها حجر خصم مزدوج، ولا يجوز النزول عليه.',
+    autoPlay: 'حركتك الوحيدة — تُلعب تلقائياً',
     n: {
       start: 'ابدأ برمية الزهر.',
       rolled: 'اختر القطعة التي تتحرك.',
@@ -554,6 +557,9 @@ const T = {
     bot: 'Computer',
     place: 'Place',
     winner: 'Winner',
+    yourDie: 'Your die',
+    blockedHint: 'Blocked: an opponent holds that square with two tokens, and a block cannot be landed on.',
+    autoPlay: 'Your only move — playing it',
     n: {
       start: 'Roll to begin.',
       rolled: 'Choose a token to move.',
@@ -971,6 +977,34 @@ export default function Ludo({
     return m
   }, [moves])
 
+  // A token the die COULD advance, held back only by an opponent's block (two
+  // of their tokens on one square). The rulebook says so; the board never did
+  // — and «لم أستطع تحريكه» was reported over exactly this silence, because a
+  // block sits on the opponent's entry square, i.e. at the mouth of their
+  // house, which is precisely where the owner's token stood. Overshooting the
+  // centre is deliberately NOT counted here: that is the player's own count,
+  // not an obstacle.
+  const blockedTokens = useMemo(() => {
+    const out = new Set()
+    if (!gstate || gstate.phase !== 'move' || !myTurn) return out
+    const d = Number(gstate.die) || 0
+    if (d < 1) return out
+    const mine = gstate.tokens[seat] || []
+    for (let t = 0; t < mine.length; t += 1) {
+      if (movable.has(t)) continue
+      const from = mine[t]
+      if (from === YARD || from === HOME) continue
+      const to = from + d
+      if (to > LAST_RING) continue // home column: no blocks live there
+      const idx = ringIndexOf(seat, to)
+      for (let s = 0; s < 4; s += 1) {
+        if (s === seat) continue
+        if (countOn(gstate, s, idx) >= 2) { out.add(t); break }
+      }
+    }
+    return out
+  }, [gstate, myTurn, seat, movable])
+
   const placed = useMemo(() => {
     if (!gstate) return []
     const list = []
@@ -996,19 +1030,29 @@ export default function Ludo({
       const n = groups[it.key]
       const i = seen[it.key] || 0
       seen[it.key] = i + 1
-      const spread = n > 1 ? 0.19 : 0
+      // Co-located tokens used to sit 0.19 apart while each carried a 0.55
+      // hit circle — so a token's own centre lay inside every neighbour's tap
+      // area and only a ~1px crescent still reached its own handler. The
+      // spread now exceeds the visual radius, so discs read as a stack
+      // instead of a smear, and the hit circle below is sized to the disc.
+      const spread = n > 1 ? 0.25 : 0
       const ang = n > 1 ? (Math.PI * 2 * i) / n - Math.PI / 2 : 0
       return {
         ...it,
         x: it.base.x + Math.cos(ang) * spread,
         y: it.base.y + Math.sin(ang) * spread,
-        r: n > 2 ? 0.26 : (n > 1 ? 0.29 : 0.33),
+        r: n > 2 ? 0.22 : (n > 1 ? 0.26 : 0.33),
       }
     })
-    // SVG paints in document order: a walking token must draw on top
-    out.sort((a, b) => (a.moving === b.moving ? 0 : a.moving ? 1 : -1))
+    // SVG paints in document order, so order IS z-order. My own playable
+    // tokens must end up on top: otherwise a higher-seat opponent sharing a
+    // safe square paints over mine and buries the piece I am being asked to
+    // move (seat 0 — the only seat a solo player can hold — sits under all
+    // three others, which is why this hit every offline game).
+    const rank = (it) => (myTurn && it.s === seat && movable.has(it.t) ? 2 : (it.moving ? 1 : 0))
+    out.sort((a, b) => rank(a) - rank(b))
     return out
-  }, [gstate, seats, disp])
+  }, [gstate, seats, disp, myTurn, seat, movable])
 
   const stalled = useMemo(() => {
     if (!online || !gstate || gstate.phase === 'over' || myTurn) return false
@@ -1036,14 +1080,26 @@ export default function Ludo({
   // "No decision" = one legal move, OR several interchangeable ones (four yard
   // tokens all exiting to the same start square are the same move four times).
   // Reduced-motion users still get the auto-play, just as a jump cut.
-  useEffect(() => {
-    if (!myTurn || !gstate || gstate.phase !== 'move' || !moves.length) return undefined
+  //
+  // It ANNOUNCES itself now. Silent self-play was the second half of «حرّكت
+  // القطعة القريبة ولم تتحرك البعيدة»: when a block killed every other option
+  // the board quietly played the one that was left, which reads as the game
+  // choosing for you. The fingerprint dep is a scalar on purpose — depending
+  // on `gstate`/`moves` object identity restarted this timer on every room
+  // snapshot, so in a busy room the move could be postponed indefinitely.
+  const [autoPlaying, setAutoPlaying] = useState(false)
+  const soleMove = useMemo(() => {
+    if (!myTurn || !gstate || gstate.phase !== 'move' || !moves.length) return null
     const distinct = new Set(moves.map((o) => `${o.from}>${o.to}`))
-    if (distinct.size !== 1) return undefined
-    const tk = moves[0].token
-    const id = setTimeout(() => submit({ type: 'move', token: tk }), 600)
-    return () => clearTimeout(id)
-  }, [myTurn, gstate, moves, submit])
+    return distinct.size === 1 ? moves[0].token : null
+  }, [myTurn, gstate, moves])
+  const autoFp = `${gstate ? gstate.rollCount : ''}:${soleMove}`
+  useEffect(() => {
+    if (soleMove == null) { setAutoPlaying(false); return undefined }
+    setAutoPlaying(true)
+    const id = setTimeout(() => submit({ type: 'move', token: soleMove }), 700)
+    return () => { clearTimeout(id); setAutoPlaying(false) }
+  }, [autoFp]) // eslint-disable-line react-hooks/exhaustive-deps
 
   // ---- a gentle cue when the turn lands on me (never on mount/rehydration)
   const turnSeenRef = useRef(null)
@@ -1141,42 +1197,51 @@ export default function Ludo({
     return str ? Array.from(str)[0].toUpperCase() : '·'
   }
 
+  // The four chips sit on the side of the board their yard is on — reds and
+  // greens above it, blues and yellows below — so a player looks straight down
+  // at their own corner instead of hunting a row of names at the top. It also
+  // uses the space a square board leaves on a tall phone, which is what made
+  // the screen read as half-empty.
+  const topSeats = seats.filter((s) => s === 0 || s === 1)
+  const bottomSeats = [3, 2].filter((s) => seats.includes(s))
+
+  const Chip = ({ s }) => {
+    const c = COLORS[s]
+    const homeN = (gstate.tokens[s] || []).filter((p) => p === HOME).length
+    const rank = gstate.finished.indexOf(s)
+    const isTurn = turnSeat === s && !over
+    return (
+      <div
+        className={`lud-p${isTurn ? ' is-turn' : ''}${s === seat ? ' is-me' : ''}${rank >= 0 ? ' is-done' : ''}`}
+        style={{ '--pc': c.main, '--pd': c.deep }}
+      >
+        <span className="lud-pavatar">
+          <b>{initialOf(nameOf(s))}</b>
+          {isTurn && ringPct != null ? (
+            <svg className="lud-pring" viewBox="0 0 36 36" aria-hidden="true">
+              <circle cx="18" cy="18" r="16" pathLength="100" />
+              <circle cx="18" cy="18" r="16" pathLength="100" style={{ strokeDashoffset: 100 - ringPct }} />
+            </svg>
+          ) : null}
+        </span>
+        <span className="lud-pcol">
+          <span className="lud-pname">{nameOf(s)}{s === seat ? ` · ${L.you}` : ''}</span>
+          {rank >= 0 ? (
+            <span className="lud-pmeta">{`${L.place} ${fmt(rank + 1)}`}</span>
+          ) : (
+            <span className="lud-pdots" role="img" aria-label={`${fmt(homeN)}/${fmt(4)}`}>
+              {[0, 1, 2, 3].map((i) => <i key={i} className={i < homeN ? 'on' : ''} />)}
+            </span>
+          )}
+        </span>
+      </div>
+    )
+  }
+
   return (
     <div className="lud-root" style={{ '--lud-brand': brand }} dir={lang === 'ar' ? 'rtl' : 'ltr'}>
-      <div className="lud-players">
-        {seats.map((s) => {
-          const c = COLORS[s]
-          const homeN = (gstate.tokens[s] || []).filter((p) => p === HOME).length
-          const rank = gstate.finished.indexOf(s)
-          const isTurn = turnSeat === s && !over
-          return (
-            <div
-              key={s}
-              className={`lud-p${isTurn ? ' is-turn' : ''}${s === seat ? ' is-me' : ''}${rank >= 0 ? ' is-done' : ''}`}
-              style={{ '--pc': c.main, '--pd': c.deep }}
-            >
-              <span className="lud-pavatar">
-                <b>{initialOf(nameOf(s))}</b>
-                {isTurn && ringPct != null ? (
-                  <svg className="lud-pring" viewBox="0 0 36 36" aria-hidden="true">
-                    <circle cx="18" cy="18" r="16" pathLength="100" />
-                    <circle cx="18" cy="18" r="16" pathLength="100" style={{ strokeDashoffset: 100 - ringPct }} />
-                  </svg>
-                ) : null}
-              </span>
-              <span className="lud-pcol">
-                <span className="lud-pname">{nameOf(s)}</span>
-                {rank >= 0 ? (
-                  <span className="lud-pmeta">{`${L.place} ${fmt(rank + 1)}`}</span>
-                ) : (
-                  <span className="lud-pdots" role="img" aria-label={`${fmt(homeN)}/${fmt(4)}`}>
-                    {[0, 1, 2, 3].map((i) => <i key={i} className={i < homeN ? 'on' : ''} />)}
-                  </span>
-                )}
-              </span>
-            </div>
-          )
-        })}
+      <div className="lud-players is-top">
+        {topSeats.map((s) => <Chip key={s} s={s} />)}
       </div>
 
       <div className="lud-stage">
@@ -1189,9 +1254,6 @@ export default function Ludo({
             aria-label={L.soloTitle}
           >
             <defs>
-              <filter id="ludShadow" x="-40%" y="-40%" width="180%" height="180%">
-                <feDropShadow dx="0" dy="0.07" stdDeviation="0.055" floodColor="#0b1218" floodOpacity="0.5" />
-              </filter>
               <radialGradient id="ludGloss" cx="34%" cy="28%" r="72%">
                 <stop offset="0%" stopColor="#ffffff" stopOpacity="0.85" />
                 <stop offset="55%" stopColor="#ffffff" stopOpacity="0.12" />
@@ -1329,41 +1391,114 @@ export default function Ludo({
             {placed.map((it) => {
               const c = COLORS[it.s]
               const can = myTurn && it.s === seat && movable.has(it.t)
+              const blocked = myTurn && it.s === seat && blockedTokens.has(it.t)
               const fly = flying && flying.has(`${it.s}:${it.t}`)
               return (
                 <g
                   key={`t${it.s}-${it.t}`}
                   className={`lud-tok${can ? ' is-live' : ''}${it.moving ? ' is-step' : ''}${fly ? ' is-fly' : ''}`}
-                  style={{ transform: `translate(${it.x}px, ${it.y}px)` }}
+                  // SVG ATTRIBUTE, never a CSS px transform: iOS Safari does
+                  // not resolve CSS pixels into this viewBox's user units, so
+                  // the px form piled every token into the board's corner and
+                  // the owner's iPhone showed an empty board with only the
+                  // sockets painted. Unitless attribute = identical in every
+                  // engine, and the CSS transitions still ride it.
+                  transform={`translate(${it.x.toFixed(3)} ${it.y.toFixed(3)})`}
+                  // Only a token the player may actually move is a tap target.
+                  // Everything else is inert, so no opponent disc — and no
+                  // frozen token of my own — can swallow the tap aimed at the
+                  // piece underneath it.
+                  style={{ pointerEvents: can ? 'auto' : 'none' }}
                   onPointerDown={can ? (e) => { e.preventDefault(); onTokenTap(it.s, it.t) } : undefined}
                 >
-                  <ellipse cx="0" cy={it.r * 0.52} rx={it.r * 0.9} ry={it.r * 0.36} fill="rgba(10,14,20,0.28)" />
-                  <g filter="url(#ludShadow)">
-                    <circle r={it.r} fill={c.deep} />
-                    <circle r={it.r * 0.92} cy={-it.r * 0.09} fill={c.main} />
-                    <circle r={it.r * 0.92} cy={-it.r * 0.09} fill="url(#ludGloss)" />
-                    <circle r={it.r * 0.36} cy={-it.r * 0.24} fill="#ffffff" opacity="0.92" />
-                  </g>
+                  {/* NO SVG FILTER ON THE PIECE. `filter="url(#ludShadow)"`
+                      wrapped these four circles and WebKit rendered NOTHING
+                      for the filtered group — the ground ellipse below (no
+                      filter) still painted, which is exactly the owner's
+                      «تظهر ظلال فقط»: an iPhone board of empty sockets and
+                      floating shadows. Proven by removing the attribute live
+                      in a WebKit page, where all eight discs appeared at
+                      once. The depth is drawn instead: a grounded ellipse, a
+                      dark base ring, the body, a gloss and a highlight — same
+                      look, no filter, and cheaper on a phone. */}
+                  <ellipse cx="0" cy={it.r * 0.58} rx={it.r * 0.95} ry={it.r * 0.34} fill="rgba(8,12,18,0.34)" />
+                  <circle r={it.r} fill={c.deep} />
+                  <circle r={it.r * 0.92} cy={-it.r * 0.09} fill={c.main} />
+                  <circle r={it.r * 0.92} cy={-it.r * 0.09} fill="url(#ludGloss)" />
+                  <circle r={it.r * 0.36} cy={-it.r * 0.24} fill="#ffffff" opacity="0.92" />
                   {can ? <circle className="lud-halo" r={it.r + 0.15} fill="none" stroke="#f3d98b" strokeWidth="0.09" /> : null}
                   {can ? <circle className="lud-ping" r={it.r + 0.14} fill="none" stroke={c.deep} strokeWidth="0.07" /> : null}
-                  <circle r="0.55" fill="transparent" />
+                  {/* the rulebook's block, drawn: a barred ring says the square
+                      ahead is held, instead of the piece silently going dead */}
+                  {blocked ? (
+                    <g className="lud-blocked">
+                      <circle r={it.r + 0.12} fill="none" stroke="#2b3542" strokeWidth="0.08" strokeDasharray="0.16 0.12" opacity="0.85" />
+                      <path d={`M${-it.r * 0.5} ${-it.r * 0.5} L${it.r * 0.5} ${it.r * 0.5}`} stroke="#141a22" strokeWidth="0.09" strokeLinecap="round" opacity="0.7" />
+                    </g>
+                  ) : null}
+                  {/* the tap target is the CELL, not a circle wider than it:
+                      a full cell is the largest area that cannot reach into a
+                      neighbour's square, and it only exists on live tokens */}
+                  {can ? <circle r="0.48" fill="transparent" /> : null}
+                </g>
+              )
+            })}
+
+            {/* THE DIE SITS IN FRONT OF ITS OWNER — one per seat, resting in
+                the middle of that player's own yard («يجب أن يكون الزهر أمام
+                كل شخص»). The seat on turn holds the live die: it is the only
+                tappable one, it tumbles, and it wears its owner's colour. The
+                other three rest dim, showing the face each last rolled, so the
+                table reads like four people sitting around a board rather
+                than one shared die in a toolbar. */}
+            {seats.map((s) => {
+              const [r, c] = YARD_AT[s]
+              const cx = c + 3
+              const cy = r + 3
+              const live = turnSeat === s && gstate.phase === 'roll' && !over
+              const mineLive = live && s === seat && !busy
+              // only the seat holding the turn shows a face; the rest rest empty
+              const face = turnSeat === s ? (dieShow ?? gstate.lastDie) : null
+              const spin = turnSeat === s && tumbling
+              return (
+                <g
+                  key={`die${s}`}
+                  className={`lud-seatdie${live ? ' is-live' : ''}${spin ? ' is-roll' : ''}${s === seat ? ' is-mine' : ''}`}
+                  transform={`translate(${cx} ${cy})`}
+                  style={{ pointerEvents: mineLive ? 'auto' : 'none' }}
+                  onPointerDown={mineLive ? (e) => { e.preventDefault(); submit({ type: 'roll' }) } : undefined}
+                  role={mineLive ? 'button' : undefined}
+                  aria-label={mineLive ? L.roll : undefined}
+                >
+                  <rect x="-0.62" y="-0.55" width="1.24" height="1.24" rx="0.3" fill="rgba(12,18,26,0.26)" />
+                  <rect x="-0.62" y="-0.62" width="1.24" height="1.24" rx="0.3" fill="#fdfdfb" stroke={COLORS[s].deep} strokeWidth="0.07" />
+                  <rect x="-0.5" y="-0.5" width="1" height="1" rx="0.22" fill="none" stroke="rgba(255,255,255,.9)" strokeWidth="0.05" />
+                  {(PIPS[face] || []).map(([dx, dy], i) => (
+                    <circle key={i} cx={dx * 0.28} cy={dy * 0.28} r="0.11" fill="#17202b" />
+                  ))}
+                  {!face ? <circle r="0.09" fill="rgba(23,32,43,.22)" /> : null}
+                  {mineLive ? <circle className="lud-diehalo" r="0.86" fill="none" stroke="#f3d98b" strokeWidth="0.08" /> : null}
                 </g>
               )
             })}
 
             {/* transient effects: capture ring burst, home star pop */}
             {fx.map((f) => (f.kind === 'burst' ? (
-              <g key={f.id} className="lud-fxg" style={{ transform: `translate(${f.x}px, ${f.y}px)` }}>
+              <g key={f.id} className="lud-fxg" transform={`translate(${f.x.toFixed(3)} ${f.y.toFixed(3)})`}>
                 <circle className="lud-fx-ring" r="0.3" fill="none" stroke={f.color} strokeWidth="0.11" />
                 <circle className="lud-fx-ring lud-fx-ring2" r="0.3" fill="none" stroke="#f3d98b" strokeWidth="0.07" />
               </g>
             ) : (
-              <g key={f.id} className="lud-fxg" style={{ transform: `translate(${f.x}px, ${f.y}px)` }}>
+              <g key={f.id} className="lud-fxg" transform={`translate(${f.x.toFixed(3)} ${f.y.toFixed(3)})`}>
                 <polygon className="lud-fx-star" points={starPoints(0, 0, 0.62)} fill="url(#ludGold)" stroke="rgba(122,90,34,.5)" strokeWidth="0.04" />
               </g>
             )))}
           </svg>
         </div>
+      </div>
+
+      <div className="lud-players is-bottom">
+        {bottomSeats.map((s) => <Chip key={s} s={s} />)}
       </div>
 
       <div className="lud-bar">
@@ -1374,7 +1509,16 @@ export default function Ludo({
               ? `${L.winner}: ${gstate.finished.length ? nameOf(gstate.finished[0]) : '—'}`
               : (myTurn ? L.turnYou : `${L.turnOf} ${nameOf(turnSeat)}`)}
           </span>
-          <span className="lud-note">{gstate.phase === 'move' && myTurn ? L.pick : noteText}</span>
+          {/* the hint always states what is happening NOW, in priority order:
+              the board playing for me, a block holding a piece back, then the
+              plain prompt. A rule that removes an option has to say so. */}
+          <span className="lud-note">
+            {autoPlaying
+              ? L.autoPlay
+              : (gstate.phase === 'move' && myTurn
+                ? (blockedTokens.size ? L.blockedHint : L.pick)
+                : noteText)}
+          </span>
         </div>
 
         <div className="lud-actions">

@@ -1268,8 +1268,17 @@ export default function MenuView({ tenant, tenantId, items, categories, offers =
 
       {/* Venue ad / welcome popup. It decides for itself whether anything is
           due (schedule, audience, trigger, per-guest frequency) and renders
-          nothing when it is not — so mounting it is always safe. */}
-      {!preview && tenant?.adsEnabled !== false && (
+          nothing when it is not — so mounting it is always safe.
+
+          NOT while a full-screen experience is open. The popup paints at
+          z-index 420 across the whole viewport, which is ABOVE the games hub
+          and the item stage: an ad that fired mid-game silently swallowed
+          every tap on the board, and the game read as frozen. Caught by a
+          WebKit hit-test during Ludo testing — the tap that should have
+          reached a token was landing on `.adx-backdrop`. A guest deep in a
+          game or reading a dish is mid-task; the ad waits for them to come
+          back out. */}
+      {!preview && tenant?.adsEnabled !== false && !fxOpen && !viewItem && (
         <Suspense fallback={null}>
           <AdPopup
             tenant={tenant} tenantId={tenantId} items={visibleItems} categories={sortedCats} lang={lang}

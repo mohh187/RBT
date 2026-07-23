@@ -673,3 +673,43 @@
     transition-duration: 0.001ms !important;
   }
 }
+
+/* ---------- the per-seat die: one resting in each player's own yard ----------
+   The owner asked for «الزهر أمام كل شخص» — a shared die in the toolbar reads
+   as a machine turn, four dice on the board read as four people playing. Only
+   the live one is a tap target (the group carries pointer-events inline), so
+   the three resting dice can never intercept a token tap. */
+.lud-seatdie { opacity: 0.34; transition: opacity 240ms var(--lud-ease); }
+.lud-seatdie.is-live { opacity: 1; }
+.lud-seatdie.is-live.is-mine { cursor: pointer; }
+.lud-seatdie.is-roll { animation: lud-diespin 620ms var(--lud-ease); }
+@keyframes lud-diespin {
+  0% { transform: rotate(0deg) scale(1); }
+  35% { transform: rotate(-16deg) scale(1.14); }
+  70% { transform: rotate(12deg) scale(1.06); }
+  100% { transform: rotate(0deg) scale(1); }
+}
+/* the gold call-to-tap ring around MY die while it waits for me */
+.lud-diehalo { animation: lud-breathe 1.5s ease-in-out infinite; }
+
+/* the block cue: a barred ring on a token the rulebook is holding back */
+.lud-blocked { pointer-events: none; }
+
+/* the halo/ping rings are decoration, never tap targets — opacity 0 does NOT
+   stop an SVG shape being hit-tested, which is how an invisible animated ring
+   ends up stealing taps from the piece it decorates */
+.lud-halo, .lud-ping { pointer-events: none; }
+
+@media (prefers-reduced-motion: reduce) {
+  .lud-seatdie.is-roll { animation: none; }
+  .lud-diehalo { animation: none; }
+}
+
+/* ---------- players around the board, not stacked above it ----------
+   Two chips over the board (the red and green yards) and two under it (blue
+   and yellow), so a player reads their own corner without hunting a list —
+   and the vertical space a square board leaves on a phone finally carries
+   something. `is-bottom` keeps the same chip, mirrored in stacking order. */
+.lud-players.is-top { margin-bottom: 2px; }
+.lud-players.is-bottom { margin-top: 2px; }
+.lud-players.is-bottom:empty { display: none; }
