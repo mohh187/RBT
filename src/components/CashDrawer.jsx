@@ -38,7 +38,11 @@ export default function CashDrawer({ tid, lang = 'ar', actorName = '', uid = '',
   // Online prepaid sales this shift — attributed by time (no cashier); do NOT hit
   // the physical drawer, shown separately so the shift picture is complete.
   const onlineSales = orders.filter((o) => o.paidOnline === true && (o.paidAtMs || 0) >= since).reduce((s, o) => s + (o.total || 0) - refundOf(o), 0)
-  const expectedCash = (session?.openingFloat || 0) + cashSales
+  // A tip paid in cash physically lands in the drawer, so it MUST count toward
+  // the expected cash — otherwise every cash tip showed as a phantom surplus at
+  // count time. Card-paid tips don't touch the drawer.
+  const cashTips = settled.reduce((s, o) => s + ((o.paymentMethod || 'cash') === 'cash' && !o.paymentBreakdown ? (o.tip || 0) : 0), 0)
+  const expectedCash = (session?.openingFloat || 0) + cashSales + cashTips
   const variance = counted === '' ? null : (Number(counted) || 0) - expectedCash
 
   // Session open/close are money-critical: guard double-taps and surface failures.

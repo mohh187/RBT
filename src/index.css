@@ -9981,7 +9981,9 @@ button.edt-pair:active { transform: scale(.98); }
 .acc-bill-meta strong { font-size: 12px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 
 .acc-lightbox {
-  position: fixed; inset: 0; z-index: 90; display: grid; place-items: center; padding: 16px;
+  /* was z-index 90 — below the app-bar and bottom-nav (100), so the chrome poked
+     through this fullscreen bill viewer on mobile. Lift above the modal layer. */
+  position: fixed; inset: 0; z-index: 340; display: grid; place-items: center; padding: 16px;
   background: color-mix(in srgb, #000 68%, transparent); backdrop-filter: blur(3px);
 }
 .acc-lightbox-inner {
