@@ -101,7 +101,10 @@ const fitOf = (r) => (r >= 1.9 ? 'wide' : r <= 0.86 ? 'tall' : 'std')
 // before decode" that actually survives a cold cache.
 function useImgFit(src = '', hint = 0) {
   const primed = src ? (IMG_RATIO.get(src) || (Number(hint) > 0 ? Number(hint) : undefined)) : undefined
-  const [fit, setFit] = useState(primed ? fitOf(primed) : '')
+  // Unknown ratio starts at 'std' rather than blank: blank meant the stage
+  // reserved the base cap and then jumped the moment a wide/tall photo
+  // retagged it. 'std' IS the base cap, so the common case never re-reserves.
+  const [fit, setFit] = useState(primed ? fitOf(primed) : (src ? 'std' : ''))
   const [ratio, setRatio] = useState(primed || 0)
   const nodeRef = useRef(null)
   const read = (n) => {
@@ -118,7 +121,7 @@ function useImgFit(src = '', hint = 0) {
     if (!src) return
     const r = IMG_RATIO.get(src) || (Number(hint) > 0 ? Number(hint) : 0)
     setRatio(r || 0)
-    setFit(r ? fitOf(r) : '')
+    setFit(r ? fitOf(r) : 'std')
   }, [src, hint])
   // ref callback too: a cached photo is already complete before onLoad fires
   const bind = (n) => { nodeRef.current = n; read(n) }

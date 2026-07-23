@@ -7873,7 +7873,17 @@ video.edt-backdrop { width: 100%; height: 100%; display: block; }
      stage-cohesion dials now (tableStageVars: --edt-stg-padtop/--edt-stg-heromin,
      from menuTable.heroPad/heroMax) — the fallbacks ARE today's clamps, so an
      untouched venue computes the identical box */
-  min-height: var(--edt-stg-heromin, min(30dvh, 260px));
+  /* THE BOX IS RESERVED, NEVER DERIVED FROM THE PHOTO.
+     A dish photo that finishes decoding AFTER the stage opened used to grow
+     this box and shove the panel — and the painted table on it — down with
+     it: measured at 110px on a cold open of «وجبة بلطي» on the live venue,
+     which is the owner's long-standing «الطاولة تتحرك» complaint. Reserving
+     the cap up front (and letting object-fit centre a shorter photo inside
+     it) means nothing below can move no matter WHEN, or WHETHER, the pixels
+     arrive — no data, no cache and no network timing involved. The cap rides
+     one var so the three fits stay reservation and content in lockstep. */
+  --edt-hero-cap: var(--edt-stg-heromax, min(42dvh, 420px));
+  min-height: calc(var(--edt-stg-padtop, clamp(56px, 14vw, 76px)) + var(--edt-hero-cap));
   display: flex; align-items: center; justify-content: center;
   padding: var(--edt-stg-padtop, clamp(56px, 14vw, 76px)) clamp(18px, 6vw, 40px) 0;
   will-change: transform;
@@ -7887,14 +7897,15 @@ video.edt-backdrop { width: 100%; height: 100%; display: block; }
   position: relative; /* paints above the ground glow */
   display: block;
   width: 100%; height: auto;
-  max-height: var(--edt-stg-heromax, min(42dvh, 420px));
+  max-height: var(--edt-hero-cap);
   object-fit: contain;
   object-position: center;
 }
-.edt-stg-hero[data-fit='wide'] { min-height: var(--edt-stg-heromin, min(26dvh, 220px)); padding-inline: 0; }
-/* the tall-fit cap out-specifies the base img rule, so it must consume the
-   same var or heroMax silently dies on tall photos (the screenshot's case) */
-.edt-stg-hero[data-fit='tall'] img { max-height: var(--edt-stg-heromax, min(50dvh, 500px)); }
+/* Each fit moves the CAP, and the reservation above follows it automatically,
+   so switching fit resizes the box in one step instead of letting the photo
+   push it around after the fact. */
+.edt-stg-hero[data-fit='wide'] { padding-inline: 0; }
+.edt-stg-hero[data-fit='tall'] { --edt-hero-cap: var(--edt-stg-heromax, min(50dvh, 500px)); }
 .edt-stg-hero .edt-glow {
   inset: 6% 4% 8%;
   height: auto;
