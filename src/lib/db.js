@@ -547,7 +547,22 @@ export function watchActiveOrders(tid, cb) {
     where('status', 'in', ['pending', 'accepted', 'preparing', 'ready']),
     orderBy('createdAt', 'asc'),
   )
-  return onSnapshot(q, (s) => cb(s.docs.map((d) => ({ id: d.id, ...d.data() }))), () => cb([]))
+  // Resilient board feed (KDS + cashier): a transient listener error must NOT
+  // blank an already-populated board with a false "no tickets" all-clear (a
+  // kitchen would miss live orders), and a dead listener must resubscribe. Only
+  // surface empty if nothing has loaded yet (avoids an infinite spinner).
+  let got = false
+  let unsub = null
+  let stopped = false
+  const start = () => {
+    unsub = onSnapshot(
+      q,
+      (s) => { got = true; cb(s.docs.map((d) => ({ id: d.id, ...d.data() }))) },
+      () => { if (!got) cb([]); if (!stopped) setTimeout(() => { if (!stopped) start() }, 3000) },
+    )
+  }
+  start()
+  return () => { stopped = true; unsub && unsub() }
 }
 
 export function watchOrder(tid, id, cb) {
@@ -580,7 +595,9 @@ export function watchDeliveryPool(tid, cb) {
   if (!tid) { cb([]); return () => {} }
   const q = query(sub(tid, 'orders'), where('delivery.status', '==', 'pending'))
   return onSnapshot(q, (s) => {
-    const list = s.docs.map((d) => ({ id: d.id, ...d.data() })).filter((o) => !o.delivery?.driverId && o.status !== 'cancelled')
+    // Exclude held online orders that have not settled yet (awaiting_payment) —
+    // an unpaid order must not surface to drivers to claim and deliver.
+    const list = s.docs.map((d) => ({ id: d.id, ...d.data() })).filter((o) => !o.delivery?.driverId && o.status !== 'cancelled' && o.status !== 'awaiting_payment')
     list.sort((a, b) => (a.createdAt?.toMillis?.() || 0) - (b.createdAt?.toMillis?.() || 0))
     cb(list)
   }, () => cb([]))
@@ -880,7 +897,10 @@ async function reverseOrderEffects(tid, order, policy) {
   const phone = order?.customerPhone
   if (!phone) return
   const ref = subDoc(tid, 'customers', phoneId(phone))
-  const earned = policy?.enabled ? Math.round((order.total || 0) * (policy.earnRate || 1)) : 0
+  // Reverse EXACTLY what was awarded (recorded on the order at earn time). Old
+  // orders with no record reverse 0 — never re-derive from total×rate, which
+  // ignored pointsMultiplier and wrongly deducted from orders that never earned.
+  const earned = Math.max(0, Number(order.pointsAwarded) || 0)
   return runTransaction(db, async (tx) => {
     const snap = await tx.get(ref)
     if (!snap.exists()) return
@@ -967,7 +987,9 @@ export async function setOrderTable(tid, id, { tableId = null, tableLabel = '', 
 // lines change; fall back to the stored amount if the original subtotal is unknown.
 function scaledMemberDiscount(prev, newSubtotal) {
   const pct = (prev.subtotal || 0) > 0 ? (prev.memberDiscount || 0) / prev.subtotal : 0
-  return pct > 0 ? Math.round(newSubtotal * pct) : (prev.memberDiscount || 0)
+  // round to halalas (2 dp), not whole riyals — whole-riyal rounding here shrank
+  // the member's discount every time the order was edited.
+  return pct > 0 ? Math.round(newSubtotal * pct * 100) / 100 : (prev.memberDiscount || 0)
 }
 
 // Single source of truth for an active order's total after an edit. Every
@@ -1252,6 +1274,11 @@ export async function processMembershipOnPaid(tid, phone, order, policy) {
       const points = (m.points || 0) + earned
       const { tier, discountPct } = tierForPoints(policy, lifetime, d.totalOrders || 0)
       m = { ...m, points, pointsLifetime: lifetime, tier, discountPct, lastEarnOrderId: order.id, lastEarnAt: Date.now() }
+      // Record the EXACT points this order awarded (multiplier included) on the
+      // order itself, so a later cancel/refund reverses precisely this amount —
+      // not a recomputed guess that ignored the multiplier (permanent inflation)
+      // or a deduction for an order that never earned any (pre-membership).
+      tx.set(subDoc(tid, 'orders', order.id), { pointsAwarded: earned }, { merge: true })
     }
     const custPatch = { membership: m }
     // birthday bonus (once per year, on the member's birthday MM-DD)

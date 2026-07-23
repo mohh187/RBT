@@ -231,10 +231,15 @@ service cloud.firestore {
       // ---- item reviews: guests submit + read, managers moderate ----
       match /reviews/{id} {
         allow read: if true;
-        allow create: if true
-          && request.resource.data.rating is number
+        // Public write, but bounded: only the known review fields, rating 1-5, and
+        // capped text — so the public collection can't be stuffed with arbitrary or
+        // oversized payloads.
+        allow create: if request.resource.data.rating is number
           && request.resource.data.rating >= 1
-          && request.resource.data.rating <= 5;
+          && request.resource.data.rating <= 5
+          && request.resource.data.keys().hasOnly(['itemId', 'itemNameAr', 'itemNameEn', 'name', 'rating', 'comment', 'staffUid', 'createdAt'])
+          && (!('comment' in request.resource.data) || (request.resource.data.comment is string && request.resource.data.comment.size() <= 1000))
+          && (!('name' in request.resource.data) || (request.resource.data.name is string && request.resource.data.name.size() <= 120));
         allow update, delete: if isManager(tid);
       }
       match /offers/{id} {
