@@ -829,3 +829,113 @@
     transition-duration: 0.001ms !important;
   }
 }
+
+/* =========================================================================
+   «الحريق» — Hareeg. The table centre carries the two piles and the shared
+   melds shelf; staging sits over the hand. Reuses every cg-* primitive; the
+   melds shelf is the ONE scrollable area (overlay-invisible per repo rule).
+   ========================================================================= */
+.hr-table {
+  position: absolute;
+  inset: 12% 4% 14%;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  align-items: center;
+  justify-content: center;
+  pointer-events: none;
+}
+.hr-table > * { pointer-events: auto; }
+
+.hr-piles { display: flex; gap: 14px; align-items: flex-end; }
+.hr-pile {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+  padding: 6px 8px;
+  border-radius: 12px;
+  border: 1px solid var(--cg-line);
+  background: color-mix(in srgb, var(--cg-surface) 82%, transparent);
+  color: inherit;
+  cursor: pointer;
+}
+.hr-pile:disabled { cursor: default; opacity: 0.75; }
+.hr-pile.is-live {
+  border-color: color-mix(in srgb, var(--cg-gold) 65%, transparent);
+  box-shadow: 0 0 0 1px color-mix(in srgb, var(--cg-gold) 35%, transparent),
+    0 6px 18px -8px color-mix(in srgb, var(--cg-gold) 55%, transparent);
+}
+.hr-pile-back {
+  display: block;
+  width: 38px;
+  height: 54px;
+  border-radius: 6px;
+}
+.hr-pile-lbl { font-size: 10px; opacity: 0.75; white-space: nowrap; font-variant-numeric: tabular-nums; }
+.hr-pile-empty {
+  display: grid;
+  place-items: center;
+  width: 38px;
+  height: 54px;
+  border: 1px dashed var(--cg-line);
+  border-radius: 6px;
+  font-size: 9px;
+  opacity: 0.6;
+}
+
+.hr-melds {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  align-items: flex-start;
+  justify-content: center;
+  max-height: 38%;
+  max-width: 100%;
+  padding: 4px;
+}
+.hr-meld {
+  display: flex;
+  padding: 4px 6px;
+  border-radius: 10px;
+  border: 1px solid var(--cg-line);
+  background: color-mix(in srgb, var(--cg-surface) 70%, transparent);
+  cursor: default;
+}
+.hr-meld .cg-card { margin-inline-start: -14px; }
+.hr-meld .cg-card:first-child { margin-inline-start: 0; }
+.hr-meld.is-target {
+  cursor: pointer;
+  border-color: color-mix(in srgb, var(--cg-gold) 70%, transparent);
+  box-shadow: 0 0 0 1px color-mix(in srgb, var(--cg-gold) 40%, transparent);
+}
+.hr-nomelds { font-size: 11px; opacity: 0.6; text-align: center; padding: 10px 14px; }
+
+.hr-staged {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+  justify-content: center;
+  padding: 4px 8px;
+}
+.hr-staged-meld {
+  display: flex;
+  padding: 3px 5px;
+  border-radius: 9px;
+  border: 1px dashed color-mix(in srgb, var(--cg-gold) 60%, transparent);
+}
+.hr-staged-meld .cg-card { margin-inline-start: -16px; }
+.hr-staged-meld .cg-card:first-child { margin-inline-start: 0; }
+.hr-staged-pts { font-size: 11px; font-weight: 800; color: var(--cg-gold); font-variant-numeric: tabular-nums; }
+
+/* small card variant for piles / melds / staging */
+.cg-card.is-sm { width: 34px; height: 48px; font-size: 11px; }
+.cg-card.is-sm .cg-card-big { width: 14px; height: 14px; }
+.cg-card.is-sm .cg-card-mini { width: 9px; height: 9px; }
+.cg-card.is-joker { color: var(--cg-gold); }
+.cg-card.is-joker .cg-card-rank { color: var(--cg-gold); }
+
+/* burned-out players stay visible but clearly out of the match */
+.cg-score.is-out { opacity: 0.45; text-decoration: line-through; }
+.cg-seat.is-out { opacity: 0.45; filter: saturate(0.4); }

@@ -867,7 +867,12 @@ export function tableChampions(rooms, { gameId = '' } = {}) {
         byPerson.set(peer.id, { deviceId: peer.id, name: peer.name, score, gameId: String(r.gameId || ''), at, wins: num(prev?.wins, 0) })
       }
       const cur = byPerson.get(peer.id)
-      if (r.winnerSeat != null && r.winnerSeat === p.seat) cur.wins = num(cur.wins, 0) + 1
+      // Partnership games report winnerSeat as the winning TEAM (0|1: seats
+      // 0+2 vs 1+3), so a plain seat comparison would never credit seats 2/3.
+      const teamGame = r.gameId === 'wist' || r.gameId === 'jackaroo'
+      const won = r.winnerSeat != null
+        && (teamGame ? p.seat % 2 === Number(r.winnerSeat) : r.winnerSeat === p.seat)
+      if (won) cur.wins = num(cur.wins, 0) + 1
     }
   }
   return [...byPerson.values()]

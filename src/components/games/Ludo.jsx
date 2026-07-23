@@ -399,7 +399,10 @@ export function reduce(state, move, room) {
 
     st.phase = 'move'
     st.note = { k: 'rolled', a: seat, b: die }
-    return { state: st }
+    // Same seat, FRESH turn stamp: without it turn.startedAt keeps aging while
+    // the player picks a token, so a roll made near the stall window's edge
+    // left them force-skippable mid-move with a die they never got to play.
+    return { state: st, turn: turnAt(seat) }
   }
 
   // ---- move a token ----
@@ -461,6 +464,10 @@ export function reduce(state, move, room) {
     // off mid-game. Placings live in state.finished and are shown on the board;
     // winnerSeat is only reported when the round genuinely ends, above.
     st.phase = 'roll'
+    // The streak belongs to the PLAYER. Finishing a token on a six grants no
+    // extra roll (`done` above), and without this reset the count would leak
+    // to the next seat, who could then forfeit off a single six of their own.
+    if (!extra) st.sixStreak = 0
     return { state: st, turn: turnAt(extra ? seat : nextSeat(seats, st, seat)) }
   }
 
@@ -643,7 +650,13 @@ export default function Ludo({
   const [spin, setSpin] = useState(false)
   const [tick, setTick] = useState(0)
 
-  const gstate = online ? (room.state || null) : (local ? local.state : null)
+  // createRoom seeds `state: {}` — truthy but not a board. Anything without a
+  // tokens array must read as "not started yet" so the waiting panel renders;
+  // an invited guest arriving before the host starts used to crash here on
+  // `gstate.finished.length`.
+  const gstate = online
+    ? (room.state && Array.isArray(room.state.tokens) ? room.state : null)
+    : (local ? local.state : null)
   const groom = online ? room : (local ? local.room : null)
   const turnSeat = (groom && groom.turn && Number.isInteger(groom.turn.seat)) ? groom.turn.seat : -1
 

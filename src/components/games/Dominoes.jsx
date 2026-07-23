@@ -137,7 +137,7 @@ const sane = (s) =>
   !!s && typeof s === 'object' && s.hands && Array.isArray(s.boneyard) && Array.isArray(s.line) &&
   Number.isInteger(s.playerCount)
 
-export function initialState(playerCount = 2) {
+export function initialState(playerCount = 2, seed = null) {
   const count = Math.max(2, Math.min(4, Number(playerCount) || 2))
   const scores = {}
   for (let s = 0; s < count; s++) scores[String(s)] = 0
@@ -145,7 +145,10 @@ export function initialState(playerCount = 2) {
     {
       playerCount: count,
       target: TARGET,
-      seed: Math.floor(Math.random() * 1e9),
+      // `reduce` re-runs on every client, so any state it rebuilds must come
+      // from a caller-supplied deterministic seed; only a genuinely local
+      // first deal (no room involved) may draw randomness here.
+      seed: Number.isInteger(seed) ? seed : Math.floor(Math.random() * 1e9),
       roundNo: 1,
       scores,
       matchWinner: null,
@@ -180,7 +183,11 @@ const turnOut = (seat, move) => ({ seat, startedAt: stampOf(move), deadlineAt: n
 // The anti-cheat boundary. Total function: any illegal move returns the state
 // untouched. Re-runs inside the room transaction against the committed state.
 export function reduce(state, move, room) {
-  const st = sane(state) ? state : initialState(2)
+  // A broken state is rebuilt DETERMINISTICALLY — never Math.random inside
+  // reduce, or each client would fabricate a different board.
+  const st = sane(state)
+    ? state
+    : initialState(2, (Math.imul((state && state.seed) || 1, 2654435761) + ((state && state.roundNo) || 0)) >>> 0)
   const type = move && move.type ? move.type : 'play'
   const seat = Number.isInteger(move && move.seat)
     ? move.seat
@@ -192,7 +199,8 @@ export function reduce(state, move, room) {
   // player could wipe the scores mid-match
   if (type === 'reset') {
     if (st.phase !== 'matchEnd') return { state: st }
-    const fresh = initialState(st.playerCount)
+    // Deterministic reseed: every client must deal the same fresh match.
+    const fresh = initialState(st.playerCount, (Math.imul(st.seed || 1, 2654435761) + (st.roundNo || 0)) >>> 0)
     return { state: fresh, turn: turnOut(fresh.turn, move), status: 'playing', winnerSeat: null }
   }
   if (type === 'next') {
@@ -247,7 +255,10 @@ export function reduce(state, move, room) {
       )
       return {
         state: settled,
-        turn: turnOut(st.turn, move),
+        // Free-for-all between rounds: «الجولة التالية» renders for every seat
+        // and the `next` branch accepts any of them, so pinning the turn to
+        // one player (who may have left) silently rejected everyone else's tap.
+        turn: null,
         status: settled.phase === 'matchEnd' ? 'ended' : 'playing',
         winnerSeat: settled.phase === 'matchEnd' ? settled.matchWinner : null,
       }
@@ -304,7 +315,8 @@ export function reduce(state, move, room) {
     const settled = settleRound(base, 'domino', seat)
     return {
       state: settled,
-      turn: turnOut(seat, move),
+      // Between rounds any seat may deal on — see the blocked-round settle.
+      turn: null,
       status: settled.phase === 'matchEnd' ? 'ended' : 'playing',
       winnerSeat: settled.phase === 'matchEnd' ? settled.matchWinner : null,
     }
@@ -499,6 +511,7 @@ export default function Dominoes({
   onMove,
   onProgress,
   resumeState,
+  isHost = false,
   // «العب ضد الكمبيوتر»: one to three machine seats. The player is always seat
   // zero, so the seat count of a solo match is soloBots + 1.
   soloBots = null,
@@ -531,7 +544,10 @@ export default function Dominoes({
   })
   const st = useMemo(() => {
     const raw = mp ? room.state : local
-    return sane(raw) ? raw : initialState(mp && Array.isArray(room.players) ? room.players.length : 2)
+    // Stand-in board for a playing room whose state is broken: seed 1, a
+    // constant, so every client fabricates the SAME fallback instead of four
+    // different random ones.
+    return sane(raw) ? raw : initialState(mp && Array.isArray(room.players) ? room.players.length : 2, 1)
   }, [mp, room, local])
 
   // Hot-seat play passes the phone, so the acting seat follows the turn.
@@ -595,10 +611,13 @@ export default function Dominoes({
   }, [vsBot, st])
 
   useEffect(() => {
-    if (!mp) onProgressRef.current?.({ game: GAME_ID, state: st })
+    // Saved progress is a hot-seat convenience ONLY: persisting a bot match
+    // resumed it later as pass-the-phone, handing the machine seats' tiles to
+    // phantom humans.
+    if (!mp && !vsBot) onProgressRef.current?.({ game: GAME_ID, state: st })
     const mine = Number.isInteger(seat) ? st.scores[String(seat)] : null
     if (Number.isInteger(mine)) onScoreRef.current?.(mine)
-  }, [st, mp, seat])
+  }, [st, mp, vsBot, seat])
 
   const tapTile = useCallback((id) => {
     if (!myTurn || veiled) return
@@ -801,7 +820,11 @@ export default function Dominoes({
               <Icon name="play" size={14} />{t.nextRound}
             </button>
           ) : null}
-          {st.phase === 'matchEnd' ? (
+          {st.phase === 'matchEnd' && (!mp || isHost) ? (
+            // Online, a finished match means an ENDED room, and only the host
+            // can restart it (GamesCenter reroutes this reset through
+            // startGame). Everyone else would get a dead button, so they get
+            // the winner banner alone — same convention as Chess's rematch.
             <button type="button" className="bgm-btn bgm-press" data-tone="brand" onClick={() => submit({ type: 'reset' })}>
               <Icon name="reload" size={14} />{t.newMatch}
             </button>

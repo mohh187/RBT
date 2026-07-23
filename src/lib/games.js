@@ -335,6 +335,20 @@ export const GAMES = [
     maxPlayers: 4,
     load: () => import('../components/games/Jackaroo.jsx'),
   },
+  {
+    id: 'haree',
+    ar: 'الحريق',
+    en: 'Hareeg',
+    desc: 'حريق 14 — شدّتان وجوكرات، افتتح بخمسين ونقطة، وارمِ بلا غطاء. من بلغ 31 احترق وخرج، وآخر من يبقى يفوز.',
+    descEn: 'Hareeg 14 — two decks and jokers; open at 51, never throw a cover. Reach 31 and you burn; last one standing wins.',
+    icon: 'flame',
+    tags: ['all'],
+    kind: 'party',
+    multiplayer: true,
+    minPlayers: 2,
+    maxPlayers: 4,
+    load: () => import('../components/games/Haree.jsx'),
+  },
 ]
 
 // A venue that has never touched the picker gets this starter set: one game per

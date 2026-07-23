@@ -385,17 +385,34 @@ export async function startGame({ tid, roomId, playerId, initialState, turnMs, f
     const snap = await tx.get(ref)
     if (!snap.exists()) fail('not-found')
     const room = snap.data()
-    if (room.status === 'ended') fail('ended')
     if (room.status === 'playing') return { already: true }
+    // 'ended' is deliberately NOT rejected: applyMove refuses every move on an
+    // ended room, so the host's in-game rematch (GamesCenter.submitMove) can
+    // only restart the SAME room through here, with a fresh state below.
     if (playerId && room.hostId !== playerId) fail('not-host')
     const players = Array.isArray(room.players) ? room.players : []
     if (players.length < (room.minPlayers || 2)) fail('not-enough')
+
+    // Reseat contiguously before dealing. A lobby leaver frees a middle seat
+    // ({0,1,2} becomes {0,2}), and every reducer sizes its world by player
+    // COUNT — the player left on seat 2 of a 2-player room would fail every
+    // `seat >= playerCount` check for the whole game.
+    const seated = players
+      .slice()
+      .sort((a, b) => (Number(a.seat) || 0) - (Number(b.seat) || 0))
+      .map((p, i) => ({ ...p, seat: i }))
+    const fs = Number(firstSeat)
+    const first = Number.isInteger(fs) ? Math.max(0, Math.min(fs, seated.length - 1)) : 0
 
     const ms = Math.max(0, Number(turnMs ?? room.turnMs) || 0)
     const now = Date.now()
     const patch = {
       status: 'playing',
-      turn: { seat: firstSeat, startedAt: now, deadlineAt: ms ? now + ms : null },
+      players: seated,
+      turn: { seat: first, startedAt: now, deadlineAt: ms ? now + ms : null },
+      // A restart of an ended room must not keep last match's verdict around.
+      winnerSeat: null,
+      endedAt: null,
       updatedAt: now,
     }
     if (initialState !== undefined) {

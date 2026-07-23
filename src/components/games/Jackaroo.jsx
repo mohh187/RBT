@@ -91,6 +91,8 @@ const LANE = 4
 const BASE = 900
 const L0 = 100
 
+const STALL_MS = 75000 // after this a stopped turn can be skipped by anyone (same window as Ludo)
+
 const SUITS = ['S', 'H', 'D', 'C']
 const RANKS = ['2', '3', '4', '5', '6', '7', '8', '9', 'T', 'J', 'Q', 'K', 'A']
 const RED = { H: true, D: true }
@@ -539,6 +541,25 @@ function doDiscard(s, move) {
   return advance(s, seat, hands, s.marbles, last, move)
 }
 
+// ---- anti-stall: a disconnected or timed-out seat can be skipped ----------
+// Mirrors Ludo's forceSkip: any player may submit it, but it only bites when
+// the turn holder is disconnected or has sat on the turn past STALL_MS. The
+// stalled seat loses its first card so the round still drains toward the next
+// deal; a hand already empty mid-round has nothing to lose and just passes on.
+function doForceSkip(s, move, room) {
+  if (s.phase !== 'play') return keep(s)
+  const turnSeat = s.turnSeat
+  const holder = (Array.isArray(room?.players) ? room.players : []).find((p) => Number(p?.seat) === turnSeat)
+  const startedAt = Number(room?.turn?.startedAt) || 0
+  const stale = startedAt > 0 && (Date.now() - startedAt) > STALL_MS
+  const gone = !holder || holder.connected === false
+  if (!stale && !gone) return keep(s)
+  const hand = s.hands[turnSeat] || []
+  const hands = hand.length ? s.hands.map((h, k) => (k === turnSeat ? h.slice(1) : h)) : s.hands
+  const last = { seat: turnSeat, owner: turnSeat, card: hand.length ? hand[0] : null, mode: 'discard', kills: 0 }
+  return advance(s, turnSeat, hands, s.marbles, last, move)
+}
+
 export function reduce(state, move, room) {
   const s = normalise(state)
   const m = move && typeof move === 'object' ? move : null
@@ -550,6 +571,7 @@ export function reduce(state, move, room) {
     case 'deal': return doDeal(s, m, room)
     case 'play': return doPlay(s, m)
     case 'discard': return doDiscard(s, m)
+    case 'forceSkip': return doForceSkip(s, m, room)
     default: return keep(s)
   }
 }
@@ -697,6 +719,7 @@ export default function Jackaroo({
   const [sel, setSel] = useState(null) // { i, card }
   const [split, setSplit] = useState(null) // null | 7 | 1..6
   const [picks, setPicks] = useState([]) // [{ o, m }]
+  const [tick, setTick] = useState(0) // re-render pulse for the stall detector only
 
   const table = remote ? room : localRoom
   const st = useMemo(() => normalise(table?.state), [table])
@@ -706,6 +729,10 @@ export default function Jackaroo({
   const seat = remote
     ? (Number.isInteger(mySeat) ? mySeat : 0)
     : (vsBot ? 0 : (Number.isInteger(st.turnSeat) ? st.turnSeat : 0))
+  // A remote viewer with no seat (spectator, or a snapshot arriving before the
+  // join settles) falls back to seat 0 above so the BOARD can rotate — but it
+  // must never be handed seat 0's cards or controls (see the hand gate below).
+  const seated = !remote || Number.isInteger(mySeat)
 
   const host = remote ? !!isHost : true
   const players = Array.isArray(table?.players) ? table.players : []
@@ -768,6 +795,14 @@ export default function Jackaroo({
     return () => clearTimeout(id)
   }, [vsBot, st, localRoom, submit])
 
+  // slow re-render pulse only so the skip affordance can appear while a
+  // stalled turn ages; nothing else polls (same rhythm as Ludo)
+  useEffect(() => {
+    if (!remote || st.phase !== 'play') return undefined
+    const iv = setInterval(() => setTick((n) => (n + 1) % 100000), 3000)
+    return () => clearInterval(iv)
+  }, [remote, st.phase])
+
   // clear the selection whenever the board moves on
   const stamp = st.round + ':' + st.turnSeat + ':' + (st.hands[seat] || []).length
   useEffect(() => { setSel(null); setSplit(null); setPicks([]) }, [stamp])
@@ -788,6 +823,7 @@ export default function Jackaroo({
       home: 'في الخانة', us: 'فريقنا', them: 'الخصوم', win: 'فزتم', lose: 'فاز الخصوم',
       partnerNow: 'بيادقك وصلت — أنت تحرّك بيادق شريكك الآن.', round: 'الجولة',
       killed: 'قتل', swapped: 'بدّل', released: 'أخرج بيدقاً', discarded: 'رمى',
+      skip: 'تخطَّ اللاعب المتوقف',
     }
     : {
       rules: 'Rules', close: 'Close', deal: 'Start', exit: 'Exit',
@@ -799,6 +835,7 @@ export default function Jackaroo({
       home: 'parked', us: 'Us', them: 'Them', win: 'You win', lose: 'They win',
       partnerNow: 'Your marbles are all in — you now move your partner\'s.', round: 'Round',
       killed: 'sent one home', swapped: 'swapped', released: 'released a marble', discarded: 'discarded',
+      skip: 'Skip stalled player',
     }
 
   const nameOf = (sx) => bySeat[sx]?.name || (ar ? 'مقعد فارغ' : 'Empty')
@@ -806,6 +843,17 @@ export default function Jackaroo({
   const isMyTurn = st.turnSeat === seat && st.phase === 'play'
   const owner = activeOwner(st.marbles, seat)
   const myHand = st.hands[seat] || []
+
+  // Same anti-stall affordance as Ludo: when the turn holder is gone or has
+  // sat on the turn past STALL_MS, the other players get a skip button, and
+  // `reduce` re-checks the window before honouring it.
+  const stalled = useMemo(() => {
+    if (!remote || st.phase !== 'play' || isMyTurn) return false
+    const holder = players.find((p) => Number(p?.seat) === st.turnSeat)
+    if (!holder || holder.connected === false) return true
+    const startedAt = Number(table?.turn?.startedAt) || 0
+    return startedAt > 0 && (Date.now() - startedAt) > STALL_MS
+  }, [remote, st.phase, st.turnSeat, isMyTurn, players, table, tick])
 
   // legal descriptors for the selected card, recomputed from live state
   const legal = useMemo(
@@ -1094,6 +1142,9 @@ export default function Jackaroo({
         ) : null}
       </div>
 
+      {/* A seatless remote viewer gets the board only: rendering this block
+          for them dressed seat 0's hand in live-looking controls. */}
+      {seated ? (
       <div className="cg-hand-wrap">
         {owner !== seat && st.phase === 'play' ? (
           <div className="jak-legend"><span>{t.partnerNow}</span></div>
@@ -1157,10 +1208,16 @@ export default function Jackaroo({
               {ar ? 'تراجع' : 'Undo'}
             </button>
           ) : null}
+          {stalled ? (
+            <button type="button" className="cg-btn is-ghost cg-press" onClick={() => submit({ t: 'forceSkip', seat })}>
+              {t.skip}
+            </button>
+          ) : null}
         </div>
 
         <div className="cg-hand-hint">{hint}</div>
       </div>
+      ) : null}
 
       {rules ? (
         <div className="cg-over">

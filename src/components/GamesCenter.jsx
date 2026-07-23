@@ -24,7 +24,9 @@ import { getLocalCustomer, setLocalCustomer } from '../lib/customer.js'
 import { useScrollLock } from '../lib/scrollLock.js'
 import { submitScore, watchTopScores, currentMonth, myRank } from '../lib/leaderboard.js'
 import { deviceKey } from '../lib/device.js'
-import { watchRoom, applyMove, heartbeat, leaveRoom, HEARTBEAT_MS } from '../lib/gameRoom.js'
+// startGame is aliased: this file already has a local startGame (the solo
+// launcher), and the room restart below must not shadow or collide with it.
+import { watchRoom, applyMove, startGame as startRoomGame, heartbeat, leaveRoom, HEARTBEAT_MS } from '../lib/gameRoom.js'
 import { clearSoloIntent } from '../lib/gameBots.js'
 import {
   watchLiveTournament, recordTournamentPlay, recordHappyHourPlay, rememberRoom,
@@ -353,10 +355,16 @@ export default function GamesCenter({
   const [roomId, setRoomId] = useState('')
   const [room, setRoom] = useState(null)
   const reduceRef = useRef(null)   // the active game's pure reducer
+  const modRef = useRef(null)      // the loaded game module — the rematch path re-deals from its initialState
   const mySeat = useMemo(() => {
     const p = (room?.players || []).find((x) => x.id === deviceKey())
     return p ? p.seat : null
   }, [room])
+
+  // Latest room snapshot for callbacks: submitMove must judge a rematch against
+  // the CURRENT room status, not the one captured when it was created.
+  const roomRef = useRef(null)
+  useEffect(() => { roomRef.current = room }, [room])
 
   // Live room subscription + presence while a room is open.
   useEffect(() => {
@@ -371,14 +379,38 @@ export default function GamesCenter({
   // so two phones tapping at once can never both apply.
   const submitMove = useCallback((move) => {
     if (!tenantId || !roomId || mySeat == null || !reduceRef.current) return Promise.resolve()
+    const mt = move?.type || move?.t
+    // A finished room refuses applyMove outright, so the in-game «مباراة
+    // جديدة» buttons can only work as a restart of the SAME room: the host
+    // re-deals through startGame with a fresh initialState. Non-hosts stay a
+    // no-op, exactly like any other rejected move.
+    const cur = roomRef.current
+    if (cur?.status === 'ended' && (mt === 'newGame' || mt === 'reset')) {
+      if (cur.hostId !== deviceKey() || !modRef.current) return Promise.resolve()
+      const mod = modRef.current
+      let st = {}
+      try { st = typeof mod.initialState === 'function' ? mod.initialState(cur.players?.length || 2) : {} } catch (_) { st = {} }
+      return startRoomGame({
+        tid: tenantId,
+        roomId,
+        playerId: deviceKey(),
+        initialState: st,
+        // Same rule as the lobby start: an opener the deal pre-picked
+        // (Dominoes' highest double) must become the room's turn seat.
+        firstSeat: Number.isInteger(st?.turn) ? st.turn : 0,
+      }).catch(() => { /* rejected restart: the snapshot already shows the truth */ })
+    }
     return applyMove({
       tid: tenantId,
       roomId,
       seat: mySeat,
       move,
       reduce: reduceRef.current,
-      // Anti-stall skips are submitted by a player other than the turn holder.
-      allowOutOfTurn: move?.type === 'forceSkip' || move?.type === 'skipTurn',
+      // Moves a NON-turn seat must legitimately submit: anti-stall skips, chess
+      // resign/draw negotiation (the offerer keeps the turn), and deals/rematches
+      // (the host's seat is not necessarily the turn seat after a host transfer).
+      // Every one of them is still fully validated by the game's own reducer.
+      allowOutOfTurn: ['forceSkip', 'skipTurn', 'resign', 'offerDraw', 'acceptDraw', 'declineDraw', 'deal', 'next'].includes(mt),
     }).catch(() => { /* rejected move: the snapshot already shows the truth */ })
   }, [tenantId, roomId, mySeat])
 
@@ -408,8 +440,9 @@ export default function GamesCenter({
     }
     try {
       const mod = await g.load()
+      modRef.current = mod
       reduceRef.current = typeof mod.reduce === 'function' ? mod.reduce : null
-    } catch (_) { reduceRef.current = null }
+    } catch (_) { modRef.current = null; reduceRef.current = null }
     // Remember the room locally so «من لعبت معهم» still knows these people
     // tomorrow — the room doc itself is not queryable by participant.
     rememberRoom(tenantId, rid)

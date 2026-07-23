@@ -95,6 +95,10 @@ export const BOT_NOTE = {
     ar: 'يجرّب كل حركة تسمح بها ورقته ويختار ما يقدّم فريقه أكثر — الدخول إلى الخانة ثم القتل ثم التقدّم ثم الخروج من البيت. يزن ورقة واحدة فقط ولا يخطّط للجولة القادمة.',
     en: 'Tries every move its card allows and takes the one that advances its side most — lane, kill, progress, release. One card deep, no planning.',
   },
+  haree: {
+    ar: 'يأخذ المرمية إذا دخلت في نزلة عنده، يفتتح فور بلوغ 51، ينزل ويمدّد ما يجد، ويرمي أثقل ورقة لا تنفعه. يرى يده وحدها ولا يعدّ ورق غيره.',
+    en: 'Takes the thrown card when it completes a meld, opens the moment it holds 51, lays and extends what it finds, and throws its heaviest useless card. Sees only its own hand.',
+  },
 }
 
 export function botNote(gameId, lang) {
@@ -770,6 +774,77 @@ export function jackarooBotMove(state, seat, ctx) {
 }
 
 // ===========================================================================
+// «الحريق» — Hareeg. Draws with purpose, opens at 51, lays what its greedy
+// meld finder produces, extends table melds with loose cards, then throws the
+// heaviest card that is not a cover. Every candidate is verified through the
+// game's own reduce before being returned, so a heuristic slip can never
+// submit an illegal move — it simply tries the next candidate. Reads ONLY its
+// own seat's hand.
+// ===========================================================================
+function hareeBotMove(state, seat, ctx) {
+  const st = state
+  if (!st || st.phase !== 'turn' || st.turnSeat !== seat) return null
+  const H = (ctx && ctx.helpers) || {}
+  const { findMelds, validMeld, valueOf, OPEN_MIN } = H
+  if (typeof findMelds !== 'function') return null
+  const room = ctx.room
+  const hand = (st.hands && st.hands[seat]) || []
+  const legal = (mv) => {
+    if (typeof ctx.reduce !== 'function') return mv
+    try {
+      const r = ctx.reduce(st, { ...mv, at: 1 }, room)
+      return r && r.state && r.state !== st ? mv : null
+    } catch (_) {
+      return null
+    }
+  }
+
+  if (st.step === 'draw') {
+    const top = st.discard && st.discard.length ? st.discard[st.discard.length - 1] : null
+    if (top) {
+      const gain = findMelds([...hand, top])
+      if (gain.used.has(top)) {
+        const take = legal({ t: 'draw', seat, from: 'discard' })
+        if (take) return take
+      }
+    }
+    return legal({ t: 'draw', seat, from: 'stock' }) || legal({ t: 'draw', seat, from: 'discard' })
+  }
+
+  const found = findMelds(hand)
+  const opened = !!(st.opened && st.opened[seat])
+
+  // lay: everything the finder produced, the moment it is allowed to
+  if (found.melds.length && (opened || found.points >= (OPEN_MIN || 51))) {
+    const mv = legal({ t: 'lay', seat, melds: found.melds })
+    if (mv) return mv
+  }
+
+  // extend: loose cards onto any table meld (one at a time, re-validated)
+  if (opened && Array.isArray(st.melds)) {
+    for (let i = 0; i < st.melds.length; i += 1) {
+      for (const c of hand) {
+        if (found.used.has(c)) continue
+        if (validMeld([...st.melds[i].cards, c])) {
+          const mv = legal({ t: 'extend', seat, meld: i, cards: [c] })
+          if (mv) return mv
+        }
+      }
+    }
+  }
+
+  // throw: heaviest loose card first; meld-plan cards only as a last resort.
+  // reduce enforces the cover rule, so an unlawful throw just tries the next.
+  const loose = hand.filter((c) => !found.used.has(c)).sort((a, b) => valueOf(b) - valueOf(a))
+  const rest = hand.filter((c) => found.used.has(c)).sort((a, b) => valueOf(b) - valueOf(a))
+  for (const c of [...loose, ...rest]) {
+    const mv = legal({ t: 'discard', seat, card: c })
+    if (mv) return mv
+  }
+  return null
+}
+
+// ===========================================================================
 // registry
 // ===========================================================================
 export const BOTS = {
@@ -778,6 +853,7 @@ export const BOTS = {
   dominoes: dominoesBotMove,
   wist: wistBotMove,
   jackaroo: jackarooBotMove,
+  haree: hareeBotMove,
 }
 
 // The single entry point a game component calls. Returns a move or null; never

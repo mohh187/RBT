@@ -700,6 +700,10 @@ export default function Chess({
     ? flipPin
     : mp ? mySeat === 1 : (vsBot ? false : st.turn === 'b')
 
+  // A manual flip pins the view only until the turn changes hands: without
+  // this, one tap of «اقلب» killed hot-seat auto-rotation for the whole match.
+  useEffect(() => { if (!mp && !vsBot) setFlipPin(null) }, [mp, vsBot, st.turn])
+
   const legal = useMemo(() => (st.status === 'playing' ? legalMoves(st) : []), [st])
   const targets = useMemo(() => {
     if (sel === null) return new Map()
@@ -725,9 +729,14 @@ export default function Chess({
     else setLocal((prev) => {
       // hot-seat: the seat acting is the side to move, EXCEPT when answering a
       // draw offer — that answer belongs to the player who did not offer, and
-      // offering never passes the turn
+      // offering never passes the turn. Against the computer the human is
+      // ALWAYS seat 0: attributing a resign tapped during the bot's think time
+      // to the side to move scored it as the BOT resigning (a free win), and
+      // the same path let the human offer-and-accept their own draw.
       const answering = move.type === 'acceptDraw' || move.type === 'declineDraw'
-      const actor = answering ? (prev.drawOffer === 0 ? 1 : 0) : seatOfSide(prev.turn)
+      const actor = answering
+        ? (prev.drawOffer === 0 ? 1 : 0)
+        : (vsBot ? 0 : seatOfSide(prev.turn))
       return reduce(prev, { ...payload, seat: actor }, null).state
     })
     setSel(null)
@@ -779,7 +788,10 @@ export default function Chess({
   const reportedRef = useRef(false)
   useEffect(() => {
     if (!mp) onProgressRef.current?.({ game: GAME_ID, state: st })
-    if (st.status === 'playing' || reportedRef.current) return
+    // A rematch flips the board back to 'playing' — re-arm the one-shot here,
+    // or every round after the first would award no points.
+    if (st.status === 'playing') { reportedRef.current = false; return }
+    if (reportedRef.current) return
     reportedRef.current = true
     const points = st.result === 'draw' ? 75 : mySide === null ? 40 : st.result === mySide ? 150 : 25
     onScoreRef.current?.(points)

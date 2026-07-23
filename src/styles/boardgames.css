@@ -481,6 +481,9 @@
   gap: 8px;
   align-items: center;
   justify-content: center;
+  /* the SVG chain above is drawn LTR regardless of language, so under RTL the
+     flex order mirrored these buttons and taps landed on the opposite end */
+  direction: ltr;
 }
 .bgm-end {
   appearance: none;

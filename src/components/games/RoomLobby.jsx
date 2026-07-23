@@ -281,6 +281,11 @@ export default function RoomLobby({
         playerId: me.id,
         initialState: st,
         turnMs: Number(game?.turnMs) || 0,
+        // Games that pre-pick their opener bake it into the state (Dominoes
+        // stamps the highest-double holder in st.turn). Without handing that
+        // seat to the room's turn gate, the opener's first move is rejected
+        // and the table silently freezes on the deal.
+        firstSeat: Number.isInteger(st?.turn) ? st.turn : 0,
       })
       // No onStart here on purpose: the snapshot drives the hand-off for
       // everyone, host included, so nobody can be a frame ahead of the board.
