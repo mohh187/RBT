@@ -66,6 +66,7 @@
 // per-seat subcollections + rules, outside this component.
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { botMoveFor, botLabel, takeSoloIntent, BOT_DELAY_MS } from '../../lib/gameBots.js'
+import { play } from '../../lib/gameSounds.js'
 import '../../styles/cardgames.css'
 
 // ---------------------------------------------------------------------------
@@ -706,6 +707,39 @@ export default function Haree({
 
   // selection resets whenever the turn moves on or the hand changes shape
   useEffect(() => { setSel([]); setStaged([]) }, [st.turnSeat, st.step, st.roundNo])
+
+  // ---- sound feedback. Display-only: one effect over existing state fields,
+  // ref-guarded so nothing fires on mount/rehydration — only on real changes.
+  const sndRef = useRef(null)
+  useEffect(() => {
+    const cur = {
+      roundNo: st.roundNo,
+      discardN: st.discard.length,
+      meldN: st.melds.reduce((a, m) => a + ((m.cards && m.cards.length) || 0), 0),
+      phase: st.phase,
+      turnSeat: st.turnSeat,
+    }
+    const prev = sndRef.current
+    sndRef.current = cur
+    if (!prev) return
+    if (cur.roundNo !== prev.roundNo) { play('deal'); return }
+    if (cur.phase !== prev.phase) {
+      if (cur.phase === 'matchEnd') { play(st.winnerSeat === seat ? 'win' : 'lose'); return }
+      if (cur.phase === 'roundEnd') {
+        const lr = st.lastRound
+        if (lr && !lr.void) {
+          if (lr.winner === seat) play('win', { gain: 0.5 })
+          else play('lose', { gain: (lr.burnedNow || []).includes(seat) ? 0.6 : 0.3 })
+        }
+        return
+      }
+    }
+    if (cur.discardN !== prev.discardN || cur.meldN !== prev.meldN) play('card')
+    // hot-seat (no bots, same phone) would chime on every handover — noise
+    if (cur.turnSeat !== prev.turnSeat && cur.turnSeat === seat && cur.phase === 'turn' && (remote || vsBot)) {
+      play('turn', { gain: 0.8 })
+    }
+  }, [st, seat, remote, vsBot])
 
   // remote host: auto-deal when enough seats are filled
   const dealtRef = useRef(false)

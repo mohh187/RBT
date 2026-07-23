@@ -2,8 +2,12 @@
    «الليدو» — Ludo. Owned by src/components/games/Ludo.jsx, prefixed `lud-`.
    Deliberately isolated from index.css (never edit that file).
 
-   Rules kept: only transform/opacity animate; every scroll container hides its
-   scrollbar; the whole file goes still under prefers-reduced-motion.
+   LOOK: the shared «majlis game table» skin — deep felt greens over dark wood
+   with soft gold accents, matching cardgames.css (--cg-felt/--cg-gold family).
+   The board itself is warm cream inside a wooden frame, drawn in the JSX SVG.
+
+   Rules kept: only transform/opacity run in keyframes; every scroll container
+   hides its scrollbar; the whole file goes still under prefers-reduced-motion.
    =========================================================================== */
 
 .lud-root {
@@ -12,6 +16,8 @@
   --lud-dim: rgba(244, 247, 250, 0.62);
   --lud-line: rgba(255, 255, 255, 0.11);
   --lud-surface: rgba(255, 255, 255, 0.06);
+  --lud-gold: #e7c46a;
+  --lud-gold-dim: rgba(231, 196, 106, 0.45);
   --lud-ease: cubic-bezier(0.22, 1, 0.36, 1);
   --lud-spring: cubic-bezier(0.34, 1.4, 0.5, 1);
 
@@ -25,7 +31,9 @@
   overflow: hidden;
   box-sizing: border-box;
   color: var(--lud-ink);
-  background: radial-gradient(120% 60% at 50% -10%, rgba(255, 255, 255, 0.08) 0%, transparent 60%);
+  background:
+    radial-gradient(120% 70% at 50% 0%, rgba(255, 255, 255, 0.07) 0%, transparent 60%),
+    linear-gradient(180deg, #0c1a18 0%, #081210 100%);
   -webkit-tap-highlight-color: transparent;
   font-family: inherit;
 }
@@ -43,56 +51,114 @@
   align-items: stretch;
 }
 .lud-p {
+  position: relative;
   flex: 1 1 0;
   min-width: 0;
   display: flex;
   align-items: center;
-  gap: 6px;
-  padding: 6px 8px;
-  border-radius: 12px;
+  gap: 7px;
+  padding: 5px 8px;
+  border-radius: 13px;
   background: var(--lud-surface);
   border: 1px solid var(--lud-line);
   transition: transform 240ms var(--lud-ease), opacity 240ms var(--lud-ease), border-color 240ms var(--lud-ease);
-  opacity: 0.62;
+  opacity: 0.6;
 }
 .lud-p.is-turn {
   opacity: 1;
   border-color: var(--pc);
   transform: translate3d(0, -2px, 0);
-  box-shadow: 0 0 0 1px var(--pc) inset;
+  box-shadow: 0 0 0 1px var(--pc) inset, 0 4px 16px rgba(0, 0, 0, 0.35);
 }
-.lud-p.is-me .lud-pname { text-decoration: underline; text-underline-offset: 3px; }
+/* soft breathing glow behind the active chip — opacity only */
+.lud-p.is-turn::before {
+  content: '';
+  position: absolute;
+  inset: -1px;
+  border-radius: inherit;
+  background: radial-gradient(60% 100% at 50% 0%, var(--pc) 0%, transparent 70%);
+  opacity: 0.18;
+  animation: lud-chipglow 1.8s ease-in-out infinite;
+  pointer-events: none;
+}
+@keyframes lud-chipglow {
+  0%, 100% { opacity: 0.1; }
+  50% { opacity: 0.28; }
+}
+.lud-p.is-me { border-color: color-mix(in srgb, var(--lud-gold) 45%, var(--lud-line)); }
+.lud-p.is-me .lud-pname { color: var(--lud-gold); }
+.lud-p.is-done { opacity: 0.85; }
+
 .lud-pavatar {
+  position: relative;
   flex: 0 0 auto;
-  width: 20px;
-  height: 20px;
+  width: 26px;
+  height: 26px;
   border-radius: 50%;
-  background: var(--pc);
+  background: linear-gradient(160deg, var(--pc), var(--pd));
   border: 1.5px solid var(--pd);
   display: grid;
   place-items: center;
 }
-.lud-pavatar > span {
-  width: 8px;
-  height: 8px;
-  border-radius: 50%;
-  background: rgba(255, 255, 255, 0.92);
+.lud-pavatar > b {
+  font-size: 0.66rem;
+  font-weight: 900;
+  color: #fff;
+  line-height: 1;
+  text-shadow: 0 1px 2px rgba(0, 0, 0, 0.4);
 }
-.lud-pname {
+/* turn-timer countdown ring (online rooms only) */
+.lud-pring {
+  position: absolute;
+  inset: -5px;
+  width: calc(100% + 10px);
+  height: calc(100% + 10px);
+  transform: rotate(-90deg);
+  pointer-events: none;
+}
+.lud-pring circle {
+  fill: none;
+  stroke-width: 3.4;
+  stroke-linecap: round;
+}
+.lud-pring circle:first-child { stroke: rgba(255, 255, 255, 0.14); }
+.lud-pring circle:last-child {
+  stroke: var(--pc);
+  stroke-dasharray: 100;
+  transition: stroke-dashoffset 480ms linear;
+}
+
+.lud-pcol {
   flex: 1 1 auto;
   min-width: 0;
-  font-size: 0.72rem;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+.lud-pname {
+  min-width: 0;
+  font-size: 0.68rem;
   font-weight: 700;
+  line-height: 1.15;
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
 }
 .lud-pmeta {
-  flex: 0 0 auto;
-  font-size: 0.66rem;
+  font-size: 0.62rem;
   font-variant-numeric: tabular-nums;
-  color: var(--lud-dim);
+  color: var(--lud-gold);
+  line-height: 1;
 }
+/* four little sockets = tokens brought home */
+.lud-pdots { display: flex; gap: 3px; }
+.lud-pdots i {
+  width: 5px;
+  height: 5px;
+  border-radius: 50%;
+  background: rgba(255, 255, 255, 0.2);
+}
+.lud-pdots i.on { background: var(--pc); box-shadow: 0 0 4px var(--pc); }
 
 /* ---------- board ----------
    ROOT SIZING MODEL — read before changing anything here.
@@ -148,21 +214,48 @@
   height: 100%;
   display: block;
   touch-action: none;
-  border-radius: 12px;
   overflow: visible;
-  filter: drop-shadow(0 10px 26px rgba(0, 0, 0, 0.4));
+  filter: drop-shadow(0 12px 28px rgba(0, 0, 0, 0.45));
 }
+@keyframes lud-shake {
+  0%, 100% { transform: translate3d(0, 0, 0); }
+  20% { transform: translate3d(-1.4%, 0, 0); }
+  40% { transform: translate3d(1.2%, 0.5%, 0); }
+  60% { transform: translate3d(-0.9%, -0.4%, 0); }
+  80% { transform: translate3d(0.7%, 0, 0); }
+}
+.lud-board.is-shake { animation: lud-shake 520ms var(--lud-ease); }
 
+/* ---------- tokens ---------- */
 .lud-tok {
   transition: transform 300ms var(--lud-spring);
   will-change: transform;
 }
+/* walking cell to cell: quick linear hops, the JS drives the cadence */
+.lud-tok.is-step { transition: transform 92ms linear; }
+/* captured: fly back to the yard, shrinking on the way */
+.lud-tok.is-fly { transition: transform 520ms var(--lud-ease); }
+.lud-tok.is-fly > g { animation: lud-flyshrink 520ms var(--lud-ease); }
+@keyframes lud-flyshrink {
+  0% { transform: scale(1); }
+  40% { transform: scale(0.72); }
+  100% { transform: scale(1); }
+}
 .lud-tok.is-live { cursor: pointer; }
 
+/* movable: a gold halo that breathes */
+.lud-halo {
+  transform-origin: 0 0;
+  animation: lud-breathe 1.5s ease-in-out infinite;
+}
+@keyframes lud-breathe {
+  0%, 100% { transform: scale(1); opacity: 0.55; }
+  50% { transform: scale(1.12); opacity: 0.95; }
+}
 @keyframes lud-ping {
-  0% { opacity: 0.85; transform: scale(0.9); }
-  70% { opacity: 0; transform: scale(1.32); }
-  100% { opacity: 0; transform: scale(1.32); }
+  0% { opacity: 0.8; transform: scale(0.9); }
+  70% { opacity: 0; transform: scale(1.35); }
+  100% { opacity: 0; transform: scale(1.35); }
 }
 .lud-ping {
   transform-origin: 0 0;
@@ -174,6 +267,28 @@
   50% { opacity: 0.95; }
 }
 .lud-target { animation: lud-target 1200ms ease-in-out infinite; }
+
+/* ---------- transient effects (capture burst, home star pop) ---------- */
+.lud-fxg { pointer-events: none; }
+.lud-fx-ring {
+  transform-origin: 0 0;
+  animation: lud-burst 640ms var(--lud-ease) forwards;
+}
+.lud-fx-ring2 { animation-delay: 110ms; }
+@keyframes lud-burst {
+  0% { transform: scale(0.8); opacity: 0.95; }
+  100% { transform: scale(3.9); opacity: 0; }
+}
+.lud-fx-star {
+  transform-origin: 0 0;
+  animation: lud-starpop 880ms var(--lud-ease) forwards;
+}
+@keyframes lud-starpop {
+  0% { transform: scale(0.15) rotate(-40deg); opacity: 0; }
+  30% { transform: scale(1.3) rotate(8deg); opacity: 1; }
+  60% { transform: scale(1) rotate(0deg); opacity: 1; }
+  100% { transform: scale(1.05) rotate(0deg); opacity: 0; }
+}
 
 /* ---------- bottom bar ---------- */
 .lud-bar {
@@ -235,12 +350,12 @@
   font-size: 0.75rem;
   font-weight: 800;
   cursor: pointer;
-  transition: transform 200ms var(--lud-ease), background-color 200ms var(--lud-ease), opacity 200ms var(--lud-ease);
+  transition: transform 200ms var(--lud-ease), background-color 200ms var(--lud-ease), opacity 200ms var(--lud-ease), border-color 200ms var(--lud-ease);
 }
 .lud-rollbtn.is-on {
   background: var(--lud-brand);
-  border-color: transparent;
-  box-shadow: 0 6px 18px rgba(0, 0, 0, 0.32);
+  border-color: var(--lud-gold-dim);
+  box-shadow: 0 6px 18px rgba(0, 0, 0, 0.32), 0 0 0 1px var(--lud-gold-dim);
 }
 .lud-rollbtn:active:not(:disabled) { transform: scale(0.96); }
 .lud-rollbtn:disabled { opacity: 0.5; cursor: default; }
@@ -251,14 +366,14 @@
   flex: 0 0 auto;
   display: block;
 }
-@keyframes lud-shake {
+@keyframes lud-dieshake {
   0% { transform: rotate(0deg) scale(1); }
-  25% { transform: rotate(-18deg) scale(1.1); }
-  50% { transform: rotate(14deg) scale(1.06); }
-  75% { transform: rotate(-8deg) scale(1.03); }
+  20% { transform: rotate(-22deg) scale(1.12); }
+  45% { transform: rotate(16deg) scale(1.07); }
+  70% { transform: rotate(-10deg) scale(1.04); }
   100% { transform: rotate(0deg) scale(1); }
 }
-.lud-die.is-roll { animation: lud-shake 440ms var(--lud-ease); }
+.lud-die.is-roll { animation: lud-dieshake 620ms var(--lud-ease); }
 
 .lud-ghost {
   padding: 6px 10px;
@@ -274,6 +389,111 @@
   transition: transform 200ms var(--lud-ease), color 200ms var(--lud-ease);
 }
 .lud-ghost:active { transform: scale(0.96); }
+
+/* ---------- round-over celebration ---------- */
+.lud-over {
+  position: absolute;
+  inset: 0;
+  z-index: 4;
+  display: grid;
+  place-items: center;
+  padding: 16px;
+  background: rgba(5, 9, 12, 0.6);
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
+  animation: lud-fadein 260ms var(--lud-ease);
+}
+@keyframes lud-fadein { from { opacity: 0; } to { opacity: 1; } }
+.lud-over-card {
+  width: min(340px, 100%);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 6px;
+  padding: 20px 16px 16px;
+  border-radius: 20px;
+  background: linear-gradient(180deg, #14332b 0%, #0b1f1a 100%);
+  border: 1px solid var(--lud-gold-dim);
+  box-shadow: 0 24px 70px rgba(0, 0, 0, 0.55);
+  text-align: center;
+  animation: lud-cardup 360ms var(--lud-spring);
+}
+@keyframes lud-cardup {
+  from { transform: translate3d(0, 18px, 0) scale(0.94); opacity: 0; }
+  to { transform: translate3d(0, 0, 0) scale(1); opacity: 1; }
+}
+.lud-crown {
+  width: 48px;
+  height: 34px;
+  display: block;
+  filter: drop-shadow(0 4px 10px rgba(0, 0, 0, 0.4));
+  animation: lud-crownpop 620ms var(--lud-spring);
+  transform-origin: 50% 100%;
+}
+@keyframes lud-crownpop {
+  0% { transform: scale(0.3) rotate(-14deg); opacity: 0; }
+  60% { transform: scale(1.12) rotate(4deg); opacity: 1; }
+  100% { transform: scale(1) rotate(0deg); opacity: 1; }
+}
+.lud-over-w {
+  font-size: 1.05rem;
+  font-weight: 900;
+  max-width: 100%;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.lud-over-sub {
+  font-size: 0.68rem;
+  font-weight: 700;
+  color: var(--lud-gold);
+  letter-spacing: 0.04em;
+}
+.lud-places {
+  list-style: none;
+  margin: 8px 0 0;
+  padding: 0;
+  width: 100%;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.lud-places li {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 7px 10px;
+  border-radius: 12px;
+  background: rgba(255, 255, 255, 0.05);
+  border: 1px solid rgba(255, 255, 255, 0.09);
+}
+.lud-places li.is-me { border-color: var(--lud-gold-dim); background: rgba(231, 196, 106, 0.08); }
+.lud-places li > b {
+  flex: 0 0 auto;
+  width: 18px;
+  font-size: 0.76rem;
+  font-variant-numeric: tabular-nums;
+}
+.lud-place-dot {
+  flex: 0 0 auto;
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  background: var(--pc);
+  box-shadow: 0 0 0 2px rgba(255, 255, 255, 0.14);
+}
+.lud-place-nm {
+  flex: 1 1 auto;
+  min-width: 0;
+  text-align: start;
+  font-size: 0.78rem;
+  font-weight: 700;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.lud-place-ok { flex: 0 0 auto; font-size: 0.62rem; color: var(--lud-dim); }
+.lud-over-card .lud-cta { margin-top: 10px; }
 
 /* ---------- panels (lobby / local setup / rules) ---------- */
 .lud-panel {
@@ -394,7 +614,7 @@
   gap: 10px;
   padding: 16px;
   border-radius: 18px;
-  background: #121a22;
+  background: #0e211c;
   border: 1px solid var(--lud-line);
   box-shadow: 0 20px 60px rgba(0, 0, 0, 0.5);
 }
@@ -419,8 +639,8 @@
 
 /* ---------- narrow screens ---------- */
 @media (max-width: 380px) {
-  .lud-pname { font-size: 0.66rem; }
-  .lud-pmeta { display: none; }
+  .lud-pname { font-size: 0.62rem; }
+  .lud-pavatar { width: 22px; height: 22px; }
   .lud-rollbtn span { display: none; }
   .lud-rollbtn { padding: 5px; }
 }
@@ -431,11 +651,12 @@
    not need, so it stays legible when height is the binding axis. */
 @media (max-height: 560px) {
   .lud-root { gap: 4px; padding: 5px; }
-  .lud-p { padding: 3px 6px; border-radius: 9px; }
-  .lud-pavatar { width: 15px; height: 15px; }
-  .lud-pavatar > span { width: 6px; height: 6px; }
-  .lud-pname { font-size: 0.64rem; }
-  .lud-pmeta { display: none; }
+  .lud-p { padding: 3px 6px; border-radius: 9px; gap: 5px; }
+  .lud-pavatar { width: 18px; height: 18px; }
+  .lud-pavatar > b { font-size: 0.54rem; }
+  .lud-pname { font-size: 0.6rem; }
+  .lud-pdots i { width: 4px; height: 4px; }
+  .lud-pmeta { font-size: 0.56rem; }
   .lud-bar { padding: 4px 6px; border-radius: 11px; }
   .lud-note { display: none; }
   .lud-die { width: 24px; height: 24px; }

@@ -736,12 +736,17 @@ service cloud.firestore {
       // sessions (settle/cancel/refund paths), so they stay staff-only.
       match /customers/{id} {
         allow read: if isStaff(tid);
+        // lastOrderAt is in the anonymous allowlist because the Customers
+        // screen orders by it and Firestore hides docs missing the ordered
+        // field — self-registration stamps it as "last activity" so a new
+        // guest is actually visible. Refreshing one's own recency is the
+        // whole exposure; the money/loyalty fields stay staff-only.
         allow create: if isStaff(tid)
-          || (request.resource.data.keys().hasOnly(['name', 'phone', 'source', 'registeredAt', 'updatedAt'])
+          || (request.resource.data.keys().hasOnly(['name', 'phone', 'source', 'registeredAt', 'lastOrderAt', 'updatedAt'])
               && (!('name' in request.resource.data) || (request.resource.data.name is string && request.resource.data.name.size() <= 120))
               && (!('phone' in request.resource.data) || (request.resource.data.phone is string && request.resource.data.phone.size() <= 32)));
         allow update: if isStaff(tid)
-          || (request.resource.data.diff(resource.data).affectedKeys().hasOnly(['name', 'phone', 'source', 'registeredAt', 'updatedAt'])
+          || (request.resource.data.diff(resource.data).affectedKeys().hasOnly(['name', 'phone', 'source', 'registeredAt', 'lastOrderAt', 'updatedAt'])
               && (!('name' in request.resource.data) || (request.resource.data.name is string && request.resource.data.name.size() <= 120))
               && (!('phone' in request.resource.data) || (request.resource.data.phone is string && request.resource.data.phone.size() <= 32)));
         allow delete: if isManager(tid);

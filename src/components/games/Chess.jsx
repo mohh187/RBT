@@ -37,6 +37,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import Icon from '../Icon.jsx'
 import { botMoveFor, botLabel, takeSoloIntent, BOT_DELAY_MS } from '../../lib/gameBots.js'
+import { play } from '../../lib/gameSounds.js'
 import '../../styles/boardgames.css'
 
 export const GAME_ID = 'chess'
@@ -722,6 +723,31 @@ export default function Chess({
     const key = `${st.board}|${st.turn}`
     if (posRef.current !== key) { posRef.current = key; setSel(null); setPromo(null) }
   }, [st.board, st.turn])
+
+  // ---- sound feedback. Display-only: one effect over existing state fields,
+  // ref-guarded so nothing fires on mount/rehydration — only on real changes.
+  const sndRef = useRef(null)
+  useEffect(() => {
+    const cur = {
+      board: st.board,
+      caps: (st.takenByW || '').length + (st.takenByB || '').length,
+      status: st.status,
+      turn: st.turn,
+    }
+    const prev = sndRef.current
+    sndRef.current = cur
+    if (!prev) return
+    if (cur.board !== prev.board) play(cur.caps > prev.caps ? 'capture' : 'move')
+    if (cur.status !== prev.status && cur.status !== 'playing') {
+      if (st.result === 'draw' || mySide === null) play('win', { gain: 0.35 })
+      else play(st.result === mySide ? 'win' : 'lose')
+      return
+    }
+    // hot-seat (same phone) would chime on every handover — noise
+    if (cur.turn !== prev.turn && mySide !== null && cur.turn === mySide && cur.status === 'playing' && (mp || vsBot)) {
+      play('turn', { gain: 0.8 })
+    }
+  }, [st, mySide, mp, vsBot])
 
   const submit = useCallback((move) => {
     const payload = Number.isInteger(seat) ? { ...move, seat } : move

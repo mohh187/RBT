@@ -56,6 +56,7 @@
 // ---------------------------------------------------------------------------
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { botMoveFor, botLabel, takeSoloIntent, BOT_DELAY_MS, BOT_DELAY_FAST } from '../../lib/gameBots.js'
+import { play } from '../../lib/gameSounds.js'
 import '../../styles/ludo.css'
 
 // ===========================================================================
@@ -647,8 +648,28 @@ export default function Ludo({
   const [setup, setSetup] = useState({ count: 4, bots: true })
   const [showRules, setShowRules] = useState(false)
   const [busy, setBusy] = useState(false)
-  const [spin, setSpin] = useState(false)
   const [tick, setTick] = useState(0)
+
+  // -------- presentation-only state (never touches the engine) --------
+  const [dieShow, setDieShow] = useState(null)  // face shown while tumbling
+  const [tumbling, setTumbling] = useState(false)
+  const [disp, setDisp] = useState(null)        // {'s:t': relPos} display overrides while a token walks
+  const [flying, setFlying] = useState(null)    // Set('s:t') — captured tokens flying home
+  const [fx, setFx] = useState([])              // transient bursts/star pops on the board
+  const [shake, setShake] = useState(false)     // triple-six forfeit
+  const [now, setNow] = useState(0)             // countdown ring clock (online only)
+
+  const reduceMotion = useMemo(() => {
+    try { return window.matchMedia('(prefers-reduced-motion: reduce)').matches } catch (_) { return false }
+  }, [])
+
+  const fxIdRef = useRef(0)
+  const pushFx = useCallback((f) => {
+    fxIdRef.current += 1
+    const id = fxIdRef.current
+    setFx((list) => [...list, { ...f, id }])
+    setTimeout(() => setFx((list) => list.filter((x) => x.id !== id)), 950)
+  }, [])
 
   // createRoom seeds `state: {}` — truthy but not a board. Anything without a
   // tokens array must read as "not started yet" so the waiting panel renders;
@@ -757,14 +778,144 @@ export default function Ludo({
     return () => clearTimeout(t)
   }, [busy])
 
-  // die shake on every new roll
+  // ---- die tumble: display-only. The engine already resolved the value; the
+  // face just cycles for ~600ms before settling on it. Ref-guarded so joining
+  // a room mid-game does not replay the last roll.
   const rollFp = gstate ? `${gstate.rollCount}` : ''
+  const rollSeenRef = useRef(null)
   useEffect(() => {
-    if (!rollFp || rollFp === '0') return undefined
-    setSpin(true)
-    const t = setTimeout(() => setSpin(false), 460)
+    if (!gstate) return undefined
+    if (rollSeenRef.current === null || rollSeenRef.current === rollFp) {
+      rollSeenRef.current = rollFp
+      setDieShow(gstate.lastDie)
+      return undefined
+    }
+    rollSeenRef.current = rollFp
+    const final = gstate.lastDie
+    play('dice')
+    if (reduceMotion) { setDieShow(final); return undefined }
+    setTumbling(true)
+    let n = 0
+    const iv = setInterval(() => {
+      n += 1
+      if (n >= 8) {
+        clearInterval(iv)
+        setDieShow(final)
+        setTumbling(false)
+      } else {
+        setDieShow(1 + ((final + n * 2 + (n % 3)) % 6))
+      }
+    }, 75)
+    return () => { clearInterval(iv); setTumbling(false); setDieShow(final) }
+  }, [rollFp, gstate, reduceMotion])
+
+  // ---- token motion: walk the mover cell by cell, hold any captured token on
+  // its square until the mover lands, then let it fly home. Pure display —
+  // `disp` only overrides where a token is DRAWN, never what the engine says.
+  const tokensJson = gstate ? JSON.stringify(gstate.tokens) : ''
+  const prevTokensRef = useRef(null)
+  const animTimerRef = useRef(null)
+  useEffect(() => () => { if (animTimerRef.current) clearTimeout(animTimerRef.current) }, [])
+  useEffect(() => {
+    if (!gstate) { prevTokensRef.current = null; return }
+    const cur = gstate.tokens.map((a) => (a || []).slice())
+    const prev = prevTokensRef.current
+    prevTokensRef.current = cur
+    if (!prev) { setDisp(null); setFlying(null); return }
+    const changed = []
+    for (let s = 0; s < 4; s += 1) {
+      for (let t = 0; t < 4; t += 1) {
+        if (Number.isInteger(prev[s]?.[t]) && prev[s][t] !== cur[s]?.[t]) {
+          changed.push({ s, t, from: prev[s][t], to: cur[s][t] })
+        }
+      }
+    }
+    // No token moved (a roll, a turn pass...): leave any running walk alone —
+    // cancelling here would freeze the walker mid-path with a stale override.
+    if (!changed.length) return
+    if (animTimerRef.current) { clearTimeout(animTimerRef.current); animTimerRef.current = null }
+    const mover = changed.find((e) => e.to !== YARD)
+    const caps = changed.filter((e) => e.to === YARD)
+    if (!mover) { setDisp(null); setFlying(null); return } // restart / reset — silent
+    const homed = mover.to === HOME
+
+    const landFx = () => {
+      if (caps.length) {
+        play('capture')
+        const q = tokenXY(mover.s, mover.to, mover.t)
+        pushFx({ kind: 'burst', x: q.x, y: q.y, color: COLORS[mover.s].main })
+      } else if (homed) {
+        play('win', { gain: 0.45 })
+        pushFx({ kind: 'star', x: 7.5, y: 7.5, color: COLORS[mover.s].main })
+      }
+    }
+    const flyCaps = () => {
+      if (!caps.length) { setFlying(null); return }
+      setFlying(new Set(caps.map((e) => `${e.s}:${e.t}`)))
+      setTimeout(() => setFlying(null), 620)
+    }
+
+    const steps = []
+    if (mover.from === YARD) steps.push(mover.to)
+    else for (let p = mover.from + 1; p <= mover.to; p += 1) steps.push(p)
+
+    if (reduceMotion || steps.length <= 1) {
+      setDisp(null)
+      play('move')
+      landFx()
+      flyCaps()
+      return
+    }
+
+    const overrides = {}
+    caps.forEach((e) => { overrides[`${e.s}:${e.t}`] = e.from })
+    const key = `${mover.s}:${mover.t}`
+    let i = 0
+    overrides[key] = steps[0]
+    setDisp({ ...overrides })
+    play('move', { gain: 0.6 })
+    const stepMs = steps.length > 7 ? 72 : 95
+    const walk = () => {
+      i += 1
+      if (i < steps.length) {
+        overrides[key] = steps[i]
+        setDisp({ ...overrides })
+        play('move', { gain: 0.45 })
+        animTimerRef.current = setTimeout(walk, stepMs)
+      } else {
+        animTimerRef.current = null
+        setDisp(null)
+        landFx()
+        flyCaps()
+      }
+    }
+    animTimerRef.current = setTimeout(walk, stepMs)
+  }, [tokensJson, gstate, reduceMotion, pushFx])
+
+  // ---- triple-six forfeit: shake the board, sigh softly (only loud-ish for me)
+  const noteFp = gstate ? `${gstate.rollCount}|${gstate.note?.k || ''}` : ''
+  const noteSeenRef = useRef(null)
+  useEffect(() => {
+    if (!gstate) return undefined
+    if (noteSeenRef.current === null) { noteSeenRef.current = noteFp; return undefined }
+    if (noteSeenRef.current === noteFp) return undefined
+    noteSeenRef.current = noteFp
+    if (gstate.note?.k !== 'threeSixes') return undefined
+    play('lose', { gain: gstate.note.a === seat ? 0.55 : 0.3 })
+    if (reduceMotion) return undefined
+    setShake(true)
+    const t = setTimeout(() => setShake(false), 560)
     return () => clearTimeout(t)
-  }, [rollFp])
+  }, [noteFp, gstate, seat, reduceMotion])
+
+  // ---- countdown clock for the active seat's ring (online rooms only) ----
+  const deadlineAt = online ? Number(groom?.turn?.deadlineAt) || 0 : 0
+  useEffect(() => {
+    if (!deadlineAt || !gstate || gstate.phase === 'over') return undefined
+    setNow(Date.now())
+    const iv = setInterval(() => setNow(Date.now()), 500)
+    return () => clearInterval(iv)
+  }, [deadlineAt, gstate])
 
   // ---- machine seats ----------------------------------------------------
   // The bot decides through src/lib/gameBots.js, which validates every candidate
@@ -828,17 +979,20 @@ export default function Ludo({
       if (seats.length && !seats.includes(s)) continue
       const arr = gstate.tokens[s] || []
       for (let t = 0; t < arr.length; t += 1) {
-        const p = arr[t]
+        // `disp` overrides where a walking / just-captured token is DRAWN;
+        // the engine's position stays authoritative for every decision.
+        const ov = disp ? disp[`${s}:${t}`] : undefined
+        const p = ov !== undefined ? ov : arr[t]
         const base = tokenXY(s, p, t)
         const key = `${Math.round(base.x * 2)}:${Math.round(base.y * 2)}`
         slots[key] = (slots[key] || 0) + 1
-        list.push({ s, t, p, base, key })
+        list.push({ s, t, p, base, key, moving: ov !== undefined })
       }
     }
     const groups = {}
     list.forEach((it) => { groups[it.key] = slots[it.key] })
     const seen = {}
-    return list.map((it) => {
+    const out = list.map((it) => {
       const n = groups[it.key]
       const i = seen[it.key] || 0
       seen[it.key] = i + 1
@@ -851,7 +1005,10 @@ export default function Ludo({
         r: n > 2 ? 0.26 : (n > 1 ? 0.29 : 0.33),
       }
     })
-  }, [gstate, seats])
+    // SVG paints in document order: a walking token must draw on top
+    out.sort((a, b) => (a.moving === b.moving ? 0 : a.moving ? 1 : -1))
+    return out
+  }, [gstate, seats, disp])
 
   const stalled = useMemo(() => {
     if (!online || !gstate || gstate.phase === 'over' || myTurn) return false
@@ -874,6 +1031,40 @@ export default function Ludo({
     if (!o) return
     submit({ type: 'move', token: t })
   }, [myTurn, seat, movable, submit])
+
+  // ---- auto-move: when there is no real decision, play it after a beat.
+  // "No decision" = one legal move, OR several interchangeable ones (four yard
+  // tokens all exiting to the same start square are the same move four times).
+  // Reduced-motion users still get the auto-play, just as a jump cut.
+  useEffect(() => {
+    if (!myTurn || !gstate || gstate.phase !== 'move' || !moves.length) return undefined
+    const distinct = new Set(moves.map((o) => `${o.from}>${o.to}`))
+    if (distinct.size !== 1) return undefined
+    const tk = moves[0].token
+    const id = setTimeout(() => submit({ type: 'move', token: tk }), 600)
+    return () => clearTimeout(id)
+  }, [myTurn, gstate, moves, submit])
+
+  // ---- a gentle cue when the turn lands on me (never on mount/rehydration)
+  const turnSeenRef = useRef(null)
+  useEffect(() => {
+    if (!gstate || gstate.phase === 'over') return
+    if (turnSeenRef.current === null) { turnSeenRef.current = turnSeat; return }
+    if (turnSeenRef.current === turnSeat) return
+    turnSeenRef.current = turnSeat
+    // Hot-seat (same device, no bots) would chime on every handover — noise.
+    if (turnSeat === seat && (online || (local && local.bots))) play('turn')
+  }, [gstate, turnSeat, seat, online, local])
+
+  // ---- one verdict sound when the round ends
+  const overSoundRef = useRef(false)
+  useEffect(() => {
+    if (!gstate) return
+    if (gstate.phase !== 'over') { overSoundRef.current = false; return }
+    if (overSoundRef.current) return
+    overSoundRef.current = true
+    play(gstate.finished && gstate.finished[0] === seat ? 'win' : 'lose')
+  }, [gstate, seat])
 
   // ---- gates -------------------------------------------------------------
   // room exists but the lead has not seeded state yet (still in the lobby)
@@ -938,6 +1129,17 @@ export default function Ludo({
   const over = gstate.phase === 'over'
   const note = gstate.note || { k: 'start' }
   const noteText = (L.n && L.n[note.k]) || ''
+  const turnMsTotal = online ? (Number(groom?.turnMs) || 45000) : 0
+  const ringPct = deadlineAt && turnMsTotal && !over
+    ? Math.max(0, Math.min(100, ((deadlineAt - (now || Date.now())) / turnMsTotal) * 100))
+    : null
+  const placings = over
+    ? [...gstate.finished, ...seats.filter((s) => !gstate.finished.includes(s))]
+    : []
+  const initialOf = (nm) => {
+    const str = String(nm || '').trim()
+    return str ? Array.from(str)[0].toUpperCase() : '·'
+  }
 
   return (
     <div className="lud-root" style={{ '--lud-brand': brand }} dir={lang === 'ar' ? 'rtl' : 'ltr'}>
@@ -946,16 +1148,31 @@ export default function Ludo({
           const c = COLORS[s]
           const homeN = (gstate.tokens[s] || []).filter((p) => p === HOME).length
           const rank = gstate.finished.indexOf(s)
+          const isTurn = turnSeat === s && !over
           return (
             <div
               key={s}
-              className={`lud-p${turnSeat === s && !over ? ' is-turn' : ''}${s === seat ? ' is-me' : ''}`}
+              className={`lud-p${isTurn ? ' is-turn' : ''}${s === seat ? ' is-me' : ''}${rank >= 0 ? ' is-done' : ''}`}
               style={{ '--pc': c.main, '--pd': c.deep }}
             >
-              <span className="lud-pavatar"><span /></span>
-              <span className="lud-pname">{nameOf(s)}</span>
-              <span className="lud-pmeta">
-                {rank >= 0 ? `${L.place} ${fmt(rank + 1)}` : `${fmt(homeN)}/${fmt(4)}`}
+              <span className="lud-pavatar">
+                <b>{initialOf(nameOf(s))}</b>
+                {isTurn && ringPct != null ? (
+                  <svg className="lud-pring" viewBox="0 0 36 36" aria-hidden="true">
+                    <circle cx="18" cy="18" r="16" pathLength="100" />
+                    <circle cx="18" cy="18" r="16" pathLength="100" style={{ strokeDashoffset: 100 - ringPct }} />
+                  </svg>
+                ) : null}
+              </span>
+              <span className="lud-pcol">
+                <span className="lud-pname">{nameOf(s)}</span>
+                {rank >= 0 ? (
+                  <span className="lud-pmeta">{`${L.place} ${fmt(rank + 1)}`}</span>
+                ) : (
+                  <span className="lud-pdots" role="img" aria-label={`${fmt(homeN)}/${fmt(4)}`}>
+                    {[0, 1, 2, 3].map((i) => <i key={i} className={i < homeN ? 'on' : ''} />)}
+                  </span>
+                )}
               </span>
             </div>
           )
@@ -964,7 +1181,13 @@ export default function Ludo({
 
       <div className="lud-stage">
         <div className="lud-boardbox">
-          <svg className="lud-board" viewBox="0 0 15 15" preserveAspectRatio="xMidYMid meet" role="img" aria-label={L.soloTitle}>
+          <svg
+            className={`lud-board${shake ? ' is-shake' : ''}`}
+            viewBox="-0.85 -0.85 16.7 16.7"
+            preserveAspectRatio="xMidYMid meet"
+            role="img"
+            aria-label={L.soloTitle}
+          >
             <defs>
               <filter id="ludShadow" x="-40%" y="-40%" width="180%" height="180%">
                 <feDropShadow dx="0" dy="0.07" stdDeviation="0.055" floodColor="#0b1218" floodOpacity="0.5" />
@@ -974,53 +1197,95 @@ export default function Ludo({
                 <stop offset="55%" stopColor="#ffffff" stopOpacity="0.12" />
                 <stop offset="100%" stopColor="#000000" stopOpacity="0.22" />
               </radialGradient>
+              <linearGradient id="ludWood" x1="0" y1="0" x2="1" y2="1">
+                <stop offset="0%" stopColor="#8a5a30" />
+                <stop offset="28%" stopColor="#6f4523" />
+                <stop offset="55%" stopColor="#82552c" />
+                <stop offset="80%" stopColor="#5f3a1d" />
+                <stop offset="100%" stopColor="#714724" />
+              </linearGradient>
+              <linearGradient id="ludCell" x1="0" y1="0" x2="0" y2="1">
+                <stop offset="0%" stopColor="#fffdf7" />
+                <stop offset="100%" stopColor="#ece3cf" />
+              </linearGradient>
+              <linearGradient id="ludGold" x1="0" y1="0" x2="0" y2="1">
+                <stop offset="0%" stopColor="#f6df9a" />
+                <stop offset="100%" stopColor="#c69f3d" />
+              </linearGradient>
+              {COLORS.map((c, s) => (
+                <linearGradient key={s} id={`ludY${s}`} x1="0" y1="0" x2="1" y2="1">
+                  <stop offset="0%" stopColor={c.main} />
+                  <stop offset="100%" stopColor={c.deep} />
+                </linearGradient>
+              ))}
             </defs>
 
-            <rect x="0" y="0" width="15" height="15" rx="0.7" fill="#f7f4ee" />
+            {/* wood frame with a gold pinstripe */}
+            <rect x="-0.85" y="-0.85" width="16.7" height="16.7" rx="1.05" fill="url(#ludWood)" />
+            <rect x="-0.62" y="-0.62" width="16.24" height="16.24" rx="0.9" fill="none" stroke="rgba(46,26,10,.5)" strokeWidth="0.1" />
+            <rect x="-0.34" y="-0.34" width="15.68" height="15.68" rx="0.7" fill="none" stroke="rgba(231,196,106,.55)" strokeWidth="0.07" />
 
-            {/* yards */}
+            {/* board base */}
+            <rect x="0" y="0" width="15" height="15" rx="0.45" fill="#f3ecdb" />
+
+            {/* yards: colour panel, cream inner court, four token sockets */}
             {[0, 1, 2, 3].map((s) => {
               const [r, c] = YARD_AT[s]
               const dim = seats.length && !seats.includes(s)
               return (
-                <g key={`y${s}`} opacity={dim ? 0.28 : 1}>
-                  <rect x={c} y={r} width="6" height="6" rx="0.6" fill={COLORS[s].main} />
-                  <rect x={c + 0.9} y={r + 0.9} width="4.2" height="4.2" rx="0.45" fill="#fbfaf7" />
+                <g key={`y${s}`} opacity={dim ? 0.26 : 1}>
+                  <rect x={c} y={r} width="6" height="6" rx="0.55" fill={`url(#ludY${s})`} />
+                  <rect x={c + 0.16} y={r + 0.16} width="5.68" height="5.68" rx="0.45" fill="none" stroke="rgba(255,255,255,.28)" strokeWidth="0.09" />
+                  <rect x={c + 0.75} y={r + 0.75} width="4.5" height="4.5" rx="0.4" fill="#faf5e9" />
+                  <rect x={c + 0.75} y={r + 0.75} width="4.5" height="4.5" rx="0.4" fill={COLORS[s].soft} opacity="0.55" />
+                  {[[2, 2], [4, 2], [2, 4], [4, 4]].map(([dx, dy], k) => (
+                    <g key={k}>
+                      <circle cx={c + dx} cy={r + dy} r="0.5" fill="rgba(37,26,12,0.1)" />
+                      <circle cx={c + dx} cy={r + dy} r="0.5" fill="none" stroke={COLORS[s].main} strokeOpacity="0.5" strokeWidth="0.07" />
+                    </g>
+                  ))}
                 </g>
               )
             })}
 
-            {/* ring */}
+            {/* ring: soft-depth cells; each colour's entry square wears its colour */}
             {RING.map(([r, c], i) => {
-              let fill = '#ffffff'
               const owner = START.indexOf(i)
-              if (owner >= 0) fill = COLORS[owner].soft
               return (
                 <rect
                   key={`r${i}`}
                   x={c} y={r} width="1" height="1"
-                  fill={fill}
-                  stroke="rgba(24,32,42,.2)"
-                  strokeWidth="0.045"
+                  fill={owner >= 0 ? COLORS[owner].main : 'url(#ludCell)'}
+                  opacity={owner >= 0 ? 0.92 : 1}
+                  stroke="rgba(88,68,44,.3)"
+                  strokeWidth="0.042"
                 />
               )
             })}
 
-            {/* entry arrows + safe stars */}
+            {/* safe squares: white star on the entries, gold star on the free stars */}
             {START.map((i, s) => {
               const [r, c] = RING[i]
               return (
                 <polygon
                   key={`e${s}`}
-                  points={starPoints(c + 0.5, r + 0.5, 0.33)}
-                  fill={COLORS[s].main}
-                  opacity="0.5"
+                  points={starPoints(c + 0.5, r + 0.5, 0.3)}
+                  fill="#ffffff"
+                  opacity="0.9"
                 />
               )
             })}
             {STAR.map((i) => {
               const [r, c] = RING[i]
-              return <polygon key={`s${i}`} points={starPoints(c + 0.5, r + 0.5, 0.34)} fill="rgba(28,38,50,.3)" />
+              return (
+                <polygon
+                  key={`s${i}`}
+                  points={starPoints(c + 0.5, r + 0.5, 0.34)}
+                  fill="url(#ludGold)"
+                  stroke="rgba(122,90,34,.55)"
+                  strokeWidth="0.035"
+                />
+              )
             })}
 
             {/* home columns */}
@@ -1035,12 +1300,14 @@ export default function Ludo({
               )
             })}
 
-            {/* centre */}
+            {/* centre home: four colour triangles under a gold star */}
             <polygon points="6,6 9,6 7.5,7.5" fill={COLORS[1].main} />
             <polygon points="9,6 9,9 7.5,7.5" fill={COLORS[2].main} />
             <polygon points="6,9 9,9 7.5,7.5" fill={COLORS[3].main} />
             <polygon points="6,6 6,9 7.5,7.5" fill={COLORS[0].main} />
-            <rect x="6" y="6" width="3" height="3" fill="none" stroke="rgba(24,32,42,.28)" strokeWidth="0.06" />
+            <rect x="6" y="6" width="3" height="3" fill="none" stroke="rgba(24,32,42,.3)" strokeWidth="0.06" />
+            <circle cx="7.5" cy="7.5" r="0.62" fill="rgba(255,255,255,0.16)" />
+            <polygon points={starPoints(7.5, 7.5, 0.5)} fill="url(#ludGold)" stroke="rgba(122,90,34,.6)" strokeWidth="0.04" />
 
             {/* legal destination highlights */}
             {moves.map((o) => {
@@ -1057,33 +1324,51 @@ export default function Ludo({
               )
             })}
 
-            {/* tokens */}
+            {/* tokens: glossy discs with a grounding shadow; the movable ones
+                breathe and carry an enlarged invisible hit circle */}
             {placed.map((it) => {
               const c = COLORS[it.s]
               const can = myTurn && it.s === seat && movable.has(it.t)
+              const fly = flying && flying.has(`${it.s}:${it.t}`)
               return (
                 <g
                   key={`t${it.s}-${it.t}`}
-                  className={`lud-tok${can ? ' is-live' : ''}`}
+                  className={`lud-tok${can ? ' is-live' : ''}${it.moving ? ' is-step' : ''}${fly ? ' is-fly' : ''}`}
                   style={{ transform: `translate(${it.x}px, ${it.y}px)` }}
                   onPointerDown={can ? (e) => { e.preventDefault(); onTokenTap(it.s, it.t) } : undefined}
                 >
+                  <ellipse cx="0" cy={it.r * 0.52} rx={it.r * 0.9} ry={it.r * 0.36} fill="rgba(10,14,20,0.28)" />
                   <g filter="url(#ludShadow)">
-                    <circle r={it.r} fill={c.main} stroke={c.deep} strokeWidth="0.075" />
-                    <circle r={it.r} fill="url(#ludGloss)" />
-                    <circle r={it.r * 0.42} fill="#ffffff" opacity="0.9" />
+                    <circle r={it.r} fill={c.deep} />
+                    <circle r={it.r * 0.92} cy={-it.r * 0.09} fill={c.main} />
+                    <circle r={it.r * 0.92} cy={-it.r * 0.09} fill="url(#ludGloss)" />
+                    <circle r={it.r * 0.36} cy={-it.r * 0.24} fill="#ffffff" opacity="0.92" />
                   </g>
-                  {can ? <circle className="lud-ping" r={it.r + 0.14} fill="none" stroke={c.deep} strokeWidth="0.08" /> : null}
+                  {can ? <circle className="lud-halo" r={it.r + 0.15} fill="none" stroke="#f3d98b" strokeWidth="0.09" /> : null}
+                  {can ? <circle className="lud-ping" r={it.r + 0.14} fill="none" stroke={c.deep} strokeWidth="0.07" /> : null}
+                  <circle r="0.55" fill="transparent" />
                 </g>
               )
             })}
+
+            {/* transient effects: capture ring burst, home star pop */}
+            {fx.map((f) => (f.kind === 'burst' ? (
+              <g key={f.id} className="lud-fxg" style={{ transform: `translate(${f.x}px, ${f.y}px)` }}>
+                <circle className="lud-fx-ring" r="0.3" fill="none" stroke={f.color} strokeWidth="0.11" />
+                <circle className="lud-fx-ring lud-fx-ring2" r="0.3" fill="none" stroke="#f3d98b" strokeWidth="0.07" />
+              </g>
+            ) : (
+              <g key={f.id} className="lud-fxg" style={{ transform: `translate(${f.x}px, ${f.y}px)` }}>
+                <polygon className="lud-fx-star" points={starPoints(0, 0, 0.62)} fill="url(#ludGold)" stroke="rgba(122,90,34,.5)" strokeWidth="0.04" />
+              </g>
+            )))}
           </svg>
         </div>
       </div>
 
       <div className="lud-bar">
         <div className="lud-turn">
-          <span className="lud-dot" style={{ background: turnSeat >= 0 ? COLORS[turnSeat].main : '#999' }} />
+          <span className="lud-dot" style={{ background: turnSeat >= 0 && COLORS[turnSeat] ? COLORS[turnSeat].main : '#999' }} />
           <span className="lud-turn-t">
             {over
               ? `${L.winner}: ${gstate.finished.length ? nameOf(gstate.finished[0]) : '—'}`
@@ -1096,13 +1381,7 @@ export default function Ludo({
           {stalled ? (
             <button type="button" className="lud-ghost" onClick={() => submit({ type: 'forceSkip' })}>{L.skip}</button>
           ) : null}
-          {over ? (
-            // Online rematches need a fresh room (applyMove rejects an ended
-            // room), so the hub owns that button — only local mode resets here.
-            !online ? (
-              <button type="button" className="lud-cta lud-cta-sm" onClick={() => setLocal(null)}>{L.again}</button>
-            ) : null
-          ) : (
+          {!over ? (
             <button
               type="button"
               className={`lud-rollbtn${myTurn && gstate.phase === 'roll' ? ' is-on' : ''}`}
@@ -1110,13 +1389,51 @@ export default function Ludo({
               onClick={() => submit({ type: 'roll' })}
               aria-label={L.roll}
             >
-              <Die value={gstate.lastDie} spinning={spin} />
+              <Die value={dieShow ?? gstate.lastDie} spinning={tumbling} />
               <span>{busy ? L.rolling : L.roll}</span>
             </button>
-          )}
+          ) : null}
           <button type="button" className="lud-ghost" onClick={() => setShowRules(true)}>{L.rules}</button>
         </div>
       </div>
+
+      {/* round-over celebration: placings in seat colours, the winner crowned.
+          Online rematches need a fresh room (applyMove rejects an ended room),
+          so the hub owns that button — only local mode resets here. */}
+      {over ? (
+        <div className="lud-over" role="dialog" aria-modal="true" aria-label={L.winner}>
+          <div className="lud-over-card">
+            <svg className="lud-crown" viewBox="0 0 48 34" aria-hidden="true">
+              <defs>
+                <linearGradient id="ludCrownG" x1="0" y1="0" x2="0" y2="1">
+                  <stop offset="0%" stopColor="#f6df9a" />
+                  <stop offset="100%" stopColor="#c69f3d" />
+                </linearGradient>
+              </defs>
+              <path d="M6 25 L3.4 8.5 L15 16 L24 3.6 L33 16 L44.6 8.5 L42 25 Z" fill="url(#ludCrownG)" stroke="rgba(122,90,34,.6)" strokeWidth="1" strokeLinejoin="round" />
+              <rect x="6.4" y="26.6" width="35.2" height="4.4" rx="1.6" fill="url(#ludCrownG)" stroke="rgba(122,90,34,.5)" strokeWidth="0.8" />
+              <circle cx="3.4" cy="7.4" r="1.9" fill="url(#ludCrownG)" />
+              <circle cx="24" cy="2.6" r="1.9" fill="url(#ludCrownG)" />
+              <circle cx="44.6" cy="7.4" r="1.9" fill="url(#ludCrownG)" />
+            </svg>
+            <div className="lud-over-w">{gstate.finished.length ? nameOf(gstate.finished[0]) : '—'}</div>
+            <div className="lud-over-sub">{L.winner}</div>
+            <ol className="lud-places">
+              {placings.map((s, i) => (
+                <li key={s} className={s === seat ? 'is-me' : ''} style={{ '--pc': COLORS[s].main }}>
+                  <b>{fmt(i + 1)}</b>
+                  <span className="lud-place-dot" />
+                  <span className="lud-place-nm">{nameOf(s)}</span>
+                  {gstate.finished.includes(s) ? <span className="lud-place-ok">{L.home}</span> : null}
+                </li>
+              ))}
+            </ol>
+            {!online ? (
+              <button type="button" className="lud-cta lud-cta-sm" onClick={() => setLocal(null)}>{L.again}</button>
+            ) : null}
+          </div>
+        </div>
+      ) : null}
 
       {showRules ? <RulesSheet L={L} onClose={() => setShowRules(false)} /> : null}
     </div>

@@ -92,8 +92,15 @@ const paragraphsOf = (body) => String(body || '').split(/\n\s*\n|\n/).map((p) =>
 const IMG_RATIO = new Map()
 const fitOf = (r) => (r >= 1.9 ? 'wide' : r <= 0.86 ? 'tall' : 'std')
 
-function useImgFit(src = '') {
-  const primed = src ? IMG_RATIO.get(src) : undefined
+// `hint` is the item's STORED ratio (item.imageRatio, healed/written admin-
+// side). The runtime Map only helps warm reopens — measured on the live
+// venue: a cold tap raced the list thumbnail's very first fetch, the cache
+// was empty, and the hero ballooned 110px when the decode landed, shoving
+// the table down. A ratio persisted on the item doc is there on the FIRST
+// frame of every device forever, which is the only version of "reserved
+// before decode" that actually survives a cold cache.
+function useImgFit(src = '', hint = 0) {
+  const primed = src ? (IMG_RATIO.get(src) || (Number(hint) > 0 ? Number(hint) : undefined)) : undefined
   const [fit, setFit] = useState(primed ? fitOf(primed) : '')
   const [ratio, setRatio] = useState(primed || 0)
   const nodeRef = useRef(null)
@@ -104,15 +111,15 @@ function useImgFit(src = '') {
     setRatio(r)
     setFit(fitOf(r))
   }
-  // Gallery swaps re-enter with a new src: prime from the cache (or reset to
-  // unknown). Guarded on src so the src-less list call sites keep today's
-  // exact behavior — their bind() read must not be clobbered on mount.
+  // Gallery swaps re-enter with a new src: prime from the cache, the stored
+  // hint, or reset to unknown. Guarded on src so the src-less list call sites
+  // keep today's exact behavior — their bind() read must not be clobbered.
   useEffect(() => {
     if (!src) return
-    const r = IMG_RATIO.get(src)
+    const r = IMG_RATIO.get(src) || (Number(hint) > 0 ? Number(hint) : 0)
     setRatio(r || 0)
     setFit(r ? fitOf(r) : '')
-  }, [src])
+  }, [src, hint])
   // ref callback too: a cached photo is already complete before onLoad fires
   const bind = (n) => { nodeRef.current = n; read(n) }
   return { fit, ratio, bind, nodeRef, onLoad: (e) => read(e.currentTarget) }
@@ -614,10 +621,16 @@ export function wallPaint(w) {
   const poss = layers.map((l) => l.p)
 
   if (w.pattern === 'image') {
-    // the venue's own photograph — the only thing on this wall that is fetched
+    // The venue's own photograph — the only thing on this wall that is
+    // fetched. NEVER tiled: a photo has no engineered edge continuity, so any
+    // repeat whose tile does not divide the viewport exactly leaves a visible
+    // sliver where the coursing breaks (measured on the live venue: scale 0.9
+    // on a 390px screen = a ~19px misaligned strip down both edges). The
+    // scale dial therefore only ZOOMS IN (crop, no seam possible); shrinking
+    // below full coverage falls back to cover instead of tiling.
     imgs.push(`url("${String(w.url).replace(/["\\]/g, '')}")`)
-    sizes.push(w.scale === 1 ? 'cover' : `${Math.round(w.scale * 100)}%`)
-    reps.push(w.scale === 1 ? 'no-repeat' : 'repeat')
+    sizes.push(w.scale > 1 ? `${Math.round(w.scale * 100)}%` : 'cover')
+    reps.push('no-repeat')
     poss.push('center')
   } else {
     const tile = wallTile(w, base, mortar)
@@ -1672,11 +1685,12 @@ export function EditorialItemStage({ item, tenant = null, currency, onClose, onA
     [item.imageUrl, item.images],
   )
   const heroSrc = gallery[Math.min(imgIdx, Math.max(0, gallery.length - 1))] || ''
-  // Sized-before-decode: primes fit + ratio from the list's earlier measure of
-  // this same URL (see IMG_RATIO above). Called here, after heroSrc, so the
-  // gallery swap re-primes too. Hook order stays fixed — the call is
-  // unconditional on every render.
-  const { fit, ratio, bind, onLoad } = useImgFit(heroSrc)
+  // Sized-before-decode: primes fit + ratio from the stored item.imageRatio
+  // (primary photo) or the runtime measure cache (see IMG_RATIO above).
+  // Called here, after heroSrc, so the gallery swap re-primes too. Hook order
+  // stays fixed — the call is unconditional on every render.
+  const ratioHint = imgIdx === 0 || heroSrc === item.imageUrl ? Number(item.imageRatio) || 0 : 0
+  const { fit, ratio, bind, onLoad } = useImgFit(heroSrc, ratioHint)
   // A decode that lands after mount is a fresh late paint: count it so the
   // iOS composite kick below re-runs and the table paint can never be left
   // composited at a stale position by the arrival.

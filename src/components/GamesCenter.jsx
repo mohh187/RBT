@@ -28,6 +28,7 @@ import { deviceKey } from '../lib/device.js'
 // launcher), and the room restart below must not shadow or collide with it.
 import { watchRoom, applyMove, startGame as startRoomGame, heartbeat, leaveRoom, HEARTBEAT_MS } from '../lib/gameRoom.js'
 import { clearSoloIntent } from '../lib/gameBots.js'
+import { isMuted, setMuted, play as playSound } from '../lib/gameSounds.js'
 import {
   watchLiveTournament, recordTournamentPlay, recordHappyHourPlay, rememberRoom,
 } from '../lib/socialPlay.js'
@@ -49,6 +50,8 @@ const TXT = {
     close: 'إغلاق',
     back: 'رجوع',
     restart: 'إعادة من البداية',
+    soundOn: 'تشغيل أصوات اللعبة',
+    soundOff: 'كتم أصوات اللعبة',
     loading: 'جارٍ تحميل اللعبة...',
     gateTitle: 'اسمك ورقمك، ثم نبدأ',
     gateWhy: 'نحفظ نتائجك ومراحلك على هذا الجهاز، ونسجّلك لدى المكان.',
@@ -98,6 +101,8 @@ const TXT = {
     close: 'Close',
     back: 'Back',
     restart: 'Restart',
+    soundOn: 'Unmute game sounds',
+    soundOff: 'Mute game sounds',
     loading: 'Loading the game...',
     gateTitle: 'Your name and number, then we start',
     gateWhy: 'We keep your scores and stages on this device, and register you with the venue.',
@@ -315,6 +320,18 @@ export default function GamesCenter({
   const [hint, setHint] = useState('')
   const [memResume, setMemResume] = useState({})
   const [reveal, setReveal] = useState(null)
+  // Game-sounds mute. The module owns persistence; this state only re-renders
+  // the icon. Toggling ON plays a confirmation click, which doubles as the
+  // user-gesture that unlocks the AudioContext for everything after it.
+  const [sndMuted, setSndMuted] = useState(() => isMuted())
+  const toggleSound = useCallback(() => {
+    setSndMuted((m) => {
+      const next = !m
+      setMuted(next)
+      if (!next) playSound('click')
+      return next
+    })
+  }, [])
 
   // Which lower-priority «now» cards the guest has expanded from their one-line
   // teaser. Add-only for the session — opening one is deliberate, and having it
@@ -985,6 +1002,15 @@ export default function GamesCenter({
         {inGame ? (
           <>
             <span className="gh-live" aria-live="polite">{fmt(runScore)}</span>
+            <button
+              type="button"
+              className="gh-icon-btn gh-press"
+              onClick={toggleSound}
+              aria-label={sndMuted ? t.soundOn : t.soundOff}
+              aria-pressed={sndMuted}
+            >
+              <Icon name={sndMuted ? 'soundOff' : 'sound'} size={17} />
+            </button>
             <button type="button" className="gh-icon-btn gh-press" onClick={restart} aria-label={t.restart}>
               <Icon name="reload" size={17} />
             </button>

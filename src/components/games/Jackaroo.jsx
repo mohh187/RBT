@@ -80,6 +80,7 @@
 // Hiding them needs per-seat subcollections plus rules, outside this file.
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { botMoveFor, botLabel, takeSoloIntent, BOT_DELAY_MS } from '../../lib/gameBots.js'
+import { play } from '../../lib/gameSounds.js'
 import '../../styles/cardgames.css'
 
 // ---------------------------------------------------------------------------
@@ -811,6 +812,36 @@ export default function Jackaroo({
   useEffect(() => {
     onScore?.(teamHome(st.marbles, myTeam) * 10 + (st.winnerTeam === myTeam ? 40 : 0))
   }, [onScore, st.marbles, st.winnerTeam, myTeam])
+
+  // ---- sound feedback. Display-only: one effect over existing state fields,
+  // ref-guarded so nothing fires on mount/rehydration — only on real changes.
+  const sndRef = useRef(null)
+  useEffect(() => {
+    const cur = {
+      marbles: JSON.stringify(st.marbles),
+      last: JSON.stringify(st.last),
+      round: st.round,
+      phase: st.phase,
+      turnSeat: st.turnSeat,
+    }
+    const prev = sndRef.current
+    sndRef.current = cur
+    if (!prev) return
+    if (cur.round !== prev.round) play('deal')
+    if (cur.marbles !== prev.marbles) {
+      play(st.last && st.last.kills > 0 ? 'capture' : 'move')
+    } else if (cur.last !== prev.last && st.last) {
+      play('card') // a card was spent without a marble moving (burn/discard)
+    }
+    if (cur.phase !== prev.phase && cur.phase === 'end') {
+      play(st.winnerTeam === myTeam ? 'win' : 'lose')
+      return
+    }
+    // hot-seat (no bots, same phone) would chime on every handover — noise
+    if (cur.turnSeat !== prev.turnSeat && cur.turnSeat === seat && cur.phase === 'play' && (remote || vsBot)) {
+      play('turn', { gain: 0.8 })
+    }
+  }, [st, seat, myTeam, remote, vsBot])
 
   const t = ar
     ? {

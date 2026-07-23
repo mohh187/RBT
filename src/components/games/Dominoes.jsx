@@ -32,6 +32,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import Icon from '../Icon.jsx'
 import { botMoveFor, botLabel, takeSoloIntent, BOT_DELAY_MS } from '../../lib/gameBots.js'
+import { play } from '../../lib/gameSounds.js'
 import '../../styles/boardgames.css'
 
 export const GAME_ID = 'dominoes'
@@ -579,6 +580,37 @@ export default function Dominoes({
     const n = (st.line || []).length
     if (lineRef.current !== n) { lineRef.current = n; setSel(null) }
   }, [st.line])
+
+  // ---- sound feedback. Display-only: one effect over existing state fields,
+  // ref-guarded so nothing fires on mount/rehydration — only on real changes.
+  const sndRef = useRef(null)
+  useEffect(() => {
+    const cur = {
+      lineN: (st.line || []).length,
+      boneN: (st.boneyard || []).length,
+      phase: st.phase,
+      turn: st.turn,
+      roundNo: st.roundNo,
+    }
+    const prev = sndRef.current
+    sndRef.current = cur
+    if (!prev) return
+    if (cur.roundNo !== prev.roundNo) { play('deal'); return }
+    if (cur.phase !== prev.phase) {
+      if (cur.phase === 'matchEnd') { play(st.matchWinner === seat ? 'win' : 'lose'); return }
+      if (cur.phase === 'roundEnd') {
+        const w = st.result ? st.result.winner : null
+        play(w === seat ? 'win' : 'lose', { gain: w === seat ? 0.55 : 0.35 })
+        return
+      }
+    }
+    if (cur.lineN > prev.lineN) play('card')
+    if (cur.boneN < prev.boneN) play('dice', { gain: 0.6 })
+    // hot-seat (no bots, same phone) would chime on every handover — noise
+    if (cur.turn !== prev.turn && cur.turn === seat && cur.phase === 'play' && (mp || vsBot)) {
+      play('turn', { gain: 0.8 })
+    }
+  }, [st, seat, mp, vsBot])
 
   const submit = useCallback((move) => {
     const payload = Number.isInteger(seat) ? { ...move, seat } : move

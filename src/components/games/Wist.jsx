@@ -62,6 +62,7 @@
 // subcollections plus security rules, which live outside this component.
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { botMoveFor, botLabel, takeSoloIntent, BOT_DELAY_MS } from '../../lib/gameBots.js'
+import { play } from '../../lib/gameSounds.js'
 import '../../styles/cardgames.css'
 
 // ---------------------------------------------------------------------------
@@ -632,6 +633,36 @@ export default function Wist({
 
   // report an absolute score to the hub: my side's match total, floored at zero
   const myTeam = team(seat)
+
+  // ---- sound feedback. Display-only: one effect watching existing state
+  // fields, ref-guarded so nothing fires on mount/rehydration — only on real
+  // CHANGES after the first snapshot. Never touches the reducer.
+  const sndRef = useRef(null)
+  useEffect(() => {
+    const cur = {
+      handNo: st.handNo,
+      trickN: st.trick.length,
+      phase: st.phase,
+      turnSeat: st.turnSeat,
+    }
+    const prev = sndRef.current
+    sndRef.current = cur
+    if (!prev) return
+    if (cur.handNo !== prev.handNo) { play('deal'); return }
+    if (cur.phase !== prev.phase) {
+      if (cur.phase === 'matchEnd') { play(st.winnerTeam === myTeam ? 'win' : 'lose'); return }
+      if (cur.phase === 'handEnd') {
+        const lh = st.lastHand
+        if (lh && !lh.washout) play(lh.delta[myTeam] >= lh.delta[1 - myTeam] ? 'win' : 'lose', { gain: 0.5 })
+        return
+      }
+    }
+    if (cur.trickN !== prev.trickN && cur.trickN > 0) play('card')
+    // hot-seat (no bots, same phone) would chime on every handover — noise
+    if (cur.turnSeat !== prev.turnSeat && cur.turnSeat === seat && cur.phase === 'play' && (remote || vsBot)) {
+      play('turn', { gain: 0.8 })
+    }
+  }, [st, seat, myTeam, remote, vsBot])
   useEffect(() => {
     onScore?.(Math.max(0, st.scores[myTeam] || 0))
   }, [onScore, st.scores, myTeam])

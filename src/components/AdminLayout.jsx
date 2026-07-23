@@ -6,7 +6,7 @@ import Sheet from './Sheet.jsx'
 import Icon from './Icon.jsx'
 import StaffBell from './StaffBell.jsx'
 import InstallButton from './InstallButton.jsx'
-import { watchActiveOrders, healMemberMirrors, healStaffCapsMirrors } from '../lib/db.js'
+import { watchActiveOrders, healMemberMirrors, healStaffCapsMirrors, healRegisteredCustomers, healImageRatios } from '../lib/db.js'
 import { migrateStaffPins } from '../lib/pin.js'
 import { CAP } from '../lib/permissions.js'
 import { planAllows, planExpired, EXPIRED_GRACE_DAYS } from '../lib/plans.js'
@@ -245,6 +245,29 @@ export default function AdminLayout() {
     if (sessionStorage.getItem(key)) return
     migrateStaffPins(tenantId)
       .then((r) => { sessionStorage.setItem(key, '1'); if (r.moved > 0) console.info(`[heal] migrated ${r.moved} staff PIN(s) to staffPins`) })
+      .catch(() => {})
+  }, [tenantId, isManager])
+
+  // 6. self-registered guests: backfill lastOrderAt so the lastOrderAt-ordered
+  // customer list actually shows them (they were bell-visible but list-invisible).
+  useEffect(() => {
+    if (!tenantId) return
+    const key = `ml.custheal.${tenantId}`
+    if (sessionStorage.getItem(key)) return
+    healRegisteredCustomers(tenantId)
+      .then((n) => { sessionStorage.setItem(key, '1'); if (n > 0) console.info(`[heal] surfaced ${n} registered customer(s)`) })
+      .catch(() => {})
+  }, [tenantId])
+
+  // 7. dish-photo ratios: persist imageRatio on items that lack it, so the
+  // menu reserves each photo's box before decode (kills the stage table jump
+  // on cold opens). Manager-only (items update requires the menu cap).
+  useEffect(() => {
+    if (!tenantId || !isManager) return
+    const key = `ml.imgratio.${tenantId}`
+    if (sessionStorage.getItem(key)) return
+    healImageRatios(tenantId)
+      .then((n) => { sessionStorage.setItem(key, '1'); if (n > 0) console.info(`[heal] stored ${n} photo ratio(s)`) })
       .catch(() => {})
   }, [tenantId, isManager])
 

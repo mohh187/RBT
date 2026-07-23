@@ -18,6 +18,7 @@ import {
   runTransaction,
   increment,
   deleteField,
+  Timestamp,
 } from 'firebase/firestore'
 import { db } from './firebase.js'
 import { randomToken, slugify, normalizePhone } from './format.js'
@@ -1176,6 +1177,13 @@ export async function updateCustomer(tid, phone, patch) {
 // Self-registration from the menu ("join the family"): creates/merges the
 // customer record so the venue's CRM + campaigns + follow-ups know this guest.
 // Writes only unprotected fields (rules allow anonymous diners to do this).
+//
+// lastOrderAt is stamped here ON PURPOSE even though no order happened: the
+// Customers screen queries orderBy('lastOrderAt') and Firestore drops docs
+// that lack the ordered field — a fresh self-registered guest existed (the
+// staff bell announced them) but was INVISIBLE in the customer list until
+// their first paid order. It means "last activity", and the timestamp type
+// must match the settle path's serverTimestamp so the ordering stays sane.
 export async function registerCustomer(tid, { name = '', phone = '' } = {}) {
   const p = String(phone || '').trim()
   if (!p) return null
@@ -1185,9 +1193,26 @@ export async function registerCustomer(tid, { name = '', phone = '' } = {}) {
     phone: p,
     source: 'menu-register',
     registeredAt: Date.now(),
+    lastOrderAt: serverTimestamp(),
     updatedAt: serverTimestamp(),
   }, { merge: true })
   return { id: phoneId(p) }
+}
+
+// One-shot heal for guests registered BEFORE lastOrderAt was stamped above:
+// they exist but never surface in the lastOrderAt-ordered customer list.
+// Staff context; backfills lastOrderAt from registeredAt as a real Timestamp
+// (a raw number would sort in a separate type bucket below every timestamp).
+export async function healRegisteredCustomers(tid) {
+  const s = await getDocs(query(sub(tid, 'customers'), orderBy('registeredAt', 'desc'), limit(200)))
+  let fixed = 0
+  for (const c of s.docs) {
+    const d = c.data()
+    if (d.lastOrderAt != null || !d.registeredAt) continue
+    await updateDoc(c.ref, { lastOrderAt: Timestamp.fromMillis(Number(d.registeredAt) || Date.now()) }).catch(() => {})
+    fixed += 1
+  }
+  return fixed
 }
 
 // Upsert a customer keyed by phone, accumulating stats + loyalty progress.
@@ -1550,6 +1575,31 @@ export async function healStaffCapsMirrors(tid, roleCapsOverride) {
   }
   return fixed
 }
+// One-shot heal: persist each dish photo's aspect ratio on the item doc
+// (imageRatio). The editorial stage reserves the photo's box from this BEFORE
+// the pixels decode — the runtime measure cache alone lost the race on cold
+// opens and the panel below the photo visibly jumped (measured 110px on the
+// live venue). Manager context (items update needs manage_menu); idempotent —
+// items measured once are skipped, new uploads get healed on the next visit.
+export async function healImageRatios(tid) {
+  const s = await getDocs(sub(tid, 'items'))
+  let fixed = 0
+  for (const d of s.docs) {
+    const it = d.data()
+    if (!it.imageUrl || Number(it.imageRatio) > 0) continue
+    const r = await new Promise((resolve) => {
+      const im = new Image()
+      im.onload = () => resolve(im.naturalWidth && im.naturalHeight ? im.naturalWidth / im.naturalHeight : 0)
+      im.onerror = () => resolve(0)
+      im.src = it.imageUrl
+    })
+    if (!(r > 0)) continue
+    await updateDoc(d.ref, { imageRatio: Math.round(r * 1000) / 1000 }).catch(() => {})
+    fixed += 1
+  }
+  return fixed
+}
+
 export function watchStaff(tid, cb) {
   return onSnapshot(sub(tid, 'staff'), (s) => cb(s.docs.map((d) => ({ uid: d.id, ...d.data() }))), () => cb([]))
 }

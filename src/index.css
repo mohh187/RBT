@@ -7051,6 +7051,14 @@ body:has(.sd2-root) .toast-wrap { z-index: 840; }
   /* the wall's blend mode must act on the same canvas it acts on inside the
      wrap, and must never leak past this layer */
   isolation: isolate;
+  /* Own compositor layer ON PURPOSE: a position:fixed page-wide backdrop
+     under a long content-visibility scroller is exactly the surface iOS
+     Safari composites stale («الخلفيات لا تظهر على طول») — same bug class as
+     the item stage's translateZ kick. One viewport-sized layer is cheap;
+     without it WebKit may leave the wall blank/misplaced until the next
+     scroll forces a recomposite. */
+  transform: translateZ(0);
+  will-change: transform;
 }
 /* the wrap stops repainting the room it is already standing in — a wall with
    opacity < 1 or a blend mode would otherwise render visibly darker */

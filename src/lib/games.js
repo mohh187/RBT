@@ -277,6 +277,10 @@ export const GAMES = [
     multiplayer: true,
     minPlayers: 2,
     maxPlayers: 4,
+    // Online rooms only: gameRoom stamps turn.deadlineAt from this, and the
+    // board renders a countdown ring on the active seat. Local/solo rounds
+    // carry no deadline (the local room mirrors deadlineAt: null).
+    turnMs: 45000,
     load: () => import('../components/games/Ludo.jsx'),
   },
   {
