@@ -1250,11 +1250,15 @@ function ItemEditor({ tenantId, cats, currency, value, onClose, onSaved, onDelet
           .map((v, idx) => ({ key: `v${idx}`, nameAr: v.nameAr, nameEn: v.nameEn, price: Math.max(0, Number(v.price) || 0) })),
         modifierGroups: (form.modifierGroups || [])
           .filter((g) => (g.nameAr || g.nameEn) && (g.options || []).some((o) => o.nameAr || o.nameEn))
-          .map((g) => ({
-            nameAr: g.nameAr || '', nameEn: g.nameEn || '',
-            min: Math.max(0, Number(g.min) || 0), max: Math.max(0, Number(g.max) || 0), required: !!g.required,
-            options: (g.options || []).filter((o) => o.nameAr || o.nameEn).map((o) => ({ nameAr: o.nameAr || '', nameEn: o.nameEn || '', price: Math.max(0, Number(o.price) || 0), recipe: cleanLines(o.recipe) })),
-          })),
+          .map((g) => {
+            const options = (g.options || []).filter((o) => o.nameAr || o.nameEn).map((o) => ({ nameAr: o.nameAr || '', nameEn: o.nameEn || '', price: Math.max(0, Number(o.price) || 0), recipe: cleanLines(o.recipe) }))
+            // Normalize so the group can never make the item un-orderable: min can't
+            // exceed the option count, and a positive max can't be below min (0 = ∞).
+            const min = Math.min(Math.max(0, Number(g.min) || 0), options.length)
+            const rawMax = Math.max(0, Number(g.max) || 0)
+            const max = rawMax === 0 ? 0 : Math.min(Math.max(rawMax, min), options.length)
+            return { nameAr: g.nameAr || '', nameEn: g.nameEn || '', min, max, required: !!g.required, options }
+          }),
         sortOrder: form.sortOrder || 0,
         namePriceLayout: form.namePriceLayout || '',
         nameColor: form.nameColor || '',

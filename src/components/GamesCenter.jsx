@@ -21,6 +21,7 @@ import { gamesFor, gameById } from '../lib/games.js'
 import { startPlay, saveProgress, finishPlay } from '../lib/gameMemory.js'
 import { registerCustomer } from '../lib/db.js'
 import { getLocalCustomer, setLocalCustomer } from '../lib/customer.js'
+import { useScrollLock } from '../lib/scrollLock.js'
 import { submitScore, watchTopScores, currentMonth, myRank } from '../lib/leaderboard.js'
 import { deviceKey } from '../lib/device.js'
 import { watchRoom, applyMove, heartbeat, leaveRoom, HEARTBEAT_MS } from '../lib/gameRoom.js'
@@ -289,6 +290,7 @@ export default function GamesCenter({
   joinRoomId = '', joinGameId = '',
 }) {
   const t = TXT[lang] || TXT.ar
+  useScrollLock(open) // full-screen games hub: lock the menu behind it
   const brand = useMemo(() => safeBrand(tenant), [tenant])
   const deviceId = useMemo(() => deviceKey(), [])
   const enabled = useMemo(() => gamesFor(tenant), [tenant])

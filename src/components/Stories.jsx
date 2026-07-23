@@ -2,6 +2,7 @@ import { useEffect, useMemo, useRef, useState } from 'react'
 import { watchStories, activeStories, bumpStory, addStoryReply } from '../lib/db.js'
 import { normalizeVideoTrim } from '../lib/dishComposition.js'
 import { useVideoTrim } from '../lib/useVideoTrim.js'
+import { useScrollLock } from '../lib/scrollLock.js'
 import Icon from './Icon.jsx'
 
 // Instagram-style stories on the diner menu: a circle strip under the hero,
@@ -49,6 +50,7 @@ export default function Stories({ tenantId, lang = 'ar' }) {
 function StoryViewer({ stories, start, tenantId, ar, onClose }) {
   const [idx, setIdx] = useState(start)
   const [paused, setPaused] = useState(false)
+  useScrollLock(true) // full-screen story: lock the menu behind it like every other diner overlay
   const [liked, setLiked] = useState(false)
   const [reply, setReply] = useState('')
   const [sent, setSent] = useState(false)
