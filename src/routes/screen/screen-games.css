@@ -1,0 +1,725 @@
+/* ===========================================================================
+   screen-games.css — the TOURNAMENT / TV layer of the venue signage.
+
+   OWNERSHIP: the screen layer. Imported by
+     components/screen/LiveMatchScreen.jsx
+     routes/screen/TournamentBoard.jsx
+     routes/screen/GamesJoinPanel.jsx
+   and by nothing else. Every selector is prefixed `.tvg-`, so it cannot collide
+   with a game's own stylesheet (cardgames.css / ludo.css / boardgames.css),
+   which the game agents own and rewrite independently.
+
+   HOUSE AESTHETIC — the same "majlis game table" the boards use: deep felt
+   green, dark walnut, soft gold. Tokens below mirror cardgames.css (--cg-felt,
+   --cg-gold) so the wall and the phone read as one product.
+
+   SIZING MODEL — ONE continuous rule, no breakpoints. Everything is a clamp on
+   vmin, so the exact same markup is legible on a 1920x1080 wall TV (1vmin =
+   10.8px) and on a paired tablet, with hard floors so nothing ever collapses
+   into unreadable text on a small panel.
+
+   HARD REPO RULES honoured here: no emoji (icons are inline SVG in the JSX),
+   Latin digits only (formatted in the JSX), no visible scrollbar anywhere,
+   only transform/opacity animate, and everything goes still under
+   prefers-reduced-motion.
+   =========================================================================== */
+
+.tvg-root {
+  --tvg-brand: #0e7490;
+
+  --tvg-ink: #f5f2ea;
+  --tvg-dim: rgba(245, 242, 234, 0.62);
+  --tvg-faint: rgba(245, 242, 234, 0.34);
+  --tvg-line: rgba(231, 196, 106, 0.16);
+  --tvg-surface: rgba(255, 255, 255, 0.05);
+  --tvg-surface-2: rgba(255, 255, 255, 0.09);
+
+  --tvg-felt-1: #123c35;
+  --tvg-felt-2: #08201c;
+  --tvg-walnut: #2a1c12;
+  --tvg-gold: #e7c46a;
+  --tvg-gold-2: #b98d3c;
+  --tvg-live: #ef5a5a;
+
+  --tvg-ease: cubic-bezier(0.22, 1, 0.36, 1);
+
+  position: fixed;
+  inset: 0;
+  z-index: 40;
+  display: flex;
+  flex-direction: column;
+  gap: 1.2vmin;
+  padding: 2vmin 2.4vmin;
+  box-sizing: border-box;
+  overflow: hidden;
+  color: var(--tvg-ink);
+  background:
+    radial-gradient(115% 70% at 50% -12%, rgba(231, 196, 106, 0.1) 0%, transparent 58%),
+    radial-gradient(140% 120% at 50% 118%, color-mix(in srgb, var(--tvg-brand) 26%, transparent) 0%, transparent 62%),
+    linear-gradient(180deg, var(--tvg-felt-1) 0%, var(--tvg-felt-2) 55%, var(--tvg-walnut) 100%);
+  font-family: inherit;
+  -webkit-tap-highlight-color: transparent;
+}
+
+.tvg-root *,
+.tvg-root *::before,
+.tvg-root *::after { box-sizing: border-box; }
+
+/* Rendered as ONE SLIDE inside the signage player rather than as a full-screen
+   takeover. It then has to sit in the player's own stacking order, so the live
+   «طلبك جاهز» overlay, the news ticker and the emergency alert still float
+   above it exactly as they do above a menu or an image slide. */
+.tvg-root.tvg-inslide { position: absolute; z-index: 1; }
+
+/* NO VISIBLE SCROLLBAR, ANYWHERE. Nothing on this layer is meant to scroll —
+   content shrinks or is capped in the JSX instead — but a panel narrower than
+   we planned must still never paint a bar on a wall TV. */
+.tvg-root ::-webkit-scrollbar { width: 0; height: 0; }
+.tvg-root * { scrollbar-width: none; }
+
+.tvg-center { align-items: center; justify-content: center; gap: 3vmin; }
+
+/* Latin digits, tabular, always left-to-right even inside RTL text. */
+.tvg-num { font-variant-numeric: tabular-nums; direction: ltr; unicode-bidi: isolate; }
+
+/* ---------------------------------------------------------------------------
+   brand bar
+   --------------------------------------------------------------------------- */
+.tvg-top {
+  flex: 0 0 auto;
+  /* `align-self` is explicit because .tvg-center centres its children: without
+     it the brand bar collapsed to its own width in the middle of the wall
+     instead of staying the full-width header of the screen. */
+  align-self: stretch;
+  display: flex;
+  align-items: center;
+  gap: 1.4vmin;
+  min-height: 6vmin;
+}
+.tvg-logo {
+  width: 5.4vmin;
+  height: 5.4vmin;
+  min-width: 36px;
+  min-height: 36px;
+  border-radius: 50%;
+  object-fit: cover;
+  border: 0.2vmin solid var(--tvg-line);
+  box-shadow: 0 0.6vmin 2vmin rgba(0, 0, 0, 0.45);
+}
+.tvg-venue {
+  font-size: clamp(1rem, 2.7vmin, 2.6rem);
+  font-weight: 800;
+  letter-spacing: -0.01em;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 34vw;
+}
+.tvg-ctx {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.9vmin;
+  padding: 0.6vmin 1.6vmin;
+  border-radius: 999px;
+  background: var(--tvg-surface);
+  border: 0.15vmin solid var(--tvg-line);
+  color: var(--tvg-gold);
+  font-size: clamp(0.72rem, 1.8vmin, 1.6rem);
+  font-weight: 800;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 40vw;
+}
+.tvg-spacer { flex: 1 1 auto; }
+.tvg-live {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.9vmin;
+  padding: 0.7vmin 1.7vmin;
+  border-radius: 999px;
+  background: rgba(239, 90, 90, 0.15);
+  border: 0.15vmin solid rgba(239, 90, 90, 0.42);
+  color: #ffb4b4;
+  font-size: clamp(0.72rem, 1.8vmin, 1.6rem);
+  font-weight: 800;
+  white-space: nowrap;
+}
+.tvg-live-dot {
+  width: 1.3vmin;
+  height: 1.3vmin;
+  min-width: 9px;
+  min-height: 9px;
+  border-radius: 50%;
+  background: var(--tvg-live);
+  animation: tvg-pulse 1.7s ease-out infinite;
+}
+
+/* ---------------------------------------------------------------------------
+   scoreboard — two table sides, or up to four seats of a room
+   --------------------------------------------------------------------------- */
+.tvg-score {
+  flex: 0 0 auto;
+  display: grid;
+  grid-template-columns: 1fr auto 1fr;
+  align-items: stretch;
+  gap: 1.4vmin;
+}
+/* The default 1fr/auto/1fr above is the MATCH layout (table ضد table, with the
+   game's name between them). A plain room has no «ضد» column, so it declares
+   its seat count and gets equal columns instead — without this a two-seat room
+   put both cards in the first two columns and left a third of the wall empty. */
+.tvg-score[data-seats="2"] { grid-template-columns: repeat(2, 1fr); }
+.tvg-score[data-seats="3"] { grid-template-columns: repeat(3, 1fr); }
+.tvg-score[data-seats="4"] { grid-template-columns: repeat(4, 1fr); }
+
+.tvg-seat {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 0.3vmin;
+  /* Deliberately tight. Every vmin spent on chrome is a vmin the BOARD does not
+     get, and the board is the thing the room is watching — the names only have
+     to be legible, not monumental. */
+  padding: 0.9vmin 1.4vmin;
+  border-radius: 1.6vmin;
+  background: linear-gradient(180deg, var(--tvg-surface-2) 0%, var(--tvg-surface) 100%);
+  border: 0.15vmin solid var(--tvg-line);
+  box-shadow: inset 0 0.1vmin 0 rgba(255, 255, 255, 0.08);
+  transition: opacity 0.3s var(--tvg-ease), box-shadow 0.3s var(--tvg-ease);
+  min-width: 0;
+}
+.tvg-seat.is-turn {
+  border-color: color-mix(in srgb, var(--tvg-gold) 65%, transparent);
+  box-shadow:
+    inset 0 0.1vmin 0 rgba(255, 255, 255, 0.12),
+    0 0 0 0.25vmin color-mix(in srgb, var(--tvg-gold) 34%, transparent),
+    0 1.2vmin 4vmin rgba(0, 0, 0, 0.4);
+  animation: tvg-breathe 2.6s ease-in-out infinite;
+}
+.tvg-seat.is-win {
+  border-color: color-mix(in srgb, var(--tvg-gold) 80%, transparent);
+  box-shadow: 0 0 0 0.3vmin color-mix(in srgb, var(--tvg-gold) 45%, transparent), 0 1.4vmin 4.5vmin rgba(0, 0, 0, 0.45);
+}
+.tvg-seat.is-lose { opacity: 0.5; }
+
+.tvg-seat-name {
+  font-size: clamp(1.05rem, 3.5vmin, 3.6rem);
+  font-weight: 900;
+  letter-spacing: -0.02em;
+  line-height: 1.05;
+  text-align: center;
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.tvg-seat-sub {
+  font-size: clamp(0.66rem, 1.6vmin, 1.5rem);
+  color: var(--tvg-dim);
+  font-weight: 600;
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.tvg-seat-scorewrap {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  min-height: 5.4vmin;
+}
+.tvg-seat-num {
+  font-size: clamp(1.5rem, 5vmin, 5.4rem);
+  font-weight: 900;
+  line-height: 1;
+  color: var(--tvg-ink);
+}
+/* Three or four seats share the same row, so each card gives up a little more
+   again — the board keeps the difference. */
+.tvg-score[data-seats="3"] .tvg-seat-name,
+.tvg-score[data-seats="4"] .tvg-seat-name { font-size: clamp(1rem, 2.9vmin, 3rem); }
+.tvg-score[data-seats="3"] .tvg-seat-num,
+.tvg-score[data-seats="4"] .tvg-seat-num { font-size: clamp(1.3rem, 4.2vmin, 4.4rem); }
+.tvg-score[data-seats="3"] .tvg-seat-scorewrap,
+.tvg-score[data-seats="4"] .tvg-seat-scorewrap { min-height: 4.6vmin; }
+.tvg-seat.is-win .tvg-seat-num { color: var(--tvg-gold); }
+.tvg-seat-metric {
+  margin-top: 0.3vmin;
+  font-size: clamp(0.58rem, 1.35vmin, 1.25rem);
+  color: var(--tvg-dim);
+  font-weight: 700;
+}
+.tvg-seat-state {
+  min-height: 2.3vmin;
+  font-size: clamp(0.68rem, 1.65vmin, 1.5rem);
+  font-weight: 800;
+  color: var(--tvg-gold);
+}
+.tvg-seat.is-off .tvg-seat-state { color: var(--tvg-faint); }
+
+.tvg-vs {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 0.5vmin;
+  padding-inline: 0.9vmin;
+}
+.tvg-vs-word {
+  font-size: clamp(0.95rem, 3vmin, 3rem);
+  font-weight: 900;
+  color: var(--tvg-faint);
+}
+.tvg-vs-game {
+  font-size: clamp(0.7rem, 1.7vmin, 1.6rem);
+  font-weight: 800;
+  color: var(--tvg-gold);
+  white-space: nowrap;
+}
+
+/* ---------------------------------------------------------------------------
+   «من يلعب الآن» — the one line that tells the room what it is looking at
+   --------------------------------------------------------------------------- */
+.tvg-now {
+  flex: 0 0 auto;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 1.4vmin;
+  padding: 0.55vmin 1.9vmin;
+  border-radius: 999px;
+  background: linear-gradient(180deg, rgba(231, 196, 106, 0.12) 0%, rgba(231, 196, 106, 0.05) 100%);
+  border: 0.15vmin solid var(--tvg-line);
+  align-self: center;
+  max-width: 92%;
+}
+.tvg-now-label {
+  font-size: clamp(0.7rem, 1.7vmin, 1.5rem);
+  font-weight: 700;
+  color: var(--tvg-dim);
+  white-space: nowrap;
+}
+.tvg-now-name {
+  font-size: clamp(1rem, 2.9vmin, 2.8rem);
+  font-weight: 900;
+  color: var(--tvg-gold);
+  letter-spacing: -0.01em;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.tvg-now-game {
+  font-size: clamp(0.7rem, 1.7vmin, 1.5rem);
+  font-weight: 700;
+  color: var(--tvg-dim);
+  white-space: nowrap;
+}
+
+/* ---------------------------------------------------------------------------
+   the board slot
+   --------------------------------------------------------------------------- */
+.tvg-stage {
+  flex: 1 1 auto;
+  min-height: 0;
+  min-width: 0;
+  display: grid;
+  place-items: center;
+}
+.tvg-stage-inner {
+  position: relative;
+  width: 100%;
+  height: 100%;
+  display: flex;
+  /* READ-ONLY GUARANTEE: no tap on a public screen can ever reach the board,
+     even on a touch panel. The board also receives no onMove/onExit/mySeat. */
+  pointer-events: none;
+}
+
+/* ---------------------------------------------------------------------------
+   result banner
+   --------------------------------------------------------------------------- */
+.tvg-banner {
+  position: absolute;
+  left: 50%;
+  bottom: 3.6vmin;
+  transform: translateX(-50%);
+  display: inline-flex;
+  align-items: center;
+  gap: 1.3vmin;
+  padding: 1.4vmin 3.2vmin;
+  border-radius: 999px;
+  background: rgba(8, 32, 28, 0.78);
+  backdrop-filter: blur(10px);
+  border: 0.15vmin solid color-mix(in srgb, var(--tvg-gold) 55%, transparent);
+  color: var(--tvg-gold);
+  font-size: clamp(1.1rem, 3.2vmin, 3.2rem);
+  font-weight: 900;
+  box-shadow: 0 2vmin 6vmin rgba(0, 0, 0, 0.55);
+  animation: tvg-rise 0.45s var(--tvg-ease) both;
+  max-width: 92vw;
+  text-align: center;
+}
+.tvg-banner[data-draw="1"] { border-color: var(--tvg-line); color: var(--tvg-ink); }
+
+/* ---------------------------------------------------------------------------
+   honest waiting / refusal notice
+   --------------------------------------------------------------------------- */
+.tvg-notice {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  text-align: center;
+  gap: 2vmin;
+  max-width: 78vw;
+}
+.tvg-notice > svg { color: var(--tvg-gold); opacity: 0.85; }
+.tvg-notice-t {
+  margin: 0;
+  font-size: clamp(1.3rem, 4.2vmin, 4.4rem);
+  font-weight: 900;
+  letter-spacing: -0.02em;
+  line-height: 1.15;
+}
+.tvg-notice-p {
+  margin: 0;
+  font-size: clamp(0.85rem, 2.1vmin, 2.1rem);
+  color: var(--tvg-dim);
+  font-weight: 600;
+  line-height: 1.55;
+}
+
+/* ---------------------------------------------------------------------------
+   board lazy-load spinner
+   --------------------------------------------------------------------------- */
+.tvg-spin {
+  width: 7vmin;
+  height: 7vmin;
+  min-width: 40px;
+  min-height: 40px;
+  border-radius: 50%;
+  border: 0.5vmin solid var(--tvg-line);
+  border-top-color: var(--tvg-gold);
+  animation: tvg-spin 0.9s linear infinite;
+  margin: auto;
+}
+
+/* ===========================================================================
+   TOURNAMENT BOARD
+   =========================================================================== */
+.tvg-cup {
+  flex: 1 1 auto;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 1.4vmin;
+}
+.tvg-cup-head {
+  flex: 0 0 auto;
+  display: flex;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: 2vmin;
+  padding-bottom: 1.2vmin;
+  border-bottom: 0.15vmin solid var(--tvg-line);
+}
+.tvg-cup-title {
+  margin: 0;
+  font-size: clamp(1.4rem, 4.6vmin, 4.8rem);
+  font-weight: 900;
+  letter-spacing: -0.025em;
+  line-height: 1.05;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  max-width: 60vw;
+}
+.tvg-cup-meta {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5vmin;
+  align-items: flex-start;
+  min-width: 0;
+}
+.tvg-cup-sub {
+  font-size: clamp(0.75rem, 1.9vmin, 1.8rem);
+  font-weight: 700;
+  color: var(--tvg-dim);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  max-width: 58vw;
+}
+.tvg-cup-prize {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.9vmin;
+  padding: 0.7vmin 1.7vmin;
+  border-radius: 999px;
+  background: linear-gradient(180deg, rgba(231, 196, 106, 0.2) 0%, rgba(185, 141, 60, 0.12) 100%);
+  border: 0.15vmin solid color-mix(in srgb, var(--tvg-gold) 45%, transparent);
+  color: var(--tvg-gold);
+  font-size: clamp(0.8rem, 2.1vmin, 2rem);
+  font-weight: 900;
+  white-space: nowrap;
+  max-width: 44vw;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.tvg-cup-clock {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 0.2vmin;
+  flex: 0 0 auto;
+}
+.tvg-cup-clock b {
+  font-size: clamp(1.2rem, 4vmin, 4rem);
+  font-weight: 900;
+  line-height: 1;
+  color: var(--tvg-gold);
+}
+.tvg-cup-clock span {
+  font-size: clamp(0.66rem, 1.6vmin, 1.5rem);
+  font-weight: 700;
+  color: var(--tvg-dim);
+}
+
+.tvg-board {
+  flex: 1 1 auto;
+  min-height: 0;
+  display: grid;
+  gap: 0.9vmin;
+  /* Centred, not top-anchored: a board with three names must read as a
+     deliberate short list on a 1080p wall, not as a table that got cut off. */
+  align-content: center;
+  overflow: hidden;
+}
+.tvg-row {
+  display: grid;
+  grid-template-columns: auto 1fr auto;
+  align-items: center;
+  gap: 1.6vmin;
+  padding: 1.05vmin 1.8vmin;
+  border-radius: 1.4vmin;
+  background: var(--tvg-surface);
+  border: 0.15vmin solid rgba(255, 255, 255, 0.06);
+  min-width: 0;
+}
+.tvg-row[data-rank="1"] {
+  background: linear-gradient(90deg, rgba(231, 196, 106, 0.22) 0%, rgba(231, 196, 106, 0.06) 100%);
+  border-color: color-mix(in srgb, var(--tvg-gold) 55%, transparent);
+}
+.tvg-row[data-rank="2"] { background: linear-gradient(90deg, rgba(214, 220, 228, 0.16) 0%, rgba(214, 220, 228, 0.04) 100%); }
+.tvg-row[data-rank="3"] { background: linear-gradient(90deg, rgba(199, 138, 84, 0.18) 0%, rgba(199, 138, 84, 0.04) 100%); }
+.tvg-row.is-me { outline: 0.2vmin solid color-mix(in srgb, var(--tvg-brand) 70%, transparent); }
+
+.tvg-rank {
+  width: 5.2vmin;
+  min-width: 32px;
+  height: 5.2vmin;
+  min-height: 32px;
+  display: grid;
+  place-items: center;
+  border-radius: 50%;
+  background: rgba(0, 0, 0, 0.28);
+  border: 0.15vmin solid var(--tvg-line);
+  font-size: clamp(0.85rem, 2.4vmin, 2.3rem);
+  font-weight: 900;
+  color: var(--tvg-ink);
+}
+.tvg-row[data-rank="1"] .tvg-rank { background: var(--tvg-gold); color: #2a1c12; border-color: transparent; }
+.tvg-row[data-rank="2"] .tvg-rank { background: #d6dce4; color: #24303c; border-color: transparent; }
+.tvg-row[data-rank="3"] .tvg-rank { background: #c78a54; color: #2a1c12; border-color: transparent; }
+
+.tvg-rowname {
+  font-size: clamp(0.95rem, 3vmin, 3rem);
+  font-weight: 800;
+  letter-spacing: -0.015em;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  min-width: 0;
+}
+.tvg-rowval {
+  display: flex;
+  align-items: baseline;
+  gap: 0.7vmin;
+  white-space: nowrap;
+}
+.tvg-rowval b {
+  font-size: clamp(1.05rem, 3.4vmin, 3.4rem);
+  font-weight: 900;
+  line-height: 1;
+  color: var(--tvg-gold);
+}
+.tvg-rowval span {
+  font-size: clamp(0.62rem, 1.5vmin, 1.4rem);
+  font-weight: 700;
+  color: var(--tvg-dim);
+}
+
+.tvg-foot {
+  flex: 0 0 auto;
+  font-size: clamp(0.66rem, 1.6vmin, 1.5rem);
+  color: var(--tvg-faint);
+  font-weight: 600;
+  text-align: center;
+  line-height: 1.5;
+}
+
+/* ===========================================================================
+   JOIN PANEL — the idle invitation
+   =========================================================================== */
+.tvg-join {
+  flex: 1 1 auto;
+  min-height: 0;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 4vmin;
+}
+.tvg-join[data-solo="1"] { grid-template-columns: minmax(0, 1fr); }
+
+.tvg-join-copy { display: flex; flex-direction: column; gap: 2.8vmin; min-width: 0; }
+.tvg-join-t {
+  margin: 0;
+  font-size: clamp(1.6rem, 6.8vmin, 7rem);
+  font-weight: 900;
+  letter-spacing: -0.03em;
+  line-height: 1.06;
+}
+.tvg-join-p {
+  margin: 0;
+  font-size: clamp(0.9rem, 2.9vmin, 2.9rem);
+  color: var(--tvg-dim);
+  font-weight: 600;
+  line-height: 1.5;
+}
+.tvg-steps { display: flex; flex-direction: column; gap: 1.6vmin; }
+.tvg-step {
+  display: flex;
+  align-items: center;
+  gap: 1.4vmin;
+  font-size: clamp(0.85rem, 2.5vmin, 2.5rem);
+  font-weight: 700;
+}
+.tvg-step i {
+  flex: 0 0 auto;
+  width: 5vmin;
+  min-width: 28px;
+  height: 5vmin;
+  min-height: 28px;
+  display: grid;
+  place-items: center;
+  border-radius: 50%;
+  background: rgba(0, 0, 0, 0.3);
+  border: 0.15vmin solid var(--tvg-line);
+  color: var(--tvg-gold);
+  font-style: normal;
+  font-size: clamp(0.7rem, 1.9vmin, 1.8rem);
+  font-weight: 900;
+}
+
+.tvg-qr {
+  flex: 0 0 auto;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 1.2vmin;
+  padding: 1.8vmin;
+  border-radius: 2vmin;
+  background: #fffdf7;
+  box-shadow: 0 2vmin 6vmin rgba(0, 0, 0, 0.5);
+}
+.tvg-qr img {
+  width: 34vmin;
+  height: 34vmin;
+  min-width: 150px;
+  min-height: 150px;
+  display: block;
+  border-radius: 0.8vmin;
+}
+.tvg-qr-cap {
+  font-size: clamp(0.68rem, 1.7vmin, 1.5rem);
+  font-weight: 800;
+  color: #3a2b1a;
+}
+
+.tvg-codes {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 1.2vmin;
+}
+.tvg-code {
+  display: flex;
+  flex-direction: column;
+  gap: 0.35vmin;
+  padding: 1vmin 1.8vmin;
+  border-radius: 1.3vmin;
+  background: linear-gradient(180deg, rgba(231, 196, 106, 0.18) 0%, rgba(231, 196, 106, 0.05) 100%);
+  border: 0.15vmin solid color-mix(in srgb, var(--tvg-gold) 42%, transparent);
+}
+.tvg-code b {
+  font-size: clamp(1.1rem, 3.6vmin, 3.6rem);
+  font-weight: 900;
+  letter-spacing: 0.12em;
+  color: var(--tvg-gold);
+  line-height: 1;
+}
+.tvg-code span {
+  font-size: clamp(0.6rem, 1.5vmin, 1.4rem);
+  font-weight: 700;
+  color: var(--tvg-dim);
+}
+
+/* ---------------------------------------------------------------------------
+   motion — transform / opacity only
+   --------------------------------------------------------------------------- */
+@keyframes tvg-pulse {
+  0% { box-shadow: 0 0 0 0 rgba(239, 90, 90, 0.55); }
+  70% { box-shadow: 0 0 0 1.6vmin rgba(239, 90, 90, 0); }
+  100% { box-shadow: 0 0 0 0 rgba(239, 90, 90, 0); }
+}
+@keyframes tvg-breathe {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.88; }
+}
+@keyframes tvg-rise {
+  from { opacity: 0; transform: translate(-50%, 2vmin); }
+  to { opacity: 1; transform: translate(-50%, 0); }
+}
+@keyframes tvg-spin { to { transform: rotate(360deg); } }
+
+/* A portrait panel (a tablet on a stand, or a screen the venue set to
+   `orientation: portrait`) has no room for a side-by-side poster: stack the
+   invitation and let the QR grow, rather than squeezing two columns into a
+   1080-wide wall. */
+@media (orientation: portrait) {
+  .tvg-join {
+    grid-template-columns: minmax(0, 1fr);
+    grid-auto-flow: row;
+    justify-items: center;
+    gap: 5vmin;
+  }
+  .tvg-join-copy { align-items: center; text-align: center; }
+  .tvg-steps { align-items: flex-start; }
+  .tvg-qr img { width: 46vmin; height: 46vmin; }
+  .tvg-score { grid-template-columns: 1fr; }
+  .tvg-score[data-seats="3"],
+  .tvg-score[data-seats="4"] { grid-template-columns: repeat(2, 1fr); }
+  .tvg-vs { flex-direction: row; gap: 1.4vmin; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .tvg-live-dot,
+  .tvg-seat.is-turn,
+  .tvg-banner,
+  .tvg-spin {
+    animation-duration: 0.001ms !important;
+    animation-iteration-count: 1 !important;
+  }
+}

@@ -6,14 +6,35 @@ import { orderNumber } from '../../lib/format.js'
 import DesignSlideView from '../../components/DesignSlideView.jsx'
 import Icon from '../../components/Icon.jsx'
 import { watchRoom } from '../../lib/gameRoom.js'
-import { watchSpectatableMatch, spectatePhase, SPECTATE_RESULT_HOLD_MS } from '../../lib/spectate.js'
+import {
+  watchSpectatableMatch, spectatePhase, SPECTATE_RESULT_HOLD_MS,
+  watchLiveGameRooms, watchOpenGameRooms, pickSpectateRoom, openRoomInvites, roomPhase,
+} from '../../lib/spectate.js'
+import {
+  watchLiveTournament, watchTournamentEntries, tournamentWinners, tournamentPrize,
+} from '../../lib/socialPlay.js'
 import LiveMatchScreen from '../../components/screen/LiveMatchScreen.jsx'
+import TournamentBoard from './TournamentBoard.jsx'
+import GamesJoinPanel from './GamesJoinPanel.jsx'
 
 // Digital signage player — open /screen on any TV/tablet browser, enter the
 // 6-char pairing code from Admin → Screens, and it plays the venue playlist
 // (images / videos / live menu slides) fullscreen with realtime updates.
 const CODE_KEY = 'ml.screen.code'
-const DUR = { image: 8, menu: 12, design: 10, prayer: 12 }
+const DUR = { image: 8, menu: 12, design: 10, prayer: 12, tournament: 16, gamesjoin: 14 }
+
+// ---- games / tournament layer -------------------------------------------
+// The multiplayer games whose presence in `tenant.games` means this venue
+// actually runs table games — and therefore that the wall has something real to
+// invite people to. A venue that turned them all off never sees the join panel.
+const PARTY_GAME_IDS = ['ludo', 'chess', 'dominoes', 'wist', 'jackaroo', 'haree']
+// A finalized tournament keeps its result on the wall for a day, so the guests
+// who played it actually see who won before it disappears.
+const CUP_RESULT_HOLD_MS = 24 * 60 * 60 * 1000
+// Modes whose ranking one self-written row per device can express exactly
+// (mirrors socialPlay.GUEST_RANKABLE_MODES — 'streak' cannot, and the board
+// says so instead of ranking the wrong person for a real prize).
+const CUP_RANKABLE = ['highscore', 'mostPlays']
 
 // ---- prayer-times slide (مواقيت الصلاة) helpers ----
 // Free keyless API: api.aladhan.com timingsByCity. Data is cached per city in a
@@ -247,7 +268,10 @@ export default function ScreenPlayer() {
       .slice(0, 4),
   [readyMap, beat])
 
-  const slides = useMemo(() => (screen?.items || []).filter((s) => {
+  // The venue's OWN configured playlist. The games/tournament layer folds its
+  // synthetic slides into this further down (`slides`), once the tournament
+  // state it depends on has been read.
+  const baseSlides = useMemo(() => (screen?.items || []).filter((s) => {
     if (!schedMatch(s.sched)) return false
     if (s.type === 'prayer') { // only with verified fetched times — otherwise the slide is skipped entirely
       const d = prayer[normCity(s.city).toLowerCase()]
@@ -264,7 +288,6 @@ export default function ScreenPlayer() {
     if (!pls.length) return screen?.audio || null
     return pls.find((p) => p.sched && schedMatch(p.sched)) || pls.find((p) => !p.sched) || pls[0]
   }, [screen, tick]) // eslint-disable-line
-  const slide = slides.length ? slides[idx % slides.length] : null
   const fx = `scr-fx-${['slide', 'zoom'].includes(screen?.fx) ? screen.fx : 'fade'}`
   // per-screen design fields (set from Admin → Screens → التصميم) — all optional
   const fit = screen?.fit === 'contain' ? 'contain' : 'cover' // media letterbox vs fill
@@ -333,6 +356,119 @@ export default function ScreenPlayer() {
     return { on: false, mode: '' }
   }, [specMatch, specRoom, beat])
 
+  // ---- TOURNAMENTS -------------------------------------------------------
+  // One listener for the whole screen (not one per slide rotation): the venue's
+  // running tournament, or — when none is running — the one it most recently
+  // announced, so the room still sees who won for a day afterwards.
+  const [cupBundle, setCupBundle] = useState({ live: null, all: [] })
+  useEffect(() => {
+    if (!tid) { setCupBundle({ live: null, all: [] }); return undefined }
+    return watchLiveTournament(tid, ({ tournament, all }) => {
+      setCupBundle({ live: tournament || null, all: Array.isArray(all) ? all : [] })
+    })
+  }, [tid, subN])
+
+  // The tournament this screen should put on the wall. A running one always
+  // wins; otherwise the most recently ANNOUNCED one, and only for a day.
+  const cup = useMemo(() => {
+    if (cupBundle.live) return cupBundle.live
+    const now = Date.now()
+    return cupBundle.all
+      .filter((t) => t.finalizedAt && now - Number(t.finalizedAt) < CUP_RESULT_HOLD_MS)
+      .sort((a, b) => Number(b.finalizedAt) - Number(a.finalizedAt))[0] || null
+  }, [cupBundle, tick])
+
+  // A RUNNING tournament is the venue-level consent switch for everything that
+  // puts a private table on a public wall — live rooms, and open room codes.
+  // See lib/spectate.js, SAFETY LIMIT 3.
+  const cupRunning = !!cupBundle.live
+
+  const [cupRows, setCupRows] = useState({ entries: [], rankable: true })
+  const cupId = cup?.id || ''
+  const cupMode = cup?.mode || 'highscore'
+  useEffect(() => {
+    if (!tid || !cupId) { setCupRows({ entries: [], rankable: true }); return undefined }
+    // A finalized tournament shows its frozen winners, so its live board is not
+    // read at all — one listener saved on every screen in the venue.
+    if (cup?.finalizedAt) { setCupRows({ entries: [], rankable: true }); return undefined }
+    return watchTournamentEntries(tid, cupId, ({ entries, rankable }) => {
+      setCupRows({ entries: entries || [], rankable: rankable !== false })
+    }, cupMode)
+  }, [tid, cupId, cupMode, cup?.finalizedAt, subN])
+
+  // ---- LIVE ROOMS (tournament nights only) --------------------------------
+  // Most rounds played in a cafe are plain rooms with no match document behind
+  // them, so a screen that watched only `matches` sat on the menu playlist
+  // through an entire tournament. These two listeners are opened ONLY while a
+  // tournament is running — that is the consent gate, and it also means a venue
+  // not running one pays for no extra reads at all.
+  const [liveRooms, setLiveRooms] = useState([])
+  const [lobbyRooms, setLobbyRooms] = useState([])
+  useEffect(() => {
+    if (!tid || !cupRunning) { setLiveRooms([]); setLobbyRooms([]); return undefined }
+    const u1 = watchLiveGameRooms(tid, ({ rooms }) => setLiveRooms(rooms || []))
+    const u2 = watchOpenGameRooms(tid, ({ rooms }) => setLobbyRooms(rooms || []))
+    return () => { u1(); u2() }
+  }, [tid, cupRunning, subN])
+
+  // The one live room to show, and its own end-of-round hold. A room is only
+  // considered while no table-versus-table match is already on screen, because
+  // a public challenge outranks a private table.
+  const cupRoom = useMemo(
+    () => (cupRunning ? pickSpectateRoom(liveRooms, Date.now()) : null),
+    [cupRunning, liveRooms, beat],
+  )
+  const roomSpec = useMemo(() => {
+    if (spec.on || !cupRoom) return { on: false, mode: '' }
+    const phase = roomPhase(cupRoom, Date.now())
+    if (phase === 'live') return { on: true, mode: 'live' }
+    if (phase === 'ended') {
+      const at = Number(cupRoom.endedAt) || 0
+      if (at && Date.now() - at < SPECTATE_RESULT_HOLD_MS) return { on: true, mode: 'ended' }
+    }
+    return { on: false, mode: '' }
+  }, [spec.on, cupRoom, beat])
+
+  // Open rooms whose CODE the wall may print as an invitation. Empty unless a
+  // tournament is running (see above), and already trimmed to a public shape.
+  // Recomputed on the 30s `tick`, not the 1s `beat`: this list builds fresh
+  // objects, and rebuilding it every second would re-render the join panel 60
+  // times a minute on a weak TV box for a code that changes maybe twice an hour.
+  const invites = useMemo(
+    () => (cupRunning ? openRoomInvites(lobbyRooms, Date.now(), 3) : []),
+    [cupRunning, lobbyRooms, tick],
+  )
+
+  // Does this venue run table games at all? `tenant.games` missing = never
+  // configured = every game is on (lib/games.gamesFor); an explicitly empty
+  // array means the venue turned games OFF, and the wall respects that.
+  const hasPartyGames = useMemo(() => {
+    const ids = venue && Array.isArray(venue.games) ? venue.games : null
+    if (!ids) return true
+    return ids.some((id) => PARTY_GAME_IDS.includes(id))
+  }, [venue])
+
+  // ---- the playlist, with the games layer folded in ----------------------
+  // Two synthetic slides join the venue's own rotation. They are SLIDES, not
+  // takeovers, on purpose: a tournament that seized the wall all day would
+  // delete the menu, the offers and the prayer times the venue actually paid
+  // for. A live board is the only thing urgent enough to take the whole screen.
+  //
+  //   'tournament'  while one is running (or was announced in the last day)
+  //   'gamesjoin'   whenever this venue runs table games at all — the idle
+  //                 invitation, so «العب معنا» is on the wall between boards
+  const slides = useMemo(() => {
+    const extra = []
+    if (cup) extra.push({ type: 'tournament', id: `__cup_${cup.id}` })
+    // A screen with NOTHING configured and no tournament keeps its «أضف محتوى»
+    // setup hint: a fresh screen must still tell the person pairing it what to
+    // do next, instead of looking finished because a games poster filled it.
+    if (hasPartyGames && (baseSlides.length > 0 || cup)) extra.push({ type: 'gamesjoin', id: '__join' })
+    return extra.length ? [...baseSlides, ...extra] : baseSlides
+  }, [baseSlides, cup, hasPartyGames])
+
+  const slide = slides.length ? slides[idx % slides.length] : null
+
   // advance: images/menu by duration, videos on ended — frozen while paused
   useEffect(() => {
     clearTimeout(timer.current)
@@ -383,7 +519,32 @@ export default function ScreenPlayer() {
   // before the empty-playlist and player returns so it can cut in even when the
   // venue configured no signage content at all.
   if (spec.on && specMatch) {
-    return <LiveMatchScreen match={specMatch} room={specRoom} venue={venueEff} mode={spec.mode} />
+    return (
+      <LiveMatchScreen
+        match={specMatch}
+        room={specRoom}
+        venue={venueEff}
+        mode={spec.mode}
+        context={cupBundle.live ? (cupBundle.live.name || 'بطولة جارية') : ''}
+      />
+    )
+  }
+
+  // ---- LIVE ROOM takeover (tournament nights) ----
+  // The same frame, for the far more common case of a table that simply started
+  // a game without challenging anybody. Only ever reached while a tournament is
+  // running — see lib/spectate.js, SAFETY LIMIT 3 — and only for the games
+  // certified to render a seatless viewer without showing anyone's hand.
+  if (roomSpec.on && cupRoom) {
+    return (
+      <LiveMatchScreen
+        match={null}
+        room={cupRoom}
+        venue={venueEff}
+        mode={roomSpec.mode}
+        context={cupBundle.live ? (cupBundle.live.name || 'بطولة جارية') : ''}
+      />
+    )
   }
 
   // ---- empty playlist ----
@@ -420,6 +581,29 @@ export default function ScreenPlayer() {
         <div key={idx} className={`scr-media ${fx}`}>
           <DesignSlideView slide={slide} data={{ items, offers, venue: venueEff }} />
         </div>
+      ) : slide.type === 'tournament' ? (
+        <TournamentBoard
+          key={slide.id}
+          className={`tvg-inslide ${fx}`}
+          tournament={cup}
+          entries={cupRows.entries}
+          rankable={cupRows.rankable && CUP_RANKABLE.includes(cup?.mode)}
+          winners={cup?.finalizedAt ? tournamentWinners(cup) : []}
+          venue={venueEff}
+          now={Date.now()}
+        />
+      ) : slide.type === 'gamesjoin' ? (
+        <GamesJoinPanel
+          key={slide.id}
+          className={`tvg-inslide ${fx}`}
+          venue={venueEff}
+          live={cupRunning}
+          title={cupRunning ? (cupBundle.live.name || 'بطولة جارية') : 'العب الآن من جوالك'}
+          note={cupRunning
+            ? (tournamentPrize(cupBundle.live) || 'جولتك تدخل لوحة البطولة مباشرة')
+            : 'ليدو، شطرنج، دومينو، وِست، جكارو وحريق — على طاولتك، من جوالك.'}
+          invites={invites}
+        />
       ) : slide.type === 'prayer' ? (
         // reaches here ONLY with verified fetched timings (the slides filter skips otherwise)
         <PrayerSlide key={idx} data={prayer[normCity(slide.city).toLowerCase()]} venue={venueEff} fxClass={fx} />

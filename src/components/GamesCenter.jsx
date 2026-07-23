@@ -31,6 +31,7 @@ import { clearSoloIntent } from '../lib/gameBots.js'
 import { isMuted, setMuted, play as playSound } from '../lib/gameSounds.js'
 import {
   watchLiveTournament, recordTournamentPlay, recordHappyHourPlay, rememberRoom,
+  tournamentCounts,
 } from '../lib/socialPlay.js'
 import WeeklyTournament from './social/WeeklyTournament.jsx'
 import HangingChallenge from './social/HangingChallenge.jsx'
@@ -95,6 +96,7 @@ const TXT = {
     condition: 'استحققتها',
     limit: 'الحد',
     done: 'تمام',
+    inCup: 'ضمن البطولة',
   },
   en: {
     hub: 'Games Corner',
@@ -146,6 +148,7 @@ const TXT = {
     condition: 'Earned by',
     limit: 'Limit',
     done: 'Done',
+    inCup: 'In the tournament',
   },
 }
 
@@ -1001,6 +1004,38 @@ export default function GamesCenter({
         <strong className="gh-bar-title">{inGame ? gameName(active, lang) : t.hub}</strong>
         {inGame ? (
           <>
+            {/* TOURNAMENT MARKER. The «ما يحدث الآن» card that announces a
+                running tournament lives on the browse screen, so the moment a
+                guest opened a game they lost every sign that this round was
+                being counted for a prize. This chip is the shell's job (the
+                games render only their play area), it appears ONLY when the
+                venue really has one running AND it counts THIS game
+                (tournamentCounts — an 'any' tournament counts all of them),
+                and it never claims a rank the board has not written. */}
+            {tour && tournamentCounts(tour, active) ? (
+              <span
+                title={tour.name || ''}
+                style={{
+                  flex: '0 0 auto',
+                  display: 'inline-flex',
+                  alignItems: 'center',
+                  gap: 5,
+                  padding: '3px 9px',
+                  borderRadius: 999,
+                  border: '1px solid color-mix(in srgb, var(--gh-brand, #0e7490) 55%, transparent)',
+                  background: 'color-mix(in srgb, var(--gh-brand, #0e7490) 18%, transparent)',
+                  fontSize: 11.5,
+                  fontWeight: 800,
+                  maxWidth: '38%',
+                  overflow: 'hidden',
+                  whiteSpace: 'nowrap',
+                  textOverflow: 'ellipsis',
+                }}
+              >
+                <Icon name="award" size={13} aria-hidden="true" />
+                {t.inCup}
+              </span>
+            ) : null}
             <span className="gh-live" aria-live="polite">{fmt(runScore)}</span>
             <button
               type="button"

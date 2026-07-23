@@ -1,0 +1,869 @@
+/* ===========================================================================
+   dominoes.css — «الدومينو». Owned by src/components/games/Dominoes.jsx and
+   imported AFTER boardgames.css so it wins on every shared selector.
+
+   Everything here is prefixed `dmo-`. Nothing in this file may leak into
+   Chess (`bgm-*`), Ludo (`lud-*`) or the card games (`cg-*`).
+
+   LOOK — the shared «majlis game table»: dark walnut frame, deep felt green
+   surface, soft gold hairlines, ivory tiles with real light. Same family as
+   ludo.css (--lud-gold #e7c46a) and cardgames.css (--cg-felt-*), so the five
+   games read as one suite. No image assets: every surface is a gradient.
+
+   SIZING — ONE MODEL, NO BREAKPOINTS.
+   The component measures its own box with a ResizeObserver and writes four
+   numbers onto the root:
+       --dmo-fs        base type unit, in px, derived from the measured box
+       --dmo-pad       the shell's padding
+       --dmo-tile-h    the height of a hand tile, in px, derived from the
+                       measured rail width AND the tile count, so seven tiles
+                       always fit a 390px phone with no clipping
+       --dmo-hand-gap  the gap between hand tiles, tightened as a hand grows
+   Every other length in this file is a multiple of one of those, which is why
+   the same markup is legible on a 360x640 phone and across a room on a
+   1920x1080 venue TV. Never reintroduce a hard-coded px type size here.
+
+   HARD REPO RULES honoured:
+     · no emoji — every glyph is inline SVG drawn by the JSX
+     · Latin digits only (the JSX formats with 'ar-SA-u-nu-latn')
+     · no visible scrollbars — every scroller hides its bar
+     · only transform / opacity animate; the file goes still under
+       prefers-reduced-motion
+     · SVG children are NEVER positioned with a px CSS transform (the iOS
+       Safari trap) — the JSX uses the unitless `transform` attribute, and the
+       only CSS transforms in this file live on HTML elements
+   =========================================================================== */
+
+.dmo-root {
+  /* written by the JSX; these defaults are sized for a 390x844 phone so the
+     very first paint — before the ResizeObserver fires — is already close */
+  --dmo-fs: 13px;
+  --dmo-pad: 8px;
+  --dmo-tile-h: 92px;
+  --dmo-hand-gap: 5px;
+
+  --dmo-ink: #f6f2e6;
+  --dmo-dim: rgba(246, 242, 230, 0.68);
+  --dmo-faint: rgba(246, 242, 230, 0.42);
+  --dmo-line: rgba(255, 255, 255, 0.1);
+  --dmo-surface: rgba(255, 255, 255, 0.06);
+  --dmo-gold: #e7c46a;
+  --dmo-gold-soft: rgba(231, 196, 106, 0.42);
+  --dmo-live: #6ee7b7;
+  --dmo-warn: #fbbf24;
+  --dmo-ease: cubic-bezier(0.22, 1, 0.36, 1);
+  --dmo-spring: cubic-bezier(0.34, 1.42, 0.5, 1);
+
+  position: relative;
+  width: 100%;
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+  gap: calc(var(--dmo-fs) * 0.45);
+  padding: var(--dmo-pad);
+  box-sizing: border-box;
+  overflow: hidden;
+  color: var(--dmo-ink);
+  font-family: inherit;
+  font-variant-numeric: tabular-nums;
+  -webkit-tap-highlight-color: transparent;
+  user-select: none;
+  -webkit-user-select: none;
+  background:
+    radial-gradient(120% 76% at 50% -8%, rgba(231, 196, 106, 0.09) 0%, transparent 62%),
+    linear-gradient(180deg, #14100a 0%, #0a0806 100%);
+}
+.dmo-root *,
+.dmo-root *::before,
+.dmo-root *::after { box-sizing: border-box; }
+
+/* the shared gradient sheet: never display:none (Safari has dropped paint
+   references out of a display:none subtree), just collapsed out of flow */
+.dmo-defs {
+  position: absolute;
+  width: 0;
+  height: 0;
+  overflow: hidden;
+  pointer-events: none;
+}
+
+/* ---------------------------------------------------------------------------
+   1. PLAYER STRIP
+   Name, running score and remaining-tile count for every seat, at a glance.
+   The active seat is marked THREE ways — gold ring, lift, and a lit rail —
+   never colour alone.
+   --------------------------------------------------------------------------- */
+.dmo-seats {
+  flex: 0 0 auto;
+  display: flex;
+  gap: calc(var(--dmo-fs) * 0.36);
+  align-items: stretch;
+  min-width: 0;
+}
+
+.dmo-seat {
+  position: relative;
+  flex: 1 1 0;
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  gap: calc(var(--dmo-fs) * 0.42);
+  padding: calc(var(--dmo-fs) * 0.34) calc(var(--dmo-fs) * 0.5);
+  border-radius: calc(var(--dmo-fs) * 0.95);
+  border: 1px solid var(--dmo-line);
+  background: linear-gradient(180deg, rgba(255, 255, 255, 0.08), rgba(255, 255, 255, 0.03));
+  opacity: 0.6;
+  overflow: hidden;
+  transition: opacity 260ms var(--dmo-ease), transform 260ms var(--dmo-ease),
+    border-color 260ms var(--dmo-ease);
+}
+.dmo-seat[data-me='1'] { background: linear-gradient(180deg, rgba(231, 196, 106, 0.15), rgba(255, 255, 255, 0.03)); }
+.dmo-seat[data-active='1'] {
+  opacity: 1;
+  border-color: var(--dmo-gold-soft);
+  transform: translate3d(0, -1px, 0);
+  box-shadow:
+    0 0 0 1px rgba(231, 196, 106, 0.3),
+    0 calc(var(--dmo-fs) * 0.3) calc(var(--dmo-fs) * 1) rgba(0, 0, 0, 0.45);
+}
+.dmo-seat[data-active='1']::after {
+  content: '';
+  position: absolute;
+  inset-block-end: 0;
+  inset-inline: 12%;
+  height: 2px;
+  border-radius: 2px;
+  background: linear-gradient(90deg, transparent, var(--dmo-gold), transparent);
+  animation: dmo-rail 2.1s ease-in-out infinite;
+}
+
+.dmo-seat-mark {
+  flex: 0 0 auto;
+  width: calc(var(--dmo-fs) * 1.85);
+  height: calc(var(--dmo-fs) * 1.85);
+  border-radius: calc(var(--dmo-fs) * 0.55);
+  display: grid;
+  place-items: center;
+  font-size: calc(var(--dmo-fs) * 0.95);
+  font-weight: 900;
+  color: #1b1409;
+  background: linear-gradient(160deg, #f7efd8, #cdb887);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.85), 0 1px 2px rgba(0, 0, 0, 0.5);
+}
+.dmo-seat-mark svg { display: block; height: calc(var(--dmo-fs) * 1); width: auto; }
+.dmo-seat[data-bot='1'] .dmo-seat-mark { background: linear-gradient(160deg, #d6dee4, #8b9aa5); }
+
+.dmo-seat-id { min-width: 0; flex: 1 1 auto; display: flex; flex-direction: column; gap: 1px; }
+.dmo-seat-name {
+  font-size: calc(var(--dmo-fs) * 0.94);
+  font-weight: 800;
+  line-height: 1.25;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.dmo-seat-sub {
+  display: flex;
+  align-items: center;
+  gap: calc(var(--dmo-fs) * 0.2);
+  font-size: calc(var(--dmo-fs) * 0.8);
+  font-weight: 700;
+  color: var(--dmo-dim);
+  line-height: 1.2;
+}
+.dmo-seat-sub svg { display: block; height: calc(var(--dmo-fs) * 0.9); width: auto; flex: 0 0 auto; }
+
+.dmo-seat-score {
+  flex: 0 0 auto;
+  font-size: calc(var(--dmo-fs) * 1.28);
+  font-weight: 900;
+  line-height: 1;
+  color: var(--dmo-gold);
+  text-shadow: 0 1px 0 rgba(0, 0, 0, 0.6);
+}
+
+/* three or four seats on a phone: the avatar is the first thing to go, so the
+   name never truncates to two letters */
+.dmo-seats[data-tight='1'] .dmo-seat { gap: calc(var(--dmo-fs) * 0.3); padding-inline: calc(var(--dmo-fs) * 0.4); }
+.dmo-seats[data-tight='1'] .dmo-seat-mark { display: none; }
+.dmo-seats[data-tight='1'] .dmo-seat-name { font-size: calc(var(--dmo-fs) * 0.86); }
+.dmo-seats[data-tight='1'] .dmo-seat-score { font-size: calc(var(--dmo-fs) * 1.12); }
+@media (orientation: landscape) and (min-width: 900px) {
+  .dmo-seats[data-tight='1'] .dmo-seat-mark { display: grid; }
+}
+
+/* ---------------------------------------------------------------------------
+   2. THE TABLE — walnut frame, felt bed
+   --------------------------------------------------------------------------- */
+.dmo-table {
+  position: relative;
+  flex: 1 1 0;
+  min-height: 0;
+  min-width: 0;
+  display: grid;
+  padding: calc(var(--dmo-fs) * 0.5);
+  border-radius: calc(var(--dmo-fs) * 1.4);
+  background:
+    linear-gradient(180deg, rgba(255, 255, 255, 0.2), rgba(0, 0, 0, 0.26)),
+    repeating-linear-gradient(94deg,
+      rgba(0, 0, 0, 0.2) 0 1px,
+      rgba(255, 255, 255, 0.05) 1px 2px,
+      transparent 2px 6px),
+    linear-gradient(138deg, #7d5029 0%, #4f3219 24%, #6d4523 48%, #43290f 74%, #6b4322 100%);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 226, 178, 0.32),
+    inset 0 -2px 3px rgba(0, 0, 0, 0.5),
+    0 calc(var(--dmo-fs) * 0.45) calc(var(--dmo-fs) * 1.5) rgba(0, 0, 0, 0.5);
+}
+
+.dmo-felt {
+  position: relative;
+  min-width: 0;
+  min-height: 0;
+  border-radius: calc(var(--dmo-fs) * 1);
+  overflow: hidden;
+  background:
+    radial-gradient(112% 78% at 50% 4%, rgba(255, 255, 255, 0.085) 0%, transparent 58%),
+    radial-gradient(140% 120% at 50% 118%, rgba(0, 0, 0, 0.42) 0%, transparent 62%),
+    repeating-linear-gradient(47deg, rgba(255, 255, 255, 0.018) 0 1px, transparent 1px 3px),
+    repeating-linear-gradient(-43deg, rgba(0, 0, 0, 0.03) 0 1px, transparent 1px 3px),
+    linear-gradient(178deg, #17493c 0%, #0f3830 42%, #0a2620 100%);
+  box-shadow:
+    inset 0 0 0 1px rgba(231, 196, 106, 0.26),
+    inset 0 calc(var(--dmo-fs) * 0.5) calc(var(--dmo-fs) * 1.4) rgba(0, 0, 0, 0.52);
+}
+
+/* THE TAP-STEALING RULE: the chain paints, it never listens. Only a live end
+   slot re-enables pointer events, and its hit box is exactly the dashed plate
+   the player can see. */
+.dmo-chain {
+  position: absolute;
+  top: calc(var(--dmo-fs) * 0.28);
+  left: calc(var(--dmo-fs) * 0.28);
+  /* An <svg> is a REPLACED element: with width/height:auto and only `inset`
+     it sizes to its own viewBox ratio and OVERFLOWS the inset box instead of
+     filling it — and .dmo-felt (overflow:hidden) then shears the overflow, so
+     up to 78% of the lowest tiles and the whole left end-slot fell below the
+     felt. Pin an explicit box (the felt minus the inset on both sides) so the
+     SVG fills exactly what it is given; preserveAspectRatio="xMidYMid meet"
+     then scales the chain to fit inside with nothing cropped — identically on
+     Chromium and WebKit, since this is plain CSS box sizing, not an SVG
+     transform. */
+  width: calc(100% - var(--dmo-fs) * 0.56);
+  height: calc(100% - var(--dmo-fs) * 0.56);
+  display: block;
+  pointer-events: none;
+  touch-action: manipulation;
+}
+.dmo-slot { pointer-events: none; }
+.dmo-slot[data-live='1'] { pointer-events: auto; cursor: pointer; }
+
+/* the round badge floats over the felt corner: information without a row */
+.dmo-round {
+  position: absolute;
+  inset-block-start: calc(var(--dmo-fs) * 0.4);
+  inset-inline-start: calc(var(--dmo-fs) * 0.4);
+  z-index: 3;
+  display: flex;
+  align-items: center;
+  gap: calc(var(--dmo-fs) * 0.4);
+  padding: calc(var(--dmo-fs) * 0.22) calc(var(--dmo-fs) * 0.6);
+  border-radius: 999px;
+  font-size: calc(var(--dmo-fs) * 0.78);
+  font-weight: 800;
+  color: rgba(255, 244, 219, 0.82);
+  background: rgba(6, 20, 16, 0.55);
+  border: 1px solid rgba(231, 196, 106, 0.22);
+  pointer-events: none;
+  white-space: nowrap;
+}
+.dmo-round b { color: var(--dmo-gold); font-weight: 900; }
+.dmo-round-sep {
+  width: 1px;
+  height: calc(var(--dmo-fs) * 0.9);
+  background: rgba(231, 196, 106, 0.3);
+}
+
+/* empty-board plate */
+.dmo-empty {
+  position: absolute;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  padding: calc(var(--dmo-fs) * 1.4);
+  text-align: center;
+  pointer-events: none;
+}
+.dmo-empty-in {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: calc(var(--dmo-fs) * 0.5);
+  padding: calc(var(--dmo-fs) * 1) calc(var(--dmo-fs) * 1.6);
+  border-radius: calc(var(--dmo-fs) * 1);
+  border: 1px dashed rgba(231, 196, 106, 0.3);
+  background: rgba(4, 18, 14, 0.3);
+  max-width: 92%;
+}
+.dmo-empty-in svg {
+  display: block;
+  height: calc(var(--dmo-fs) * 3.4);
+  width: auto;
+  max-width: 100%;
+  opacity: 0.92;
+  filter: drop-shadow(0 3px 6px rgba(0, 0, 0, 0.5));
+}
+.dmo-empty-in b { font-size: calc(var(--dmo-fs) * 1.1); font-weight: 900; }
+.dmo-empty-in span {
+  font-size: calc(var(--dmo-fs) * 0.92);
+  font-weight: 700;
+  line-height: 1.6;
+  color: rgba(246, 242, 230, 0.7);
+}
+
+/* ---------------------------------------------------------------------------
+   3. ACTION BAR — one hint line that always says what is expected now, the
+   boneyard and pass beside it, then the two chain ends on their own row so
+   both stay a full-size tap target on a phone.
+   --------------------------------------------------------------------------- */
+.dmo-bar {
+  flex: 0 0 auto;
+  display: flex;
+  flex-direction: column;
+  gap: calc(var(--dmo-fs) * 0.34);
+  min-width: 0;
+}
+.dmo-line {
+  display: flex;
+  align-items: stretch;
+  gap: calc(var(--dmo-fs) * 0.34);
+  min-width: 0;
+}
+
+.dmo-hint {
+  flex: 1 1 auto;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: calc(var(--dmo-fs) * 0.4);
+  min-width: 0;
+  min-height: calc(var(--dmo-fs) * 2.5);
+  padding: calc(var(--dmo-fs) * 0.24) calc(var(--dmo-fs) * 0.6);
+  border-radius: calc(var(--dmo-fs) * 0.85);
+  border: 1px solid var(--dmo-line);
+  background: var(--dmo-surface);
+  font-size: calc(var(--dmo-fs) * 0.92);
+  font-weight: 800;
+  line-height: 1.3;
+  text-align: center;
+  color: var(--dmo-dim);
+  transition: background-color 220ms var(--dmo-ease), color 220ms var(--dmo-ease);
+}
+.dmo-hint span {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+}
+.dmo-hint svg { flex: 0 0 auto; height: calc(var(--dmo-fs) * 1.05); width: auto; }
+.dmo-hint[data-tone='go'] {
+  color: #062b1f;
+  background: linear-gradient(180deg, #8ef0c4, #46c894);
+  border-color: rgba(255, 255, 255, 0.32);
+}
+.dmo-hint[data-tone='warn'] {
+  color: #2a1c00;
+  background: linear-gradient(180deg, #ffe08a, #e8b83c);
+  border-color: rgba(255, 255, 255, 0.3);
+}
+.dmo-hint[data-tone='wait'] { color: var(--dmo-faint); }
+
+.dmo-act {
+  appearance: none;
+  font-family: inherit;
+  flex: 0 0 auto;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: calc(var(--dmo-fs) * 0.32);
+  padding: calc(var(--dmo-fs) * 0.28) calc(var(--dmo-fs) * 0.7);
+  min-height: calc(var(--dmo-fs) * 2.5);
+  border-radius: calc(var(--dmo-fs) * 0.85);
+  border: 1px solid var(--dmo-line);
+  background: linear-gradient(180deg, rgba(255, 255, 255, 0.12), rgba(255, 255, 255, 0.04));
+  color: var(--dmo-ink);
+  font-size: calc(var(--dmo-fs) * 0.86);
+  font-weight: 800;
+  cursor: pointer;
+  white-space: nowrap;
+  transition: transform 180ms var(--dmo-spring), opacity 180ms var(--dmo-ease);
+}
+.dmo-act:disabled { opacity: 0.32; cursor: default; }
+.dmo-act:active:not(:disabled) { transform: scale(0.95); }
+.dmo-act[data-tone='gold'] {
+  color: #1d1607;
+  background: linear-gradient(180deg, #f3d68d, #d3ac54);
+  border-color: rgba(255, 255, 255, 0.4);
+}
+.dmo-act > svg { display: block; height: calc(var(--dmo-fs) * 1.1); width: auto; flex: 0 0 auto; }
+.dmo-act-n { font-weight: 900; }
+.dmo-act-lbl { overflow: hidden; text-overflow: ellipsis; }
+
+/* the boneyard button carries a real little stack of face-down tiles */
+.dmo-bone { padding-inline: calc(var(--dmo-fs) * 0.5); }
+.dmo-bone > svg { height: calc(var(--dmo-fs) * 1.9); }
+.dmo-bone[data-armed='1']:not(:disabled) {
+  border-color: var(--dmo-gold-soft);
+  animation: dmo-breathe 1.5s ease-in-out infinite;
+}
+
+.dmo-watch {
+  flex: 0 0 auto;
+  display: inline-flex;
+  align-items: center;
+  gap: calc(var(--dmo-fs) * 0.32);
+  padding: calc(var(--dmo-fs) * 0.28) calc(var(--dmo-fs) * 0.7);
+  border-radius: calc(var(--dmo-fs) * 0.85);
+  border: 1px solid var(--dmo-line);
+  background: var(--dmo-surface);
+  font-size: calc(var(--dmo-fs) * 0.86);
+  font-weight: 800;
+  color: var(--dmo-dim);
+  white-space: nowrap;
+}
+.dmo-watch svg { display: block; height: calc(var(--dmo-fs) * 1.05); width: auto; }
+
+/* The chain is drawn left-to-right whatever the language, so these two buttons
+   must not mirror or the taps land on the opposite end. Only the row order is
+   forced — each label keeps the document's own direction. */
+.dmo-ends {
+  display: flex;
+  align-items: stretch;
+  gap: calc(var(--dmo-fs) * 0.34);
+  min-width: 0;
+  direction: ltr;
+}
+.dmo-root[data-rtl='1'] .dmo-ends > * { direction: rtl; }
+
+.dmo-end {
+  appearance: none;
+  font-family: inherit;
+  flex: 1 1 0;
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: calc(var(--dmo-fs) * 0.4);
+  padding: calc(var(--dmo-fs) * 0.28) calc(var(--dmo-fs) * 0.5);
+  min-height: calc(var(--dmo-fs) * 2.85);
+  border-radius: calc(var(--dmo-fs) * 0.85);
+  border: 1px dashed rgba(231, 196, 106, 0.34);
+  background: var(--dmo-surface);
+  color: var(--dmo-dim);
+  font-size: calc(var(--dmo-fs) * 0.86);
+  font-weight: 800;
+  cursor: default;
+  transition: transform 200ms var(--dmo-spring), background-color 200ms var(--dmo-ease),
+    border-color 200ms var(--dmo-ease), color 200ms var(--dmo-ease), opacity 200ms var(--dmo-ease);
+}
+.dmo-end[data-live='1'] {
+  cursor: pointer;
+  border-style: solid;
+  color: #06281d;
+  background: linear-gradient(180deg, #9df3cd, #4ecb98);
+  border-color: rgba(255, 255, 255, 0.4);
+  animation: dmo-breathe 1.7s ease-in-out infinite;
+}
+.dmo-end[data-live='1']:active { transform: scale(0.95); }
+.dmo-end[data-dead='1'] { opacity: 0.36; }
+.dmo-end-pip {
+  flex: 0 0 auto;
+  display: inline-grid;
+  place-items: center;
+  width: calc(var(--dmo-fs) * 1.85);
+  height: calc(var(--dmo-fs) * 1.85);
+  border-radius: calc(var(--dmo-fs) * 0.4);
+  background: linear-gradient(165deg, #fdfaf0, #ddd3ba);
+  color: #16202a;
+  font-weight: 900;
+  font-size: calc(var(--dmo-fs) * 1.05);
+  line-height: 1;
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.9), 0 1px 2px rgba(0, 0, 0, 0.45);
+}
+.dmo-end-lbl { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
+/* ---------------------------------------------------------------------------
+   4. HAND
+   Seven tiles must fit a 390px phone with nothing clipped: the JSX measures
+   the rail and writes --dmo-tile-h and --dmo-hand-gap, so the tiles size
+   themselves down to a readable floor and only then does the rail begin to
+   scroll — with its bar hidden, like every scroller in this product.
+   --------------------------------------------------------------------------- */
+.dmo-handwrap {
+  position: relative;
+  flex: 0 0 auto;
+  min-width: 0;
+}
+
+.dmo-hand {
+  display: flex;
+  align-items: flex-end;
+  justify-content: center;
+  /* a centred flex row that overflows puts its leading edge out of reach of
+     the scroller, which silently clips the first tile. `safe` degrades to the
+     plain `center` above it on engines that do not know the keyword. */
+  justify-content: safe center;
+  gap: var(--dmo-hand-gap);
+  min-height: var(--dmo-tile-h);
+  padding-block: calc(var(--dmo-tile-h) * 0.14) 0;
+  margin-block-start: calc(var(--dmo-tile-h) * -0.14);
+  overflow-x: auto;
+  overflow-y: hidden;
+  scrollbar-width: none;
+  -ms-overflow-style: none;
+  -webkit-overflow-scrolling: touch;
+  transition: opacity 240ms var(--dmo-ease);
+}
+.dmo-hand::-webkit-scrollbar { width: 0; height: 0; }
+.dmo-hand[data-idle='1'] { opacity: 0.66; }
+.dmo-hand[data-idle='1'] .dmo-tile { cursor: default; }
+.dmo-hand-empty {
+  align-self: center;
+  font-size: calc(var(--dmo-fs) * 0.9);
+  font-weight: 800;
+  color: var(--dmo-faint);
+}
+
+.dmo-tile {
+  appearance: none;
+  border: 0;
+  padding: 0;
+  margin: 0;
+  background: transparent;
+  flex: 0 0 auto;
+  height: var(--dmo-tile-h);
+  width: calc(var(--dmo-tile-h) / 2);
+  cursor: pointer;
+  touch-action: manipulation;
+  transition: transform 220ms var(--dmo-spring), opacity 200ms var(--dmo-ease),
+    filter 200ms var(--dmo-ease);
+}
+.dmo-tile-in { display: block; width: 100%; height: 100%; }
+.dmo-tile svg { display: block; width: 100%; height: 100%; overflow: visible; }
+.dmo-tile[data-playable='1'] { filter: drop-shadow(0 2px 4px rgba(0, 0, 0, 0.55)); }
+/* a tile that no legal end will take: greyed on purpose, and tapping it says
+   why in the hint line rather than doing nothing */
+.dmo-tile[data-playable='0'] { opacity: 0.4; filter: grayscale(0.75) brightness(0.82); }
+.dmo-tile[data-sel='1'] {
+  transform: translate3d(0, -13%, 0) scale(1.06);
+  filter: drop-shadow(0 6px 12px rgba(231, 196, 106, 0.55));
+}
+.dmo-tile[data-playable='1']:active { transform: translate3d(0, -6%, 0) scale(1.02); }
+/* the one tile the rules force you to open with */
+.dmo-tile[data-forced='1'] {
+  filter: drop-shadow(0 0 4px rgba(231, 196, 106, 0.9)) drop-shadow(0 2px 5px rgba(0, 0, 0, 0.5));
+  animation: dmo-forced 1.5s ease-in-out infinite;
+}
+.dmo-tile-in[data-shake='1'] { animation: dmo-shake 340ms ease-in-out both; }
+
+/* the row of face-down tiles a spectator sees — never a private hand */
+.dmo-backs {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-wrap: wrap;
+  gap: calc(var(--dmo-fs) * 0.35);
+  min-height: var(--dmo-tile-h);
+}
+.dmo-backs svg {
+  display: block;
+  height: calc(var(--dmo-tile-h) * 0.82);
+  width: auto;
+  opacity: 0.92;
+}
+.dmo-backs-lbl {
+  width: 100%;
+  text-align: center;
+  font-size: calc(var(--dmo-fs) * 0.86);
+  font-weight: 800;
+  color: var(--dmo-faint);
+}
+
+/* hot-seat privacy veil (single-device play only) */
+.dmo-veil {
+  position: absolute;
+  inset: calc(var(--dmo-fs) * -0.35);
+  z-index: 12;
+  display: grid;
+  place-items: center;
+  border-radius: calc(var(--dmo-fs) * 1.1);
+  background: rgba(8, 14, 11, 0.94);
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
+  border: 1px solid rgba(231, 196, 106, 0.24);
+  cursor: pointer;
+  text-align: center;
+  animation: dmo-fade 220ms var(--dmo-ease) both;
+}
+.dmo-veil b { display: block; font-size: calc(var(--dmo-fs) * 1.2); font-weight: 900; }
+.dmo-veil span {
+  display: block;
+  font-size: calc(var(--dmo-fs) * 0.88);
+  font-weight: 700;
+  color: var(--dmo-dim);
+  margin-block-start: calc(var(--dmo-fs) * 0.3);
+}
+
+/* ---------------------------------------------------------------------------
+   5. FLYING TILE — the placement animation.
+   An HTML element, deliberately: a CSS transform in px on an SVG child does
+   not resolve into SVG user space on iOS Safari, so the piece would land in
+   the wrong place or vanish. Here the transform runs on a plain div and the
+   SVG inside only ever gets the unitless attribute form.
+   --------------------------------------------------------------------------- */
+.dmo-fly {
+  position: fixed;
+  z-index: 60;
+  pointer-events: none;
+  animation: dmo-fly 400ms var(--dmo-ease) both;
+  filter: drop-shadow(0 8px 16px rgba(0, 0, 0, 0.55));
+}
+.dmo-fly svg { display: block; width: 100%; height: 100%; overflow: visible; }
+
+@keyframes dmo-fly {
+  from { transform: translate3d(var(--dmo-fx), var(--dmo-fy), 0) rotate(var(--dmo-fr)) scale(var(--dmo-fsc)); }
+  to { transform: translate3d(0, 0, 0) rotate(0deg) scale(1); }
+}
+
+/* ---------------------------------------------------------------------------
+   6. ROUND / MATCH RESULT SHEET
+   --------------------------------------------------------------------------- */
+.dmo-sheet {
+  position: absolute;
+  inset: 0;
+  z-index: 20;
+  display: grid;
+  place-items: center;
+  padding: calc(var(--dmo-fs) * 0.8);
+  background: rgba(5, 14, 11, 0.72);
+  backdrop-filter: blur(7px);
+  -webkit-backdrop-filter: blur(7px);
+  animation: dmo-fade 240ms var(--dmo-ease) both;
+}
+.dmo-card {
+  width: 100%;
+  max-width: calc(var(--dmo-fs) * 42);
+  max-height: 100%;
+  display: flex;
+  flex-direction: column;
+  gap: calc(var(--dmo-fs) * 0.4);
+  padding: calc(var(--dmo-fs) * 0.85);
+  border-radius: calc(var(--dmo-fs) * 1.1);
+  border: 1px solid rgba(231, 196, 106, 0.32);
+  background: linear-gradient(180deg, #143a31 0%, #0a221d 100%);
+  box-shadow: 0 calc(var(--dmo-fs) * 1.2) calc(var(--dmo-fs) * 3) rgba(0, 0, 0, 0.62);
+  overflow: hidden;
+  animation: dmo-pop 320ms var(--dmo-spring) both;
+}
+.dmo-card-head {
+  display: flex;
+  align-items: center;
+  gap: calc(var(--dmo-fs) * 0.45);
+  font-size: calc(var(--dmo-fs) * 1.12);
+  font-weight: 900;
+  line-height: 1.35;
+}
+.dmo-card-head svg { flex: 0 0 auto; height: calc(var(--dmo-fs) * 1.45); width: auto; color: var(--dmo-gold); }
+.dmo-card-head span { min-width: 0; overflow: hidden; text-overflow: ellipsis; }
+.dmo-card-sub {
+  font-size: calc(var(--dmo-fs) * 0.8);
+  font-weight: 800;
+  letter-spacing: 0.02em;
+  color: var(--dmo-faint);
+  margin-block-start: calc(var(--dmo-fs) * 0.2);
+}
+
+.dmo-rows {
+  display: flex;
+  flex-direction: column;
+  gap: calc(var(--dmo-fs) * 0.3);
+  overflow-y: auto;
+  overflow-x: hidden;
+  scrollbar-width: none;
+  -ms-overflow-style: none;
+  min-height: 0;
+}
+.dmo-rows::-webkit-scrollbar { width: 0; height: 0; }
+
+.dmo-row {
+  display: flex;
+  align-items: center;
+  gap: calc(var(--dmo-fs) * 0.45);
+  padding: calc(var(--dmo-fs) * 0.34) calc(var(--dmo-fs) * 0.45);
+  border-radius: calc(var(--dmo-fs) * 0.7);
+  border: 1px solid var(--dmo-line);
+  background: rgba(255, 255, 255, 0.045);
+  min-width: 0;
+}
+.dmo-row[data-win='1'] {
+  border-color: var(--dmo-gold-soft);
+  background: rgba(231, 196, 106, 0.14);
+  animation: dmo-winrow 1.6s var(--dmo-ease) 2;
+}
+.dmo-row-name {
+  flex: 0 0 auto;
+  max-width: 8ch;
+  font-size: calc(var(--dmo-fs) * 0.9);
+  font-weight: 800;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.dmo-row-tiles {
+  flex: 1 1 auto;
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  gap: calc(var(--dmo-fs) * 0.14);
+  overflow: hidden;
+}
+.dmo-row-tiles svg { display: block; height: calc(var(--dmo-fs) * 1.75); width: auto; flex: 0 0 auto; }
+.dmo-row-tiles em {
+  font-style: normal;
+  font-size: calc(var(--dmo-fs) * 0.82);
+  font-weight: 800;
+  color: var(--dmo-live);
+}
+.dmo-row-pips {
+  flex: 0 0 auto;
+  min-width: 3ch;
+  text-align: end;
+  font-size: calc(var(--dmo-fs) * 0.95);
+  font-weight: 900;
+  color: var(--dmo-warn);
+}
+.dmo-row-gain {
+  flex: 0 0 auto;
+  min-width: 4ch;
+  text-align: end;
+  font-size: calc(var(--dmo-fs) * 0.95);
+  font-weight: 900;
+  color: var(--dmo-live);
+}
+
+.dmo-track {
+  display: flex;
+  flex-direction: column;
+  gap: calc(var(--dmo-fs) * 0.28);
+}
+.dmo-trk {
+  display: flex;
+  align-items: center;
+  gap: calc(var(--dmo-fs) * 0.42);
+  font-size: calc(var(--dmo-fs) * 0.86);
+  font-weight: 800;
+}
+.dmo-trk-name { flex: 0 0 auto; max-width: 8ch; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.dmo-trk-bar {
+  flex: 1 1 auto;
+  min-width: 0;
+  height: calc(var(--dmo-fs) * 0.52);
+  border-radius: 999px;
+  background: rgba(0, 0, 0, 0.42);
+  overflow: hidden;
+  border: 1px solid var(--dmo-line);
+  direction: ltr;
+}
+.dmo-trk-fill {
+  display: block;
+  width: 100%;
+  height: 100%;
+  border-radius: 999px;
+  background: linear-gradient(90deg, #46c894, var(--dmo-gold));
+  transform-origin: left center;
+  transition: transform 620ms var(--dmo-ease);
+}
+.dmo-trk-n { flex: 0 0 auto; min-width: 4ch; text-align: end; color: var(--dmo-gold); font-weight: 900; }
+
+.dmo-card-foot {
+  display: flex;
+  gap: calc(var(--dmo-fs) * 0.4);
+  margin-block-start: calc(var(--dmo-fs) * 0.2);
+}
+.dmo-card-foot .dmo-act { flex: 1 1 auto; }
+
+/* ---------------------------------------------------------------------------
+   7. MOTION — transform and opacity only
+   --------------------------------------------------------------------------- */
+@keyframes dmo-fade { from { opacity: 0; } to { opacity: 1; } }
+@keyframes dmo-pop {
+  from { opacity: 0; transform: translate3d(0, 6%, 0) scale(0.95); }
+  to { opacity: 1; transform: translate3d(0, 0, 0) scale(1); }
+}
+@keyframes dmo-breathe {
+  0%, 100% { transform: scale(1); }
+  50% { transform: scale(1.035); }
+}
+@keyframes dmo-forced {
+  0%, 100% { transform: translate3d(0, 0, 0); }
+  50% { transform: translate3d(0, -7%, 0); }
+}
+@keyframes dmo-rail {
+  0%, 100% { opacity: 0.35; transform: scaleX(0.6); }
+  50% { opacity: 1; transform: scaleX(1); }
+}
+@keyframes dmo-shake {
+  0%, 100% { transform: translate3d(0, 0, 0); }
+  18% { transform: translate3d(-9%, 0, 0) rotate(-2.5deg); }
+  40% { transform: translate3d(8%, 0, 0) rotate(2.5deg); }
+  62% { transform: translate3d(-5%, 0, 0) rotate(-1.5deg); }
+  82% { transform: translate3d(3%, 0, 0) rotate(0.8deg); }
+}
+@keyframes dmo-winrow {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.72; }
+}
+/* the freshly laid tile's gold wash — opacity only, so it is safe on an SVG
+   child in every engine (no transform, no px) */
+.dmo-fresh { animation: dmo-fresh 900ms var(--dmo-ease) both; }
+@keyframes dmo-fresh {
+  0% { opacity: 0.8; }
+  100% { opacity: 0; }
+}
+/* the pulsing plate on a legal chain end */
+.dmo-endring { animation: dmo-ring 1.5s ease-in-out infinite; }
+@keyframes dmo-ring {
+  0%, 100% { opacity: 0.5; }
+  50% { opacity: 1; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .dmo-root *,
+  .dmo-root *::before,
+  .dmo-root *::after,
+  .dmo-fly,
+  .dmo-fly * {
+    animation-duration: 0.001ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.001ms !important;
+  }
+}
+
+/* ---------------------------------------------------------------------------
+   8. WIDE / TV — one landscape rule, no per-device breakpoints.
+   The venue screen is what the tournament is watched on, so the hint and the
+   two ends share a single row and give the felt the rest of the height.
+   Everything else already scales from --dmo-fs.
+   --------------------------------------------------------------------------- */
+@media (orientation: landscape) and (min-width: 900px) {
+  .dmo-seats { gap: calc(var(--dmo-fs) * 0.5); }
+  .dmo-seat { padding: calc(var(--dmo-fs) * 0.45) calc(var(--dmo-fs) * 0.7); }
+  .dmo-bar { flex-direction: row-reverse; align-items: stretch; gap: calc(var(--dmo-fs) * 0.5); }
+  .dmo-line { flex: 1 1 auto; }
+  .dmo-ends { flex: 0 0 auto; }
+  .dmo-end { flex: 0 0 auto; min-width: calc(var(--dmo-fs) * 7.5); }
+  .dmo-hint { font-size: calc(var(--dmo-fs) * 0.98); }
+  .dmo-card { max-width: calc(var(--dmo-fs) * 34); }
+}

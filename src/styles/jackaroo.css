@@ -1,0 +1,803 @@
+/* ===========================================================================
+   jackaroo.css — «الجكارو» only. Imported by src/components/games/Jackaroo.jsx
+   AFTER cardgames.css, and every rule is scoped under `.jak-root` so it can
+   only ever tighten the shared card-game skin, never leak into Wist or Hareeg.
+
+   OWNERSHIP: this file belongs to the Jackaroo game. cardgames.css stays shared
+   and untouched; the old `.jak-*` rules that live there are simply no longer
+   referenced (the board now uses its own names: .jak-hole / .jak-mb / .jak-ring
+   / .jak-arena) so nothing here has to fight them.
+
+   HARD REPO RULES honoured here
+     • no emoji — every mark is inline SVG drawn by the JSX
+     • Latin digits only — the JSX formats with 'ar-SA-u-nu-latn'
+     • no visible scrollbars — nothing in this file scrolls
+     • only transform / opacity animate; the whole file goes still under
+       prefers-reduced-motion (cardgames.css already kills every animation
+       inside .cg-root, and the component skips its own motion as well)
+
+   THE SAFARI SVG TRANSFORM TRAP — the rule this file lives by
+     A CSS `transform` on an SVG element REPLACES its `transform` attribute, and
+     iOS Safari does not resolve CSS px into SVG user units. So every piece is
+     drawn as TWO nested groups:
+        <g transform="translate(x y)">      ← position, attribute form, unitless
+          <g class="jak-mb">…</g>           ← CSS transform, rotate/scale ONLY
+        </g>
+     No rule in this file ever puts a px length inside a transform.
+
+   SIZING MODEL
+     --jak-u is one "board unit" in px, measured from the real element box by a
+     ResizeObserver in the component (min(width,height)/100, clamped). Every
+     size below is a multiple of it, so the same layout is legible on a 360px
+     phone and on a 1920x1080 venue TV with no breakpoints and no fixed type.
+   =========================================================================== */
+
+.cg-root.jak-root {
+  --jak-u: 3.9px;
+
+  /* the hand inherits the shared card model, but tracks the board unit */
+  --cg-card-w: clamp(34px, calc(var(--jak-u) * 11), 104px);
+  --cg-card-r: calc(var(--jak-u) * 1.5);
+  /* four cards, never more: they sit side by side with a real gap instead of
+     the fanned overlap the 13-card games need */
+  --cg-overlap: calc(var(--cg-card-w) * 0.07);
+
+  /* majlis game table: dark walnut frame, cream board, soft gold */
+  --jak-wood-1: #7a5230;
+  --jak-wood-2: #3a2313;
+  --jak-wood-3: #52341c;
+  --jak-face-1: #f3e6c9;
+  --jak-face-2: #d9c194;
+  --jak-face-3: #b39867;
+  --jak-ink: #40301c;
+  --jak-gold: #e7c46a;
+
+  background:
+    radial-gradient(120% 70% at 50% 0%, rgba(255, 255, 255, 0.06) 0%, transparent 58%),
+    radial-gradient(90% 60% at 50% 110%, rgba(12, 60, 52, 0.55) 0%, transparent 70%),
+    linear-gradient(180deg, #0b1a17 0%, #060f0d 100%);
+}
+
+/* ------------------------------------------------------------------ top bar */
+.jak-root .cg-top {
+  min-height: calc(var(--jak-u) * 11);
+  padding: calc(var(--jak-u) * 1.5) calc(var(--jak-u) * 2);
+  gap: calc(var(--jak-u) * 1.6);
+}
+
+.jak-team {
+  display: inline-flex;
+  align-items: center;
+  gap: calc(var(--jak-u) * 1.1);
+  padding: calc(var(--jak-u) * 0.9) calc(var(--jak-u) * 1.8);
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.05);
+  border: 1px solid var(--cg-line);
+  min-width: 0;
+}
+.jak-team.is-us { border-color: color-mix(in srgb, var(--jak-gold) 58%, transparent); }
+.jak-team-nm {
+  font-size: calc(var(--jak-u) * 3.1);
+  font-weight: 800;
+  line-height: 1.15;
+  white-space: nowrap;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.jak-team.is-us .jak-team-nm { color: var(--jak-gold); }
+.jak-team-who {
+  font-size: calc(var(--jak-u) * 2.5);
+  color: var(--cg-faint);
+  line-height: 1.15;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: calc(var(--jak-u) * 30);
+  display: none;
+}
+.jak-team-n {
+  font-size: calc(var(--jak-u) * 3.4);
+  font-weight: 800;
+  font-variant-numeric: tabular-nums;
+  line-height: 1;
+}
+
+/* eight parked slots per partnership: a filled square is a marble that is home,
+   so the score reads without relying on colour alone */
+.jak-tp { display: inline-flex; gap: calc(var(--jak-u) * 0.28); flex: 0 0 auto; }
+.jak-tp i {
+  width: calc(var(--jak-u) * 0.95);
+  height: calc(var(--jak-u) * 1.9);
+  border-radius: calc(var(--jak-u) * 0.3);
+  border: 1px solid rgba(255, 255, 255, 0.32);
+}
+.jak-tp i.is-on { background: var(--jak-gold); border-color: var(--jak-gold); }
+
+.jak-root .cg-chip {
+  font-size: calc(var(--jak-u) * 2.8);
+  padding: calc(var(--jak-u) * 0.8) calc(var(--jak-u) * 1.8);
+}
+.jak-levelbtn {
+  display: inline-flex;
+  align-items: center;
+  gap: calc(var(--jak-u) * 0.9);
+  cursor: pointer;
+  font-family: inherit;
+}
+.jak-levelbtn b { color: var(--jak-gold); font-weight: 800; }
+.jak-level-lbl { color: var(--cg-faint); }
+
+.jak-root .cg-iconbtn {
+  width: calc(var(--jak-u) * 8);
+  height: calc(var(--jak-u) * 8);
+  font-size: calc(var(--jak-u) * 3.6);
+  border-radius: calc(var(--jak-u) * 2.4);
+}
+
+/* a phone has no room for the word AND the value: the gold value carries the
+   meaning and the button keeps its aria-label */
+@media (max-width: 430px) {
+  .jak-root .jak-level-lbl { display: none; }
+}
+
+/* -------------------------------------------------------------------- stage */
+.jak-stage {
+  display: flex;
+  flex-direction: column;
+  gap: calc(var(--jak-u) * 0.9);
+  padding: calc(var(--jak-u) * 1.1) calc(var(--jak-u) * 1.2) 0;
+  min-height: 0;
+}
+
+.jak-seats {
+  flex: 0 0 auto;
+  display: flex;
+  gap: calc(var(--jak-u) * 0.9);
+  justify-content: center;
+  align-items: stretch;
+}
+
+.jak-pod {
+  flex: 1 1 0;
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  gap: calc(var(--jak-u) * 1.1);
+  padding: calc(var(--jak-u) * 1) calc(var(--jak-u) * 1.2);
+  border-radius: calc(var(--jak-u) * 2.6);
+  border: 1px solid var(--cg-line);
+  background: linear-gradient(180deg, rgba(255, 255, 255, 0.07) 0%, rgba(255, 255, 255, 0.025) 100%);
+  max-width: calc(var(--jak-u) * 44);
+  transition: border-color 220ms var(--cg-ease), box-shadow 220ms var(--cg-ease),
+    transform 220ms var(--cg-ease), opacity 220ms var(--cg-ease);
+}
+.jak-pod.is-mate { border-color: color-mix(in srgb, var(--jak-gold) 34%, transparent); }
+.jak-pod.is-turn {
+  border-color: var(--jak-gold);
+  box-shadow: 0 0 0 1px var(--jak-gold), 0 0 calc(var(--jak-u) * 5) calc(var(--jak-u) * -1) var(--jak-gold);
+  transform: translateY(calc(var(--jak-u) * -0.3));
+}
+.jak-pod.is-off { opacity: 0.52; }
+
+.jak-pod-av {
+  flex: 0 0 auto;
+  width: calc(var(--jak-u) * 6.4);
+  height: calc(var(--jak-u) * 6.4);
+  border-radius: 50%;
+  display: grid;
+  place-items: center;
+  font-size: calc(var(--jak-u) * 3);
+  font-weight: 800;
+  color: #06131a;
+  background: radial-gradient(circle at 34% 28%, #fff 0%, var(--pc, #38bdf8) 62%, color-mix(in srgb, var(--pc, #38bdf8) 55%, #000) 100%);
+  box-shadow: 0 0 0 1px rgba(0, 0, 0, 0.45), inset 0 calc(var(--jak-u) * -0.4) calc(var(--jak-u) * 0.8) rgba(0, 0, 0, 0.3);
+}
+
+.jak-pod-col { display: flex; flex-direction: column; min-width: 0; gap: calc(var(--jak-u) * 0.35); flex: 1 1 auto; }
+.jak-pod-nm {
+  font-size: calc(var(--jak-u) * 3.1);
+  font-weight: 700;
+  line-height: 1.2;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.jak-pod-sub { display: flex; align-items: center; gap: calc(var(--jak-u) * 1); min-width: 0; }
+
+/* four marble states per player, by SHAPE not colour:
+   hollow circle = in the base, filled circle = out on the track,
+   filled square = parked in the finish lane */
+.jak-mp { display: inline-flex; gap: calc(var(--jak-u) * 0.36); flex: 0 0 auto; }
+.jak-mp i {
+  width: calc(var(--jak-u) * 1.5);
+  height: calc(var(--jak-u) * 1.5);
+  border-radius: 50%;
+  border: 1px solid color-mix(in srgb, var(--pc, #38bdf8) 70%, transparent);
+}
+.jak-mp i.is-track { background: var(--pc, #38bdf8); }
+.jak-mp i.is-lane {
+  background: var(--jak-gold);
+  border-color: var(--jak-gold);
+  border-radius: calc(var(--jak-u) * 0.3);
+}
+
+.jak-root .cg-backs { flex: 0 0 auto; }
+.jak-root .cg-back {
+  width: calc(var(--jak-u) * 2.4);
+  height: calc(var(--jak-u) * 3.3);
+  margin-inline-start: calc(var(--jak-u) * -1.3);
+  border-radius: calc(var(--jak-u) * 0.5);
+}
+
+.jak-pod-tag {
+  flex: 0 0 auto;
+  font-size: calc(var(--jak-u) * 2.2);
+  font-weight: 800;
+  letter-spacing: 0.04em;
+  padding: calc(var(--jak-u) * 0.25) calc(var(--jak-u) * 1.1);
+  border-radius: 999px;
+  border: 1px solid var(--jak-gold);
+  color: var(--jak-gold);
+  white-space: nowrap;
+}
+
+/* ------------------------------------------------------------------- board */
+.jak-arena {
+  flex: 1 1 auto;
+  min-height: 0;
+  min-width: 0;
+  display: grid;
+  place-items: center;
+  container-type: size;
+}
+
+.jak-frame {
+  position: relative;
+  width: min(100cqw, 100cqh);
+  height: min(100cqw, 100cqh);
+  border-radius: calc(var(--jak-u) * 4.6);
+  background:
+    linear-gradient(148deg, var(--jak-wood-1) 0%, var(--jak-wood-2) 46%, var(--jak-wood-3) 100%);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.24),
+    inset 0 calc(var(--jak-u) * -0.6) calc(var(--jak-u) * 1.6) rgba(0, 0, 0, 0.55),
+    0 calc(var(--jak-u) * 4) calc(var(--jak-u) * 10) calc(var(--jak-u) * -4) rgba(0, 0, 0, 0.8);
+}
+/* walnut grain — two fine repeating passes, no image assets */
+.jak-frame::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  background:
+    repeating-linear-gradient(97deg,
+      rgba(255, 235, 205, 0.055) 0 calc(var(--jak-u) * 0.18),
+      rgba(0, 0, 0, 0.07) calc(var(--jak-u) * 0.18) calc(var(--jak-u) * 0.5),
+      transparent calc(var(--jak-u) * 0.5) calc(var(--jak-u) * 1.15)),
+    repeating-linear-gradient(93deg,
+      rgba(0, 0, 0, 0.05) 0 calc(var(--jak-u) * 0.9),
+      transparent calc(var(--jak-u) * 0.9) calc(var(--jak-u) * 3.4));
+  pointer-events: none;
+}
+
+.jak-face {
+  position: absolute;
+  inset: calc(var(--jak-u) * 2.3);
+  border-radius: calc(var(--jak-u) * 3);
+  background:
+    radial-gradient(118% 96% at 30% 14%, var(--jak-face-1) 0%, var(--jak-face-2) 46%, var(--jak-face-3) 100%);
+  box-shadow:
+    inset 0 0 0 1px rgba(58, 35, 19, 0.55),
+    inset 0 calc(var(--jak-u) * 0.7) calc(var(--jak-u) * 2.4) rgba(58, 35, 19, 0.4),
+    0 0 0 1px rgba(0, 0, 0, 0.35);
+  overflow: hidden;
+}
+.jak-face::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background:
+    repeating-linear-gradient(84deg,
+      rgba(120, 84, 40, 0.05) 0 calc(var(--jak-u) * 0.22),
+      transparent calc(var(--jak-u) * 0.22) calc(var(--jak-u) * 0.9));
+  pointer-events: none;
+}
+
+.jak-svg {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  display: block;
+  touch-action: manipulation;
+}
+
+@supports not (container-type: size) {
+  .jak-frame {
+    width: min(100%, 58dvh);
+    height: auto;
+    aspect-ratio: 1;
+  }
+  /* cq units would not parse here, which would leave the centre card at the
+     hand's size — it gets an explicit fallback instead */
+  .jak-centre { --cg-card-w: calc(var(--jak-u) * 11); }
+}
+
+/* ---- the drilled board, drawn in SVG user units (crisp at any size) ------ */
+.jak-hole { fill: url(#jak-hole); }
+.jak-hole-rim { fill: none; stroke: rgba(255, 255, 255, 0.4); stroke-width: 0.18; }
+.jak-hole-cut { fill: none; stroke: rgba(52, 32, 15, 0.55); stroke-width: 0.3; }
+.jak-band { fill: none; stroke-linecap: round; stroke-linejoin: round; opacity: 0.9; }
+.jak-channel { fill: none; stroke-linecap: round; stroke-width: 4.3; opacity: 0.2; }
+.jak-plate {
+  stroke-width: 0.32;
+  opacity: 0.95;
+}
+.jak-plate-ini {
+  font-size: 3.4px;
+  font-weight: 800;
+  text-anchor: middle;
+  dominant-baseline: middle;
+  opacity: 0.72;
+  letter-spacing: 0.02em;
+}
+.jak-start-ring { fill: none; stroke-width: 0.62; }
+.jak-chev { fill: none; stroke-width: 0.62; stroke-linecap: round; stroke-linejoin: round; opacity: 0.72; }
+.jak-med { fill: url(#jak-med); stroke: rgba(255, 255, 255, 0.16); stroke-width: 0.22; }
+.jak-med-ring { fill: none; stroke: color-mix(in srgb, var(--jak-gold) 60%, transparent); stroke-width: 0.22; }
+
+.jak-board-layer, .jak-fx-layer { pointer-events: none; }
+
+/* destination rings — the answer to "where can this card take me".
+   TRAP 2: the whole hint layer is inert; only the explicit hit circle opts in,
+   and the rings are painted BEFORE the pieces so a marble always wins an
+   overlap with a hint. */
+.jak-rings, .jak-ring { pointer-events: none; }
+.jak-ring-art {
+  fill: none;
+  stroke: var(--jak-gold);
+  stroke-width: 0.55;
+  stroke-dasharray: 2.1 1.5;
+  animation: jak-spin 6s linear infinite;
+  transform-box: fill-box;
+  transform-origin: center;
+}
+.jak-ring.is-kill .jak-ring-art { stroke: #ff8ea0; stroke-dasharray: 1.3 1.1; }
+.jak-ring.is-lane .jak-ring-art { stroke: #7ef0c4; }
+.jak-ring.is-swap .jak-ring-art { stroke: #b9f3d8; stroke-dasharray: 1.8 1.4; }
+.jak-ring-n {
+  fill: var(--jak-gold);
+  font-size: 2.9px;
+  font-weight: 800;
+  text-anchor: middle;
+  dominant-baseline: central;
+  font-variant-numeric: tabular-nums;
+  paint-order: stroke;
+  stroke: rgba(28, 18, 6, 0.75);
+  stroke-width: 0.7;
+}
+.jak-ring.is-kill .jak-ring-n { fill: #ff8ea0; }
+.jak-ring.is-lane .jak-ring-n { fill: #7ef0c4; }
+.jak-ring-hit { fill: transparent; pointer-events: auto; cursor: pointer; }
+/* an outline does not paint on SVG shapes in every browser, so focus is a
+   stroke on the hit circle itself */
+.jak-ring-hit:focus-visible,
+.jak-mb-hit:focus-visible {
+  outline: none;
+  stroke: #ffffff;
+  stroke-width: 0.45;
+  stroke-dasharray: 0.9 0.7;
+}
+@keyframes jak-spin { to { transform: rotate(360deg); } }
+
+/* a translucent stand-in for the first marble of a split seven, so the player
+   can see the half-played move while choosing the second marble */
+.jak-ghost { opacity: 0.42; pointer-events: none; }
+.jak-ghost-ring {
+  fill: none;
+  stroke: var(--jak-gold);
+  stroke-width: 0.35;
+  stroke-dasharray: 1 1;
+  pointer-events: none;
+}
+
+/* ---- marbles: glass bodies with a contact shadow -------------------------
+   TRAP 2: nothing a marble paints is ever a tap target. The ONE hit circle is
+   1.12x the drawn body — a hair, not a halo — and it only opts back in when
+   that marble is actually actionable (live) or has something to explain (ask).
+   An invisible halo would still steal taps, so it never gets pointer-events. */
+.jak-piece, .jak-piece * { pointer-events: none; }
+.jak-piece.is-live .jak-mb-hit,
+.jak-piece.is-ask .jak-mb-hit { pointer-events: auto; cursor: pointer; }
+
+.jak-mb { transform-box: fill-box; transform-origin: center; }
+.jak-mb-sh { fill: rgba(40, 24, 10, 0.42); }
+.jak-mb-rim { fill: none; stroke: rgba(28, 16, 6, 0.55); stroke-width: 0.22; }
+.jak-mb-lite { fill: none; stroke: rgba(255, 255, 255, 0.55); stroke-width: 0.3; stroke-linecap: round; }
+.jak-mb-shine { fill: rgba(255, 255, 255, 0.86); }
+.jak-mb-spark { fill: rgba(255, 255, 255, 0.7); }
+.jak-mb-hit { fill: transparent; }
+
+.jak-piece.is-dim .jak-mb { opacity: 0.42; }
+.jak-piece.is-live .jak-mb-halo {
+  fill: none;
+  stroke: var(--jak-gold);
+  stroke-width: 0.34;
+  opacity: 0.95;
+}
+.jak-piece.is-live .jak-mb { animation: jak-breathe 1.7s var(--cg-ease) infinite; }
+@keyframes jak-breathe {
+  0%, 100% { transform: scale(1); }
+  50% { transform: scale(1.09); }
+}
+.jak-piece.is-pick .jak-mb-halo { stroke: #fff; stroke-width: 0.5; opacity: 1; }
+.jak-piece.is-target .jak-mb-halo { fill: none; stroke: #7ef0c4; stroke-width: 0.4; opacity: 0.95; }
+/* TRAP 3 made visible: the parked marble that is physically blocking a count
+   is ringed, so "the lane was blocked" is never a silent refusal */
+.jak-piece.is-block .jak-mb-halo {
+  fill: none;
+  stroke: #ff8ea0;
+  stroke-width: 0.36;
+  stroke-dasharray: 0.9 0.8;
+  opacity: 0.95;
+}
+
+/* an illegal tap answers with a wobble — rotate only, never a px translate */
+.jak-piece.is-shake .jak-mb { animation: jak-wobble 400ms var(--cg-ease) 1; }
+@keyframes jak-wobble {
+  0% { transform: rotate(0deg); }
+  18% { transform: rotate(-9deg) scale(1.05); }
+  42% { transform: rotate(8deg) scale(1.05); }
+  66% { transform: rotate(-5deg); }
+  86% { transform: rotate(3deg); }
+  100% { transform: rotate(0deg); }
+}
+
+/* ---- celebrations -------------------------------------------------------- */
+.jak-burst {
+  fill: none;
+  stroke-width: 0.6;
+  transform-box: fill-box;
+  transform-origin: center;
+  animation: jak-burst 620ms var(--cg-ease) both;
+  pointer-events: none;
+}
+.jak-burst.is-kill { stroke: #ff8ea0; }
+.jak-burst.is-park { stroke: var(--jak-gold); }
+@keyframes jak-burst {
+  0% { transform: scale(0.35); opacity: 0; }
+  22% { opacity: 1; }
+  100% { transform: scale(2.6); opacity: 0; }
+}
+
+/* ---- the middle of the board: the card just played ----------------------- */
+.jak-centre {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  transform: translate(-50%, -50%);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: calc(var(--jak-u) * 0.6);
+  pointer-events: none;
+  --cg-card-w: max(calc(var(--jak-u) * 7.4), calc(min(100cqw, 100cqh) * 0.125));
+}
+.jak-centre .cg-card { animation: jak-drop 320ms var(--cg-spring) both; }
+@keyframes jak-drop {
+  from { opacity: 0; transform: scale(0.82) rotate(-9deg); }
+  to { opacity: 1; transform: scale(1) rotate(-4deg); }
+}
+.jak-centre-nm {
+  font-size: calc(var(--jak-u) * 2.4);
+  font-weight: 700;
+  color: #3b2a16;
+  background: rgba(255, 250, 236, 0.82);
+  border-radius: 999px;
+  padding: calc(var(--jak-u) * 0.2) calc(var(--jak-u) * 1.2);
+  max-width: calc(var(--jak-u) * 26);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.28);
+}
+.jak-centre-idle {
+  width: calc(var(--jak-u) * 8);
+  height: calc(var(--jak-u) * 11);
+  border-radius: calc(var(--jak-u) * 1.2);
+  border: 1px dashed rgba(70, 46, 22, 0.42);
+}
+
+/* round-rollover / event flash over the board */
+.jak-flash {
+  position: absolute;
+  left: 50%;
+  bottom: 6%;
+  transform: translateX(-50%);
+  display: flex;
+  align-items: center;
+  gap: calc(var(--jak-u) * 1.2);
+  padding: calc(var(--jak-u) * 0.9) calc(var(--jak-u) * 2.2);
+  border-radius: 999px;
+  background: rgba(6, 20, 17, 0.88);
+  border: 1px solid var(--jak-gold);
+  color: var(--jak-gold);
+  font-size: calc(var(--jak-u) * 2.7);
+  font-weight: 700;
+  white-space: nowrap;
+  pointer-events: none;
+  animation: jak-rise 320ms var(--cg-spring) both;
+  z-index: 5;
+}
+.jak-flash b { font-variant-numeric: tabular-nums; margin-inline-start: calc(var(--jak-u) * 0.5); }
+.jak-flash-dot {
+  width: calc(var(--jak-u) * 0.7);
+  height: calc(var(--jak-u) * 0.7);
+  border-radius: 50%;
+  background: currentColor;
+  opacity: 0.5;
+}
+@keyframes jak-rise {
+  from { opacity: 0; transform: translateX(-50%) scale(0.92); }
+  to { opacity: 1; transform: translateX(-50%) scale(1); }
+}
+
+/* ------------------------------------------------------------------- rail */
+.jak-rail {
+  flex: 0 0 auto;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: calc(var(--jak-u) * 1.4);
+  padding: calc(var(--jak-u) * 0.8) 0 calc(var(--jak-u) * 0.4);
+  min-width: 0;
+}
+.jak-last {
+  display: inline-flex;
+  align-items: center;
+  gap: calc(var(--jak-u) * 1);
+  font-size: calc(var(--jak-u) * 2.8);
+  color: var(--cg-dim);
+  min-width: 0;
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  padding: calc(var(--jak-u) * 0.7) calc(var(--jak-u) * 2);
+  border-radius: 999px;
+  border: 1px solid var(--cg-line);
+  background: rgba(255, 255, 255, 0.035);
+}
+.jak-last i {
+  width: calc(var(--jak-u) * 1.8);
+  height: calc(var(--jak-u) * 1.8);
+  border-radius: 50%;
+  background: var(--pc, #38bdf8);
+  flex: 0 0 auto;
+}
+
+/* ---------------------------------------------------- wide screens / TV --- */
+.jak-stage.is-wide {
+  flex-direction: row;
+  align-items: stretch;
+  gap: calc(var(--jak-u) * 1.6);
+  padding: calc(var(--jak-u) * 1.2);
+}
+.jak-stage.is-wide .jak-seats {
+  flex-direction: column;
+  justify-content: center;
+  gap: calc(var(--jak-u) * 1.4);
+  width: clamp(112px, 20%, calc(var(--jak-u) * 44));
+}
+.jak-stage.is-wide .jak-pod { flex: 0 0 auto; max-width: none; padding: calc(var(--jak-u) * 1.5); }
+.jak-stage.is-wide .jak-rail {
+  flex-direction: column;
+  justify-content: center;
+  align-items: stretch;
+  width: clamp(112px, 20%, calc(var(--jak-u) * 44));
+  gap: calc(var(--jak-u) * 1.6);
+}
+.jak-stage.is-wide .jak-last {
+  white-space: normal;
+  text-align: start;
+  line-height: 1.5;
+  padding: calc(var(--jak-u) * 1.4);
+  border-radius: calc(var(--jak-u) * 2.4);
+  border: 1px solid var(--cg-line);
+  background: rgba(255, 255, 255, 0.04);
+}
+.jak-stage.is-wide .jak-team-who { display: block; }
+
+/* --------------------------------------------------------------- the hand */
+.jak-root .cg-hand-wrap {
+  padding: calc(var(--jak-u) * 1) calc(var(--jak-u) * 2) calc(var(--jak-u) * 1.4);
+  background: linear-gradient(180deg, rgba(0, 0, 0, 0.16) 0%, rgba(0, 0, 0, 0.44) 100%);
+}
+.jak-me {
+  display: flex;
+  align-items: center;
+  gap: calc(var(--jak-u) * 1.2);
+  padding-bottom: calc(var(--jak-u) * 0.4);
+}
+.jak-me .jak-pod {
+  flex: 0 0 auto;
+  max-width: none;
+  border: 0;
+  background: none;
+  padding: 0;
+}
+.jak-me-note {
+  flex: 1 1 auto;
+  min-width: 0;
+  text-align: end;
+  font-size: calc(var(--jak-u) * 2.5);
+  color: var(--jak-gold);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.jak-root .cg-hand {
+  padding-top: calc(var(--jak-u) * 2.6);
+  min-height: calc(var(--cg-card-w) * 1.44 + var(--jak-u) * 2.6);
+  gap: 0;
+}
+/* SELECTION is the loudest state in the hand (verifier #7). The old code let a
+   dead card's dim filter AND its faint is-dead outline both land on the chosen
+   card, so a selected dead card went grey and lost its ring while the one still
+   playable card stayed bright — the eye landed on the wrong card. Now the
+   selected card ALWAYS lifts clear, shows full colour and carries a bright halo,
+   so "which card am I holding" and "which card can move" stop sharing a single
+   brightness channel. */
+.jak-root .cg-hand-slot { z-index: 1; }
+.jak-root .cg-hand-slot.is-sel {
+  transform: translateY(calc(var(--jak-u) * -2.8)) scale(1.09);
+  z-index: 5;
+}
+.jak-root .cg-hand-slot:not(:disabled):hover { transform: translateY(calc(var(--jak-u) * -1.6)); }
+.jak-root .cg-hand-slot.is-dim { filter: brightness(0.5) saturate(0.35); }
+/* the selection always wins the brightness channel back, even on a dead card */
+.jak-root .cg-hand-slot.is-sel.is-dim { filter: none; }
+
+/* a selected card's halo — box-shadow so it is never a tap target and never
+   shifts layout. Gold when it has a move, warm-red when it is a dead card being
+   lined up for a discard, so the two selection meanings read as two colours. */
+.jak-root .cg-hand-slot.is-sel .cg-card {
+  box-shadow:
+    0 0 0 2px var(--jak-gold),
+    0 0 0 calc(var(--jak-u) * 1.2) rgba(231, 196, 106, 0.26),
+    0 calc(var(--jak-u) * 2.6) calc(var(--jak-u) * 3.4) rgba(0, 0, 0, 0.52);
+}
+.jak-root .cg-hand-slot.is-sel.is-dead .cg-card {
+  box-shadow:
+    0 0 0 2px #ff9aa8,
+    0 0 0 calc(var(--jak-u) * 1.2) rgba(255, 138, 152, 0.26),
+    0 calc(var(--jak-u) * 2.6) calc(var(--jak-u) * 3.4) rgba(0, 0, 0, 0.52);
+}
+/* an UNSELECTED dead card keeps a faint outline so the fan still shows what may
+   be discarded, but it stays dim and low so it never competes with the pick */
+.jak-root .cg-hand-slot.is-dead:not(.is-sel) .cg-card {
+  box-shadow: 0 0 0 1px rgba(255, 255, 255, 0.22), 0 2px 6px rgba(0, 0, 0, 0.4);
+}
+
+/* the two-step seven: pick a marble, then how far it goes */
+.jak-legs {
+  display: flex;
+  gap: calc(var(--jak-u) * 0.9);
+  justify-content: center;
+  flex-wrap: wrap;
+  align-items: center;
+  padding-top: calc(var(--jak-u) * 1);
+}
+.jak-legbtn {
+  min-width: calc(var(--jak-u) * 9.4);
+  height: calc(var(--jak-u) * 9);
+  border-radius: calc(var(--jak-u) * 2.4);
+  border: 1px solid var(--cg-line);
+  background: rgba(255, 255, 255, 0.06);
+  color: var(--cg-ink);
+  font-size: calc(var(--jak-u) * 3.4);
+  font-weight: 800;
+  font-variant-numeric: tabular-nums;
+  font-family: inherit;
+  cursor: pointer;
+  padding: 0 calc(var(--jak-u) * 1.4);
+  transition: transform 160ms var(--cg-ease), border-color 160ms var(--cg-ease), opacity 160ms var(--cg-ease);
+}
+.jak-legbtn:disabled { opacity: 0.28; cursor: default; }
+.jak-legbtn.is-on { border-color: var(--jak-gold); color: var(--jak-gold); background: rgba(231, 196, 106, 0.14); }
+.jak-legbtn:active:not(:disabled) { transform: scale(0.94); }
+.jak-legs-rest {
+  font-size: calc(var(--jak-u) * 2.7);
+  color: var(--jak-gold);
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+.jak-root .cg-actions { padding-top: calc(var(--jak-u) * 1.1); gap: calc(var(--jak-u) * 1.2); }
+.jak-root .cg-btn {
+  font-size: calc(var(--jak-u) * 3);
+  padding: calc(var(--jak-u) * 2) calc(var(--jak-u) * 3.4);
+  border-radius: calc(var(--jak-u) * 2.6);
+}
+.jak-root .cg-btn.is-sm { font-size: calc(var(--jak-u) * 2.7); padding: calc(var(--jak-u) * 1.5) calc(var(--jak-u) * 2.4); }
+
+/* the one line that always says what is expected right now */
+.jak-hint {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: calc(var(--jak-u) * 1);
+  text-align: center;
+  padding-top: calc(var(--jak-u) * 1.1);
+  min-height: calc(var(--jak-u) * 5);
+  font-size: calc(var(--jak-u) * 3.2);
+  line-height: 1.35;
+  color: var(--cg-dim);
+}
+.jak-hint.is-you { color: var(--jak-gold); font-weight: 700; }
+.jak-hint.is-warn { color: #ffb3bf; font-weight: 700; }
+.jak-hint svg { width: calc(var(--jak-u) * 3.4); height: calc(var(--jak-u) * 3.4); flex: 0 0 auto; }
+
+/* ------------------------------------------------------- watching, no seat */
+.jak-watch {
+  flex: 0 0 auto;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: calc(var(--jak-u) * 1.4);
+  padding: calc(var(--jak-u) * 1.6) calc(var(--jak-u) * 2);
+  border-top: 1px solid var(--cg-line);
+  background: rgba(0, 0, 0, 0.3);
+  font-size: calc(var(--jak-u) * 2.9);
+  color: var(--cg-dim);
+}
+.jak-watch b { color: var(--cg-ink); font-weight: 800; }
+.jak-watch-dot {
+  width: calc(var(--jak-u) * 2);
+  height: calc(var(--jak-u) * 2);
+  border-radius: 50%;
+  background: #4ade80;
+  flex: 0 0 auto;
+  animation: jak-pulse 1.8s var(--cg-ease) infinite;
+}
+@keyframes jak-pulse { 0%, 100% { opacity: 0.45; } 50% { opacity: 1; } }
+
+/* ------------------------------------------------------------- lobby / end */
+.jak-root .cg-lobby-title { font-size: calc(var(--jak-u) * 4.4); }
+.jak-root .cg-lobby-sub { font-size: calc(var(--jak-u) * 3); max-width: calc(var(--jak-u) * 78); }
+.jak-root .cg-modal-title { font-size: calc(var(--jak-u) * 4.4); }
+.jak-root .cg-row { font-size: calc(var(--jak-u) * 3); }
+.jak-root .cg-over-body { font-size: calc(var(--jak-u) * 3.1); }
+
+/* A short landscape window (a phone turned sideways) has to give the board
+   every pixel it can: the hand keeps its cards and its one hint line and drops
+   the rest. Nothing is cropped and nothing scrolls. */
+@media (max-height: 540px) and (orientation: landscape) {
+  .jak-root .jak-me { display: none; }
+  .jak-root .cg-hand { padding-top: calc(var(--jak-u) * 1.4); }
+  .jak-root .cg-actions { padding-top: calc(var(--jak-u) * 0.6); }
+  .jak-root .cg-hand-wrap { padding: calc(var(--jak-u) * 0.6) calc(var(--jak-u) * 2); }
+  .jak-root .jak-legs { padding-top: calc(var(--jak-u) * 0.6); }
+  .jak-root .jak-hint { padding-top: calc(var(--jak-u) * 0.5); }
+}
+
+/* -------------------------------------------------------- reduced motion */
+@media (prefers-reduced-motion: reduce) {
+  .jak-root .jak-piece.is-live .jak-mb,
+  .jak-root .jak-ring-art,
+  .jak-root .jak-burst,
+  .jak-root .jak-watch-dot { animation: none; }
+  .jak-root .jak-burst { opacity: 0; }
+}
+
+/* While ANY card is selected the rest of the fan steps back a notch — the
+   verifier photographed a bright playable K reading as "the selection" while
+   the real selection was a dim dead 9 lined up for discard. One brightness
+   channel cannot carry two meanings; with a live selection, brightness now
+   belongs to the selected card alone (its ring keeps the move/discard colour). */
+.jak-root .cg-hand:has(.cg-hand-slot.is-sel) .cg-hand-slot:not(.is-sel) .cg-card {
+  filter: brightness(0.72) saturate(0.78);
+}

@@ -713,3 +713,46 @@
 .lud-players.is-top { margin-bottom: 2px; }
 .lud-players.is-bottom { margin-top: 2px; }
 .lud-players.is-bottom:empty { display: none; }
+
+/* ---------- using the whole screen, phone and TV ----------
+   A square board can never fill a 9:19 phone: the leftover height used to
+   pool as two black bands inside the stage (measured 2x128px = 32% of the
+   play area painting nothing). In portrait the stage now takes only what the
+   board needs and the two seat strips absorb the slack — players sit in
+   roomy bands above and below the board, like chairs at a table. */
+@media (orientation: portrait) {
+  .lud-stage { flex: 0 0 auto; height: min(100vw - 16px, 56dvh); }
+  .lud-players.is-top,
+  .lud-players.is-bottom { flex: 1 1 0; min-height: 44px; align-items: center; }
+  .lud-p { max-height: 74px; }
+}
+
+/* Type and avatars scale with the screen instead of freezing at phone size:
+   on the 1920x1080 venue TV the seat name measured 10.88px inside a 949px
+   pill — unreadable from across a room, while every sibling game ran 22-29px.
+   vmin keeps the same rules sane on a phone (390x844 -> ~12px). */
+.lud-pname { font-size: clamp(0.68rem, 1.1vmin + 0.35rem, 1.6rem); }
+.lud-pavatar { width: clamp(26px, 4.6vmin, 58px); height: clamp(26px, 4.6vmin, 58px); }
+.lud-pavatar > b { font-size: clamp(0.7rem, 1.6vmin, 1.5rem); }
+.lud-pmeta { font-size: clamp(0.6rem, 1vmin + 0.25rem, 1.1rem); }
+.lud-pdots i { width: clamp(5px, 0.8vmin, 11px); height: clamp(5px, 0.8vmin, 11px); }
+.lud-p { max-width: clamp(200px, 46vmin, 460px); }
+.lud-players { justify-content: center; gap: clamp(6px, 1.4vmin, 24px); }
+
+/* Wide screens (the tournament TV): the seat chips flank the board as two
+   side columns instead of thin strips above it, so the 55%-empty sides carry
+   the players and the board grows to the full usable height. */
+@media (min-width: 1100px) and (orientation: landscape) {
+  .lud-root {
+    display: grid;
+    grid-template-columns: 1fr min(88vh, 56vw) 1fr;
+    grid-template-rows: minmax(0, 1fr) auto;
+    column-gap: clamp(12px, 2vw, 44px);
+    align-items: center;
+  }
+  .lud-players.is-top { grid-area: 1 / 1; flex-direction: column; justify-content: center; align-items: stretch; }
+  .lud-players.is-bottom { grid-area: 1 / 3; flex-direction: column; justify-content: center; align-items: stretch; }
+  .lud-stage { grid-area: 1 / 2; height: 100%; }
+  .lud-bar { grid-area: 2 / 1 / 3 / 4; }
+  .lud-p { max-width: none; width: 100%; flex: 0 0 auto; }
+}

@@ -7,7 +7,7 @@
 // opening threshold, in whether the thrown card may «cover» a table meld, and
 // in how the round penalty is counted. Blending variants produces a game
 // nobody actually plays, so this file implements ONE coherent ruleset end to
-// end — the widely played «حريق ١٤» family — with the ONE sanctioned switch
+// end — the widely played «حريق 14» family — with the ONE sanctioned switch
 // being the penalty mode:
 //
 //   • 2–4 players, no partnerships. TWO 52-card decks plus four jokers (108).
@@ -32,7 +32,7 @@
 //     final throw or by laying everything. Everyone else adds a penalty:
 //       - mode «14»   : the point value of the cards left in hand (brutal —
 //                       one bad round can burn you out; this is the classic
-//                       «حريق ١٤» risk).
+//                       «حريق 14» risk).
 //       - mode «عدّ»  : one point per card left (the slower classic count).
 //   • BURNING (الحرق): a player whose accumulated penalties reach 31 is
 //     burned and leaves the table. Rounds continue among the survivors; the
@@ -40,7 +40,10 @@
 //   • STOCK: when the stock runs dry, the thrown pile (minus its top card)
 //     is reshuffled — deterministically from the round seed — into a new
 //     stock. If there is nothing left to reshuffle the round is void: no
-//     winner, no penalties, next dealer redeals.
+//     winner, no penalties, next dealer redeals. A round that has ALREADY
+//     been rebuilt MAX_RESHUFFLE times and still has nobody out is dead and
+//     is voided the same way — without that cap a table where nobody can
+//     open cycles the same cards forever, which measurement confirmed.
 //
 // WHERE OTHER TABLES DIFFER (deliberately NOT implemented, listed for honesty)
 //   • Some tables open at 41 or 61; here the floor is a flat 51.
@@ -60,14 +63,29 @@
 // client cannot force an illegal play. All randomness is a seeded PRNG
 // carried on the deal move — never Math.random inside reduce.
 //
+// PRESENTATION CONTRACT (this component renders ONLY the play area)
+//   • The hub (GamesCenter) owns the title bar, the live score, mute and
+//     close. Everything below the hub bar is ours.
+//   • Sizing is MEASURED, never guessed: a ResizeObserver on the root feeds
+//     five CSS numbers (--hg-card / --hg-tcard / --hg-pile / --hg-fs /
+//     --hg-lap) that every length in haree.css is a multiple of. A fifteen
+//     card hand fits a 360px phone with no crop and no scroll, and the same
+//     markup is legible on a 1920x1080 venue TV.
+//   • A viewer holding no seat (`mySeat` not an integer in a room) is a
+//     SPECTATOR: no hand is rendered for them, and no control implies they
+//     can act.
+//   • Any rule that removes an option says so on the board — the cover rule
+//     dims the card AND points at the meld it belongs to.
+//
 // KNOWN LIMITATION (same as every card game here): the hands live in
 // room.state and the room doc is readable by its players; the UI hides other
 // hands but a network inspector does not. Hiding them for real needs
 // per-seat subcollections + rules, outside this component.
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
 import { botMoveFor, botLabel, takeSoloIntent, BOT_DELAY_MS } from '../../lib/gameBots.js'
 import { play } from '../../lib/gameSounds.js'
 import '../../styles/cardgames.css'
+import '../../styles/haree.css'
 
 // ---------------------------------------------------------------------------
 // deck — two decks + four jokers. Codes are rank+suit+copy («AS0», «AS1»)
@@ -79,6 +97,9 @@ const RANKS = ['A', '2', '3', '4', '5', '6', '7', '8', '9', 'T', 'J', 'Q', 'K']
 const RED = { H: true, D: true }
 const OPEN_MIN = 51
 const BURN_AT = 31
+// how many times the thrown pile may be rebuilt into a stock before the round
+// is declared dead. Termination guard, not a tactic — see the STOCK note above.
+const MAX_RESHUFFLE = 3
 
 const suitOf = (c) => String(c || '').charAt(1)
 const rankOf = (c) => String(c || '').charAt(0)
@@ -86,10 +107,14 @@ const isJoker = (c) => rankOf(c) === 'X'
 const nx = (s) => (s + 1) % 4
 
 const RANK_LABEL = { T: '10', J: 'J', Q: 'Q', K: 'K', A: 'A' }
-const label = (c) => (isJoker(c) ? '★' : RANK_LABEL[rankOf(c)] || rankOf(c))
+// A joker has NO rank text: its corner index is the star SVG in SUIT_PATH.
+// (Hard repo rule: icons are inline SVG, never a text glyph or an emoji.)
+const label = (c) => (isJoker(c) ? '' : RANK_LABEL[rankOf(c)] || rankOf(c))
 
 const SUIT_AR = { S: 'بستوني', H: 'كبة', D: 'ديناري', C: 'سباتي', '*': 'جوكر' }
 const SUIT_EN = { S: 'Spades', H: 'Hearts', D: 'Diamonds', C: 'Clubs', '*': 'Joker' }
+// how a card is NAMED in running text (a button label, a screen reader)
+const cardWord = (c, ar) => (isJoker(c) ? (ar ? SUIT_AR['*'] : SUIT_EN['*']) : label(c))
 
 // penalty / opening value: 2–10 by face, faces and aces and jokers are 10
 function valueOf(c) {
@@ -187,6 +212,48 @@ function isCover(melds, card) {
   return (melds || []).some((m) => validMeld([...m.cards, card]))
 }
 
+// WHICH melds it fits. The cover rule is the one rule in this game that
+// silently removes an option, so the board has to be able to point at the
+// meld that took it away.
+export function coverTargets(melds, card) {
+  const out = []
+  const list = melds || []
+  for (let i = 0; i < list.length; i += 1) if (validMeld([...list[i].cards, card])) out.push(i)
+  return out
+}
+
+// melds the current selection could legally be added to
+export function extendTargets(melds, cards) {
+  const out = []
+  const list = melds || []
+  if (!cards || !cards.length) return out
+  for (let i = 0; i < list.length; i += 1) if (validMeld([...list[i].cards, ...cards])) out.push(i)
+  return out
+}
+
+// reading order for a meld on the table: a run ascends and its jokers sit in
+// the gaps they are standing in for; a set keeps its naturals together.
+export function orderMeld(cards) {
+  const all = Array.isArray(cards) ? cards : []
+  const nat = all.filter((c) => !isJoker(c))
+  const jok = all.filter(isJoker)
+  if (nat.length < 2) return [...all]
+  if (nat.every((c) => rankOf(c) === rankOf(nat[0]))) return [...nat, ...jok]
+  const aceLow = nat.some((c) => rankOf(c) === 'A') && nat.some((c) => rankOf(c) === '2')
+  const val = (c) => (rankOf(c) === 'A' ? (aceLow ? 1 : 14) : RUN_VAL[rankOf(c)] || 0)
+  const asc = [...nat].sort((a, b) => val(a) - val(b))
+  const spare = [...jok]
+  const out = []
+  for (let i = 0; i < asc.length; i += 1) {
+    out.push(asc[i])
+    if (i < asc.length - 1) {
+      let gap = val(asc[i + 1]) - val(asc[i]) - 1
+      while (gap > 0 && spare.length) { out.push(spare.shift()); gap -= 1 }
+    }
+  }
+  return [...spare, ...out]
+}
+
 // ---------------------------------------------------------------------------
 // greedy meld finder — shared by the bots and the «hint» affordance. Runs
 // first (they spend more cards), then sets, then jokers complete pairs and
@@ -200,7 +267,7 @@ export function findMelds(hand) {
 
   // natural runs per suit
   for (const s of SUITS) {
-    let cards = sortHand([...pool].filter((c) => suitOf(c) === s))
+    const cards = sortHand([...pool].filter((c) => suitOf(c) === s))
     // walk ascending, extending while consecutive (Ace high; A-2-3 found via ace-low retry below)
     let run = []
     const flush = () => {
@@ -230,7 +297,7 @@ export function findMelds(hand) {
   }
 
   // jokers finish pairs (highest value first), then one-gap runs
-  let free = [...jokers]
+  const free = [...jokers]
   if (free.length) {
     const pairs = Object.values(byRank).filter((g) => g.filter((c) => pool.has(c)).length === 2)
       .sort((a, b) => valueOf(b[0]) - valueOf(a[0]))
@@ -268,7 +335,7 @@ export function findMelds(hand) {
 }
 
 // The narrow window the computer opponents get onto this file — see gameBots.
-export const botHelpers = { validMeld, meldPoints, findMelds, isCover, isJoker, valueOf, suitOf, rankOf, OPEN_MIN }
+export const botHelpers = { validMeld, meldPoints, findMelds, isCover, isJoker, valueOf, suitOf, rankOf, OPEN_MIN, RUN_VAL }
 
 // ---------------------------------------------------------------------------
 // state
@@ -287,7 +354,7 @@ export function initialState() {
     hands: [[], [], [], []],
     stock: [],
     discard: [],      // top of the pile = last element
-    melds: [],        // [{ cards:[codes], kind:'run'|'set' }] — shared table
+    melds: [],        // [{ cards:[codes], kind:'run'|'set', by:seat }] — shared table
     opened: [false, false, false, false],
     playing: [false, false, false, false], // seated into THIS round
     out: [false, false, false, false],     // burned out of the match
@@ -319,7 +386,7 @@ export const RULES_AR = [
   '',
   'الحرق: من بلغ مجموع عقوباته 31 «احترق» وخرج من الطاولة. تستمر الجولات بين الناجين، وآخر لاعب يبقى هو الفائز بالمباراة.',
   '',
-  'الكومة: إذا نفدت تُخلط المرمية (عدا أعلاها) كومةً جديدة. وإن لم يبق ما يُخلط أُلغيت الجولة بلا عقوبات وأعاد الموزّع التالي التوزيع.',
+  'الكومة: إذا نفدت تُخلط المرمية (عدا أعلاها) كومةً جديدة. وإن لم يبق ما يُخلط، أو تكرّر الخلط ثلاث مرات ولم يخرج أحد، أُلغيت الجولة بلا عقوبات وأعاد الموزّع التالي التوزيع.',
 ].join('\n')
 
 const RULES_EN = [
@@ -338,6 +405,8 @@ const RULES_EN = [
   'The throw must not fit an existing meld (such a card is a cover — play it, do not throw it). If your whole hand is covers, throw anything.',
   '',
   'Round end: first empty hand wins. The rest take the round penalty — card values in «14» mode, one per card in count mode. Reaching 31 burns you out of the match; the last player standing wins.',
+  '',
+  'The stock: when it runs dry the thrown pile (minus its top card) is reshuffled into a new stock. If there is nothing left to rebuild, or the pile has been rebuilt three times and nobody has gone out, the round is void — no winner, no penalties, next dealer redeals.',
 ].join('\n')
 
 // ---------------------------------------------------------------------------
@@ -417,6 +486,7 @@ function doDeal(s, move, room) {
       burns: fresh ? [0, 0, 0, 0] : s.burns,
       roundsWon: fresh ? [0, 0, 0, 0] : s.roundsWon,
       lastRound: null,
+      lastDraw: null,
       winnerSeat: null,
     },
     turn: turnOf(opener, move),
@@ -434,7 +504,7 @@ function doDraw(s, move) {
     const card = s.discard[s.discard.length - 1]
     const hands = s.hands.map((h, i) => (i === seat ? sortHand([...h, card]) : h))
     return {
-      state: { ...s, hands, discard: s.discard.slice(0, -1), step: 'act', lastDraw: { seat, from: 'discard' } },
+      state: { ...s, hands, discard: s.discard.slice(0, -1), step: 'act', lastDraw: { seat, from: 'discard', card } },
       turn: turnOf(seat, move),
     }
   }
@@ -443,8 +513,9 @@ function doDraw(s, move) {
   let discard = s.discard
   let reshuffles = s.reshuffles
   if (!stock.length) {
-    if (discard.length <= 1) {
-      // nothing to rebuild from — the round is void, no penalties
+    if (discard.length <= 1 || reshuffles >= MAX_RESHUFFLE) {
+      // nothing left to rebuild from, or the same cards have gone round often
+      // enough that nobody is going to go out — the round is void, no penalties
       return {
         state: {
           ...s,
@@ -462,7 +533,7 @@ function doDraw(s, move) {
   const card = stock[stock.length - 1]
   const hands = s.hands.map((h, i) => (i === seat ? sortHand([...h, card]) : h))
   return {
-    state: { ...s, hands, stock: stock.slice(0, -1), discard, reshuffles, step: 'act', lastDraw: { seat, from: 'stock' } },
+    state: { ...s, hands, stock: stock.slice(0, -1), discard, reshuffles, step: 'act', lastDraw: { seat, from: 'stock', card } },
     turn: turnOf(seat, move),
   }
 }
@@ -519,7 +590,7 @@ function doLay(s, move) {
   if (!s.opened[seat] && pts < OPEN_MIN) return keep(s)
 
   const hands = s.hands.map((h, i) => (i === seat ? h.filter((c) => !flat.includes(c)) : h))
-  const melds = [...s.melds, ...groups.map((g) => ({ cards: g, kind: meldKind(g) }))]
+  const melds = [...s.melds, ...groups.map((g) => ({ cards: g, kind: meldKind(g), by: seat }))]
   const opened = s.opened.map((o, i) => (i === seat ? true : o))
   const next = { ...s, hands, melds, opened }
 
@@ -542,7 +613,7 @@ function doExtend(s, move) {
   if (!validMeld(merged)) return keep(s)
 
   const hands = s.hands.map((h, i) => (i === seat ? h.filter((c) => !add.includes(c)) : h))
-  const melds = s.melds.map((m, i) => (i === idx ? { cards: merged, kind: meldKind(merged) } : m))
+  const melds = s.melds.map((m, i) => (i === idx ? { ...m, cards: merged, kind: meldKind(merged) } : m))
   const next = { ...s, hands, melds }
 
   if (!hands[seat].length) return roundWon(next, move, seat)
@@ -590,7 +661,7 @@ export function reduce(state, move, room) {
 }
 
 // ---------------------------------------------------------------------------
-// drawing — inline SVG suits (never glyphs, never emoji); joker is a star
+// drawing — inline SVG only (never a glyph, never an emoji)
 // ---------------------------------------------------------------------------
 const SUIT_PATH = {
   S: 'M12 2.2c0 0-8 6.4-8 11.1a4.15 4.15 0 0 0 6.9 3.1c-.2 1.9-1 3.4-2.3 4.2h6.8c-1.3-.8-2.1-2.3-2.3-4.2a4.15 4.15 0 0 0 6.9-3.1c0-4.7-8-11.1-8-11.1z',
@@ -608,16 +679,50 @@ function Suit({ s, className }) {
   )
 }
 
-function CardFace({ code, small }) {
+const GLYPH = {
+  help: 'M9.1 9a3 3 0 1 1 4 2.8c-.7.3-1.1 1-1.1 1.7v.6M12 17.4h.01',
+  caret: 'M6 9l6 6 6-6',
+  eye: 'M2.5 12S6 5.5 12 5.5 21.5 12 21.5 12 18 18.5 12 18.5 2.5 12 2.5 12z',
+  close: 'M6 6l12 12M18 6L6 18',
+  down: 'M12 4v13m0 0l-5-5m5 5l5-5',
+  up: 'M12 20V7m0 0l-5 5m5-5l5 5',
+  spark: 'M12 3l1.9 4.9L19 9.8l-4.1 3.1 1.3 5.3L12 15.5 7.8 18.2l1.3-5.3L5 9.8l5.1-.9z',
+  warn: 'M12 4.5l8.5 15h-17zM12 10v4m0 3h.01',
+  check: 'M4.5 12.5l5 5 10-11',
+  flame: 'M12 3.2c3.4 3 5.2 5.6 5.2 8.4a5.2 5.2 0 1 1-10.4 0c0-1.3.5-2.6 1.4-3.9.3 1.2 1 1.9 1.9 2 .3-2.4.9-4.4 1.9-6.5z',
+}
+
+function Glyph({ name, className }) {
+  return (
+    <svg viewBox="0 0 24 24" className={className} focusable="false" aria-hidden="true"
+      fill="none" stroke="currentColor" strokeWidth="1.9" strokeLinecap="round" strokeLinejoin="round">
+      <path d={GLYPH[name] || GLYPH.help} />
+    </svg>
+  )
+}
+
+// One card face. `w` names the CSS variable that drives its size, so the same
+// component is a hand card, a table card or a pile card.
+function CardFace({ code, w = 'var(--hg-card)', className = '' }) {
   const s = suitOf(code)
   const joker = isJoker(code)
   return (
-    <span className={'cg-card' + (RED[s] ? ' is-red' : '') + (joker ? ' is-joker' : '') + (small ? ' is-sm' : '')}>
-      <span className="cg-card-rank">{label(code)}</span>
-      <Suit s={s} className="cg-card-mini" />
-      <Suit s={s} className="cg-card-big" />
+    <span
+      className={'hg-card' + (RED[s] ? ' is-red' : '') + (joker ? ' is-joker' : '') + (className ? ' ' + className : '')}
+      style={{ '--w': w }}
+    >
+      {joker
+        ? <Suit s="*" className="hg-rank-ico" />
+        : <span className="hg-rank">{label(code)}</span>}
+      <Suit s={s} className="hg-mini" />
+      <Suit s={s} className="hg-big" />
+      <Suit s={s} className="hg-pip" />
     </span>
   )
+}
+
+function CardBack({ w = 'var(--hg-card)', className = '' }) {
+  return <span className={'hg-back' + (className ? ' ' + className : '')} style={{ '--w': w }} aria-hidden="true" />
 }
 
 // ---------------------------------------------------------------------------
@@ -625,17 +730,21 @@ function CardFace({ code, small }) {
 // ---------------------------------------------------------------------------
 const LOCAL_NAMES = ['اللاعب الأول', 'اللاعب الثاني', 'اللاعب الثالث', 'اللاعب الرابع']
 
+// `bots` is the NUMBER of machine seats the lobby asked for (1..3), or 0 for a
+// hot-seat table. The old build always opened four seats, so «خصم واحد» still
+// dealt a four-handed game — the lobby's choice is honoured here now.
 function makeLocalRoom(playerName, bots, lang) {
+  const seats = bots > 0 ? bots + 1 : 4
   return {
     roomId: 'local',
     gameId: 'haree',
     status: 'playing',
     local: true,
-    players: [0, 1, 2, 3].map((seat) => ({
+    players: [0, 1, 2, 3].slice(0, seats).map((seat) => ({
       id: (bots && seat > 0 ? 'bot-' : 'local-') + seat,
       name: seat === 0
         ? (playerName || LOCAL_NAMES[0])
-        : (bots ? botLabel(seat - 1, 3, lang) : LOCAL_NAMES[seat]),
+        : (bots ? botLabel(seat - 1, bots, lang) : LOCAL_NAMES[seat]),
       bot: !!bots && seat > 0,
       seat,
       connected: true,
@@ -648,6 +757,10 @@ function makeLocalRoom(playerName, bots, lang) {
     winnerSeat: null,
   }
 }
+
+const SEAT_COLOR = ['#38bdf8', '#fbbf24', '#818cf8', '#fb7185']
+const LEVELS = ['easy', 'normal', 'hard']
+const clamp = (lo, v, hi) => Math.max(lo, Math.min(hi, v))
 
 // ---------------------------------------------------------------------------
 // component
@@ -666,20 +779,35 @@ export default function Haree({
 }) {
   const ar = lang !== 'en'
   const remote = !!room
-  const [vsBot] = useState(() => !remote && (Number(soloBots) > 0 || !!takeSoloIntent('haree')))
-  const [localRoom, setLocalRoom] = useState(() => makeLocalRoom(playerName, vsBot, lang))
+  // how many machine seats the lobby asked for — 0 means a hot-seat table
+  const [bots] = useState(() => {
+    if (remote) return 0
+    const asked = Number(soloBots) > 0 ? Number(soloBots) : Number(takeSoloIntent('haree')?.bots || 0)
+    return asked > 0 ? clamp(1, Math.round(asked), 3) : 0
+  })
+  const vsBot = bots > 0
+  const [localRoom, setLocalRoom] = useState(() => makeLocalRoom(playerName, bots, lang))
   const [rules, setRules] = useState(false)
   const [covered, setCovered] = useState(false)
   const [sel, setSel] = useState([])       // selected card codes in my hand
   const [staged, setStaged] = useState([]) // melds built but not committed yet
   const [mode, setMode] = useState('14')
+  const [level, setLevel] = useState('normal')
+  const [levelOpen, setLevelOpen] = useState(false)
+  const [shake, setShake] = useState(0)    // a rejected attempt, never silence
+  const [flash, setFlash] = useState('')   // the reason it was rejected
+  const [fresh, setFresh] = useState(null) // codes that just arrived in my hand
+
+  const rootRef = useRef(null)
 
   const table = remote ? room : localRoom
   const st = useMemo(() => normalise(table?.state), [table])
 
-  const seat = remote
-    ? (Number.isInteger(mySeat) ? mySeat : 0)
-    : (vsBot ? 0 : (Number.isInteger(st.turnSeat) ? st.turnSeat : 0))
+  // ---- who am I? a room viewer with no seat WATCHES and is never handed a
+  // hand or a control that implies they can act.
+  const seated = remote && Number.isInteger(mySeat) && mySeat >= 0 && mySeat < 4
+  const spectator = remote && !seated
+  const seat = spectator ? -1 : (remote ? mySeat : (vsBot ? 0 : (Number.isInteger(st.turnSeat) ? st.turnSeat : 0)))
   const host = remote ? !!isHost : true
   const players = Array.isArray(table?.players) ? table.players : []
   const bySeat = useMemo(() => {
@@ -705,41 +833,187 @@ export default function Haree({
     })
   }, [remote, onMove])
 
-  // selection resets whenever the turn moves on or the hand changes shape
-  useEffect(() => { setSel([]); setStaged([]) }, [st.turnSeat, st.step, st.roundNo])
+  // Selection resets whenever the turn moves on or a new round starts — and so
+  // does any rule warning: a «that card is a cover» line left on screen during
+  // someone else's turn reads as a complaint about a card nobody is holding.
+  useEffect(() => {
+    setSel([]); setStaged([]); setShake(0); setFlash('')
+    // the level menu covers two player tiles — it never survives a turn
+    setLevelOpen(false)
+  }, [st.turnSeat, st.step, st.roundNo])
+
+  const myHand = seat >= 0 ? (st.hands[seat] || []) : []
+  const handKey = myHand.join(',')
+
+  // ---- cards that just landed in my hand get one entry animation, once ----
+  const handRef = useRef(null)
+  useEffect(() => {
+    const prev = handRef.current
+    handRef.current = myHand
+    if (!prev) return undefined
+    const added = myHand.filter((c) => !prev.includes(c))
+    if (!added.length) return undefined
+    setFresh(new Set(added))
+    // long enough to outlast the staggered cascade of a full fourteen-card
+    // deal (13 * 22ms of delay + the 420ms flight), or the last cards snap
+    const id = setTimeout(() => setFresh(null), 820)
+    return () => clearTimeout(id)
+    // handKey is the identity of the hand; myHand is a fresh array every render
+  }, [handKey]) // eslint-disable-line react-hooks/exhaustive-deps
+
+  // ---- a meld that just landed (or just grew) plays its arrival once ----
+  const meldSig = st.melds.map((m) => (m.cards || []).join('')).join('|')
+  const meldRef = useRef(null)
+  const [freshMelds, setFreshMelds] = useState(null)
+  useEffect(() => {
+    const cur = st.melds.map((m) => (m.cards || []).join(''))
+    const prev = meldRef.current
+    meldRef.current = cur
+    if (!prev) return undefined
+    const changed = new Set()
+    cur.forEach((sig, i) => { if (prev[i] !== sig) changed.add(i) })
+    if (!changed.size) return undefined
+    setFreshMelds(changed)
+    const id = setTimeout(() => setFreshMelds(null), 460)
+    return () => clearTimeout(id)
+  }, [meldSig]) // eslint-disable-line react-hooks/exhaustive-deps
+
+  // ---- MEASURED SIZING. Everything on screen is a multiple of these five
+  // numbers, so a fifteen-card hand fits a 360px phone with no crop and the
+  // same markup is legible across a room on a 1920x1080 TV.
+  const [box, setBox] = useState({ w: 390, h: 760 })
+  useLayoutEffect(() => {
+    const el = rootRef.current
+    if (!el) return undefined
+    const read = () => {
+      const r = el.getBoundingClientRect()
+      if (r.width > 0 && r.height > 0) {
+        setBox((b) => (Math.abs(b.w - r.width) < 1 && Math.abs(b.h - r.height) < 1 ? b : { w: r.width, h: r.height }))
+      }
+    }
+    read()
+    if (typeof ResizeObserver === 'undefined') {
+      window.addEventListener('resize', read)
+      return () => window.removeEventListener('resize', read)
+    }
+    const ro = new ResizeObserver(read)
+    ro.observe(el)
+    return () => ro.disconnect()
+  }, [])
+
+  const tableCards = st.melds.reduce((a, m) => a + ((m.cards && m.cards.length) || 0), 0)
+  const longestMeld = st.melds.reduce((a, m) => Math.max(a, (m.cards && m.cards.length) || 0), 3)
+
+  const metrics = useMemo(() => {
+    const w = Math.max(240, box.w)
+    const h = Math.max(360, box.h)
+    // base type: tracks the scarcer axis so a TV gets big type and a phone
+    // stays honest. Latin digits are tabular everywhere, so this never reflows.
+    const fs = clamp(10, Math.min(w / 33, h / 42), 26)
+    // hand: solve for the widest card that still fits N of them at 56% pitch
+    const n = Math.max(6, myHand.length || 14)
+    const pitch = 0.56
+    const byW = (w - fs * 2.2) / (1 + (n - 1) * pitch)
+    const card = clamp(20, Math.min(byW, h * 0.135), 96)
+    // The furniture on the table must NOT breathe with the hand. `card` grows
+    // as the hand empties (a last card deserves to be big), and hanging the
+    // piles and the melds off it made the whole table swell every time someone
+    // laid down. `unit` is the same solve for a FULL fourteen-card hand, so it
+    // is stable for the length of a round.
+    const unit = clamp(20, Math.min((w - fs * 2.2) / (1 + 13 * pitch), h * 0.135), 96)
+    // the piles carry the empty table: while the shelf is sparse they grow to
+    // fill the felt, so an early round is a real card table rather than two
+    // stamps floating in green
+    const pileMul = st.melds.length === 0 ? 1.55 : st.melds.length <= 3 ? 1.28 : 1.02
+    const pile = clamp(26, Math.min(unit * pileMul, h * 0.19, w * 0.3), 132)
+
+    // ---- the melds shelf is SOLVED, not guessed. Estimate the height the
+    // felt actually leaves it from the same multiples the stylesheet uses,
+    // then take the largest table card whose real wrapped layout still fits.
+    // The old density ladder cropped the top row of the shelf on a 1920x1080
+    // TV, which is exactly the screen the tournaments run on.
+    const topH = fs * 6.9
+    const benchH = fs * 0.3 + unit * 0.66 * 1.4
+    const handH = fs * 0.72 + benchH + card * 1.4 + fs * 0.75 + fs * 2.5 + fs * 1.3 + fs * 0.42
+    const boardH = Math.max(fs * 8, h - topH - handH - fs * 0.84)
+    const shelfH = Math.max(fs * 3, boardH - fs * 1.7 - (pile * 1.4 + fs * 1.2))
+    const shelfW = Math.max(fs * 6, w - fs * 2.8)
+    const M = Math.max(1, st.melds.length)
+    const L = Math.max(3, longestMeld)
+    const heightAt = (tc) => {
+      const trayW = tc * (1 + (L - 1) * 0.62) + fs * 1.3
+      const perRow = Math.max(1, Math.floor(shelfW / trayW))
+      const rows = Math.ceil(M / perRow)
+      return rows * (tc * 1.4 + fs * 1.5) + (rows - 1) * fs * 0.4
+    }
+    let tcard = clamp(13, Math.min(unit * 0.86, shelfW * 0.3), 80)
+    for (let guard = 0; guard < 40 && tcard > 13; guard += 1) {
+      if (heightAt(tcard) <= shelfH) break
+      tcard = Math.max(13, tcard * 0.92)
+    }
+    return {
+      fs: Math.round(fs * 10) / 10,
+      card: Math.round(card * 10) / 10,
+      tcard: Math.round(tcard * 10) / 10,
+      pile: Math.round(pile * 10) / 10,
+      lap: -Math.round(card * (1 - pitch) * 10) / 10,
+      tlap: -Math.round(tcard * 0.38 * 10) / 10,
+    }
+  }, [box.w, box.h, myHand.length, st.melds.length, longestMeld])
+
+  const cssVars = {
+    '--cg-brand': brand,
+    '--hg-fs': metrics.fs + 'px',
+    '--hg-card': metrics.card + 'px',
+    '--hg-tcard': metrics.tcard + 'px',
+    '--hg-pile': metrics.pile + 'px',
+    '--hg-lap': metrics.lap + 'px',
+    '--hg-tlap': metrics.tlap + 'px',
+  }
 
   // ---- sound feedback. Display-only: one effect over existing state fields,
-  // ref-guarded so nothing fires on mount/rehydration — only on real changes.
+  // ref-guarded so nothing fires on mount or on a room rehydration — only on
+  // a real change. Every event this game has is wired.
   const sndRef = useRef(null)
   useEffect(() => {
     const cur = {
       roundNo: st.roundNo,
       discardN: st.discard.length,
-      meldN: st.melds.reduce((a, m) => a + ((m.cards && m.cards.length) || 0), 0),
+      stockN: st.stock.length,
+      meldN: tableCards,
       phase: st.phase,
       turnSeat: st.turnSeat,
+      step: st.step,
+      burns: st.burns.join(','),
     }
     const prev = sndRef.current
     sndRef.current = cur
     if (!prev) return
     if (cur.roundNo !== prev.roundNo) { play('deal'); return }
     if (cur.phase !== prev.phase) {
-      if (cur.phase === 'matchEnd') { play(st.winnerSeat === seat ? 'win' : 'lose'); return }
+      // A screen that only WATCHES has no result of its own: it celebrates the
+      // table rather than mourning a seat it never held.
+      if (cur.phase === 'matchEnd') { play(seat < 0 || st.winnerSeat === seat ? 'win' : 'lose'); return }
       if (cur.phase === 'roundEnd') {
         const lr = st.lastRound
         if (lr && !lr.void) {
-          if (lr.winner === seat) play('win', { gain: 0.5 })
-          else play('lose', { gain: (lr.burnedNow || []).includes(seat) ? 0.6 : 0.3 })
+          const burnedMe = (lr.burnedNow || []).includes(seat)
+          if ((lr.burnedNow || []).length) play('capture', { gain: 0.9 })
+          if (seat < 0 || lr.winner === seat) play('win', { gain: 0.6 })
+          else play('lose', { gain: burnedMe ? 0.7 : 0.35 })
         }
         return
       }
     }
-    if (cur.discardN !== prev.discardN || cur.meldN !== prev.meldN) play('card')
-    // hot-seat (no bots, same phone) would chime on every handover — noise
+    // a lay / an extend puts cards on the table: a heavier, slid sound
+    if (cur.meldN > prev.meldN) play('move', { gain: 0.9 })
+    // a throw grows the pile; a take from the pile shrinks it
+    else if (cur.discardN > prev.discardN) play('card')
+    else if (cur.discardN < prev.discardN || cur.stockN < prev.stockN) play('card', { gain: 0.6 })
     if (cur.turnSeat !== prev.turnSeat && cur.turnSeat === seat && cur.phase === 'turn' && (remote || vsBot)) {
-      play('turn', { gain: 0.8 })
+      play('turn', { gain: 0.85 })
     }
-  }, [st, seat, remote, vsBot])
+  }, [st, seat, remote, vsBot, tableCards])
 
   // remote host: auto-deal when enough seats are filled
   const dealtRef = useRef(false)
@@ -764,32 +1038,47 @@ export default function Haree({
   // solo: the table is full of machines — deal the first round by itself
   useEffect(() => {
     if (!vsBot || st.phase !== 'waiting') return undefined
-    const id = setTimeout(() => submit({ t: 'deal', seat: 0, seed: newSeed(), dealer: 0, mode }), 260)
+    const id = setTimeout(() => submit({ t: 'deal', seat: 0, seed: newSeed(), dealer: 0, mode }), 300)
     return () => clearTimeout(id)
   }, [vsBot, st.phase, submit, mode])
 
-  // machine seats — one legal move per state change, validated through reduce
+  // machine seats — one legal move per state change, validated through reduce.
+  // The chosen level rides on ctx; gameBots reads ctx.level and nothing else
+  // in this component changes.
+  const levelRef = useRef(level)
+  useEffect(() => { levelRef.current = level }, [level])
+  // A Hareeg turn is not one move: a bot draws, then lays, then extends once
+  // per meld, then throws. Charging the full «thinking» beat for every link in
+  // that chain made one bot turn take five seconds and a lap of three bots
+  // forty. The beat belongs BETWEEN players, so only the first move of a seat's
+  // turn waits; the rest of its own chain runs at a readable clip.
+  const chainRef = useRef({ seat: -1, n: 0 })
   useEffect(() => {
     if (!vsBot) return undefined
     if (st.phase !== 'turn') return undefined
     const acting = st.turnSeat
     if (!Number.isInteger(acting) || acting <= 0) return undefined
     if (!bySeat[acting]?.bot) return undefined
+    if (chainRef.current.seat !== acting) chainRef.current = { seat: acting, n: 0 }
+    const wait = chainRef.current.n === 0 ? BOT_DELAY_MS : 300
     const id = setTimeout(() => {
-      const mv = botMoveFor('haree', st, acting, { reduce, room: localRoom, helpers: botHelpers })
-      if (mv) submit(mv)
-    }, BOT_DELAY_MS)
+      const mv = botMoveFor('haree', st, acting, {
+        reduce, room: localRoom, helpers: botHelpers, level: levelRef.current,
+      })
+      if (mv) { chainRef.current = { seat: acting, n: chainRef.current.n + 1 }; submit(mv) }
+    }, wait)
     return () => clearTimeout(id)
   }, [vsBot, st, localRoom, submit, bySeat])
 
   // solo: roll the next round automatically once the result has been readable
   useEffect(() => {
     if (!vsBot || st.phase !== 'roundEnd') return undefined
-    const id = setTimeout(() => submit({ t: 'deal', seat: 0, seed: newSeed() }), 3600)
+    const id = setTimeout(() => submit({ t: 'deal', seat: 0, seed: newSeed() }), 4200)
     return () => clearTimeout(id)
   }, [vsBot, st.phase, submit])
 
   useEffect(() => {
+    if (seat < 0) return
     onScore?.(Math.max(0, (st.roundsWon[seat] || 0) * 10 + (st.winnerSeat === seat ? 40 : 0)))
   }, [onScore, st.roundsWon, st.winnerSeat, seat])
 
@@ -798,45 +1087,82 @@ export default function Haree({
       rules: 'الشرح', close: 'إغلاق', deal: 'وزّع الورق', next: 'الجولة التالية', exit: 'خروج',
       waitPlayers: 'بانتظار اللاعبين', need: 'من لاعبَين إلى أربعة — كلٌّ لنفسه، وآخر من يبقى يفوز.',
       startNow: 'ابدأ بالموجودين', hostStarts: 'مضيف الغرفة يبدأ التوزيع.',
-      yourTurn: 'دورك', waitingFor: 'الدور على', drawHint: 'اسحب من الكومة أو خذ أعلى المرمية',
-      stock: 'الكومة', thrown: 'المرمية', empty: 'فارغة',
-      addMeld: 'أضف نزلة', lay: 'انزل', throwCard: 'ارمِ', undo: 'تراجع',
-      openNeeds: 'الافتتاح يحتاج 51 نقطة — جهّزت', pts: 'نقطة',
-      selHint: 'علّم 3 ورقات فأكثر تكوّن نزلة، أو ورقة واحدة لرميها',
-      extHint: 'اضغط نزلة على الطاولة لتمديدها بما علّمت',
-      coverBlock: 'هذه الورقة «غطاء» — تُلعب على الطاولة ولا تُرمى',
-      badMeld: 'الورقات المعلّمة لا تكوّن نزلة صحيحة',
-      roundOver: 'انتهت الجولة', matchOver: 'انتهت المباراة', voidRound: 'نفد الورق — جولة لاغية',
+      round: 'الجولة', stock: 'الكومة', thrown: 'المرمية', empty: 'فارغة',
+      addMeld: 'أضف نزلة', lay: 'انزل', throwCard: 'ارمِ', undo: 'تراجع', suggest: 'اقترح', extend: 'مدّد', clearSel: 'ألغِ التحديد',
+      pts: 'نقطة', openMeter: 'نحو الافتتاح',
+      hintDraw: 'دورك — اسحب من الكومة أو خذ أعلى المرمية',
+      hintPickMeld: 'علّم ثلاث ورقات فأكثر تكوّن نزلة، ثم «أضف نزلة»',
+      hintNeedMore: (n) => 'ينقصك ' + n + ' نقطة لبلوغ 51 — أضف نزلة أخرى أو تراجع',
+      hintReady: 'بلغت 51 — اضغط «انزل» لتثبيت نزلاتك',
+      hintThrow: 'اضغط «ارمِ» لإنهاء دورك',
+      hintExtend: 'اضغط النزلة المضيئة لتمديدها بما علّمت',
+      hintNoOpen: 'لا تمديد قبل الافتتاح — افتتح بـ51 نقطة أولاً',
+      hintBad: 'الورقات المعلّمة لا تكوّن نزلة صحيحة',
+      hintFree: 'انزل أو مدّد، ثم ارمِ ورقة واحدة لإنهاء دورك',
+      hintOpenFirst: 'افتتح بـ51 نقطة، أو ارمِ ورقة لإنهاء دورك',
+      coverBlock: 'غطاء — هذه الورقة تدخل في النزلة المضيئة، تُلعب ولا تُرمى',
+      coverAll: 'كل أوراقك أغطية — يجوز لك الرمي',
+      waitFor: 'الدور على', watching: 'أنت تشاهد هذه الجولة', youBurned: 'احترقت وخرجت من المباراة — تتابع حتى ينتهي الباقون',
+      noMelds: 'لا نزلات على الطاولة بعد — أول نزول يحتاج 51 نقطة',
+      run: 'سلسلة', set: 'مجموعة',
+      roundOver: 'انتهت الجولة', voidRound: 'نفد الورق — جولة لاغية',
       wonRound: 'أنهى ورقه وفاز بالجولة', burned: 'احترق', youWin: 'فزت بالمباراة', winnerIs: 'الفائز',
-      burnsOf: 'الحريق', of31: 'من 31', mode14: 'حريق 14', modeCount: 'عدّ الورق',
-      modePick: 'طريقة الحساب', opened: 'مفتّح', notOpened: 'لم يفتتح',
-      cards: 'ورقة',
+      mode14: 'حريق 14', modeCount: 'عدّ الورق', modePick: 'طريقة الحساب',
+      opened: 'مفتّح', you: 'أنت', emptySeat: 'مقعد فارغ',
+      lvl: 'الخصوم', easy: 'سهل', normal: 'عادي', hard: 'صعب',
+      lvlNote: {
+        easy: 'لا ينظر إلى المرمية أبداً، ويؤخّر افتتاحه حتى يفيض عن 51، ويرمي أخفّ ورقة عنده فتتراكم الصور في يده وتحرقه.',
+        normal: 'يأخذ المرمية إذا دخلت في نزلة عنده، يفتتح فور بلوغ 51، ينزل ويمدّد ما يجد، ويرمي أثقل ورقة لا تنفعه.',
+        hard: 'مثل «عادي» ويزيد: يحتفظ بالأزواج والمتتاليات القريبة، ويرمي أثقل ورقة ليس لها شريك في يده.',
+      },
+      shakeNoOpen: 'لم تفتتح بعد — لا يمكنك التمديد',
+      shakeNoFit: 'ما علّمته لا يدخل في هذه النزلة',
+      shakeShort: 'الافتتاح يحتاج 51 نقطة دفعة واحدة',
+      shakeOne: 'علّم ورقة واحدة فقط للرمي',
     }
     : {
       rules: 'Rules', close: 'Close', deal: 'Deal', next: 'Next round', exit: 'Exit',
       waitPlayers: 'Waiting for players', need: 'Two to four players — last one standing wins.',
       startNow: 'Start with current players', hostStarts: 'The host deals.',
-      yourTurn: 'Your turn', waitingFor: 'Turn:', drawHint: 'Draw from the stock or take the thrown card',
-      stock: 'Stock', thrown: 'Thrown', empty: 'Empty',
-      addMeld: 'Stage meld', lay: 'Lay down', throwCard: 'Throw', undo: 'Undo',
-      openNeeds: 'Opening needs 51 — staged', pts: 'pts',
-      selHint: 'Select 3+ cards forming a meld, or one card to throw',
-      extHint: 'Tap a table meld to extend it with your selection',
-      coverBlock: 'That card fits a meld — play it, not throw it',
-      badMeld: 'The selected cards are not a valid meld',
-      roundOver: 'Round over', matchOver: 'Match over', voidRound: 'Deck exhausted — void round',
+      round: 'Round', stock: 'Stock', thrown: 'Thrown', empty: 'Empty',
+      addMeld: 'Stage meld', lay: 'Lay down', throwCard: 'Throw', undo: 'Undo', suggest: 'Suggest', extend: 'Extend', clearSel: 'Clear picks',
+      pts: 'pts', openMeter: 'To open',
+      hintDraw: 'Your turn — draw from the stock or take the thrown card',
+      hintPickMeld: 'Select three or more cards that form a meld, then «Stage meld»',
+      hintNeedMore: (n) => n + ' more points to reach 51 — stage another meld or undo',
+      hintReady: 'You have 51 — press «Lay down» to commit',
+      hintThrow: 'Press «Throw» to end your turn',
+      hintExtend: 'Tap the highlighted meld to extend it',
+      hintNoOpen: 'No extending before you open — lay 51 first',
+      hintBad: 'The selected cards are not a valid meld',
+      hintFree: 'Lay or extend, then throw one card to end your turn',
+      hintOpenFirst: 'Open with 51, or throw a card to end your turn',
+      coverBlock: 'Cover — this card fits the highlighted meld; play it, do not throw it',
+      coverAll: 'Every card in your hand is a cover — you may throw anything',
+      waitFor: 'Turn:', watching: 'You are watching this round', youBurned: 'You burned out — the survivors play on',
+      noMelds: 'No melds on the table yet — the first lay-down needs 51',
+      run: 'Run', set: 'Set',
+      roundOver: 'Round over', voidRound: 'Deck exhausted — void round',
       wonRound: 'emptied their hand and wins the round', burned: 'burned out', youWin: 'You win the match', winnerIs: 'Winner',
-      burnsOf: 'Burn', of31: 'of 31', mode14: 'Hareeg 14', modeCount: 'Card count',
-      modePick: 'Penalty mode', opened: 'opened', notOpened: 'not opened',
-      cards: 'cards',
+      mode14: 'Hareeg 14', modeCount: 'Card count', modePick: 'Penalty mode',
+      opened: 'opened', you: 'You', emptySeat: 'Empty seat',
+      lvl: 'Opponents', easy: 'Easy', normal: 'Normal', hard: 'Hard',
+      lvlNote: {
+        easy: 'Never reads the thrown pile, waits for a margin over 51 before opening, and throws its lightest card so the pictures pile up and burn it.',
+        normal: 'Takes the thrown card when it completes a meld, opens the moment it holds 51, lays and extends, and throws its heaviest useless card.',
+        hard: 'Like normal, plus it keeps pairs and near-runs and throws the heaviest card with no partner in hand.',
+      },
+      shakeNoOpen: 'You have not opened yet — no extending',
+      shakeNoFit: 'Your selection does not fit that meld',
+      shakeShort: 'Opening needs 51 points in one turn',
+      shakeOne: 'Select exactly one card to throw',
     }
 
-  const nameOf = (sx) => bySeat[sx]?.name || (ar ? 'مقعد فارغ' : 'Empty seat')
-  const rel = (sx) => (sx - seat + 4) % 4
-  const POS = ['bottom', 'right', 'top', 'left']
+  const nameOf = (sx) => bySeat[sx]?.name || t.emptySeat
+  const shortName = (sx) => (sx === seat ? t.you : nameOf(sx))
 
-  const myHand = st.hands[seat] || []
-  const isMyTurn = st.phase === 'turn' && st.turnSeat === seat && (!remote || st.playing[seat])
+  const iAmOut = seat >= 0 && !!st.out[seat] && st.phase !== 'matchEnd'
+  const isMyTurn = seat >= 0 && st.phase === 'turn' && st.turnSeat === seat && (!remote || st.playing[seat])
   const canAct = isMyTurn && st.step === 'act'
   const canDraw = isMyTurn && st.step === 'draw'
 
@@ -844,12 +1170,36 @@ export default function Haree({
   const selFree = sel.filter((c) => !stagedFlat.includes(c))
   const stagedPts = staged.reduce((s2, g) => s2 + meldPoints(g), 0)
   const selValidMeld = selFree.length >= 3 && validMeld(selFree)
-  const needOpen = !st.opened[seat]
+  const needOpen = seat >= 0 && !st.opened[seat]
   const canCommit = staged.length > 0 && (!needOpen || stagedPts >= OPEN_MIN)
   const oneSelected = selFree.length === 1 && staged.length === 0
-  const selIsCover = oneSelected && isCover(st.melds, selFree[0])
+  const coverIdx = useMemo(
+    () => (oneSelected ? coverTargets(st.melds, selFree[0]) : []),
+    [oneSelected, st.melds, selFree],
+  )
   const allCovers = myHand.length > 0 && myHand.every((c) => isCover(st.melds, c))
-  const canThrow = canAct && oneSelected && (!selIsCover || allCovers)
+  const canThrow = canAct && oneSelected && (!coverIdx.length || allCovers)
+  const extIdx = useMemo(
+    () => ((canAct && !needOpen && selFree.length) ? extendTargets(st.melds, selFree) : []),
+    [canAct, needOpen, st.melds, selFree],
+  )
+  const suggestion = useMemo(() => {
+    if (!canAct || staged.length || !myHand.length) return null
+    const f = findMelds(myHand)
+    if (!f.melds.length) return null
+    if (needOpen && f.points < OPEN_MIN) return null
+    return f.melds
+  }, [canAct, staged.length, myHand, needOpen])
+
+  const bump = useCallback((msg) => {
+    setFlash(msg || '')
+    setShake((k) => k + 1)
+  }, [])
+  useEffect(() => {
+    if (!shake) return undefined
+    const id = setTimeout(() => { setShake(0); setFlash('') }, 1900)
+    return () => clearTimeout(id)
+  }, [shake])
 
   const toggleCard = (c) => {
     if (!canAct) return
@@ -858,28 +1208,41 @@ export default function Haree({
   }
 
   const stageMeld = () => {
-    if (!selValidMeld) return
+    if (!selValidMeld) { bump(t.hintBad); return }
+    play('click')
     setStaged((cur) => [...cur, selFree])
     setSel([])
   }
 
-  const unstage = () => { setStaged([]); setSel([]) }
+  const takeSuggestion = () => {
+    if (!suggestion) return
+    play('click')
+    setStaged(suggestion)
+    setSel([])
+  }
+
+  const unstage = () => { play('click'); setStaged([]); setSel([]) }
 
   const commitLay = () => {
-    if (!canCommit) return
+    if (!staged.length) return
+    if (!canCommit) { bump(t.shakeShort); return }
     submit({ t: 'lay', seat, melds: staged })
     setStaged([])
     setSel([])
   }
 
   const throwSel = () => {
-    if (!canThrow) return
+    if (!canAct) return
+    if (!oneSelected) { bump(t.shakeOne); return }
+    if (!canThrow) { bump(t.coverBlock); return }
     submit({ t: 'discard', seat, card: selFree[0] })
     setSel([])
   }
 
-  const tryExtend = (idx) => {
-    if (!canAct || !st.opened[seat] || !selFree.length) return
+  const tapMeld = (idx) => {
+    if (!canAct || !selFree.length) return
+    if (needOpen) { bump(t.shakeNoOpen); return }
+    if (!extIdx.includes(idx)) { bump(t.shakeNoFit); return }
     submit({ t: 'extend', seat, meld: idx, cards: selFree })
     setSel([])
   }
@@ -889,267 +1252,472 @@ export default function Haree({
   const showMatchEnd = st.phase === 'matchEnd'
   const showCover = covered && !remote && !vsBot && st.phase === 'turn'
   const discardTop = st.discard.length ? st.discard[st.discard.length - 1] : null
+  const liveSeats = [0, 1, 2, 3].filter((sx) => st.playing[sx] || bySeat[sx])
 
-  const modeChip = (
-    <span className="cg-chip">{st.phase === 'waiting' ? (mode === '14' ? t.mode14 : t.modeCount) : (st.mode === '14' ? t.mode14 : t.modeCount)}</span>
-  )
+  // ---- the one hint line. It always states what is expected now, and when a
+  // rule has removed an option it says which rule and points at the meld.
+  const hint = (() => {
+    if (flash) return { text: flash, tone: 'warn', icon: 'warn' }
+    if (spectator) return { text: t.watching, tone: '', icon: 'eye' }
+    if (st.phase !== 'turn') return { text: '', tone: '', icon: null }
+    if (!isMyTurn) return { text: t.waitFor + ' ' + nameOf(st.turnSeat), tone: '', icon: null }
+    if (canDraw) return { text: t.hintDraw, tone: 'go', icon: 'down' }
+    if (staged.length) {
+      return canCommit
+        ? { text: t.hintReady, tone: 'go', icon: 'check' }
+        : { text: t.hintNeedMore(fmt(OPEN_MIN - stagedPts, ar)), tone: 'warn', icon: 'warn' }
+    }
+    if (oneSelected && coverIdx.length) {
+      return allCovers
+        ? { text: t.coverAll, tone: 'go', icon: 'up' }
+        : { text: t.coverBlock, tone: 'warn', icon: 'warn' }
+    }
+    if (oneSelected) return { text: t.hintThrow, tone: 'go', icon: 'up' }
+    if (selFree.length >= 3 && !selValidMeld && !extIdx.length) return { text: t.hintBad, tone: 'warn', icon: 'warn' }
+    if (selFree.length && extIdx.length) return { text: t.hintExtend, tone: 'go', icon: 'check' }
+    if (selFree.length && needOpen && st.melds.length) return { text: t.hintNoOpen, tone: '', icon: null }
+    if (selValidMeld) return { text: t.hintPickMeld, tone: 'go', icon: 'check' }
+    return needOpen
+      ? { text: t.hintOpenFirst, tone: '', icon: null }
+      : { text: t.hintFree, tone: '', icon: null }
+  })()
+
+  // progress toward the 51 opening — a meter, never a number buried in a button
+  const liveOpenPts = stagedPts + (selValidMeld ? meldPoints(selFree) : 0)
+  const openProgress = needOpen ? clamp(0, liveOpenPts / OPEN_MIN, 1) : 1
+  // the meter is on screen for the whole of my turn while I still owe the 51,
+  // not only once something is staged — that is the number the round turns on
+  const showMeter = canAct && needOpen
+
+  const nextLevel = () => setLevelOpen((v) => !v)
 
   return (
-    <div className="cg-root" style={{ '--cg-brand': brand }}>
-      <div className="cg-top">
-        {[0, 1, 2, 3].filter((sx) => st.playing[sx] || bySeat[sx]).map((sx) => (
-          <span key={sx} className={'cg-score ' + (sx === seat ? 'is-a' : 'is-b') + (st.out[sx] ? ' is-out' : '')}>
-            <span>{sx === seat ? (ar ? 'أنت' : 'You') : initialsOf(nameOf(sx))}</span>
-            <b>{fmt(st.burns[sx], ar)}</b>
-          </span>
-        ))}
-        <span className="cg-top-sp" />
-        {modeChip}
-        <button type="button" className="cg-iconbtn cg-press" onClick={() => setRules(true)} aria-label={t.rules}>
-          <span aria-hidden="true">?</span>
-        </button>
+    <div
+      ref={rootRef}
+      className={'cg-root hg-root' + (ar ? '' : ' is-ltr')}
+      style={cssVars}
+    >
+      {/* ---------------------------------------------------------- top */}
+      <div className="hg-top">
+        <div className="hg-tools">
+          <span className="hg-chip">{t.round} {fmt(Math.max(1, st.roundNo), ar)}</span>
+          <span className="hg-chip">{(st.phase === 'waiting' ? mode : st.mode) === '14' ? t.mode14 : t.modeCount}</span>
+          {vsBot ? (
+            <button type="button" className="hg-chip is-gold cg-press" onClick={nextLevel} aria-expanded={levelOpen}>
+              {t.lvl}: {t[level]}
+              <Glyph name="caret" />
+            </button>
+          ) : null}
+          <span className="hg-tools-sp" />
+          <button type="button" className="hg-help cg-press" onClick={() => setRules(true)} aria-label={t.rules}>
+            <Glyph name="help" />
+          </button>
+        </div>
+
+        <div className="hg-players">
+          {liveSeats.map((sx) => {
+            const burn = st.burns[sx] || 0
+            const f = clamp(0, burn / BURN_AT, 1)
+            const hot = burn >= BURN_AT * 0.72 && !st.out[sx]
+            const n = (st.hands[sx] || []).length
+            return (
+              <div
+                key={sx}
+                className={'hg-p'
+                  + (st.phase === 'turn' && st.turnSeat === sx ? ' is-turn' : '')
+                  + (sx === seat ? ' is-me' : '')
+                  + (st.out[sx] ? ' is-out' : '')}
+              >
+                <span className="hg-p-row">
+                  <span className="hg-av" style={{ '--sc': SEAT_COLOR[sx] }}>{avatarOf(nameOf(sx), sx, ar)}</span>
+                  <span className="hg-p-name">{shortName(sx)}</span>
+                  {st.phase === 'turn' && st.turnSeat === sx ? <Glyph name="caret" className="hg-turn-mark" /> : null}
+                </span>
+                <span className="hg-p-sub">
+                  {st.out[sx] ? (
+                    <span className="hg-tag">{t.burned}</span>
+                  ) : (
+                    <>
+                      <span className="hg-stack" aria-hidden="true">
+                        {[0, 1, 2].slice(0, Math.min(3, Math.max(1, Math.ceil(n / 5)))).map((k) => <i key={k} />)}
+                      </span>
+                      <b>{fmt(n, ar)}</b>
+                      {st.opened[sx] ? <span className="hg-tag">{t.opened}</span> : null}
+                    </>
+                  )}
+                </span>
+                <span className={'hg-burn' + (hot ? ' is-hot' : '') + (st.out[sx] ? ' is-done' : '')}>
+                  <span className="hg-burn-fill" style={{ '--f': f }} />
+                  <b className="hg-burn-num hg-num">{fmt(burn, ar)}/{fmt(BURN_AT, ar)}</b>
+                </span>
+              </div>
+            )
+          })}
+        </div>
+
+        {levelOpen ? (
+          <div className="hg-pop" role="dialog" aria-label={t.lvl}>
+            {LEVELS.map((lv) => (
+              <button
+                key={lv}
+                type="button"
+                className={level === lv ? 'is-on' : ''}
+                onClick={() => { setLevel(lv); setLevelOpen(false); play('click') }}
+              >
+                {t[lv]}
+              </button>
+            ))}
+            <span className="hg-pop-note">{t.lvlNote[level]}</span>
+          </div>
+        ) : null}
       </div>
 
-      <div className="cg-stage">
-        <div className="cg-felt" />
-
-        {[0, 1, 2, 3].map((sx) => {
-          if (!st.playing[sx] && !bySeat[sx]) return null
-          const r = rel(sx)
-          const p = bySeat[sx]
-          const on = st.phase === 'turn' && st.turnSeat === sx
-          return (
-            <div
-              key={sx}
-              className={'cg-seat pos-' + POS[r] + (on ? ' is-turn' : '') + (p ? '' : ' is-off') + (st.out[sx] ? ' is-out' : '')}
-              style={{ '--sc': ['var(--cg-s0)', 'var(--cg-s1)', 'var(--cg-s2)', 'var(--cg-s3)'][sx] }}
-            >
-              <span className="cg-av">{initialsOf(p?.name)}</span>
-              <span className="cg-seat-col">
-                <span className="cg-seat-name">{r === 0 ? (ar ? 'أنت' : 'You') : nameOf(sx)}</span>
-                <span className="cg-seat-sub">
-                  {st.out[sx]
-                    ? t.burned
-                    : st.phase === 'turn'
-                      ? fmt((st.hands[sx] || []).length, ar) + ' ' + t.cards + (st.opened[sx] ? ' · ' + t.opened : '')
-                      : t.burnsOf + ' ' + fmt(st.burns[sx], ar) + ' ' + t.of31}
-                </span>
-              </span>
-            </div>
-          )
-        })}
-
-        {st.phase === 'turn' || showRoundEnd || showMatchEnd ? (
-          <div className="hr-table">
-            <div className="hr-piles">
-              <button
-                type="button"
-                className={'hr-pile cg-press' + (canDraw ? ' is-live' : '')}
-                disabled={!canDraw}
-                onClick={() => submit({ t: 'draw', seat, from: 'stock' })}
-                aria-label={t.stock}
-              >
-                <span className="cg-back hr-pile-back" />
-                <span className="hr-pile-lbl">{t.stock} · {fmt(st.stock.length, ar)}</span>
-              </button>
-              <button
-                type="button"
-                className={'hr-pile cg-press' + (canDraw && discardTop ? ' is-live' : '')}
-                disabled={!canDraw || !discardTop}
-                onClick={() => submit({ t: 'draw', seat, from: 'discard' })}
-                aria-label={t.thrown}
-              >
-                {discardTop ? <CardFace code={discardTop} small /> : <span className="hr-pile-empty">{t.empty}</span>}
-                <span className="hr-pile-lbl">{t.thrown} · {fmt(st.discard.length, ar)}</span>
-              </button>
-            </div>
-
-            <div className="hr-melds cg-scroll">
-              {st.melds.map((m, i) => (
+      {/* -------------------------------------------------------- table */}
+      <div className="hg-board">
+        <span className="hg-felt" aria-hidden="true" />
+        <div className="hg-in">
+          <div className={'hg-shelf hg-scroll' + (st.melds.length ? '' : ' is-empty')}>
+            {st.melds.length ? st.melds.map((m, i) => {
+              const target = extIdx.includes(i)
+              const fits = coverIdx.includes(i) && !allCovers
+              const nat = (m.cards || []).find((c) => !isJoker(c)) || m.cards?.[0]
+              return (
                 <button
                   key={i}
                   type="button"
-                  className={'hr-meld cg-press' + (canAct && st.opened[seat] && selFree.length ? ' is-target' : '')}
-                  onClick={() => tryExtend(i)}
-                  aria-label={(m.kind === 'run' ? (ar ? 'سلسلة' : 'Run') : (ar ? 'مجموعة' : 'Set'))}
+                  className={'hg-meld' + (target ? ' is-target' : '') + (fits ? ' is-fits' : '')
+                    + (freshMelds && freshMelds.has(i) ? ' is-fresh' : '')}
+                  onClick={() => tapMeld(i)}
+                  aria-label={(m.kind === 'run' ? t.run : t.set) + ' · ' + fmt(meldPoints(m.cards), ar)}
                 >
-                  {sortHand(m.cards).map((c) => <CardFace key={c} code={c} small />)}
+                  <span className="hg-meld-cards">
+                    {orderMeld(m.cards).map((c, k) => (
+                      <CardFace key={c} code={c} w="var(--hg-tcard)" className={k ? 'is-lap' : ''} />
+                    ))}
+                  </span>
+                  <span className="hg-meld-lbl">
+                    <i className="hg-meld-owner" style={{ '--oc': Number.isInteger(m.by) ? SEAT_COLOR[m.by] : 'rgba(255,255,255,.3)' }} />
+                    {m.kind === 'run'
+                      ? <Suit s={suitOf(nat)} />
+                      : <b>{label(nat)}</b>}
+                    {m.kind === 'run' ? t.run : t.set} · {fmt(meldPoints(m.cards), ar)}
+                  </span>
                 </button>
+              )
+            }) : (
+              <p className="hg-none">{t.noMelds}</p>
+            )}
+          </div>
+
+          <div className="hg-piles">
+            <button
+              type="button"
+              className={'hg-pile' + (canDraw && st.stock.length ? ' is-live' : '')}
+              disabled={!canDraw || !st.stock.length}
+              onClick={() => submit({ t: 'draw', seat, from: 'stock' })}
+              aria-label={t.stock}
+            >
+              <span className="hg-slot">
+                {st.stock.length > 6 ? <span className="hg-shim s1" /> : null}
+                {st.stock.length > 2 ? <span className="hg-shim s2" /> : null}
+                {st.stock.length
+                  ? <CardBack w="var(--hg-pile)" />
+                  : <span className="hg-empty">{t.empty}</span>}
+                {canDraw && st.stock.length ? <span className="hg-ring" /> : null}
+              </span>
+              <span className="hg-pile-lbl">{t.stock} · {fmt(st.stock.length, ar)}</span>
+            </button>
+
+            <button
+              type="button"
+              className={'hg-pile' + (canDraw && discardTop ? ' is-live' : '')}
+              disabled={!canDraw || !discardTop}
+              onClick={() => submit({ t: 'draw', seat, from: 'discard' })}
+              aria-label={t.thrown}
+            >
+              <span className="hg-slot">
+                {st.discard.length > 4 ? <span className="hg-shim s1 is-thrown" /> : null}
+                {st.discard.length > 1 ? <span className="hg-shim s2 is-thrown" /> : null}
+                {discardTop
+                  ? <CardFace key={discardTop} code={discardTop} w="var(--hg-pile)" className="is-thrown" />
+                  : <span className="hg-empty">{t.empty}</span>}
+                {canDraw && discardTop ? <span className="hg-ring" /> : null}
+              </span>
+              <span className="hg-pile-lbl">{t.thrown} · {fmt(st.discard.length, ar)}</span>
+            </button>
+          </div>
+        </div>
+      </div>
+
+      {/* --------------------------------------------------------- hand */}
+      {spectator || iAmOut ? (
+        // Nobody without a live hand is shown a hand or a control that implies
+        // they can act: a room viewer never had a seat, and a burned player
+        // has lost theirs. Both get the reason and, if the match is still
+        // running, the way out.
+        <div className="hg-hand-wrap">
+          <div className={'hg-watch' + (iAmOut ? ' is-out' : '')}>
+            <Glyph name={iAmOut ? 'flame' : 'eye'} />
+            <span>{iAmOut ? t.youBurned : t.watching}</span>
+          </div>
+          <div className="hg-watch-backs" aria-hidden="true">
+            {[0, 1, 2, 3, 4].map((k) => <CardBack key={k} w="calc(var(--hg-card) * 0.78)" />)}
+          </div>
+          <div className="hg-bar">
+            {iAmOut ? (
+              <button type="button" className="hg-btn is-ghost cg-press" onClick={() => onExit?.()}>{t.exit}</button>
+            ) : null}
+          </div>
+          <div className="hg-hint">
+            <span>{st.phase === 'turn' ? t.waitFor + ' ' + nameOf(st.turnSeat) : ''}</span>
+          </div>
+        </div>
+      ) : (
+        <div className="hg-hand-wrap">
+          {(staged.length || showMeter) ? (
+            <div className="hg-bench">
+              {staged.map((g, i) => (
+                <span key={i} className="hg-bench-meld">
+                  {orderMeld(g).map((c, k) => (
+                    <CardFace key={c} code={c} w="var(--hg-tcard)" className={k ? 'is-lap' : ''} />
+                  ))}
+                </span>
               ))}
-              {!st.melds.length ? (
-                <span className="hr-nomelds">{ar ? 'لا نزلات على الطاولة بعد — الافتتاح 51 نقطة' : 'No melds yet — opening needs 51'}</span>
+              {staged.length ? <span className="hg-bench-pts">{fmt(stagedPts, ar)} {t.pts}</span> : null}
+              {needOpen ? (
+                <span className={'hg-meter' + (liveOpenPts >= OPEN_MIN ? ' is-ready' : '')}>
+                  <span className="hg-meter-head">
+                    <span>{t.openMeter}</span>
+                    <b className="hg-num">{fmt(liveOpenPts, ar)} / {fmt(OPEN_MIN, ar)}</b>
+                  </span>
+                  <span className="hg-meter-bar">
+                    <span className="hg-meter-fill" style={{ '--f': openProgress }} />
+                  </span>
+                </span>
               ) : null}
             </div>
-          </div>
-        ) : null}
+          ) : null}
 
-        {st.phase === 'turn' && !isMyTurn ? (
-          <div className="cg-banner">{t.waitingFor} {nameOf(st.turnSeat)}</div>
-        ) : null}
-
-        {showLobby ? (
-          <div className="cg-lobby">
-            <strong className="cg-lobby-title">{t.waitPlayers}</strong>
-            <p className="cg-lobby-sub">{t.need}</p>
-            <div className="cg-lobby-seats">
-              {[0, 1, 2, 3].map((sx) => (
-                <div
-                  key={sx}
-                  className={'cg-lobby-seat' + (bySeat[sx] ? ' is-filled' : '') + (sx === seat ? ' is-me' : '')}
-                  style={{ '--sc': ['var(--cg-s0)', 'var(--cg-s1)', 'var(--cg-s2)', 'var(--cg-s3)'][sx] }}
+          <div className={'hg-hand' + (shake ? ' is-shake' : '')} key={'h' + shake}>
+            {myHand.map((c, ci) => {
+              const benched = stagedFlat.includes(c)
+              const on = sel.includes(c) && !benched
+              const cover = canAct && !allCovers && !staged.length && isCover(st.melds, c)
+              return (
+                <button
+                  key={c}
+                  type="button"
+                  className={'hg-slotbtn'
+                    + (on ? ' is-sel' : '')
+                    + (benched ? ' is-benched' : '')
+                    + (cover ? ' is-cover' : '')
+                    + (fresh && fresh.has(c) ? ' is-new' : '')}
+                  style={{ '--i': ci }}
+                  disabled={!canAct || benched}
+                  onClick={() => toggleCard(c)}
+                  aria-pressed={on}
+                  aria-label={cardWord(c, ar) + (isJoker(c) ? '' : ' ' + (ar ? SUIT_AR[suitOf(c)] : SUIT_EN[suitOf(c)])) + (cover ? ' — ' + (ar ? 'غطاء' : 'cover') : '')}
                 >
-                  <span className="cg-av">{initialsOf(bySeat[sx]?.name)}</span>
+                  <CardFace code={c} />
+                </button>
+              )
+            })}
+          </div>
+
+          <div className="hg-bar">
+            {canDraw ? (
+              <>
+                <button
+                  type="button"
+                  className="hg-btn is-gold cg-press"
+                  disabled={!st.stock.length}
+                  onClick={() => submit({ t: 'draw', seat, from: 'stock' })}
+                >
+                  <Glyph name="down" />
+                  {t.stock} · {fmt(st.stock.length, ar)}
+                </button>
+                <button
+                  type="button"
+                  className={'hg-btn cg-press' + (discardTop ? ' is-primary' : ' is-ghost')}
+                  disabled={!discardTop}
+                  onClick={() => submit({ t: 'draw', seat, from: 'discard' })}
+                >
+                  <Glyph name="down" />
+                  {t.thrown}{discardTop ? ' · ' + cardWord(discardTop, ar) : ''}
+                </button>
+              </>
+            ) : null}
+            {canAct && selValidMeld ? (
+              <button type="button" className="hg-btn is-primary cg-press" onClick={stageMeld}>
+                <Glyph name="down" />
+                {t.addMeld} · {fmt(meldPoints(selFree), ar)}
+              </button>
+            ) : null}
+            {canAct && !staged.length && !selFree.length && suggestion ? (
+              <button type="button" className="hg-btn is-ghost cg-press" onClick={takeSuggestion}>
+                <Glyph name="spark" />
+                {t.suggest}
+              </button>
+            ) : null}
+            {canAct && staged.length ? (
+              <>
+                <button
+                  type="button"
+                  className={'hg-btn cg-press' + (canCommit ? ' is-gold' : ' is-ghost') + (shake && !canCommit ? ' is-shake' : '')}
+                  onClick={commitLay}
+                >
+                  <Glyph name="check" />
+                  {t.lay}
+                  <span className="hg-num">{fmt(stagedPts, ar)}{needOpen ? ' / ' + fmt(OPEN_MIN, ar) : ''}</span>
+                </button>
+                <button type="button" className="hg-btn is-ghost cg-press" onClick={unstage}>{t.undo}</button>
+              </>
+            ) : null}
+            {canAct && extIdx.length === 1 && selFree.length && !staged.length ? (
+              <button type="button" className="hg-btn is-primary cg-press" onClick={() => tapMeld(extIdx[0])}>
+                <Glyph name="check" />
+                {t.extend}
+              </button>
+            ) : null}
+            {canAct && oneSelected ? (
+              <button
+                type="button"
+                className={'hg-btn cg-press' + (canThrow ? ' is-primary' : ' is-ghost') + (shake && !canThrow ? ' is-shake' : '')}
+                onClick={throwSel}
+              >
+                <Glyph name="up" />
+                {t.throwCard}
+              </button>
+            ) : null}
+            {/* The bar must NEVER be empty while cards are marked. Two marked
+                cards that form no meld used to remove every button at once —
+                the way back (re-tapping a card) existed but nothing on screen
+                named it, and a tester sat in that dead end for 20 straight
+                probes. One always-present escape hatch ends the trap. */}
+            {canAct && selFree.length ? (
+              <button type="button" className="hg-btn is-ghost cg-press" onClick={() => { play('click'); setSel([]) }}>
+                <Glyph name="close" />
+                {t.clearSel}
+              </button>
+            ) : null}
+          </div>
+
+          <div className={'hg-hint' + (hint.tone ? ' is-' + hint.tone : '')}>
+            {hint.icon ? <Glyph name={hint.icon} /> : null}
+            <span>{hint.text}</span>
+          </div>
+        </div>
+      )}
+
+      {/* ----------------------------------------------------- overlays */}
+      {showLobby ? (
+        <div className="hg-veil">
+          <div className="hg-card-panel">
+            <strong className="hg-panel-title">{t.waitPlayers}</strong>
+            <p className="hg-panel-sub">{t.need}</p>
+            <div className="hg-seatgrid">
+              {[0, 1, 2, 3].map((sx) => (
+                <div key={sx} className={'hg-seatbox' + (bySeat[sx] ? ' is-filled' : '') + (sx === seat ? ' is-me' : '')}>
+                  <span className="hg-av" style={{ '--sc': SEAT_COLOR[sx] }}>{avatarOf(bySeat[sx]?.name, sx, ar)}</span>
                   <span>{bySeat[sx]?.name || '—'}</span>
                 </div>
               ))}
             </div>
             {host ? (
               <>
-                <div className="cg-actions" role="radiogroup" aria-label={t.modePick}>
-                  <button type="button" className={'cg-btn is-sm cg-press' + (mode === '14' ? ' is-gold' : ' is-ghost')} onClick={() => setMode('14')}>{t.mode14}</button>
-                  <button type="button" className={'cg-btn is-sm cg-press' + (mode === 'count' ? ' is-gold' : ' is-ghost')} onClick={() => setMode('count')}>{t.modeCount}</button>
+                <div className="hg-choice" role="radiogroup" aria-label={t.modePick}>
+                  <button type="button" className={'hg-btn cg-press' + (mode === '14' ? ' is-gold' : ' is-ghost')} onClick={() => setMode('14')}>{t.mode14}</button>
+                  <button type="button" className={'hg-btn cg-press' + (mode === 'count' ? ' is-gold' : ' is-ghost')} onClick={() => setMode('count')}>{t.modeCount}</button>
                 </div>
-                {filled >= 2 ? (
-                  <button type="button" className="cg-btn is-gold cg-press" onClick={() => submit({ t: 'deal', seed: newSeed(), dealer: 0, mode })}>
-                    {filled < 4 ? t.startNow : t.deal}
-                  </button>
-                ) : (
-                  <span className="cg-dots"><i /><i /><i /></span>
-                )}
+                <div className="hg-choice" style={{ marginTop: 'calc(var(--hg-fs) * 0.6)' }}>
+                  {filled >= 2 ? (
+                    <button type="button" className="hg-btn is-gold cg-press" onClick={() => submit({ t: 'deal', seed: newSeed(), dealer: 0, mode })}>
+                      {filled < 4 ? t.startNow : t.deal}
+                    </button>
+                  ) : (
+                    <span className="cg-dots"><i /><i /><i /></span>
+                  )}
+                </div>
               </>
             ) : (
-              <p className="cg-lobby-sub">{t.hostStarts}</p>
+              <p className="hg-panel-sub">{t.hostStarts}</p>
             )}
           </div>
-        ) : null}
+        </div>
+      ) : null}
 
-        {showCover ? (
-          <div className="cg-modal" onClick={() => setCovered(false)}>
-            <div className="cg-modal-card">
-              <strong className="cg-modal-title">{ar ? 'سلّم الجهاز إلى' : 'Pass the phone to'} {nameOf(seat)}</strong>
-              <p className="cg-modal-sub">{ar ? 'اضغط لعرض أوراقك' : 'Tap to see your cards'}</p>
-            </div>
+      {showCover ? (
+        <div className="hg-veil" onClick={() => setCovered(false)}>
+          <div className="hg-card-panel">
+            <strong className="hg-panel-title">{ar ? 'سلّم الجهاز إلى' : 'Pass the phone to'} {nameOf(seat)}</strong>
+            <p className="hg-panel-sub">{ar ? 'اضغط لعرض أوراقك' : 'Tap to see your cards'}</p>
           </div>
-        ) : null}
+        </div>
+      ) : null}
 
-        {showRoundEnd || showMatchEnd ? (
-          <div className="cg-modal">
-            <div className="cg-modal-card">
-              <strong className="cg-modal-title">
-                {showMatchEnd
-                  ? (st.winnerSeat === seat ? t.youWin : t.winnerIs + ': ' + nameOf(st.winnerSeat ?? 0))
-                  : st.lastRound?.void ? t.voidRound : t.roundOver}
-              </strong>
-              {st.lastRound && !st.lastRound.void && st.lastRound.winner != null ? (
-                <p className="cg-modal-sub">{nameOf(st.lastRound.winner)} — {t.wonRound}</p>
-              ) : null}
-              <div className="cg-modal-rows">
-                {[0, 1, 2, 3].filter((sx) => st.playing[sx]).map((sx) => (
-                  <div key={sx} className={'cg-row ' + (sx === seat ? 'is-a' : 'is-b')}>
-                    <span>{sx === seat ? (ar ? 'أنت' : 'You') : nameOf(sx)}{st.out[sx] ? ' · ' + t.burned : ''}</span>
-                    <span className={'cg-delta' + ((st.lastRound?.pens?.[sx] || 0) > 0 ? ' is-down' : '')}>
-                      {st.lastRound?.pens?.[sx] ? '+' + fmt(st.lastRound.pens[sx], ar) : '—'}
+      {showRoundEnd || showMatchEnd ? (
+        <div className="hg-veil">
+          <div className="hg-card-panel">
+            {(showMatchEnd && st.winnerSeat === seat) || st.lastRound?.winner === seat
+              ? <span className="hg-burst" aria-hidden="true" />
+              : null}
+            <strong className="hg-panel-title">
+              {showMatchEnd
+                ? (st.winnerSeat === seat ? t.youWin : t.winnerIs + ': ' + nameOf(st.winnerSeat ?? 0))
+                : st.lastRound?.void ? t.voidRound : t.roundOver}
+            </strong>
+            {st.lastRound && !st.lastRound.void && st.lastRound.winner != null ? (
+              <p className="hg-panel-sub">{shortName(st.lastRound.winner)} — {t.wonRound}</p>
+            ) : null}
+            <div className="hg-rows">
+              {/* `playing` is re-derived every deal as «seated and not burned»,
+                  so filtering the standings by it silently DROPPED everyone who
+                  burned out in an earlier round — including the player reading
+                  the panel. The result screen lists the whole table. */}
+              {liveSeats.map((sx) => {
+                const pen = st.lastRound?.pens?.[sx] || 0
+                const burnedNow = (st.lastRound?.burnedNow || []).includes(sx)
+                return (
+                  <div key={sx} className={'hg-row' + (st.lastRound?.winner === sx ? ' is-win' : '') + (st.out[sx] ? ' is-burned' : '')}>
+                    <span className="hg-av" style={{ '--sc': SEAT_COLOR[sx] }}>{avatarOf(nameOf(sx), sx, ar)}</span>
+                    <span className="hg-row-name">
+                      {shortName(sx)}
+                      {st.out[sx] ? ' · ' + t.burned : ''}
+                      {burnedNow ? '' : ''}
                     </span>
-                    <b>{fmt(st.burns[sx], ar)} / {fmt(BURN_AT, ar)}</b>
+                    <span className="hg-row-pen">{pen ? '+' + fmt(pen, ar) : '—'}</span>
+                    <span className={'hg-burn hg-row-burn' + (st.burns[sx] >= BURN_AT * 0.72 && !st.out[sx] ? ' is-hot' : '') + (st.out[sx] ? ' is-done' : '')}>
+                      <span className="hg-burn-fill" style={{ '--f': clamp(0, (st.burns[sx] || 0) / BURN_AT, 1) }} />
+                    </span>
+                    <span className="hg-row-tot hg-num">{fmt(st.burns[sx], ar)}/{fmt(BURN_AT, ar)}</span>
                   </div>
-                ))}
-              </div>
-              <div className="cg-actions">
-                {showMatchEnd ? (
-                  <button type="button" className="cg-btn is-primary cg-press" onClick={() => onExit?.()}>{t.exit}</button>
-                ) : vsBot ? (
-                  <span className="cg-dots"><i /><i /><i /></span>
-                ) : host ? (
-                  <button type="button" className="cg-btn is-gold cg-press" onClick={() => submit({ t: 'deal', seed: newSeed() })}>{t.next}</button>
-                ) : (
-                  <span className="cg-dots"><i /><i /><i /></span>
-                )}
-              </div>
+                )
+              })}
+            </div>
+            <div className="hg-choice">
+              {showMatchEnd ? (
+                <button type="button" className="hg-btn is-primary cg-press" onClick={() => onExit?.()}>{t.exit}</button>
+              ) : vsBot ? (
+                <span className="cg-dots"><i /><i /><i /></span>
+              ) : host ? (
+                <button type="button" className="hg-btn is-gold cg-press" onClick={() => submit({ t: 'deal', seed: newSeed() })}>{t.next}</button>
+              ) : (
+                <span className="cg-dots"><i /><i /><i /></span>
+              )}
             </div>
           </div>
-        ) : null}
-      </div>
-
-      <div className="cg-hand-wrap">
-        {staged.length ? (
-          <div className="hr-staged">
-            {staged.map((g, i) => (
-              <span key={i} className="hr-staged-meld">
-                {g.map((c) => <CardFace key={c} code={c} small />)}
-              </span>
-            ))}
-            <span className="hr-staged-pts">{fmt(stagedPts, ar)} {t.pts}</span>
-          </div>
-        ) : null}
-
-        <div className="cg-hand" style={{ '--cg-overlap': (myHand.length > 12 ? -24 : myHand.length > 9 ? -18 : -10) + 'px' }}>
-          {myHand.map((c) => {
-            const inStage = stagedFlat.includes(c)
-            const on = sel.includes(c) && !inStage
-            return (
-              <button
-                key={c}
-                type="button"
-                className={'cg-hand-slot' + (on ? ' is-up' : '') + (inStage ? ' is-dim' : '')}
-                disabled={!canAct || inStage}
-                onClick={() => toggleCard(c)}
-                aria-label={label(c) + ' ' + (ar ? SUIT_AR[suitOf(c)] : SUIT_EN[suitOf(c)])}
-              >
-                <CardFace code={c} />
-              </button>
-            )
-          })}
         </div>
-
-        {canAct ? (
-          <div className="cg-actions">
-            {selValidMeld ? (
-              <button type="button" className="cg-btn is-sm is-primary cg-press" onClick={stageMeld}>
-                {t.addMeld} · {fmt(meldPoints(selFree), ar)}
-              </button>
-            ) : null}
-            {staged.length ? (
-              <>
-                <button type="button" className={'cg-btn is-sm cg-press' + (canCommit ? ' is-gold' : ' is-ghost')} disabled={!canCommit} onClick={commitLay}>
-                  {t.lay} · {fmt(stagedPts, ar)} {needOpen ? '/ ' + fmt(OPEN_MIN, ar) : ''}
-                </button>
-                <button type="button" className="cg-btn is-sm is-ghost cg-press" onClick={unstage}>{t.undo}</button>
-              </>
-            ) : null}
-            {oneSelected ? (
-              <button type="button" className={'cg-btn is-sm cg-press' + (canThrow ? ' is-primary' : ' is-ghost')} disabled={!canThrow} onClick={throwSel}>
-                {t.throwCard}
-              </button>
-            ) : null}
-          </div>
-        ) : null}
-
-        <div className="cg-hand-hint">
-          {st.phase !== 'turn'
-            ? ''
-            : !isMyTurn
-              ? t.waitingFor + ' ' + nameOf(st.turnSeat)
-              : canDraw
-                ? t.drawHint
-                : oneSelected && selIsCover && !allCovers
-                  ? t.coverBlock
-                  : selFree.length >= 3 && !selValidMeld
-                    ? t.badMeld
-                    : canAct && st.opened[seat] && selFree.length
-                      ? t.extHint
-                      : t.selHint}
-        </div>
-      </div>
+      ) : null}
 
       {rules ? (
-        <div className="cg-over">
-          <div className="cg-over-head">
+        <div className="hg-sheet">
+          <div className="hg-sheet-head">
             <strong>{ar ? 'الحريق — الشرح' : 'Hareeg — how to play'}</strong>
-            <button type="button" className="cg-iconbtn cg-press" onClick={() => setRules(false)} aria-label={t.close}>
-              <span aria-hidden="true">&#215;</span>
+            <button type="button" className="hg-help cg-press" onClick={() => setRules(false)} aria-label={t.close}>
+              <Glyph name="close" />
             </button>
           </div>
-          <div className="cg-over-body cg-scroll">{ar ? RULES_AR : RULES_EN}</div>
+          <div className="hg-sheet-body hg-scroll">{ar ? RULES_AR : RULES_EN}</div>
         </div>
       ) : null}
     </div>
@@ -1163,10 +1731,15 @@ function fmt(n, ar) {
   const v = Number(n) || 0
   return ar ? v.toLocaleString('ar-SA-u-nu-latn') : v.toLocaleString('en-US')
 }
-function initialsOf(name) {
+// One legible character for a seat badge. Machine seats are named «الكمبيوتر 2»
+// / «Computer 2», so every one of them used to reduce to the same first letter
+// and three identical badges told the player nothing — take the trailing
+// number when the name carries one, otherwise the first letter of the name.
+function avatarOf(name, seat, ar) {
   const s = String(name || '').trim()
-  if (!s) return '·'
-  return s.slice(0, 1)
+  const m = s.match(/(\d+)\s*$/)
+  if (m) return fmt(Number(m[1]), ar)
+  return s.charAt(0) || fmt(seat + 1, ar)
 }
 function newSeed() {
   return (Math.floor(Math.random() * 0xffffffff) >>> 0) || 1

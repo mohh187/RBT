@@ -1,0 +1,931 @@
+/* ===========================================================================
+   chess.css — «الشطرنج».
+
+   OWNERSHIP: owned by src/components/games/Chess.jsx and imported AFTER
+   boardgames.css. Every selector is prefixed `chs-`, so nothing here can reach
+   the shared `bgm-` skin that Dominoes also uses.
+
+   HOUSE AESTHETIC: the majlis game table — dark walnut frame, cream and felt
+   green squares, soft gold accents, pieces that read as carved objects. The
+   token family is deliberately close to cardgames.css (--cg-gold #e7c46a,
+   felt greens) so the whole games suite reads as one product.
+
+   HARD REPO RULES honoured here:
+     · no scrollbar is ever visible — every scroller hides its bar
+     · only transform / opacity animate; the file goes still under
+       prefers-reduced-motion
+     · no emoji, no icon fonts: every mark is inline SVG drawn by the JSX
+     · Arabic-first RTL shell built from logical properties; only the board and
+       the algebraic notation are forced to dir=ltr, because both are spatial
+       rather than textual
+
+   THE SIZING MODEL — two axes, one rule, measured not guessed.
+     .chs-root  is a SIZE CONTAINER.
+     .chs-stage is a square box (aspect-ratio 1/1) that may shrink, and is
+                itself a size container.
+     .chs-frame asks for min(100cqw, 100cqh) on both axes, so the largest
+                fitting square is COMPUTED rather than derived-then-clamped —
+                it can never overflow on a short viewport, and it never leaves
+                the board smaller than the space allows.
+     Everything inside the board (rings, dots, labels, piece scale) is a
+     percentage of the board or a cqmin of the stage, so one board scales from
+     a 360px phone to a 1920x1080 venue screen with no breakpoint.
+   =========================================================================== */
+
+.chs-root {
+  --chs-brand: #0e7490;
+
+  --chs-ink: #f4f8fa;
+  --chs-dim: rgba(244, 248, 250, 0.68);
+  --chs-faint: rgba(244, 248, 250, 0.4);
+  --chs-line: rgba(255, 255, 255, 0.12);
+  --chs-surface: rgba(255, 255, 255, 0.055);
+  --chs-surface-2: rgba(255, 255, 255, 0.1);
+
+  --chs-gold: #e0bb6a;
+  --chs-gold-soft: rgba(224, 187, 106, 0.24);
+  --chs-ok: #4ade80;
+  --chs-warn: #fbbf24;
+  --chs-bad: #f87171;
+
+  --chs-ease: cubic-bezier(0.22, 1, 0.36, 1);
+  --chs-spring: cubic-bezier(0.34, 1.42, 0.5, 1);
+  --chs-travel: 260ms;
+
+  /* type + rhythm: one continuous ramp from a 360px phone to a 1080p screen */
+  --chs-t0: clamp(9.5px, 1.75vmin, 20px);
+  --chs-t1: clamp(11.5px, 2.2vmin, 26px);
+  --chs-t2: clamp(12.5px, 2.5vmin, 30px);
+  --chs-gap: clamp(5px, 1vmin, 14px);
+  --chs-pad: clamp(6px, 1.1vmin, 16px);
+  --chs-btn-h: clamp(34px, 5.2vmin, 62px);
+  --chs-seat-h: clamp(44px, 7vmin, 104px);
+  --chs-radius: clamp(10px, 1.6vmin, 22px);
+
+  --chs-turnv: 0deg;
+  --chs-spin: 0deg;
+
+  position: relative;
+  width: 100%;
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+  gap: var(--chs-gap);
+  padding: var(--chs-pad);
+  box-sizing: border-box;
+  overflow: hidden;
+  container-type: size;
+  color: var(--chs-ink);
+  font-family: inherit;
+  background:
+    radial-gradient(130% 80% at 50% -12%, rgba(255, 255, 255, 0.07) 0%, transparent 62%),
+    linear-gradient(180deg, #15241f 0%, #0a1210 100%);
+  user-select: none;
+  -webkit-user-select: none;
+  -webkit-tap-highlight-color: transparent;
+  touch-action: manipulation;
+}
+
+.chs-root[data-turn='180'] {
+  --chs-turnv: 180deg;
+  --chs-spin: -180deg;
+}
+
+.chs-root *,
+.chs-root *::before,
+.chs-root *::after { box-sizing: border-box; }
+
+.chs-root :focus-visible {
+  outline: 2px solid var(--chs-gold);
+  outline-offset: 2px;
+}
+
+/* every scroller in this file — never a visible bar (hard repo rule) */
+.chs-scroll {
+  overflow: auto;
+  scrollbar-width: none;
+  -ms-overflow-style: none;
+  overscroll-behavior: contain;
+}
+.chs-scroll::-webkit-scrollbar { width: 0; height: 0; }
+
+.chs-defs { position: absolute; width: 0; height: 0; overflow: hidden; }
+
+.chs-press {
+  transition: transform 170ms var(--chs-ease), background-color 170ms var(--chs-ease),
+    border-color 170ms var(--chs-ease), opacity 170ms var(--chs-ease);
+  will-change: transform;
+}
+.chs-press:active:not(:disabled) { transform: scale(0.955); }
+
+/* ===========================================================================
+   SHELL
+   =========================================================================== */
+.chs-main {
+  flex: 0 1 auto;
+  min-height: 0;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: var(--chs-gap);
+}
+
+.chs-stage {
+  position: relative;
+  flex: 0 1 auto;
+  width: 100%;
+  aspect-ratio: 1 / 1;
+  min-height: 0;
+  container-type: size;
+}
+
+/* grow 1 / SHRINK 3: on a tall phone the rail takes the space the square board
+   cannot use, but on a short one it is the rail that gives way — the move list
+   scrolls instead of the board getting smaller. Measured: without the 3, a
+   two-line status note cost the 360x640 board 30px. */
+.chs-side {
+  flex: 1 3 auto;
+  min-height: 0;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: var(--chs-gap);
+}
+
+/* ===========================================================================
+   THE TABLE — frame, labels, board
+   =========================================================================== */
+/* MEASURED, not guessed: --chs-inset must be a LENGTH, never a percentage.
+   A percentage padding resolves against the CONTAINING BLOCK's width — which
+   is the stage, not the frame — so on a wide-but-short screen the gutter grew
+   while the board it is supposed to frame shrank, and the rank bar (whose
+   block-axis percentage resolves against height) no longer lined up with it.
+   min(4.4cqw, 4.4cqh) is 4.4% of the frame itself on both axes. */
+.chs-frame {
+  --chs-ring: clamp(2px, 0.6vmin, 9px);
+  --chs-lab: clamp(7px, 2vmin, 30px);
+  --chs-inset: clamp(9px, 4.4vmin, 58px);
+
+  position: absolute;
+  inset: 0;
+  margin: auto;
+  width: 100%;
+  height: 100%;
+  padding: var(--chs-inset);
+  border-radius: clamp(9px, 1.5vmin, 22px);
+  background:
+    linear-gradient(146deg, #7d5a34 0%, #543a21 38%, #33210f 100%);
+  box-shadow:
+    0 clamp(6px, 1.6vmin, 26px) clamp(16px, 3.6vmin, 56px) rgba(0, 0, 0, 0.5),
+    inset 0 1px 0 rgba(255, 255, 255, 0.2),
+    inset 0 0 0 1px rgba(0, 0, 0, 0.45);
+}
+
+@supports (container-type: size) {
+  .chs-frame {
+    width: min(100cqw, 100cqh);
+    height: min(100cqw, 100cqh);
+    --chs-ring: clamp(2px, 0.62cqmin, 9px);
+    --chs-lab: clamp(7px, 2.7cqmin, 30px);
+    --chs-inset: min(4.4cqw, 4.4cqh);
+  }
+}
+
+/* walnut grain: two low-contrast repeating passes, never animated */
+.chs-frame::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  pointer-events: none;
+  background:
+    repeating-linear-gradient(97deg, rgba(255, 255, 255, 0.055) 0 1px, rgba(0, 0, 0, 0.06) 1px 3px, transparent 3px 8px),
+    repeating-linear-gradient(83deg, rgba(0, 0, 0, 0.05) 0 2px, transparent 2px 11px);
+  opacity: 0.6;
+}
+
+/* the winner's sweep — one pass of light across the frame, transform+opacity */
+.chs-frame::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  pointer-events: none;
+  opacity: 0;
+  background: linear-gradient(104deg, transparent 34%, rgba(255, 244, 214, 0.42) 50%, transparent 66%);
+}
+.chs-frame[data-cheer='1']::after { animation: chs-sweep 1150ms var(--chs-ease) 1; }
+
+.chs-rankbar,
+.chs-filebar {
+  position: absolute;
+  display: grid;
+  pointer-events: none;
+  color: rgba(255, 236, 199, 0.72);
+  font-size: var(--chs-lab);
+  font-weight: 800;
+  line-height: 1;
+  font-variant-numeric: tabular-nums;
+  text-shadow: 0 1px 1px rgba(0, 0, 0, 0.55);
+}
+.chs-rankbar {
+  inset-block: var(--chs-inset);
+  left: 0;
+  width: var(--chs-inset);
+  grid-template-rows: repeat(8, 1fr);
+}
+.chs-filebar {
+  inset-inline: var(--chs-inset);
+  bottom: 0;
+  height: var(--chs-inset);
+  grid-template-columns: repeat(8, 1fr);
+}
+.chs-rankbar span,
+.chs-filebar span { display: grid; place-items: center; }
+
+.chs-board {
+  position: relative;
+  width: 100%;
+  height: 100%;
+  display: grid;
+  grid-template-columns: repeat(8, 1fr);
+  grid-template-rows: repeat(8, 1fr);
+  border-radius: clamp(2px, 0.4vmin, 8px);
+  overflow: hidden;
+  box-shadow:
+    0 0 0 max(1px, var(--chs-ring)) rgba(224, 187, 106, 0.42),
+    0 0 0 calc(max(1px, var(--chs-ring)) + 1px) rgba(0, 0, 0, 0.5),
+    inset 0 0 clamp(8px, 2.4cqmin, 40px) rgba(0, 0, 0, 0.34);
+  transform: rotate(var(--chs-turnv));
+  transition: transform 520ms var(--chs-ease) 130ms;
+  touch-action: manipulation;
+}
+
+/* ---------- one square ---------- */
+.chs-sq {
+  position: relative;
+  appearance: none;
+  border: 0;
+  padding: 0;
+  margin: 0;
+  display: block;
+  overflow: hidden;
+  cursor: pointer;
+  font: inherit;
+  color: inherit;
+  --chs-dot: rgba(43, 36, 22, 0.34);
+  /* the last-move wash is tuned PER SHADE through variables, NOT through a
+     second `[data-shade][data-last]` rule: that rule would out-rank the plain
+     `[data-sel]` one on specificity, and a selected dark square would have
+     shown the last-move tint instead of its own ring. */
+  --chs-last-a: rgba(206, 156, 54, 0.52);
+  --chs-last-b: rgba(186, 138, 44, 0.38);
+  background: linear-gradient(158deg, #f4e9cf 0%, #e2d0aa 100%);
+}
+.chs-sq[data-shade='dark'] {
+  --chs-dot: rgba(238, 246, 236, 0.4);
+  --chs-last-a: rgba(243, 210, 130, 0.46);
+  --chs-last-b: rgba(224, 187, 106, 0.3);
+  background: linear-gradient(158deg, #5d8367 0%, #3e5c46 100%);
+}
+.chs-sq:disabled { cursor: default; }
+
+/* static sheen: one light source for the whole board, upper left */
+.chs-sq::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  background: radial-gradient(118% 96% at 24% 12%, rgba(255, 255, 255, 0.16) 0%, rgba(255, 255, 255, 0) 58%);
+}
+
+/* state wash: last move / selection / check / explanation mark.
+   One element, opacity-animated only. */
+.chs-sq::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  opacity: 0;
+  transition: opacity 150ms linear;
+  background: transparent;
+}
+/* a pale gold disappears on a cream square, so the light squares carry a deeper
+   amber and the felt squares a lighter one — see --chs-last-a/b above */
+.chs-sq[data-last='1']::after {
+  opacity: 1;
+  background: linear-gradient(180deg, var(--chs-last-a) 0%, var(--chs-last-b) 100%);
+}
+.chs-sq[data-sel='1']::after {
+  opacity: 1;
+  background: linear-gradient(180deg, rgba(255, 236, 189, 0.5) 0%, rgba(224, 187, 106, 0.34) 100%);
+  box-shadow: inset 0 0 0 var(--chs-ring) rgba(255, 240, 205, 0.9);
+}
+.chs-sq[data-mark='1']::after {
+  opacity: 1;
+  background: radial-gradient(circle at 50% 50%, rgba(251, 191, 36, 0.34) 0%, rgba(251, 191, 36, 0.08) 74%);
+  box-shadow: inset 0 0 0 var(--chs-ring) rgba(251, 191, 36, 0.95);
+  animation: chs-breathe 1.5s ease-in-out infinite;
+}
+.chs-sq[data-check='1']::after {
+  opacity: 1;
+  background: radial-gradient(circle at 50% 50%, rgba(248, 113, 113, 0.62) 0%, rgba(248, 113, 113, 0.08) 76%);
+  box-shadow: inset 0 0 0 var(--chs-ring) rgba(255, 128, 128, 0.98);
+  animation: chs-breathe 1.25s ease-in-out infinite;
+}
+
+@media (hover: hover) {
+  .chs-sq:not(:disabled):hover::before {
+    background:
+      radial-gradient(118% 96% at 24% 12%, rgba(255, 255, 255, 0.16) 0%, rgba(255, 255, 255, 0) 58%),
+      linear-gradient(0deg, rgba(255, 255, 255, 0.1), rgba(255, 255, 255, 0.1));
+  }
+}
+
+/* legal targets: a soft dot on an empty square, a ring on a capture */
+.chs-dot {
+  position: absolute;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  pointer-events: none;
+}
+.chs-dot::after {
+  content: '';
+  width: 28%;
+  height: 28%;
+  border-radius: 50%;
+  background: var(--chs-dot);
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.28), inset 0 1px 0 rgba(255, 255, 255, 0.3);
+  animation: chs-pop 220ms var(--chs-spring) 1;
+}
+.chs-dot[data-cap='1']::after {
+  width: 84%;
+  height: 84%;
+  background: transparent;
+  border: calc(var(--chs-ring) * 1.5) solid var(--chs-dot);
+  box-shadow: none;
+}
+
+/* capture impact + illegal-tap ring: mounted fresh, so they always replay */
+.chs-burst,
+.chs-nope {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  border-radius: 50%;
+}
+.chs-burst {
+  border: calc(var(--chs-ring) * 1.4) solid rgba(255, 226, 176, 0.95);
+  animation: chs-burst 420ms var(--chs-ease) 1 both;
+}
+.chs-nope {
+  border: calc(var(--chs-ring) * 1.2) solid rgba(248, 113, 113, 0.9);
+  animation: chs-nope 420ms var(--chs-ease) 1 both;
+}
+
+/* ---------- the piece layer ----------
+   POINTER-EVENTS: NONE on the layer and everything in it. The 64 square
+   buttons tile the board exactly and own every tap; no piece, ring or dot may
+   ever sit on top of a square and steal it. */
+.chs-layer {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+}
+
+.chs-pc {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 12.5%;
+  height: 12.5%;
+  transform: translate(calc(var(--f) * 100%), calc(var(--r) * 100%));
+  transition: transform var(--chs-travel) var(--chs-ease);
+  will-change: transform;
+}
+.chs-pc[data-sel='1'] { z-index: 3; }
+
+/* counter-rotation: the board turns, the pieces stay upright, so the light
+   and the contact shadow never invert */
+.chs-pc-in {
+  display: block;
+  width: 100%;
+  height: 100%;
+  transform: rotate(var(--chs-spin));
+  transition: transform 520ms var(--chs-ease) 130ms;
+}
+
+.chs-piece-svg {
+  display: block;
+  width: 100%;
+  height: 100%;
+  overflow: visible;
+  transition: transform 170ms var(--chs-spring), opacity 170ms var(--chs-ease), filter 170ms var(--chs-ease);
+  filter: drop-shadow(0 1px 1px rgba(0, 0, 0, 0.32));
+}
+.chs-pc[data-sel='1'] .chs-piece-svg {
+  transform: scale(1.1);
+  filter: drop-shadow(0 3px 5px rgba(0, 0, 0, 0.45)) drop-shadow(0 0 4px rgba(255, 236, 189, 0.55));
+}
+.chs-pc[data-stuck='1'] .chs-piece-svg { opacity: 0.44; filter: saturate(0.45); }
+.chs-pc[data-born='1'] .chs-piece-svg { animation: chs-land 320ms var(--chs-spring) 1 both; }
+.chs-pc[data-shake='a'] .chs-piece-svg { animation: chs-shakeA 400ms var(--chs-ease) 1 both; }
+.chs-pc[data-shake='b'] .chs-piece-svg { animation: chs-shakeB 400ms var(--chs-ease) 1 both; }
+
+.chs-marks { pointer-events: none; }
+.chs-mark-line { fill: none; }
+.chs-mark-dot { stroke: none; }
+
+/* ===========================================================================
+   PLAYER STRIPS
+   =========================================================================== */
+.chs-seat {
+  flex: 0 0 auto;
+  display: flex;
+  align-items: center;
+  gap: clamp(6px, 1.2vmin, 16px);
+  min-width: 0;
+  min-height: var(--chs-seat-h);
+  padding: clamp(4px, 0.8vmin, 12px) clamp(8px, 1.3vmin, 18px);
+  border-radius: var(--chs-radius);
+  border: 1px solid var(--chs-line);
+  background: linear-gradient(180deg, rgba(255, 255, 255, 0.075) 0%, rgba(255, 255, 255, 0.03) 100%);
+  transition: border-color 240ms var(--chs-ease), box-shadow 240ms var(--chs-ease);
+}
+.chs-seat[data-active='1'] {
+  border-color: rgba(224, 187, 106, 0.75);
+  box-shadow:
+    inset 0 0 0 1px rgba(224, 187, 106, 0.35),
+    0 0 clamp(10px, 2vmin, 30px) rgba(224, 187, 106, 0.2);
+}
+.chs-seat[data-me='1'] { background: linear-gradient(180deg, rgba(255, 255, 255, 0.12) 0%, rgba(255, 255, 255, 0.04) 100%); }
+
+.chs-badge {
+  flex: 0 0 auto;
+  display: grid;
+  place-items: center;
+  width: clamp(26px, 4vmin, 54px);
+  height: clamp(26px, 4vmin, 54px);
+  border-radius: 50%;
+  /* a LENGTH, never a percentage — see the note on --chs-inset */
+  padding: clamp(2px, 0.5vmin, 7px);
+  border: 1px solid rgba(0, 0, 0, 0.45);
+  background: radial-gradient(circle at 32% 26%, #f7efdd 0%, #cbb894 100%);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.5), 0 2px 5px rgba(0, 0, 0, 0.35);
+}
+.chs-badge[data-side='b'] { background: radial-gradient(circle at 32% 26%, #55606c 0%, #131a21 100%); }
+.chs-badge[data-off='1'] { opacity: 0.42; }
+.chs-badge .chs-piece-svg { filter: none; }
+
+.chs-seat-mid {
+  flex: 1 1 auto;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+.chs-seat-top { display: flex; align-items: center; gap: 5px; min-width: 0; }
+.chs-seat-name {
+  font-size: var(--chs-t2);
+  font-weight: 800;
+  letter-spacing: -0.2px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  max-width: 13ch;
+}
+.chs-tag {
+  flex: 0 0 auto;
+  font-style: normal;
+  font-size: var(--chs-t0);
+  font-weight: 800;
+  color: var(--chs-gold);
+  padding: 1px clamp(4px, 0.7vmin, 9px);
+  border-radius: 999px;
+  background: var(--chs-gold-soft);
+}
+.chs-tag[data-tone='off'] { color: var(--chs-faint); background: rgba(255, 255, 255, 0.07); }
+
+.chs-tray {
+  display: flex;
+  align-items: center;
+  min-width: 0;
+  height: clamp(13px, 2.3vmin, 30px);
+  overflow: hidden;
+}
+.chs-tray-pc {
+  flex: 0 0 auto;
+  width: clamp(12px, 2.2vmin, 30px);
+  height: 100%;
+  margin-inline-end: calc(-1 * clamp(4px, 0.8vmin, 11px));
+  opacity: 0.92;
+}
+.chs-tray-pc .chs-piece-svg { filter: drop-shadow(0 1px 1px rgba(0, 0, 0, 0.5)); }
+.chs-adv {
+  margin-inline-start: clamp(7px, 1.2vmin, 15px);
+  font-size: var(--chs-t0);
+  font-weight: 900;
+  color: var(--chs-gold);
+  font-variant-numeric: tabular-nums;
+}
+
+.chs-seat-state {
+  flex: 0 0 auto;
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  font-size: var(--chs-t0);
+  font-weight: 800;
+  color: var(--chs-dim);
+  white-space: nowrap;
+}
+.chs-seat-state[data-live='1'] { color: var(--chs-gold); }
+.chs-bead {
+  width: clamp(6px, 1vmin, 12px);
+  height: clamp(6px, 1vmin, 12px);
+  border-radius: 50%;
+  background: var(--chs-gold);
+  box-shadow: 0 0 clamp(5px, 1vmin, 14px) rgba(224, 187, 106, 0.85);
+  animation: chs-bead 1.5s ease-in-out infinite;
+}
+
+/* ===========================================================================
+   MOVE PANEL
+   =========================================================================== */
+.chs-panel {
+  flex: 1 1 auto;
+  min-height: clamp(34px, 5vmin, 120px);
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  border-radius: var(--chs-radius);
+  border: 1px solid var(--chs-line);
+  background: linear-gradient(180deg, rgba(255, 255, 255, 0.05) 0%, rgba(255, 255, 255, 0.02) 100%);
+}
+.chs-panel-head {
+  flex: 0 0 auto;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding: clamp(3px, 0.6vmin, 10px) clamp(8px, 1.3vmin, 18px);
+  border-bottom: 1px solid var(--chs-line);
+  font-size: var(--chs-t0);
+  font-weight: 800;
+  color: var(--chs-dim);
+}
+.chs-panel-title {
+  display: flex;
+  align-items: baseline;
+  gap: clamp(6px, 1vmin, 14px);
+  min-width: 0;
+  overflow: hidden;
+  white-space: nowrap;
+}
+.chs-panel-note {
+  font-style: normal;
+  color: var(--chs-gold);
+  font-variant-numeric: tabular-nums;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  max-width: 22ch;
+}
+.chs-moves {
+  flex: 1 1 auto;
+  min-height: 0;
+  padding: clamp(3px, 0.5vmin, 8px);
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+.chs-empty {
+  margin: 0;
+  padding: clamp(4px, 0.9vmin, 14px) clamp(6px, 1vmin, 14px);
+  font-size: var(--chs-t0);
+  line-height: 1.7;
+  color: var(--chs-faint);
+  font-weight: 700;
+}
+.chs-mrow {
+  flex: 0 0 auto;
+  direction: ltr;
+  display: grid;
+  grid-template-columns: clamp(20px, 3.2vmin, 44px) 1fr 1fr;
+  align-items: center;
+  gap: clamp(4px, 0.8vmin, 12px);
+  padding: clamp(2px, 0.4vmin, 7px) clamp(5px, 1vmin, 14px);
+  border-radius: clamp(6px, 1vmin, 12px);
+  font-size: var(--chs-t1);
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+}
+.chs-mrow[data-live='1'] {
+  background: var(--chs-gold-soft);
+  box-shadow: inset 0 0 0 1px rgba(224, 187, 106, 0.4);
+}
+.chs-mno { color: var(--chs-faint); font-weight: 800; }
+.chs-msan { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
+/* ===========================================================================
+   ACTION BAR
+   =========================================================================== */
+.chs-bar {
+  flex: 0 0 auto;
+  display: flex;
+  flex-direction: column;
+  gap: clamp(4px, 0.8vmin, 12px);
+}
+
+.chs-guide {
+  margin: 0;
+  display: flex;
+  align-items: center;
+  gap: clamp(5px, 0.9vmin, 12px);
+  min-height: clamp(32px, 5vmin, 66px);
+  padding: clamp(4px, 0.8vmin, 12px) clamp(9px, 1.4vmin, 20px);
+  border-radius: var(--chs-radius);
+  border: 1px solid var(--chs-line);
+  background: var(--chs-surface);
+  font-size: var(--chs-t1);
+  font-weight: 700;
+  line-height: 1.45;
+  color: var(--chs-dim);
+}
+.chs-guide svg { flex: 0 0 auto; }
+.chs-guide[data-tone='live'] {
+  color: var(--chs-ink);
+  border-color: color-mix(in srgb, var(--chs-brand) 55%, transparent);
+  background: color-mix(in srgb, var(--chs-brand) 18%, transparent);
+}
+.chs-guide[data-tone='warn'] {
+  color: #fde68a;
+  border-color: rgba(251, 191, 36, 0.42);
+  background: rgba(251, 191, 36, 0.14);
+}
+.chs-guide[data-tone='bad'] {
+  color: #fecaca;
+  border-color: rgba(248, 113, 113, 0.42);
+  background: rgba(248, 113, 113, 0.14);
+}
+.chs-guide[data-tone='over'] {
+  color: #fdeec4;
+  border-color: rgba(224, 187, 106, 0.5);
+  background: var(--chs-gold-soft);
+}
+
+.chs-actions {
+  display: flex;
+  align-items: center;
+  gap: clamp(4px, 0.8vmin, 12px);
+  overflow-x: auto;
+  overflow-y: hidden;
+  padding-block: 4px;
+  margin-block: -4px;
+}
+
+.chs-btn {
+  appearance: none;
+  flex: 0 0 auto;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: clamp(4px, 0.7vmin, 10px);
+  min-height: var(--chs-btn-h);
+  padding: 0 clamp(10px, 1.5vmin, 22px);
+  border-radius: clamp(9px, 1.4vmin, 18px);
+  border: 1px solid var(--chs-line);
+  background: linear-gradient(180deg, rgba(255, 255, 255, 0.1) 0%, rgba(255, 255, 255, 0.04) 100%);
+  color: var(--chs-ink);
+  font-family: inherit;
+  font-size: var(--chs-t0);
+  font-weight: 800;
+  line-height: 1;
+  white-space: nowrap;
+  cursor: pointer;
+}
+.chs-btn:disabled { opacity: 0.36; cursor: default; }
+.chs-btn[data-tone='brand'] {
+  background: linear-gradient(180deg, color-mix(in srgb, var(--chs-brand) 88%, #fff 12%) 0%, color-mix(in srgb, var(--chs-brand) 80%, #000 20%) 100%);
+  border-color: color-mix(in srgb, var(--chs-brand) 92%, #fff 8%);
+}
+.chs-btn[data-tone='bad'] {
+  background: rgba(248, 113, 113, 0.16);
+  border-color: rgba(248, 113, 113, 0.42);
+  color: #fecaca;
+}
+
+.chs-seg {
+  flex: 0 0 auto;
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+  padding: 2px;
+  border-radius: clamp(10px, 1.5vmin, 20px);
+  border: 1px solid var(--chs-line);
+  background: rgba(0, 0, 0, 0.24);
+}
+.chs-seg-btn {
+  appearance: none;
+  border: 0;
+  min-height: calc(var(--chs-btn-h) - 8px);
+  padding: 0 clamp(8px, 1.2vmin, 18px);
+  border-radius: clamp(8px, 1.2vmin, 16px);
+  background: transparent;
+  color: var(--chs-dim);
+  font-family: inherit;
+  font-size: var(--chs-t0);
+  font-weight: 800;
+  cursor: pointer;
+  white-space: nowrap;
+}
+.chs-seg[data-size='sm'] { flex: 0 0 auto; padding: 1px; }
+.chs-seg[data-size='sm'] .chs-seg-btn {
+  min-height: clamp(24px, 3.4vmin, 42px);
+  padding: 0 clamp(6px, 1vmin, 15px);
+  font-size: var(--chs-t0);
+}
+.chs-seg-btn[data-on='1'] {
+  background: linear-gradient(180deg, rgba(224, 187, 106, 0.9) 0%, rgba(190, 150, 72, 0.9) 100%);
+  color: #22190a;
+  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.35);
+}
+
+/* ===========================================================================
+   SHEETS — promotion, resignation, result
+   =========================================================================== */
+.chs-modal {
+  position: absolute;
+  inset: 0;
+  z-index: 14;
+  display: grid;
+  place-items: center;
+  padding: clamp(12px, 2.4vmin, 40px);
+  background: rgba(5, 9, 12, 0.74);
+  backdrop-filter: blur(7px);
+  -webkit-backdrop-filter: blur(7px);
+  animation: chs-fade 190ms var(--chs-ease) 1;
+}
+.chs-card {
+  width: min(clamp(300px, 46vmin, 620px), 100%);
+  border-radius: clamp(14px, 2.2vmin, 28px);
+  border: 1px solid rgba(224, 187, 106, 0.28);
+  background: linear-gradient(180deg, #1b2a25 0%, #0d1613 100%);
+  padding: clamp(14px, 2.4vmin, 34px);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: clamp(8px, 1.4vmin, 18px);
+  text-align: center;
+  box-shadow: 0 24px 70px rgba(0, 0, 0, 0.62);
+  animation: chs-rise 280ms var(--chs-spring) 1;
+}
+.chs-card h3 { margin: 0; font-size: var(--chs-t2); font-weight: 900; }
+.chs-card p { margin: 0; font-size: var(--chs-t1); line-height: 1.7; color: var(--chs-dim); }
+.chs-card-row { display: flex; flex-wrap: wrap; gap: clamp(6px, 1vmin, 14px); justify-content: center; }
+
+.chs-over-mark {
+  display: grid;
+  place-items: center;
+  width: clamp(46px, 7vmin, 92px);
+  height: clamp(46px, 7vmin, 92px);
+  border-radius: 50%;
+  border: 1px solid var(--chs-line);
+  background: var(--chs-gold-soft);
+  color: var(--chs-gold);
+}
+.chs-over-mark[data-tone='win'] { background: rgba(74, 222, 128, 0.16); color: #86efac; border-color: rgba(74, 222, 128, 0.4); }
+.chs-over-mark[data-tone='lose'] { background: rgba(248, 113, 113, 0.14); color: #fecaca; border-color: rgba(248, 113, 113, 0.36); }
+
+.chs-promo-row { display: flex; gap: clamp(6px, 1.1vmin, 16px); justify-content: center; }
+.chs-promo-btn {
+  appearance: none;
+  border: 1px solid var(--chs-line);
+  background: linear-gradient(158deg, #f4e9cf 0%, #e2d0aa 100%);
+  border-radius: clamp(10px, 1.6vmin, 20px);
+  padding: clamp(4px, 0.8vmin, 12px);
+  width: clamp(54px, 8vmin, 108px);
+  height: clamp(54px, 8vmin, 108px);
+  cursor: pointer;
+  display: grid;
+  place-items: center;
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.55), 0 4px 10px rgba(0, 0, 0, 0.4);
+}
+.chs-promo-btn .chs-piece-svg { width: 100%; height: 100%; }
+
+/* ===========================================================================
+   WIDE + LANDSCAPE — the venue screen and any desktop window.
+   Same rule, only the axis the board grows along changes: `.chs-main` is capped
+   to the height the column can actually give the board, so the rail beside it
+   is never fighting the board for width.
+   =========================================================================== */
+@media (min-width: 780px) and (orientation: landscape) {
+  .chs-root {
+    flex-direction: row;
+    align-items: stretch;
+    justify-content: center;
+    gap: clamp(8px, 1.4vmin, 22px);
+  }
+  .chs-main {
+    flex: 0 0 auto;
+    width: min(56dvh, 62%);
+  }
+  .chs-stage {
+    flex: 1 1 auto;
+    width: 100%;
+    height: auto;
+  }
+  /* Landscape is height-poor: the player strip lays its name and its captured
+     tray on ONE line instead of two, which hands ~60px per strip back to the
+     board on a venue screen. Nothing is dropped, only re-flowed. */
+  .chs-seat-mid { flex-direction: row; align-items: center; gap: clamp(8px, 1.4vmin, 22px); }
+  .chs-seat-name { max-width: 18ch; }
+  .chs-tray { flex: 1 1 auto; }
+
+  /* the rail GROWS into whatever the square board leaves over, so a wide
+     screen has no dead gutter — capped so it never dwarfs the board */
+  .chs-side {
+    flex: 1 1 clamp(220px, 30%, 560px);
+    max-width: 42%;
+    min-width: 0;
+  }
+}
+
+@supports (container-type: size) {
+  @media (min-width: 780px) and (orientation: landscape) {
+    .chs-main {
+      width: min(
+        calc(100cqh - 2 * var(--chs-seat-h) - 2 * var(--chs-gap)),
+        62cqw
+      );
+    }
+    .chs-side { flex: 1 1 clamp(220px, 30cqw, 560px); max-width: 42cqw; }
+  }
+}
+
+/* ===========================================================================
+   MOTION
+   =========================================================================== */
+@keyframes chs-fade { from { opacity: 0; } to { opacity: 1; } }
+@keyframes chs-rise {
+  from { opacity: 0; transform: translateY(10px) scale(0.95); }
+  to { opacity: 1; transform: none; }
+}
+@keyframes chs-pop {
+  from { opacity: 0; transform: scale(0.3); }
+  to { opacity: 1; transform: scale(1); }
+}
+@keyframes chs-land {
+  from { opacity: 0; transform: scale(1.24) translateY(-8%); }
+  to { opacity: 1; transform: none; }
+}
+@keyframes chs-burst {
+  from { opacity: 0.95; transform: scale(0.34); }
+  to { opacity: 0; transform: scale(1.12); }
+}
+@keyframes chs-nope {
+  0% { opacity: 0.95; transform: scale(0.5); }
+  55% { opacity: 0.8; transform: scale(1.02); }
+  100% { opacity: 0; transform: scale(1.02); }
+}
+@keyframes chs-breathe {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.62; }
+}
+@keyframes chs-bead {
+  0%, 100% { opacity: 1; transform: scale(1); }
+  50% { opacity: 0.5; transform: scale(0.72); }
+}
+@keyframes chs-sweep {
+  from { opacity: 0; transform: translateX(-58%); }
+  40% { opacity: 1; }
+  to { opacity: 0; transform: translateX(58%); }
+}
+@keyframes chs-shakeA {
+  0%, 100% { transform: translateX(0); }
+  18% { transform: translateX(-9%); }
+  38% { transform: translateX(8%); }
+  58% { transform: translateX(-6%); }
+  78% { transform: translateX(4%); }
+}
+@keyframes chs-shakeB {
+  0%, 100% { transform: translateX(0); }
+  18% { transform: translateX(9%); }
+  38% { transform: translateX(-8%); }
+  58% { transform: translateX(6%); }
+  78% { transform: translateX(-4%); }
+}
+
+/* Reduced motion: every state change becomes a jump cut. Nothing is hidden,
+   nothing is skipped — only the travel between two truths disappears. */
+@media (prefers-reduced-motion: reduce) {
+  .chs-root *,
+  .chs-root *::before,
+  .chs-root *::after {
+    animation-duration: 0.001ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.001ms !important;
+    transition-delay: 0ms !important;
+  }
+}

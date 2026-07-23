@@ -211,6 +211,12 @@
 .edt-dec-zone[data-anchor^='header-'][data-depth='top'] { z-index: 102; }
 .edt-dec-zone[data-anchor^='header-'][data-depth='front'] { z-index: 101; }
 .edt-dec-zone[data-anchor^='header-'][data-depth='back'] { z-index: 99; }
+/* While the games hub is open the room decor steps aside ENTIRELY. The hub
+   covers the screen, but these zones are position:fixed and portalled outside
+   its stacking context — on the venue TV the 3D lantern painted OVER every
+   board and hid a seat name in all six games (measured: elementFromPoint on a
+   Ludo seat pill returned .edt-dec-mv). Tournaments run on that screen. */
+body:has(.gh-root) .edt-dec-zone { display: none; }
 .edt-dec-zone[data-anchor^='page-top-'] { top: 0; }
 .edt-dec-zone[data-anchor^='page-bottom-'] { bottom: 0; }
 /* the three depth tiers (contract DECOR_DEPTHS): back slips onto the wall

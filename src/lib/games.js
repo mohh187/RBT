@@ -323,6 +323,11 @@ export const GAMES = [
     multiplayer: true,
     minPlayers: 4,
     maxPlayers: 4,
+    // Online rooms only: gameRoom stamps turn.deadlineAt from this and the
+    // board draws a countdown ring on the seat that owes a bid or a card. The
+    // clock never decides anything — a seat that runs past it is skipped only
+    // through Wist's own `forceSkip`, which any other player has to press.
+    turnMs: 45000,
     load: () => import('../components/games/Wist.jsx'),
   },
   {

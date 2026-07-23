@@ -1381,8 +1381,12 @@ export default function MenuView({ tenant, tenantId, items, categories, offers =
         />
       )}
 
+      {/* Never over a full-screen experience: the sheet painted across the
+          lower half of a running game board (caught in a WebKit screenshot).
+          Same guest-is-mid-task rule as the ad popup — the question waits
+          until they come back out to the menu. */}
       <OrderTypeGate
-        open={typeGateOpen} curbsideEnabled={curbsideEnabled} deliveryEnabled={deliveryEnabled}
+        open={typeGateOpen && !fxOpen && !viewItem} curbsideEnabled={curbsideEnabled} deliveryEnabled={deliveryEnabled}
         onPick={(type) => { setOrderType(type); setTypeGateOpen(false) }}
         onClose={() => setTypeGateOpen(false)}
       />

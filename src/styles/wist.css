@@ -1,0 +1,959 @@
+/* ===========================================================================
+   wist.css — the skin for «الوِست» (src/components/games/Wist.jsx).
+
+   Loaded AFTER cardgames.css by Wist.jsx, so the .cg-* primitives it still
+   uses (the lobby, the result modal, the rules sheet, buttons) keep working
+   while everything table-side is redrawn here. Every selector is either
+   .wst-* or scoped inside .wst-root, so nothing here can reach Jackaroo or
+   «الحريق», which share cardgames.css.
+
+   HARD REPO RULES honoured here
+     • no visible scrollbars anywhere — nothing in this file scrolls
+     • no emoji, no glyph fonts: suits, pips, court art and the card back are
+       inline SVG drawn by the JSX
+     • only transform / opacity animate; under prefers-reduced-motion every
+       animation collapses to a jump cut (cardgames.css already forces this on
+       .cg-root *, and this file repeats it for its own keyframes)
+     • Latin digits only — the JSX formats with 'ar-SA-u-nu-latn'
+
+   SIZING MODEL
+     ONE number, --wst-u, is measured from the root element by a ResizeObserver
+     in the component and written inline. --wst-s is that number as a px unit,
+     and every metric in this file is a multiple of it, with max() floors on
+     type so a 360x640 phone never drops below a legible size. That is what
+     makes the same layout work on a phone in a hand and on a 55-inch venue TV
+     across a room: nothing here is a fixed pixel type size.
+
+   HOUSE AESTHETIC
+     A warm «majlis game table»: dark walnut rail, deep felt green, soft gold
+     inlay, cream cards with real light on them. Same family as ludo.css and
+     cardgames.css so the suite reads as one product.
+   =========================================================================== */
+
+.wst-root {
+  --wst-u: 1;
+  --wst-s: calc(var(--wst-u) * 1px);
+  --wst-card: 46px;
+
+  --wst-wood-1: #6d4726;
+  --wst-wood-2: #482c16;
+  --wst-wood-3: #2c190b;
+  --wst-felt-1: #1f6553;
+  --wst-felt-2: #134a3c;
+  --wst-felt-3: #082a22;
+  --wst-gold: #e2c078;
+  --wst-gold-dim: rgba(226, 192, 120, 0.24);
+  --wst-paper: #fbf7ec;
+  --wst-ink: #17222d;
+  --wst-inkred: #bf2b3f;
+
+  background:
+    radial-gradient(140% 80% at 50% 0%, rgba(255, 236, 200, 0.07) 0%, transparent 58%),
+    linear-gradient(180deg, #16110b 0%, #0a0805 100%);
+}
+
+.wst-num { font-variant-numeric: tabular-nums; letter-spacing: 0.01em; }
+
+/* the score / trick counters are re-keyed by the JSX when their value changes,
+   so the element remounts and this replays: a chip that ticks instead of a
+   number that silently swaps */
+.wst-chip .wst-num,
+.wst-seat-tricks {
+  display: inline-block;
+  animation: wst-tick 460ms var(--cg-spring) both;
+}
+@keyframes wst-tick {
+  0% { transform: scale(1); }
+  34% { transform: scale(1.28); }
+  100% { transform: scale(1); }
+}
+
+/* ------------------------------------------------------------------- HUD */
+.wst-hud {
+  flex: 0 0 auto;
+  display: flex;
+  flex-direction: column;
+  gap: calc(4 * var(--wst-s));
+  padding: calc(6 * var(--wst-s)) calc(8 * var(--wst-s));
+  background: linear-gradient(180deg, rgba(0, 0, 0, 0.42) 0%, rgba(0, 0, 0, 0.18) 100%);
+  border-bottom: 1px solid rgba(226, 192, 120, 0.16);
+}
+
+.wst-hud-row {
+  display: flex;
+  align-items: center;
+  gap: calc(5 * var(--wst-s));
+  flex-wrap: wrap;
+}
+.wst-hud-sp { flex: 1 1 auto; min-width: calc(4 * var(--wst-s)); }
+
+.wst-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: calc(5 * var(--wst-s));
+  padding: calc(4 * var(--wst-s)) calc(9 * var(--wst-s));
+  border-radius: 999px;
+  border: 1px solid rgba(255, 255, 255, 0.13);
+  background: rgba(255, 255, 255, 0.06);
+  color: var(--cg-ink);
+  font-size: max(10.5px, calc(12 * var(--wst-s)));
+  line-height: 1.2;
+  white-space: nowrap;
+  font-family: inherit;
+}
+.wst-chip b { font-size: max(12px, calc(14.5 * var(--wst-s))); font-weight: 800; }
+.wst-chip-lbl { opacity: 0.82; }
+
+.wst-chip.is-team { border-color: color-mix(in srgb, var(--tc) 46%, transparent); }
+.wst-chip.is-team b { color: var(--tc); }
+.wst-chip.is-team.is-mine {
+  background: color-mix(in srgb, var(--tc) 14%, transparent);
+  border-color: color-mix(in srgb, var(--tc) 72%, transparent);
+}
+.wst-chip-dot {
+  width: calc(8 * var(--wst-s));
+  height: calc(8 * var(--wst-s));
+  min-width: 6px;
+  min-height: 6px;
+  border-radius: 50%;
+  background: var(--tc);
+  box-shadow: 0 0 calc(7 * var(--wst-s)) color-mix(in srgb, var(--tc) 70%, transparent);
+}
+
+.wst-chip.is-gold { border-color: var(--wst-gold-dim); color: var(--wst-gold); }
+.wst-chip.is-gold.is-red { color: #f08a99; border-color: rgba(240, 138, 153, 0.32); }
+.wst-chip.is-watch { border-color: rgba(255, 255, 255, 0.28); opacity: 0.9; }
+.wst-chip.is-btn { cursor: pointer; }
+.wst-chip.is-btn b { color: var(--wst-gold); }
+
+.wst-chip-suit {
+  width: calc(13 * var(--wst-s));
+  height: calc(13 * var(--wst-s));
+  min-width: 11px;
+  min-height: 11px;
+  flex: 0 0 auto;
+}
+
+.wst-iconbtn {
+  flex: 0 0 auto;
+  width: max(30px, calc(32 * var(--wst-s)));
+  height: max(30px, calc(32 * var(--wst-s)));
+  display: grid;
+  place-items: center;
+  border-radius: calc(10 * var(--wst-s));
+  border: 1px solid rgba(255, 255, 255, 0.14);
+  background: rgba(255, 255, 255, 0.06);
+  color: var(--cg-ink);
+  cursor: pointer;
+  padding: 0;
+}
+.wst-iconbtn svg { width: 62%; height: 62%; display: block; }
+.wst-iconbtn:hover { background: rgba(255, 255, 255, 0.12); }
+
+/* -------------------------------------------------------- contract tracker
+   On screen for every trick of every hand: what the bidding side needs, what
+   it has, and how many tricks are left. Never colour alone — the numbers say
+   it in words as well as bars. */
+.wst-track {
+  display: flex;
+  align-items: center;
+  gap: calc(7 * var(--wst-s));
+  padding: calc(4 * var(--wst-s)) calc(9 * var(--wst-s));
+  border-radius: 999px;
+  border: 1px solid rgba(255, 255, 255, 0.11);
+  background: rgba(0, 0, 0, 0.3);
+  font-size: max(10px, calc(11.5 * var(--wst-s)));
+  line-height: 1.2;
+  white-space: nowrap;
+}
+.wst-track.is-ours { border-color: color-mix(in srgb, var(--wst-gold) 46%, transparent); }
+.wst-track-lbl { color: var(--cg-dim); overflow: hidden; text-overflow: ellipsis; }
+.wst-track-bars {
+  display: flex;
+  gap: calc(2 * var(--wst-s));
+  flex: 1 1 auto;
+  min-width: calc(70 * var(--wst-s));
+}
+/* NOTE the name: `wst-seg`, not `wst-bar`. The hand tray at the bottom of the
+   component is `.wst-bar`, and giving the tracker's thirteen little segments
+   the same class silently applied the tray's height to them and the segment's
+   8px height to the TRAY — which squashed the whole fan off the screen. */
+.wst-seg {
+  flex: 1 1 0;
+  height: calc(9 * var(--wst-s));
+  min-height: 7px;
+  border-radius: calc(2 * var(--wst-s));
+  background: rgba(255, 255, 255, 0.12);
+  box-shadow: inset 0 1px 0 rgba(0, 0, 0, 0.35);
+}
+.wst-seg.is-need {
+  background: rgba(226, 192, 120, 0.16);
+  box-shadow: inset 0 0 0 1px rgba(226, 192, 120, 0.55);
+}
+.wst-seg.is-on {
+  background: linear-gradient(180deg, #f0d493 0%, #c79b45 100%);
+  box-shadow: 0 0 calc(6 * var(--wst-s)) rgba(226, 192, 120, 0.5);
+}
+.wst-track-num { display: inline-flex; align-items: baseline; gap: calc(2 * var(--wst-s)); }
+.wst-track-num b { font-size: max(12px, calc(14 * var(--wst-s))); color: var(--wst-gold); }
+.wst-track-num span { opacity: 0.5; }
+.wst-track-rest { color: var(--cg-dim); }
+.wst-track-rest b { color: var(--cg-ink); }
+
+/* ----------------------------------------------------------------- stage */
+.wst-stage {
+  flex: 1 1 auto;
+  position: relative;
+  min-height: 0;
+  min-width: 0;
+}
+
+/* the walnut rail — a real edge, with grain and a lit top lip */
+.wst-table {
+  position: absolute;
+  inset: calc(5 * var(--wst-s));
+  border-radius: calc(24 * var(--wst-s));
+  background:
+    repeating-linear-gradient(92deg,
+      rgba(0, 0, 0, 0.16) 0 calc(2 * var(--wst-s)),
+      rgba(255, 226, 178, 0.05) calc(2 * var(--wst-s)) calc(5 * var(--wst-s))),
+    linear-gradient(180deg, var(--wst-wood-1) 0%, var(--wst-wood-2) 46%, var(--wst-wood-3) 100%);
+  box-shadow:
+    inset 0 calc(1.5 * var(--wst-s)) 0 rgba(255, 226, 178, 0.24),
+    inset 0 calc(-3 * var(--wst-s)) calc(10 * var(--wst-s)) rgba(0, 0, 0, 0.55),
+    0 calc(10 * var(--wst-s)) calc(28 * var(--wst-s)) rgba(0, 0, 0, 0.5);
+  pointer-events: none;
+}
+
+.wst-felt {
+  position: absolute;
+  inset: calc(9 * var(--wst-s));
+  border-radius: calc(17 * var(--wst-s));
+  overflow: hidden;
+  background:
+    radial-gradient(115% 88% at 50% 34%,
+      var(--wst-felt-1) 0%, var(--wst-felt-2) 48%, var(--wst-felt-3) 100%);
+  box-shadow:
+    inset 0 0 0 1px rgba(226, 192, 120, 0.3),
+    inset 0 calc(8 * var(--wst-s)) calc(26 * var(--wst-s)) rgba(0, 0, 0, 0.45),
+    inset 0 calc(-6 * var(--wst-s)) calc(18 * var(--wst-s)) rgba(0, 0, 0, 0.3);
+}
+
+/* woven felt: two fine cross hatches, kept in px so the weave stays fine on a
+   big screen instead of turning into stripes */
+.wst-grain {
+  position: absolute;
+  inset: 0;
+  background-image:
+    repeating-linear-gradient(56deg, rgba(255, 255, 255, 0.035) 0 1px, transparent 1px 3px),
+    repeating-linear-gradient(-56deg, rgba(0, 0, 0, 0.05) 0 1px, transparent 1px 3px);
+  opacity: 0.9;
+}
+.wst-vig {
+  position: absolute;
+  inset: 0;
+  background: radial-gradient(74% 62% at 50% 44%, transparent 42%, rgba(0, 0, 0, 0.5) 100%);
+}
+.wst-inlay {
+  position: absolute;
+  inset: calc(9 * var(--wst-s));
+  border-radius: calc(12 * var(--wst-s));
+  border: 1px solid rgba(226, 192, 120, 0.13);
+  box-shadow: inset 0 0 calc(24 * var(--wst-s)) rgba(226, 192, 120, 0.05);
+}
+
+/* the named trump, watermarked into the felt so it is readable from any seat */
+.wst-mark {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  transform: translate(-50%, -50%);
+  width: calc(var(--wst-card) * 3.1);
+  height: calc(var(--wst-card) * 3.1);
+  color: var(--wst-gold);
+  opacity: 0.08;
+}
+.wst-mark.is-red { color: #ff7f92; opacity: 0.09; }
+
+/* --------------------------------------------------------------- seat pod
+   A pod is information, never a control: pointer-events off so it can never
+   sit between a finger and something that IS interactive. */
+.wst-seat {
+  position: absolute;
+  z-index: 3;
+  pointer-events: none;
+  display: flex;
+  align-items: center;
+  gap: calc(6 * var(--wst-s));
+  padding: calc(5 * var(--wst-s)) calc(9 * var(--wst-s)) calc(5 * var(--wst-s)) calc(5 * var(--wst-s));
+  border-radius: 999px;
+  background: linear-gradient(180deg, rgba(12, 26, 22, 0.86) 0%, rgba(5, 14, 12, 0.9) 100%);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  box-shadow: 0 calc(4 * var(--wst-s)) calc(14 * var(--wst-s)) rgba(0, 0, 0, 0.45);
+  max-width: 58%;
+  transition: border-color 240ms var(--cg-ease), box-shadow 240ms var(--cg-ease);
+}
+.wst-seat.pos-top { left: 50%; top: calc(10 * var(--wst-s)); transform: translateX(-50%); }
+.wst-seat.pos-bottom { left: 50%; bottom: calc(10 * var(--wst-s)); transform: translateX(-50%); }
+.wst-seat.pos-left { left: calc(10 * var(--wst-s)); top: 50%; transform: translateY(-50%); }
+.wst-seat.pos-right { right: calc(10 * var(--wst-s)); top: 50%; transform: translateY(-50%); }
+
+/* the side seats stack so they never crowd the trick pad on a phone */
+.wst-seat.pos-left,
+.wst-seat.pos-right {
+  flex-direction: column;
+  align-items: center;
+  gap: calc(3 * var(--wst-s));
+  border-radius: calc(16 * var(--wst-s));
+  padding: calc(6 * var(--wst-s)) calc(6 * var(--wst-s));
+  max-width: 27%;
+}
+.wst-seat.pos-left .wst-seat-col,
+.wst-seat.pos-right .wst-seat-col { align-items: center; text-align: center; }
+
+/* during the auction the side pods give the panel its width back */
+.wst-seat.is-slim { padding: calc(5 * var(--wst-s)); border-radius: 999px; }
+.wst-seat.is-slim .wst-seat-col,
+.wst-seat.is-slim .wst-backs,
+/* their bid is already a row in the panel; a second copy only clips */
+.wst-seat.is-slim .wst-tag { display: none; }
+
+.wst-seat.is-off { opacity: 0.45; }
+.wst-seat.is-mate { border-color: rgba(120, 200, 255, 0.24); }
+.wst-seat.is-turn {
+  border-color: var(--wst-gold);
+  box-shadow:
+    0 0 0 1px var(--wst-gold),
+    0 0 calc(26 * var(--wst-s)) calc(-6 * var(--wst-s)) var(--wst-gold),
+    0 calc(4 * var(--wst-s)) calc(14 * var(--wst-s)) rgba(0, 0, 0, 0.45);
+}
+
+.wst-av {
+  position: relative;
+  flex: 0 0 auto;
+  width: calc(28 * var(--wst-s));
+  height: calc(28 * var(--wst-s));
+  min-width: 24px;
+  min-height: 24px;
+  display: grid;
+  place-items: center;
+}
+.wst-av-i {
+  width: 100%;
+  height: 100%;
+  border-radius: 50%;
+  display: grid;
+  place-items: center;
+  font-size: max(11px, calc(13 * var(--wst-s)));
+  font-weight: 800;
+  color: #06131a;
+  background: radial-gradient(70% 70% at 34% 28%, #fff8 0%, transparent 55%), var(--sc, #38bdf8);
+  box-shadow: 0 0 0 2px rgba(0, 0, 0, 0.4), inset 0 -2px 4px rgba(0, 0, 0, 0.25);
+}
+/* explicit width/height, not four insets: an <svg> with a viewBox and no
+   intrinsic size does not reliably resolve auto sizing from insets */
+.wst-av-ring {
+  position: absolute;
+  left: calc(-4 * var(--wst-s));
+  top: calc(-4 * var(--wst-s));
+  width: calc(100% + 8 * var(--wst-s));
+  height: calc(100% + 8 * var(--wst-s));
+  pointer-events: none;
+  overflow: visible;
+}
+.wst-seat.is-turn .wst-av { animation: wst-pulse 1.9s var(--cg-ease) infinite; }
+@keyframes wst-pulse {
+  0%, 100% { transform: scale(1); }
+  50% { transform: scale(1.09); }
+}
+
+.wst-seat-col { display: flex; flex-direction: column; min-width: 0; }
+.wst-seat-name {
+  font-size: max(11px, calc(12.5 * var(--wst-s)));
+  font-weight: 700;
+  line-height: 1.25;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  max-width: calc(86 * var(--wst-s));
+}
+.wst-seat-sub {
+  display: flex;
+  align-items: center;
+  gap: calc(5 * var(--wst-s));
+  font-size: max(9.5px, calc(10.5 * var(--wst-s)));
+  line-height: 1.25;
+  color: var(--cg-faint);
+  white-space: nowrap;
+}
+.wst-role.is-mate { color: #7fd0f5; }
+.wst-seat-tricks { color: var(--wst-gold); font-variant-numeric: tabular-nums; }
+.wst-seat-deal {
+  color: var(--cg-dim);
+  border: 1px solid rgba(255, 255, 255, 0.18);
+  border-radius: 999px;
+  padding: 0 calc(5 * var(--wst-s));
+}
+/* a dropped seat says so, so the skip button under the hand is never a
+   mystery control that appeared for no visible reason */
+.wst-seat-gone {
+  color: #f08a99;
+  border: 1px solid rgba(240, 138, 153, 0.45);
+  border-radius: 999px;
+  padding: 0 calc(5 * var(--wst-s));
+}
+
+/* signed numbers and totals read left-to-right even inside the RTL shell, so a
+   minus never ends up trailing its digits */
+.wst-root .cg-delta,
+.wst-root .cg-row b {
+  direction: ltr;
+  unicode-bidi: isolate;
+}
+
+.wst-backs { display: inline-flex; align-items: center; gap: 0; }
+.wst-backs .wst-card { margin-inline-start: calc(-6 * var(--wst-s)); }
+.wst-backs .wst-card:first-child { margin-inline-start: 0; }
+.wst-backs-n {
+  font-size: max(9.5px, calc(10.5 * var(--wst-s)));
+  color: var(--cg-faint);
+  margin-inline-start: calc(4 * var(--wst-s));
+  font-variant-numeric: tabular-nums;
+}
+
+.wst-tag {
+  position: absolute;
+  inset-block-start: calc(100% + 3px);
+  inset-inline-start: 50%;
+  transform: translateX(-50%);
+  font-size: max(9.5px, calc(10.5 * var(--wst-s)));
+  padding: calc(1 * var(--wst-s)) calc(7 * var(--wst-s));
+  border-radius: 999px;
+  background: rgba(4, 14, 12, 0.92);
+  border: 1px solid rgba(255, 255, 255, 0.14);
+  white-space: nowrap;
+  font-variant-numeric: tabular-nums;
+}
+.wst-seat.pos-bottom .wst-tag { inset-block-start: auto; inset-block-end: calc(100% + 3px); }
+.wst-tag.is-high { border-color: var(--wst-gold); color: var(--wst-gold); font-weight: 700; }
+.wst-tag.is-pass { opacity: 0.6; }
+
+.wst-turnlbl {
+  flex: 0 0 auto;
+  font-size: max(9.5px, calc(10.5 * var(--wst-s)));
+  font-weight: 700;
+  color: #1a1204;
+  background: linear-gradient(180deg, #f0d493 0%, #c79b45 100%);
+  border-radius: 999px;
+  padding: calc(1.5 * var(--wst-s)) calc(7 * var(--wst-s));
+  white-space: nowrap;
+}
+
+/* --------------------------------------------------------------- the pad */
+.wst-pad {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  transform: translate(-50%, -50%);
+  pointer-events: none;
+  z-index: 2;
+}
+.wst-pad-ring {
+  position: absolute;
+  inset: 6%;
+  border-radius: 50%;
+  border: 1px dashed rgba(226, 192, 120, 0.18);
+  box-shadow: inset 0 0 calc(30 * var(--wst-s)) rgba(0, 0, 0, 0.3);
+}
+.wst-pad-cards {
+  position: absolute;
+  inset: 0;
+  transition: transform 460ms var(--cg-ease), opacity 460ms var(--cg-ease);
+}
+.wst-pad-cards.is-sweep { opacity: 0; }
+
+.wst-lay {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  animation: wst-land 300ms var(--cg-ease) both;
+}
+/* the `to` keyframe deliberately carries opacity only: the transform then
+   resolves to the element's own inline resting transform, which is what makes
+   a card travel from its player's side of the table to its slot in the trick */
+@keyframes wst-land {
+  from {
+    opacity: 0;
+    transform: translate(-50%, -50%) translate(var(--ix, 0px), var(--iy, 0px)) scale(1.05);
+  }
+  to { opacity: 1; }
+}
+.wst-lay.is-win .wst-card-paper {
+  box-shadow:
+    0 0 0 calc(2 * var(--wst-s)) var(--wst-gold),
+    0 calc(6 * var(--wst-s)) calc(16 * var(--wst-s)) rgba(0, 0, 0, 0.55);
+}
+.wst-lay.is-win::after {
+  content: '';
+  position: absolute;
+  inset: -8%;
+  border-radius: 12%;
+  box-shadow: 0 0 0 calc(2 * var(--wst-s)) rgba(226, 192, 120, 0.75);
+  animation: wst-ring 620ms var(--cg-ease) both;
+  pointer-events: none;
+}
+@keyframes wst-ring {
+  from { opacity: 0.9; transform: scale(0.86); }
+  to { opacity: 0; transform: scale(1.35); }
+}
+
+.wst-pad-note {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  transform: translate(-50%, -50%);
+  font-size: max(10px, calc(11.5 * var(--wst-s)));
+  line-height: 1.7;
+  color: rgba(255, 255, 255, 0.52);
+  white-space: nowrap;
+  text-align: center;
+}
+.wst-led {
+  position: absolute;
+  left: 50%;
+  bottom: calc(-14 * var(--wst-s));
+  transform: translateX(-50%);
+  display: inline-flex;
+  align-items: center;
+  gap: calc(4 * var(--wst-s));
+  padding: calc(2 * var(--wst-s)) calc(8 * var(--wst-s));
+  border-radius: 999px;
+  background: rgba(4, 14, 12, 0.86);
+  border: 1px solid rgba(226, 192, 120, 0.3);
+  color: var(--wst-gold);
+  font-size: max(9.5px, calc(10.5 * var(--wst-s)));
+  white-space: nowrap;
+}
+.wst-led.is-red { color: #f08a99; border-color: rgba(240, 138, 153, 0.36); }
+
+.wst-banner {
+  position: absolute;
+  left: 50%;
+  bottom: calc(66 * var(--wst-s));
+  transform: translateX(-50%);
+  z-index: 6;
+  padding: calc(5 * var(--wst-s)) calc(13 * var(--wst-s));
+  border-radius: 999px;
+  background: rgba(4, 14, 12, 0.9);
+  border: 1px solid var(--wst-gold);
+  color: var(--wst-gold);
+  font-size: max(11px, calc(12.5 * var(--wst-s)));
+  font-weight: 700;
+  white-space: nowrap;
+  animation: wst-pop 320ms var(--cg-spring) both;
+}
+@keyframes wst-pop {
+  from { opacity: 0; transform: translateX(-50%) scale(0.9); }
+  to { opacity: 1; transform: translateX(-50%) scale(1); }
+}
+
+/* ---------------------------------------------------------- auction panel */
+.wst-auction {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  transform: translate(-50%, -50%);
+  z-index: 4;
+  width: min(calc(320 * var(--wst-s)), 78%);
+  padding: calc(10 * var(--wst-s)) calc(12 * var(--wst-s));
+  border-radius: calc(16 * var(--wst-s));
+  border: 1px solid rgba(226, 192, 120, 0.28);
+  background: linear-gradient(180deg, rgba(10, 26, 22, 0.92) 0%, rgba(4, 14, 12, 0.94) 100%);
+  box-shadow: 0 calc(14 * var(--wst-s)) calc(34 * var(--wst-s)) rgba(0, 0, 0, 0.5);
+  animation: wst-rise 280ms var(--cg-spring) both;
+}
+@keyframes wst-rise {
+  from { opacity: 0; transform: translate(-50%, -46%) scale(0.97); }
+  to { opacity: 1; transform: translate(-50%, -50%) scale(1); }
+}
+.wst-auction-head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: calc(8 * var(--wst-s));
+  padding-bottom: calc(6 * var(--wst-s));
+  border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+  font-size: max(10px, calc(11 * var(--wst-s)));
+  color: var(--cg-dim);
+}
+.wst-auction-head strong { font-size: max(12.5px, calc(14.5 * var(--wst-s))); color: var(--wst-gold); }
+.wst-auction-head b { color: var(--cg-ink); font-size: max(11px, calc(12.5 * var(--wst-s))); }
+
+.wst-auction-rows {
+  display: flex;
+  flex-direction: column;
+  gap: calc(3 * var(--wst-s));
+  padding: calc(6 * var(--wst-s)) 0;
+}
+.wst-arow {
+  display: flex;
+  align-items: center;
+  gap: calc(7 * var(--wst-s));
+  padding: calc(4 * var(--wst-s)) calc(7 * var(--wst-s));
+  border-radius: calc(9 * var(--wst-s));
+  border: 1px solid transparent;
+  background: rgba(255, 255, 255, 0.04);
+  font-size: max(10.5px, calc(12 * var(--wst-s)));
+}
+.wst-arow-dot {
+  width: calc(8 * var(--wst-s));
+  height: calc(8 * var(--wst-s));
+  min-width: 6px;
+  min-height: 6px;
+  border-radius: 50%;
+  background: var(--sc, #38bdf8);
+  flex: 0 0 auto;
+}
+.wst-arow-name {
+  flex: 1 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.wst-arow-bid {
+  font-weight: 800;
+  font-variant-numeric: tabular-nums;
+  font-size: max(12px, calc(14 * var(--wst-s)));
+}
+.wst-arow-bid.is-pass { font-weight: 600; font-size: max(10px, calc(11.5 * var(--wst-s))); opacity: 0.55; }
+.wst-arow.is-high {
+  border-color: var(--wst-gold);
+  background: rgba(226, 192, 120, 0.12);
+}
+.wst-arow.is-high .wst-arow-bid { color: var(--wst-gold); }
+.wst-arow.is-now { border-color: rgba(255, 255, 255, 0.3); }
+
+.wst-auction-foot {
+  margin: 0;
+  padding-top: calc(5 * var(--wst-s));
+  border-top: 1px solid rgba(255, 255, 255, 0.08);
+  font-size: max(9.5px, calc(10.5 * var(--wst-s)));
+  line-height: 1.6;
+  color: var(--cg-faint);
+}
+
+/* ---------------------------------------------------------------- the bar */
+.wst-bar {
+  flex: 0 0 auto;
+  position: relative;
+  z-index: 5;
+  padding: calc(var(--wst-card) * 0.4) calc(8 * var(--wst-s)) calc(6 * var(--wst-s));
+  border-top: 1px solid rgba(226, 192, 120, 0.14);
+  background:
+    repeating-linear-gradient(92deg,
+      rgba(0, 0, 0, 0.14) 0 calc(2 * var(--wst-s)),
+      rgba(255, 226, 178, 0.035) calc(2 * var(--wst-s)) calc(5 * var(--wst-s))),
+    linear-gradient(180deg, #3a2413 0%, #1d1108 100%);
+}
+.wst-bar.is-watch { padding-top: calc(8 * var(--wst-s)); }
+
+.wst-fan {
+  position: relative;
+  direction: ltr;
+  width: 100%;
+}
+.wst-fc {
+  position: absolute;
+  left: 50%;
+  top: 0;
+  padding: 0;
+  border: 0;
+  background: none;
+  cursor: pointer;
+  transform-origin: 50% 50%;
+  transition: transform 240ms var(--cg-spring), filter 200ms var(--cg-ease);
+  -webkit-tap-highlight-color: transparent;
+}
+/* A card that a rule has removed is DIMMED, never hidden and never silently
+   dropped: it stays tappable, and tapping it shakes it and prints the reason
+   in the hint line. A rule the board does not explain reads as a bug. */
+.wst-fc.is-dim { filter: brightness(0.58) saturate(0.55) contrast(0.92); }
+.wst-fc.is-sel .wst-card-paper {
+  box-shadow:
+    0 0 0 calc(2 * var(--wst-s)) var(--wst-gold),
+    0 calc(10 * var(--wst-s)) calc(20 * var(--wst-s)) rgba(0, 0, 0, 0.55);
+}
+.wst-fc-in { display: block; }
+.wst-fc-in.is-shake { animation: wst-shake 380ms var(--cg-ease) both; }
+@keyframes wst-shake {
+  0%, 100% { transform: translateX(0); }
+  18% { transform: translateX(-5%); }
+  38% { transform: translateX(5%); }
+  58% { transform: translateX(-3%); }
+  78% { transform: translateX(3%); }
+}
+
+/* ------------------------------------------------------------- bid panel */
+.wst-bids,
+.wst-suits,
+.wst-acts {
+  display: flex;
+  flex-wrap: wrap;
+  gap: calc(5 * var(--wst-s));
+  justify-content: center;
+  align-items: center;
+  padding-top: calc(6 * var(--wst-s));
+}
+
+.wst-bidnum {
+  min-width: max(34px, calc(38 * var(--wst-s)));
+  height: max(34px, calc(38 * var(--wst-s)));
+  border-radius: calc(11 * var(--wst-s));
+  border: 1px solid rgba(255, 255, 255, 0.16);
+  background: linear-gradient(180deg, rgba(255, 255, 255, 0.13) 0%, rgba(255, 255, 255, 0.05) 100%);
+  color: var(--cg-ink);
+  font-size: max(14px, calc(16 * var(--wst-s)));
+  font-weight: 800;
+  font-variant-numeric: tabular-nums;
+  font-family: inherit;
+  cursor: pointer;
+  padding: 0 calc(4 * var(--wst-s));
+}
+.wst-bidnum:hover:not(:disabled) { background: rgba(255, 255, 255, 0.18); }
+.wst-bidnum.is-off { opacity: 0.26; cursor: default; }
+.wst-bidnum.is-kaboot:not(.is-off) {
+  border-color: var(--wst-gold);
+  color: #1a1204;
+  background: linear-gradient(180deg, #f0d493 0%, #c79b45 100%);
+}
+.wst-passbtn {
+  height: max(34px, calc(38 * var(--wst-s)));
+  padding: 0 calc(14 * var(--wst-s));
+  border-radius: calc(11 * var(--wst-s));
+  border: 1px solid rgba(255, 255, 255, 0.2);
+  background: transparent;
+  color: var(--cg-dim);
+  font-size: max(12px, calc(13.5 * var(--wst-s)));
+  font-weight: 700;
+  font-family: inherit;
+  cursor: pointer;
+}
+
+.wst-suitpick {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: calc(2 * var(--wst-s));
+  width: max(58px, calc(66 * var(--wst-s)));
+  padding: calc(6 * var(--wst-s)) calc(4 * var(--wst-s));
+  border-radius: calc(12 * var(--wst-s));
+  border: 1px solid rgba(0, 0, 0, 0.2);
+  background: linear-gradient(168deg, #fdfaf2 0%, #ece5d4 100%);
+  color: var(--wst-ink);
+  font-size: max(10px, calc(11 * var(--wst-s)));
+  font-weight: 700;
+  font-family: inherit;
+  cursor: pointer;
+  box-shadow: 0 calc(4 * var(--wst-s)) calc(12 * var(--wst-s)) rgba(0, 0, 0, 0.45);
+}
+.wst-suitpick.is-red { color: var(--wst-inkred); }
+.wst-suitpick svg { width: calc(24 * var(--wst-s)); height: calc(24 * var(--wst-s)); min-width: 20px; min-height: 20px; }
+
+.wst-play {
+  display: inline-flex;
+  align-items: center;
+  gap: calc(7 * var(--wst-s));
+  height: max(38px, calc(42 * var(--wst-s)));
+  padding: 0 calc(12 * var(--wst-s));
+  border-radius: calc(12 * var(--wst-s));
+  border: 1px solid #e7c46a;
+  background: linear-gradient(180deg, #d8b35a 0%, #b9903c 100%);
+  color: #1a1204;
+  font-size: max(13px, calc(14.5 * var(--wst-s)));
+  font-weight: 800;
+  font-family: inherit;
+  cursor: pointer;
+}
+
+.wst-hint {
+  text-align: center;
+  padding-top: calc(5 * var(--wst-s));
+  min-height: calc(18 * var(--wst-s));
+  font-size: max(10.5px, calc(12 * var(--wst-s)));
+  line-height: 1.45;
+  color: rgba(255, 240, 220, 0.62);
+}
+.wst-hint.is-warn { color: #f5c06a; font-weight: 700; }
+
+/* --------------------------------------------------------- level control */
+.wst-levels {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: calc(5 * var(--wst-s));
+  margin: calc(4 * var(--wst-s)) 0 calc(10 * var(--wst-s));
+  flex-wrap: wrap;
+}
+.wst-levels.is-inline { justify-content: flex-start; margin-bottom: calc(14 * var(--wst-s)); }
+.wst-levels-lbl { font-size: max(10.5px, calc(11.5 * var(--wst-s))); color: var(--cg-faint); }
+.wst-levelbtn {
+  padding: calc(5 * var(--wst-s)) calc(11 * var(--wst-s));
+  border-radius: 999px;
+  border: 1px solid rgba(255, 255, 255, 0.16);
+  background: rgba(255, 255, 255, 0.05);
+  color: var(--cg-dim);
+  font-size: max(11px, calc(12 * var(--wst-s)));
+  font-weight: 700;
+  font-family: inherit;
+  cursor: pointer;
+}
+.wst-levelbtn.is-on {
+  border-color: var(--wst-gold);
+  color: #1a1204;
+  background: linear-gradient(180deg, #f0d493 0%, #c79b45 100%);
+}
+
+/* ===========================================================================
+   THE CARD — CSS paper, SVG ink. Nothing is an image, so it is exactly as
+   sharp on a 55-inch TV as on a phone.
+   =========================================================================== */
+.wst-card {
+  position: relative;
+  display: block;
+  aspect-ratio: 5 / 7;
+  flex: 0 0 auto;
+  color: var(--wst-ink);
+  user-select: none;
+}
+.wst-card.is-red { color: var(--wst-inkred); }
+
+.wst-card-paper {
+  position: absolute;
+  inset: 0;
+  border-radius: 7% / 5%;
+  background:
+    radial-gradient(120% 80% at 22% 8%, #ffffff 0%, rgba(255, 255, 255, 0) 55%),
+    linear-gradient(168deg, #fdfaf2 0%, #f4eee0 62%, #e9e1cf 100%);
+  box-shadow:
+    inset 0 0 0 1px rgba(24, 20, 12, 0.18),
+    inset 0 1px 0 rgba(255, 255, 255, 0.9),
+    0 2px 3px rgba(0, 0, 0, 0.28),
+    0 6px 12px rgba(0, 0, 0, 0.32);
+}
+.wst-card-gloss {
+  position: absolute;
+  inset: 0;
+  border-radius: 7% / 5%;
+  background: linear-gradient(118deg, rgba(255, 255, 255, 0.5) 0%, rgba(255, 255, 255, 0) 38%);
+  opacity: 0.55;
+  pointer-events: none;
+}
+.wst-ink {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  display: block;
+  overflow: visible;
+}
+
+.wst-ink-rank {
+  fill: currentColor;
+  font-weight: 800;
+  font-family: inherit;
+  text-anchor: middle;
+  letter-spacing: -0.5px;
+}
+.wst-ink-fill { fill: currentColor; }
+.wst-ink-line { stroke: currentColor; fill: none; stroke-linecap: round; }
+.wst-ink-hole { fill: #fdfaf2; }
+.wst-ink-panel {
+  fill: rgba(0, 0, 0, 0.03);
+  stroke: currentColor;
+  stroke-width: 0.9;
+  opacity: 0.55;
+}
+
+.wst-card.is-back { color: #d8b871; }
+.wst-back-paper {
+  position: absolute;
+  inset: 0;
+  border-radius: 7% / 5%;
+  background:
+    radial-gradient(120% 80% at 26% 10%, rgba(255, 255, 255, 0.16) 0%, rgba(255, 255, 255, 0) 52%),
+    linear-gradient(168deg, #17544a 0%, #0e3a33 58%, #082a25 100%);
+  box-shadow:
+    inset 0 0 0 1px rgba(226, 192, 120, 0.35),
+    0 2px 3px rgba(0, 0, 0, 0.35),
+    0 5px 10px rgba(0, 0, 0, 0.35);
+}
+.wst-back-frame { fill: none; stroke: currentColor; stroke-width: 1.4; opacity: 0.5; }
+.wst-back-line { fill: none; stroke: currentColor; stroke-width: 1.6; opacity: 0.42; }
+
+.wst-card.wst-mini .wst-ink { opacity: 0.9; }
+
+/* ===========================================================================
+   LANDSCAPE / VENUE TV. Above a 1.15 aspect the felt takes the whole area and
+   the hand tray floats over its near rail, so a 1920x1080 screen has no dead
+   band down either side and the table reads from across a room.
+   =========================================================================== */
+.wst-root.is-wide .wst-bar {
+  position: absolute;
+  left: 50%;
+  bottom: 0;
+  transform: translateX(-50%);
+  width: min(100%, calc(960 * var(--wst-s)));
+  background: none;
+  border-top: 0;
+  padding-bottom: calc(10 * var(--wst-s));
+}
+.wst-root.is-wide .wst-bar::before {
+  content: '';
+  position: absolute;
+  inset: 0 calc(-40 * var(--wst-s)) calc(-20 * var(--wst-s));
+  background: radial-gradient(58% 100% at 50% 100%, rgba(4, 12, 10, 0.82) 0%, rgba(4, 12, 10, 0) 72%);
+  pointer-events: none;
+}
+.wst-root.is-wide .wst-bar > * { position: relative; }
+
+.wst-root.is-wide .wst-seat.pos-bottom {
+  left: calc(14 * var(--wst-s));
+  bottom: calc(14 * var(--wst-s));
+  transform: none;
+}
+.wst-root.is-wide .wst-banner { bottom: calc(var(--wst-card) * 2.9); }
+/* the tray floats over the near rail in this mode, so the centre of the table
+   lifts to stay clear of it */
+.wst-root.is-wide .wst-auction { width: min(calc(360 * var(--wst-s)), 46%); top: 37%; }
+.wst-root.is-wide .wst-auction { animation-name: wst-rise-wide; }
+@keyframes wst-rise-wide {
+  from { opacity: 0; transform: translate(-50%, -54%) scale(0.97); }
+  to { opacity: 1; transform: translate(-50%, -50%) scale(1); }
+}
+.wst-root.is-wide .wst-pad { top: 43%; }
+/* on a wide screen the auction panel is large enough to reach the pods, and it
+   already carries every bid — the per-pod copy only collides with it */
+.wst-root.is-wide .wst-tag { display: none; }
+.wst-root.is-wide .wst-seat.pos-left,
+.wst-root.is-wide .wst-seat.pos-right { top: 42%; }
+
+/* ------------------------------------------------------------ small phones */
+@media (max-width: 360px) {
+  .wst-seat-name { max-width: calc(70 * var(--wst-s)); }
+  .wst-track-lbl { display: none; }
+}
+
+/* -------------------------------------------------------- reduced motion
+   cardgames.css already collapses every animation under .cg-root; this repeats
+   it for the keyframes declared in this file so the rule survives a future
+   change over there. Sound is untouched — only motion goes still. */
+@media (prefers-reduced-motion: reduce) {
+  .wst-root *,
+  .wst-root *::before,
+  .wst-root *::after {
+    animation-duration: 0.001ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.001ms !important;
+  }
+}
