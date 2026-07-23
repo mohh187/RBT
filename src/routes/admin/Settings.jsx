@@ -3208,6 +3208,17 @@ export default function Settings() {
                       </label>
                     </div>
 
+                    {/* temporary "stop taking orders" — kitchen slammed / closing early.
+                        Server + rules enforce it too, so no order slips through. */}
+                    <label className="row" style={{ gap: 10, cursor: 'pointer', alignItems: 'center', borderTop: '1px solid var(--border)', paddingTop: 12, marginTop: 2 }}>
+                      <input type="checkbox" checked={tenant?.ordersPaused === true}
+                        onChange={async (e) => { try { await saveNow({ ordersPaused: e.target.checked }); updateTenantLocal({ ordersPaused: e.target.checked }); toast.success(e.target.checked ? (ar ? 'أُوقف استقبال الطلبات' : 'Orders paused') : (ar ? 'عاد استقبال الطلبات' : 'Orders resumed')) } catch (_) { toast.error(t('error')) } }} style={{ width: 20, height: 20 }} />
+                      <span className="stack" style={{ gap: 2 }}>
+                        <span className="small bold" style={tenant?.ordersPaused === true ? { color: 'var(--danger)' } : undefined}>{ar ? 'إيقاف استقبال الطلبات مؤقتاً' : 'Pause new orders'}</span>
+                        <span className="xs faint">{ar ? 'المطبخ مزدحم أو أغلقنا مبكراً؟ يوقف زر الطلب في المنيو فوراً ويرفض أي طلب جديد حتى تعيده — والقائمة تبقى للتصفّح.' : 'Kitchen slammed or closing early? Instantly disables the menu order button and rejects any new order until you resume — the menu stays browsable.'}</span>
+                      </span>
+                    </label>
+
                     {/* psychology of the cart total — some guests shrink their order when
                         the sum shouts at them; let the venue choose how loud it is */}
                     <div className="field">

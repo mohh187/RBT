@@ -93,6 +93,22 @@ exports.onNewOrder = onDocumentCreated('tenants/{tid}/orders/{oid}', async (even
   const tid = event.params.tid
   const db = getFirestore()
 
+  // Ordering paused (kitchen slammed / closed early): reject NEW diner orders.
+  // Staff-created ('cashier') orders are exempt — the counter can still ring up.
+  if (order.source !== 'cashier') {
+    try {
+      const tSnap = await db.doc(`tenants/${tid}`).get()
+      if (tSnap.exists && tSnap.data().ordersPaused === true) {
+        await event.data.ref.update({
+          status: 'cancelled',
+          cancelReason: 'المطعم متوقف عن استقبال الطلبات مؤقتاً.',
+          stockRestored: true,
+        })
+        return
+      }
+    } catch (_) { /* if the tenant read fails, fall through to normal validation */ }
+  }
+
   // 1. Fetch item documents of all items in the order
   const lines = order.items || []
   const ids = [...new Set(lines.map((l) => l.itemId).filter(Boolean))]

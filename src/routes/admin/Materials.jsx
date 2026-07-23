@@ -363,7 +363,10 @@ function StockOpSheet({ op, onClose, tenantId, actor, currency, lang, suppliers 
       } else if (op.kind === 'count') {
         await countStock(tenantId, m.id, { countedBase: Number(qty) || 0, actor })
       } else if (op.kind === 'produce') {
-        await produceMaterial(tenantId, m.id, { batches: Number(qty) || 1, actor })
+        // produceMaterial swallows insufficient-ingredient failures into {ok:false}
+        // rather than throwing — check it, or a failed batch reports "Done".
+        const res = await produceMaterial(tenantId, m.id, { batches: Number(qty) || 1, actor })
+        if (res && res.ok === false) { toast?.error?.(ar ? 'لا يكفي مخزون المكوّنات لهذا الإنتاج' : 'Not enough ingredient stock for this batch'); return }
       } else {
         await wasteStock(tenantId, m.id, { qtyBase: Number(qty) || 0, reason: reason.trim(), actor })
       }

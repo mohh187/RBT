@@ -17,6 +17,7 @@ import { Price } from './Riyal.jsx'
 import { createOrder, upsertCustomerOnOrder, getCustomerByPhone, getMemberByToken, getMemberByPhone, watchItemReviews, watchOrder, watchDinerNotices, callWaiter, registerCustomer } from '../lib/db.js'
 import { tierDiscountAmount, TIER_META, resolveMembershipPolicy } from '../lib/membership.js'
 import { evaluateOffers, activeAutoOffers, offerForItem, discountedPrice } from '../lib/offers.js'
+import { orderingState, orderingClosedMessage } from '../lib/ordering.js'
 import { alertParty } from '../lib/notify.js'
 import { initTracking, identify, trackItemView, trackItemClose, trackCartAdd, trackSearch, trackCheckout, trackOrdered, trackGame } from '../lib/track.js'
 import ItemFx from './ItemFx.jsx'
@@ -2181,6 +2182,7 @@ function CartSheet({ cart, subtotal, currency, offers, tenant, tenantId, table, 
   const onlinePayEnabled = tenant?.onlinePayment?.enabled === true
   // Browse-only menu: the cart is a "show the waiter" list — no order submission.
   const browseOnly = tenant?.menuMode === 'browse'
+  const ordering = orderingState(tenant)
   // Marketing control: how loudly the cart TOTAL is displayed.
   // 'normal' | 'bold' (big & clear) | 'small' | 'faint' | 'hidden'.
   const totalStyle = tenant?.cartTotalStyle || 'normal'
@@ -2283,6 +2285,7 @@ function CartSheet({ cart, subtotal, currency, offers, tenant, tenantId, table, 
   const place = async () => {
     if (cart.length === 0) return
     if (preview) { toast.error(lang === 'ar' ? 'هذه معاينة فقط' : 'Preview only'); return }
+    if (!ordering.open) { toast.error(orderingClosedMessage(ordering.reason, lang)); return }
     if (orderType === 'curbside' && !car.model.trim()) { toast.error(lang === 'ar' ? 'أدخل بيانات السيارة' : 'Enter your car details'); return }
 
     // Geofence: table (dine-in) orders may only be placed inside the venue.
@@ -2387,6 +2390,12 @@ function CartSheet({ cart, subtotal, currency, offers, tenant, tenantId, table, 
           <div className="row" style={{ gap: 8, alignItems: 'center', justifyContent: 'center', padding: '4px 0', color: 'var(--text-muted)' }}>
             <Icon name="waiter" size={16} />
             <span className="small">{lang === 'ar' ? 'اعرض هذه القائمة للنادل عند الطلب' : 'Show this list to your waiter to order'}</span>
+          </div>
+        ) : !ordering.open ? (
+          /* venue is closed / paused — the menu stays browsable but no submission */
+          <div className="row" style={{ gap: 8, alignItems: 'center', justifyContent: 'center', padding: '8px 0', color: 'var(--danger)', textAlign: 'center' }}>
+            <Icon name="clock" size={16} />
+            <span className="small bold">{orderingClosedMessage(ordering.reason, lang)}</span>
           </div>
         ) : (
           <button className="btn btn-primary btn-lg btn-block" disabled={placing || cart.length === 0} onClick={place}>

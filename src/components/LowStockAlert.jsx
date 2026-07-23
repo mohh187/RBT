@@ -22,7 +22,10 @@ export default function LowStockAlert() {
   }, [tenantId])
 
   const daysUntil = (d) => { try { return Math.ceil((new Date(d) - new Date()) / 86400000) } catch (_) { return 999 } }
-  const lowMats = mats.filter((m) => m.trackStock && (m.stockQty || 0) <= (Number(m.reorderLevel) || 0))
+  // Materials are inherently stock-tracked — they have no `trackStock` flag (that
+  // is an item field), so gating on it meant this banner NEVER fired for raw
+  // materials. Alert whenever a reorder level is set and stock is at/below it.
+  const lowMats = mats.filter((m) => (Number(m.reorderLevel) || 0) > 0 && (m.stockQty || 0) <= Number(m.reorderLevel))
   const outItems = items.filter((i) => i.trackStock && (i.stock || 0) <= 0)
   const expiring = mats.filter((m) => m.expiryDate && daysUntil(m.expiryDate) <= 7)
   if (!lowMats.length && !outItems.length && !expiring.length) return null

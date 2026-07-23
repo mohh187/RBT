@@ -228,7 +228,15 @@ export async function produceMaterial(tid, materialId, { batches = 1, actor = ''
 
       // Fetch all ingredients inside transaction
       const ingredientSnaps = await Promise.all(lines.map((l) => tx.get(subDoc(tid, 'materials', l.materialId))))
-      
+
+      // Sufficiency check FIRST — production must not silently drive an
+      // ingredient's stock negative. Refuse the whole batch if any is short.
+      const short = ingredientSnaps.find((s, idx) => {
+        const need = (Number(lines[idx].qty) || 0) * n
+        return (s.exists() ? (s.data().stockQty || 0) : 0) < need
+      })
+      if (short) throw new Error('insufficient-ingredients')
+
       // Update ingredients stockQty
       ingredientSnaps.forEach((s, idx) => {
         if (!s.exists()) return

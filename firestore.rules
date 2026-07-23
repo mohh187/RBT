@@ -321,6 +321,9 @@ service cloud.firestore {
         // A suspended venue (active == false) stops accepting orders.
         allow create: if true
           && get(/databases/$(database)/documents/tenants/$(tid)).data.active != false
+          // ordering paused (kitchen slammed / closed early) blocks diner orders;
+          // staff (cashier) may still ring up at the counter.
+          && (get(/databases/$(database)/documents/tenants/$(tid)).data.ordersPaused != true || isStaff(tid))
           // 'pending' = cash/terminal (reaches staff now); 'awaiting_payment' =
           // online, held until the payment settles (server flips it to 'pending').
           && (request.resource.data.status == 'pending'
