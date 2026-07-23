@@ -911,11 +911,17 @@ function EdtDecorPiece({ d, mv, rtl }) {
           <span className="edt-dec-glow" data-motion={motion} style={{ background: glowPaint(d), ...(art || {}) }} />
         ) : null}
         {is3d
-          ? (mv ? (
+          // RADICAL iOS-crash fix: a WebGL <model-viewer> on a phone opens a GPU
+          // context that (with the 56-section list + bg video) tips WKWebView over
+          // its memory ceiling and kills the tab — and the .glb barely loaded there
+          // anyway, so the piece was invisible cost. On a narrow viewport we render
+          // only the light pool (glow) where the 3D piece would sit; the full 3D
+          // stays on desktop/tablet where the memory budget is real.
+          ? (mv && !isNarrow() ? (
             <model-viewer
               class="edt-dec-mv" data-motion={spin3d ? undefined : motion} style={art} src={d.url}
               interaction-prompt="none" loading="lazy" disable-zoom="" disable-tap=""
-              {...(spin3d && !prefersStill() && !isNarrow() ? { 'auto-rotate': '', 'rotation-per-second': decorSpinRate(d) } : {})}
+              {...(spin3d && !prefersStill() ? { 'auto-rotate': '', 'rotation-per-second': decorSpinRate(d) } : {})}
             />
           ) : null)
           : <img className="edt-dec-img" data-motion={motion} style={art} src={d.url} alt="" decoding="async" />}
@@ -1270,7 +1276,9 @@ export default function EditorialLayout({ tenant = null, cats, itemsByCat, visib
   // pieces are portalled for the same reason — position:fixed inside the wrap's
   // isolation would pin to the wrap, not to the viewport.
   const decor = useMemo(() => resolveDecor(tenant), [JSON.stringify(tenant && tenant.menuDecor) || '']) // eslint-disable-line react-hooks/exhaustive-deps
-  const mv = useModelViewer(decor.all.some((d) => d.kind === 'model'))
+  // don't even import the ~450KB model-viewer runtime on phones — 3D decor is
+  // desktop/tablet only (see EdtDecorPiece), so the mobile bundle stays lean.
+  const mv = useModelViewer(!isNarrow() && decor.all.some((d) => d.kind === 'model'))
 
   // The venue's button skin — vars stamped on the wrap, index.css dresses the
   // buttons themselves.
@@ -1642,6 +1650,31 @@ export function EditorialItemStage({ item, tenant = null, currency, onClose, onA
     if (!ids.length || !allItems.length) return []
     return ids.map((id) => allItems.find((x) => x.id === id)).filter((x) => x && x.id !== item.id).slice(0, 3)
   }, [item.pairings, item.id, allItems])
+
+  // iOS fixed-overlay repaint kick: inside a position:fixed overlay (the stage,
+  // over a position:fixed scroll-locked body) iOS Safari can paint the scaled
+  // table layer at the wrong place until the first scroll — geometry is correct,
+  // only the composite is stale («الطاولة ليست ثابتة وعند التمرير تثبت»). Toggling
+  // translateZ(0) on the stage root across two frames forces a fresh composite on
+  // open, so it never needs that first scroll to look right.
+  useEffect(() => {
+    const stg = scrollRef.current?.parentElement
+    if (!stg) return undefined
+    const raf = requestAnimationFrame(() => {
+      stg.style.transform = 'translateZ(0)'
+      requestAnimationFrame(() => { stg.style.transform = '' })
+    })
+    return () => cancelAnimationFrame(raf)
+  }, [])
+
+  // Free the ambient background video's decoder while the full-screen stage
+  // covers it — on iOS a decoding loop video behind an opaque overlay is pure
+  // memory pressure at exactly the peak moment (item media on screen).
+  useEffect(() => {
+    const vids = [...document.querySelectorAll('video.venue-bg-media')]
+    vids.forEach((v) => { try { v.pause() } catch (_) { /* ignore */ } })
+    return () => { vids.forEach((v) => { try { const p = v.play(); if (p) p.catch(() => {}) } catch (_) { /* ignore */ } }) }
+  }, [])
 
   // FLIP open: place the hero at the origin rect via transform, then release.
   useEffect(() => {
