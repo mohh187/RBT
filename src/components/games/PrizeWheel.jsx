@@ -107,6 +107,9 @@ export default function PrizeWheel({ onScore, onExit, lang = 'ar', brand = '#0e7
       cvs.width = Math.round(g.w * dpr)
       cvs.height = Math.round(g.h * dpr)
       ctx.setTransform(dpr, 0, 0, dpr, 0, 0)
+      // a resize wipes the canvas — redraw the static wheel (the spin loop, if
+      // running, already redraws every frame).
+      if (g.start && !g.spinning) g.start()
     }
     resize()
     const ro = window.ResizeObserver ? new ResizeObserver(resize) : null
@@ -114,7 +117,6 @@ export default function PrizeWheel({ onScore, onExit, lang = 'ar', brand = '#0e7
     window.addEventListener('resize', resize)
 
     const frame = (now) => {
-      g.raf = requestAnimationFrame(frame)
       const list = segsRef.current
       const n = list.length
       const segA = (Math.PI * 2) / n
@@ -195,9 +197,15 @@ export default function PrizeWheel({ onScore, onExit, lang = 'ar', brand = '#0e7
       ctx.lineWidth = 1.5
       ctx.stroke()
       ctx.restore()
+
+      // keep animating ONLY while the wheel is spinning — a static wheel does not
+      // need 60fps forever (that quietly drained the guest's battery/CPU).
+      if (g.spinning) g.raf = requestAnimationFrame(frame)
     }
 
-    g.raf = requestAnimationFrame(frame)
+    // one static draw now; spin() restarts the loop
+    g.start = () => { cancelAnimationFrame(g.raf); g.raf = requestAnimationFrame(frame) }
+    frame(performance.now())
     return () => {
       cancelAnimationFrame(g.raf)
       ro?.disconnect()
@@ -229,6 +237,7 @@ export default function PrizeWheel({ onScore, onExit, lang = 'ar', brand = '#0e7
     g.to = to
     g.t0 = performance.now()
     g.spinning = true
+    g.start?.() // restart the animation loop for the spin
     setPhase('spinning')
     g.done = () => {
       const won = list[idx]
