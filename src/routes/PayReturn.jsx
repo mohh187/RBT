@@ -15,6 +15,7 @@ export default function PayReturn() {
   const [params] = useSearchParams()
   const [state, setState] = useState('checking') // checking | paid | pending | failed
   const [orderLink, setOrderLink] = useState('') // "view my order" — never strand the guest
+  const [kind, setKind] = useState('') // payIntent kind → route owner to their dashboard on subscription
   const intent = params.get('intent')
   const paymentId = params.get('id') // Moyasar appends the payment id + status
   const moyStatus = params.get('status')
@@ -62,6 +63,7 @@ export default function PayReturn() {
         const snap = await getDoc(doc(db, 'payIntents', intent))
         if (!alive || !snap.exists()) return
         const d = snap.data() || {}
+        if (alive) setKind(d.kind || '')
         if (d.kind !== 'order' || !d.tenantId || !d.refId) return
         const t = await getDoc(doc(db, 'tenants', d.tenantId))
         const slug = t.exists() ? t.data()?.slug : ''
@@ -100,7 +102,9 @@ export default function PayReturn() {
         {orderLink && (
           <Link to={orderLink} className={`btn btn-block ${ok || pending ? 'btn-primary' : 'btn-outline'}`}><Icon name="receipt" size={16} /> {ar ? 'عرض طلبي' : 'View my order'}</Link>
         )}
-        {!orderLink && (ok || pending) && <Link to="/" className="btn btn-primary btn-block">{ar ? 'العودة للرئيسية' : 'Back home'}</Link>}
+        {/* subscription payer = a venue owner — send them into their dashboard, not the marketing home */}
+        {!orderLink && ok && kind === 'subscription' && <Link to="/admin" className="btn btn-primary btn-block"><Icon name="dashboard" size={16} /> {ar ? 'الدخول للوحتك' : 'Go to your dashboard'}</Link>}
+        {!orderLink && (ok || pending) && kind !== 'subscription' && <Link to="/" className="btn btn-primary btn-block">{ar ? 'العودة للرئيسية' : 'Back home'}</Link>}
         {(orderLink || (!ok && !pending)) && <Link to="/" className="btn btn-ghost btn-block" style={{ color: 'var(--text-muted)' }}>{ar ? 'الرئيسية' : 'Home'}</Link>}
       </div>
     </div>

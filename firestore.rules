@@ -756,10 +756,12 @@ service cloud.firestore {
         allow read: if isStaff(tid);
         allow create: if isManager(tid)
           || (isStaff(tid) && request.auth.uid == uid
-              && !request.resource.data.keys().hasAny(['salary', 'caps', 'deductions', 'workDays', 'shiftStart', 'shiftEnd']));
+              && !request.resource.data.keys().hasAny(['salary', 'caps', 'capsCustom', 'deductions', 'workDays', 'shiftStart', 'shiftEnd', 'managerRating', 'pinHash', 'staffId', 'hireDate']));
+        // managerRating/pinHash/capsCustom/staffId/hireDate are manager-owned — a
+        // staffer must not be able to inflate their own evaluation or reset a PIN.
         allow update: if isManager(tid)
           || (isStaff(tid) && request.auth.uid == uid
-              && !request.resource.data.diff(resource.data).affectedKeys().hasAny(['salary', 'role', 'caps', 'deductions', 'workDays', 'shiftStart', 'shiftEnd', 'active']));
+              && !request.resource.data.diff(resource.data).affectedKeys().hasAny(['salary', 'role', 'caps', 'capsCustom', 'deductions', 'workDays', 'shiftStart', 'shiftEnd', 'active', 'managerRating', 'pinHash', 'staffId', 'hireDate']));
         allow delete: if isManager(tid);
       }
 

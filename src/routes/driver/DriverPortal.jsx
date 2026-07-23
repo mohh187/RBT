@@ -39,24 +39,29 @@ export default function DriverPortal() {
   useEffect(() => { if (tenantId && user?.uid) return watchDriverDeliveries(tenantId, user.uid, setMine) }, [tenantId, user?.uid])
   useEffect(() => { if (tenantId) return watchDeliveryPool(tenantId, setPool) }, [tenantId])
 
-  // Broadcast the driver's live location while carrying an active delivery
-  // (throttled to ~1 write / 15s) so the customer can track the approach.
-  const activeId = (mine || []).find((o) => ['picked_up', 'on_way'].includes(o.delivery?.status))?.id
-  const lastWrite = useRef(0)
+  // Broadcast the driver's live location to EVERY active delivery they carry
+  // (a driver can run several at once), each throttled to ~1 write / 15s so the
+  // customer can track the approach.
+  const activeIds = (mine || []).filter((o) => ['picked_up', 'on_way'].includes(o.delivery?.status)).map((o) => o.id)
+  const activeKey = activeIds.join(',') // stable dep so the watcher doesn't churn
+  const lastWrite = useRef({}) // per-order throttle — no carry-over across orders
   useEffect(() => {
-    if (!activeId || !tenantId || typeof navigator === 'undefined' || !navigator.geolocation) return
-    const id = navigator.geolocation.watchPosition(
+    if (!activeKey || !tenantId || typeof navigator === 'undefined' || !navigator.geolocation) return
+    const ids = activeKey.split(',')
+    const watchId = navigator.geolocation.watchPosition(
       (p) => {
         const now = Date.now()
-        if (now - lastWrite.current < 15000) return
-        lastWrite.current = now
-        updateDriverLocation(tenantId, activeId, { lat: p.coords.latitude, lng: p.coords.longitude }).catch(() => {})
+        ids.forEach((oid) => {
+          if (now - (lastWrite.current[oid] || 0) < 15000) return
+          lastWrite.current[oid] = now
+          updateDriverLocation(tenantId, oid, { lat: p.coords.latitude, lng: p.coords.longitude }).catch(() => {})
+        })
       },
       () => {},
       { enableHighAccuracy: true, maximumAge: 10000, timeout: 20000 },
     )
-    return () => navigator.geolocation.clearWatch(id)
-  }, [tenantId, activeId])
+    return () => navigator.geolocation.clearWatch(watchId)
+  }, [tenantId, activeKey])
 
   const claim = async (o) => {
     try { await assignDelivery(tenantId, o.id, { uid: user.uid, name: user?.displayName || '' }); toast.success(ar ? 'استلمت الطلب' : 'Claimed') }

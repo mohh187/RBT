@@ -2564,7 +2564,7 @@ export default function Settings() {
                       // seed the draft from the current theme's palette so the first open is never blank
                       const baseId = tenant?.systemTheme && tenant.systemTheme !== 'custom' && SYSTEM_THEMES.some((x) => x.id === tenant.systemTheme) ? tenant.systemTheme : 'glass'
                       const th = SYSTEM_THEMES.find((x) => x.id === baseId)
-                      const dark = baseId === 'noir' || baseId === 'glassdark'
+                      const dark = ['noir', 'glassdark', 'neon'].includes(baseId)
                       let brand = '#7c2d2d'
                       try { const v = getComputedStyle(document.documentElement).getPropertyValue('--brand').trim(); if (/^#[0-9a-fA-F]{6}$/.test(v)) brand = v } catch (_) { /* keep fallback */ }
                       setCustEdit({ base: baseId, name: '', tokens: { bg: th.swatch[0], surface: th.swatch[1], text: dark ? '#f2f3f7' : '#17181c', border: dark ? '#3a3f4d' : '#e5e7eb', brand } })

@@ -6448,6 +6448,9 @@ body:has(.sd2-root) .toast-wrap { z-index: 840; }
 [data-sidetheme='golden'] .admin-side-nav a:hover { background: rgba(201, 162, 75, 0.12); }
 [data-sidetheme='golden'] .admin-side-nav a.active { background: linear-gradient(135deg, #c9a24b, #a8842c); color: #1a1408; font-weight: 800; }
 [data-sidetheme='golden'] .admin-brand-row strong { color: #f3ead6; }
+/* the footer email sits on the dark rail too — give it a golden-faint tone so it
+   isn't light-theme --text-faint (near-invisible) on #16130e */
+[data-sidetheme='golden'] .admin-side-foot p { color: #a89a7d; }
 
 /* ==== VIEWER + REAL PREVIEW (2026-07-18) ==== */
 /* Viewer: universal fullscreen file viewer (pro replacement for .img-zoom Lightbox).
