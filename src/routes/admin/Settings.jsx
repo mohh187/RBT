@@ -3294,7 +3294,7 @@ export default function Settings() {
                       is made by eye, not by name. Saved instantly on the tenant. */}
                   <div id="set-chrome" className="stack" style={{ gap: 8, borderTop: '1px solid var(--border)', paddingTop: 10 }}>
                     <strong className="small"><Icon name="penLine" size={14} style={{ verticalAlign: 'middle' }} /> {ar ? 'لون الشريط العلوي وشريط التنقّل' : 'App bar & bottom nav colour'}</strong>
-                    <p className="xs faint" style={{ margin: 0 }}>{ar ? 'يلوّن الشريط العلوي وشريط التنقّل السفلي في منيو العملاء وفي شاشات النظام. المعاينة أدناه بألوان الشريط الحقيقية.' : 'Colours the top bar and the bottom navigation on the customer menu and the staff screens. Each preview below uses the real bar colours.'}</p>
+                    <p className="xs faint" style={{ margin: 0 }}>{ar ? 'يلوّن الشريط العلوي وشريط التنقّل السفلي في منيو العملاء فقط. المعاينة أدناه بألوان الشريط الحقيقية.' : 'Colours the top bar and the bottom navigation on the customer menu only. Each preview below uses the real bar colours.'}</p>
                     <div className="chrome-grid">
                       {CHROME_THEMES.map((c) => {
                         const on = (tenant?.chromeTheme || 'auto') === c.id
