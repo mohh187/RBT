@@ -7,7 +7,7 @@
 // Firestore rules (platformAdmins gate) remain the real security backstop.
 import { collection, getDocs, query, orderBy, limit } from 'firebase/firestore'
 import { db } from './firebase.js'
-import { setTenantPlan, setTenantActive, createBroadcast, sendChatMessage, updateIssue } from './platform.js'
+import { setTenantPlan, setTenantActive, createBroadcast, sendChatMessage, updateIssue, getVenueMeta } from './platform.js'
 import { setDomainStatus } from './platformDomains.js'
 import { saveCoupon, markInvoicePaid } from './platformBilling.js'
 import { getPlansConfig } from './platformConfig.js'
@@ -124,12 +124,15 @@ export const PLATFORM_TOOLS = [
       const r = await resolveVenue(ctx, a.name)
       if (!r.t) return r.out
       const t = r.t
+      // customPrice moved to the platform-only meta doc (tenant doc is public);
+      // the tenant-doc read remains only as a legacy pre-migration fallback.
+      const meta = await getVenueMeta(t.id)
       return {
         ...brief(t),
         planStatus: t.planStatus || 'active',
         suspended: t.active === false,
         suspendReason: t.suspendReason || '',
-        customPrice: t.customPrice ?? null,
+        customPrice: meta.customPrice ?? t.customPrice ?? null,
         currency: t.currency || 'SAR',
         phone: t.phone || t.whatsapp || '',
         city: t.city || '',

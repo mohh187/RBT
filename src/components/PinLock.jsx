@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from 'react'
 import { createPortal } from 'react-dom'
 import { watchStaff } from '../lib/db.js'
-import { hashPin, isUnlocked, markUnlocked, clearUnlocked, setPinActor, getPinActor } from '../lib/pin.js'
+import { verifyPin, staffHasPin, isUnlocked, markUnlocked, clearUnlocked, setPinActor, getPinActor } from '../lib/pin.js'
 import { useAuth } from '../lib/auth.jsx'
 import { useToast } from './Toast.jsx'
 import Icon from './Icon.jsx'
@@ -64,7 +64,7 @@ export default function PinLock({ tenant, tenantId, demo = false }) {
     if (!enabled || demo) return
     const lock = () => { clearUnlocked(tenantId); setLocked(true); setSel(null); setPin(''); setOk(false) }
     const onManual = () => {
-      const has = staffRef.current.some((s) => s.pinHash && s.active !== false)
+      const has = staffRef.current.some((s) => staffHasPin(s) && s.active !== false)
       if (!has) { toast.error('عيّن رمز PIN لموظف واحد على الأقل أولاً (الإعدادات ← قفل PIN)'); return }
       lock()
     }
@@ -89,7 +89,7 @@ export default function PinLock({ tenant, tenantId, demo = false }) {
     }
   }, [enabled, idleMin, locked, tenantId]) // eslint-disable-line react-hooks/exhaustive-deps
 
-  const realPins = staff.filter((s) => s.pinHash && s.active !== false)
+  const realPins = staff.filter((s) => staffHasPin(s) && s.active !== false)
   const withPins = demo && realPins.length === 0
     ? [{ uid: 'd1', name: 'أحمد', role: 'cashier' }, { uid: 'd2', name: 'سارة', role: 'manager' }]
     : realPins
@@ -110,10 +110,12 @@ export default function PinLock({ tenant, tenantId, demo = false }) {
     setPin(next)
     if (next.length < 4 || !sel) return
     if (demo) { setErr(true); vibrate([60, 40, 60]); setTimeout(() => { setErr(false); setPin('') }, 600); return }
+    // Server-side verify: the hash never reaches the client, and the server
+    // rate-limits attempts on top of this screen's own cool-down.
     setChecking(true)
-    const h = await hashPin(tenantId, next)
+    const res = await verifyPin(tenantId, sel.uid || sel.id, next)
     setChecking(false)
-    if (h === sel.pinHash) {
+    if (res.ok) {
       fails.current = 0
       setOk(true)
       vibrate(30)
@@ -121,10 +123,12 @@ export default function PinLock({ tenant, tenantId, demo = false }) {
       markUnlocked(tenantId)
       setTimeout(() => { setLocked(false); setSel(null); setPin(''); setOk(false) }, 420)
     } else {
-      fails.current += 1
+      if (res.error) toast.error('تعذّر التحقق — تأكد من الاتصال بالإنترنت')
+      fails.current = res.locked ? 5 : fails.current + 1
       setErr(true)
       vibrate([60, 40, 60])
-      setTimeout(() => { setErr(false); setPin('') }, fails.current >= 5 ? 15000 : 700)
+      const wait = res.locked ? Math.max(15000, Number(res.waitMs) || 0) : (fails.current >= 5 ? 15000 : 700)
+      setTimeout(() => { setErr(false); setPin('') }, wait)
     }
   }
 

@@ -696,9 +696,9 @@ export function watchReadyBoard(tid, cb) {
 }
 
 // staff PIN (operational lock) — hash only, never the plaintext pin
-export async function setStaffPin(tid, staffId, pinHash) {
-  return updateDoc(subDoc(tid, 'staff', staffId), { pinHash })
-}
+// PIN writes moved server-side: setStaffPinSecure / verifyStaffPin callables
+// (see lib/pin.js) — the hash lives in the client-unreadable staffPins
+// collection now, never on the peer-readable staff doc.
 
 // ===== Digital signage screens (top-level; doc id = the TV pairing code) =====
 export function watchScreens(tid, cb) {

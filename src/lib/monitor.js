@@ -39,6 +39,12 @@ function report(message, stack, kind) {
   } catch { /* never break the app from the monitor */ }
 }
 
+// React render crashes are swallowed by an error boundary (they never reach
+// window.onerror), so the boundary reports through the same dedupe/cap pipe.
+export function reportBoundaryError(err) {
+  report((err && (err.message || err.code)) || String(err || 'boundary error'), err && err.stack, 'boundary')
+}
+
 let installed = false
 export function initMonitor() {
   if (installed) return

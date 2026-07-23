@@ -336,8 +336,16 @@ service cloud.firestore {
           // that tag to honor a manual staff discount below the offer floor; a diner
           // must not be able to forge it to underpay.
           && (request.resource.data.get('source', '') != 'cashier' || isStaff(tid));
-        // Only staff move orders through their lifecycle.
-        allow update: if isStaff(tid);
+        // Only staff move orders through their lifecycle — and a delivery
+        // driver only through the DELIVERY lane: every driver write (claim /
+        // release / advance / COD custody / live geo) touches only the
+        // `delivery` map + `updatedAt`, so a compromised driver session
+        // cannot rewrite items or totals, flip the order paid, or cancel it.
+        // Other roles keep full lifecycle writes (cashier settles, kitchen
+        // advances, managers correct).
+        allow update: if isStaff(tid)
+          && (userDoc().role != 'driver'
+              || request.resource.data.diff(resource.data).affectedKeys().hasOnly(['delivery', 'updatedAt']));
         allow delete: if isManager(tid);
       }
 
@@ -718,15 +726,24 @@ service cloud.firestore {
       }
 
       // ---- customers (CRM) ----
-      // Staff read + full write. Diners may upsert only their own LIGHT profile on order
-      // (name/phone/stats) — never the loyalty/flag fields, which are staff/server-owned.
-      // This closes the "self-grant membership / infinite points / un-flag" hole.
+      // Staff read + full write. The ONLY anonymous write path is the menu's
+      // self-registration («انضم للعائلة» / games gate / room join —
+      // registerCustomer in db.js), and it is held to a strict KEY ALLOWLIST:
+      // the old deny-list blocked the known loyalty/flag fields but still let
+      // a hostile diner attach unlimited junk under any new name (free
+      // storage at the venue's expense, or seeding a field a later feature
+      // trusts). Loyalty/stats/membership writes all happen from staff
+      // sessions (settle/cancel/refund paths), so they stay staff-only.
       match /customers/{id} {
         allow read: if isStaff(tid);
         allow create: if isStaff(tid)
-          || !request.resource.data.keys().hasAny(['membership', 'flagged', 'flagNote', 'staffRating', 'cancelCount', 'noShowCount', 'lastBdayYear', 'staffRatedBy', 'rewards', 'loyaltyDrinks', 'points', 'totalSpent', 'totalOrders', 'totalDrinks']);
+          || (request.resource.data.keys().hasOnly(['name', 'phone', 'source', 'registeredAt', 'updatedAt'])
+              && (!('name' in request.resource.data) || (request.resource.data.name is string && request.resource.data.name.size() <= 120))
+              && (!('phone' in request.resource.data) || (request.resource.data.phone is string && request.resource.data.phone.size() <= 32)));
         allow update: if isStaff(tid)
-          || !request.resource.data.diff(resource.data).affectedKeys().hasAny(['membership', 'flagged', 'flagNote', 'staffRating', 'cancelCount', 'noShowCount', 'lastBdayYear', 'staffRatedBy', 'rewards', 'loyaltyDrinks', 'points', 'totalSpent', 'totalOrders', 'totalDrinks']);
+          || (request.resource.data.diff(resource.data).affectedKeys().hasOnly(['name', 'phone', 'source', 'registeredAt', 'updatedAt'])
+              && (!('name' in request.resource.data) || (request.resource.data.name is string && request.resource.data.name.size() <= 120))
+              && (!('phone' in request.resource.data) || (request.resource.data.phone is string && request.resource.data.phone.size() <= 32)));
         allow delete: if isManager(tid);
       }
 
@@ -750,18 +767,29 @@ service cloud.firestore {
         allow update, delete: if isManager(tid);
       }
 
+      // ---- staff PIN secrets: NEVER client-readable. The 4-digit PIN hash
+      // used to sit on the peer-readable staff doc — 10k candidates against
+      // an unsalted fast hash meant any staffer could brute-force a
+      // manager's PIN offline. Hashes (scrypt + per-record salt) live here
+      // now; ONLY the verifyStaffPin / setStaffPinSecure Cloud Functions
+      // (Admin SDK) touch them. ----
+      match /staffPins/{uid} {
+        allow read, write: if false;
+      }
+
       // ---- staff directory: managers manage anyone; a staffer self-registers
       // ONLY their own doc within their own tenant (strict isolation). ----
       match /staff/{uid} {
         allow read: if isStaff(tid);
         allow create: if isManager(tid)
           || (isStaff(tid) && request.auth.uid == uid
-              && !request.resource.data.keys().hasAny(['salary', 'caps', 'capsCustom', 'deductions', 'workDays', 'shiftStart', 'shiftEnd', 'managerRating', 'pinHash', 'staffId', 'hireDate']));
-        // managerRating/pinHash/capsCustom/staffId/hireDate are manager-owned — a
-        // staffer must not be able to inflate their own evaluation or reset a PIN.
+              && !request.resource.data.keys().hasAny(['salary', 'caps', 'capsCustom', 'deductions', 'workDays', 'shiftStart', 'shiftEnd', 'managerRating', 'pinHash', 'hasPin', 'staffId', 'hireDate']));
+        // managerRating/pinHash/hasPin/capsCustom/staffId/hireDate are manager-
+        // owned — a staffer must not be able to inflate their own evaluation
+        // or fiddle the PIN flag (the hash itself lives in staffPins now).
         allow update: if isManager(tid)
           || (isStaff(tid) && request.auth.uid == uid
-              && !request.resource.data.diff(resource.data).affectedKeys().hasAny(['salary', 'role', 'caps', 'capsCustom', 'deductions', 'workDays', 'shiftStart', 'shiftEnd', 'active', 'managerRating', 'pinHash', 'staffId', 'hireDate']));
+              && !request.resource.data.diff(resource.data).affectedKeys().hasAny(['salary', 'role', 'caps', 'capsCustom', 'deductions', 'workDays', 'shiftStart', 'shiftEnd', 'active', 'managerRating', 'pinHash', 'hasPin', 'staffId', 'hireDate']));
         allow delete: if isManager(tid);
       }
 
@@ -927,6 +955,16 @@ service cloud.firestore {
     match /platformStats/{id} {
       allow read: if isPlatformAdmin();
       allow write: if false;
+    }
+
+    // Private per-venue platform metadata: the console's internal note about a
+    // venue + the negotiated custom subscription price. Deliberately OUTSIDE
+    // the tenant doc — that doc is world-readable (public menus render from
+    // it), and these two fields were leaking to anyone who fetched it. The
+    // monthly billing function reads customPrice from here via Admin SDK.
+    match /platformVenueMeta/{tid} {
+      allow read: if isPlatformAdmin();
+      allow write: if isPlatformSuper();
     }
 
     // ---- extended platform features (invoices, config, audit, growth, …) ----

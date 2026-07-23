@@ -80,17 +80,42 @@ const paragraphsOf = (body) => String(body || '').split(/\n\s*\n|\n/).map((p) =>
 // panoramically, e.g. 2029x651). One fixed box letterboxes those into a thin
 // strip. Reading the natural ratio lets the CSS give each shape its own stage:
 // 'wide' bleeds to the screen edges, 'tall' is height-capped, 'std' fills.
-function useImgFit() {
-  const [fit, setFit] = useState('')
+//
+// Measured ratios are kept per-URL across mounts: the list measures every
+// photo it draws, so when the stage later opens the same URL its shape is
+// known BEFORE the (possibly slow) decode and the hero box can be reserved
+// up front. Without that, a heavy photo that decodes after the stage opens
+// grows the hero and everything under it — the painted table — visibly
+// slides down («عند فتح الصنف تتحرك الطاولة», only on the dish whose photo
+// arrived late; photo-less dishes use the fixed-height fallback and never
+// moved).
+const IMG_RATIO = new Map()
+const fitOf = (r) => (r >= 1.9 ? 'wide' : r <= 0.86 ? 'tall' : 'std')
+
+function useImgFit(src = '') {
+  const primed = src ? IMG_RATIO.get(src) : undefined
+  const [fit, setFit] = useState(primed ? fitOf(primed) : '')
+  const [ratio, setRatio] = useState(primed || 0)
   const nodeRef = useRef(null)
   const read = (n) => {
     if (!n || !n.naturalWidth || !n.naturalHeight) return
     const r = n.naturalWidth / n.naturalHeight
-    setFit(r >= 1.9 ? 'wide' : r <= 0.86 ? 'tall' : 'std')
+    IMG_RATIO.set(n.currentSrc || n.src, r)
+    setRatio(r)
+    setFit(fitOf(r))
   }
+  // Gallery swaps re-enter with a new src: prime from the cache (or reset to
+  // unknown). Guarded on src so the src-less list call sites keep today's
+  // exact behavior — their bind() read must not be clobbered on mount.
+  useEffect(() => {
+    if (!src) return
+    const r = IMG_RATIO.get(src)
+    setRatio(r || 0)
+    setFit(r ? fitOf(r) : '')
+  }, [src])
   // ref callback too: a cached photo is already complete before onLoad fires
   const bind = (n) => { nodeRef.current = n; read(n) }
-  return { fit, bind, nodeRef, onLoad: (e) => read(e.currentTarget) }
+  return { fit, ratio, bind, nodeRef, onLoad: (e) => read(e.currentTarget) }
 }
 
 // ===========================================================================
@@ -1166,11 +1191,16 @@ function EdtBackdrop({ bg }) {
 //     tree order and follows the same lift translate, so the squashed ground
 //     shadow stays glued to the plate base a table has seated lower.
 // With tilt 0 the box is null and this renders byte-identically to before.
-function EdtDish({ comp, src, anim = '', bind = null, onLoad = null, fallback = 64, lift = 0 }) {
+function EdtDish({ comp, src, anim = '', bind = null, onLoad = null, fallback = 64, lift = 0, ratio = 0 }) {
   const box = imgTiltBoxStyle(comp.img, lift)
   const photo = imgStyle(comp.img, comp.shadow) || {}
   const style = { ...photo }
   if (!box && lift) style.transform = `${photo.transform || ''} translateY(${lift}%)`.trim()
+  // Known shape (measured earlier, e.g. by the list) → reserve the photo's box
+  // BEFORE the pixels decode, so a slow decode cannot grow the hero after the
+  // stage opened and shove the table below it. Equals the natural ratio once
+  // loaded, so the settled layout is byte-identical.
+  if (src && ratio > 0) style.aspectRatio = String(ratio)
   const has = Object.keys(style).length > 0
   const dish = src
     ? <img className="edt-dish" ref={bind} onLoad={onLoad} src={src} alt="" decoding="async" style={has ? style : undefined} />
@@ -1552,7 +1582,6 @@ export function EditorialItemStage({ item, tenant = null, currency, onClose, onA
   const scrollRef = useRef(null)
   const closingRef = useRef(false)
   const addedTimer = useRef(0)
-  const { fit, bind, onLoad } = useImgFit()
   const [closing, setClosing] = useState(false)
   const [err, setErr] = useState('')
   const [added, setAdded] = useState('')
@@ -1643,6 +1672,16 @@ export function EditorialItemStage({ item, tenant = null, currency, onClose, onA
     [item.imageUrl, item.images],
   )
   const heroSrc = gallery[Math.min(imgIdx, Math.max(0, gallery.length - 1))] || ''
+  // Sized-before-decode: primes fit + ratio from the list's earlier measure of
+  // this same URL (see IMG_RATIO above). Called here, after heroSrc, so the
+  // gallery swap re-primes too. Hook order stays fixed — the call is
+  // unconditional on every render.
+  const { fit, ratio, bind, onLoad } = useImgFit(heroSrc)
+  // A decode that lands after mount is a fresh late paint: count it so the
+  // iOS composite kick below re-runs and the table paint can never be left
+  // composited at a stale position by the arrival.
+  const [loadTick, setLoadTick] = useState(0)
+  const onHeroLoad = (e) => { onLoad(e); setLoadTick((t) => t + 1) }
   // Venue-curated «يُطلب معه»: item.pairings = [itemId, …] resolved against the
   // live menu (same rule the default/spotlight views use).
   const pairs = useMemo(() => {
@@ -1657,6 +1696,9 @@ export function EditorialItemStage({ item, tenant = null, currency, onClose, onA
   // only the composite is stale («الطاولة ليست ثابتة وعند التمرير تثبت»). Toggling
   // translateZ(0) on the stage root across two frames forces a fresh composite on
   // open, so it never needs that first scroll to look right.
+  // Re-armed on loadTick: a hero photo that decodes AFTER open is a second
+  // late paint with the same stale-composite window, so it gets its own kick
+  // (the one-shot mount kick had already fired by then).
   useEffect(() => {
     const stg = scrollRef.current?.parentElement
     if (!stg) return undefined
@@ -1665,7 +1707,7 @@ export function EditorialItemStage({ item, tenant = null, currency, onClose, onA
       requestAnimationFrame(() => { stg.style.transform = '' })
     })
     return () => cancelAnimationFrame(raf)
-  }, [])
+  }, [loadTick])
 
   // Free the ambient background video's decoder while the full-screen stage
   // covers it — on iOS a decoding loop video behind an opaque overlay is pure
@@ -1911,7 +1953,7 @@ export function EditorialItemStage({ item, tenant = null, currency, onClose, onA
             <DishProps item={dpItem} active variant="stage" />
             <EdtBackdrop bg={comp.bg} />
             <EdtLayers list={comp.layers.behind} />
-            <EdtDish comp={comp} src={heroSrc} anim={stageAnim} bind={bind} onLoad={onLoad} fallback={72} lift={table ? table.lift : 0} />
+            <EdtDish comp={comp} src={heroSrc} anim={stageAnim} bind={bind} onLoad={onHeroLoad} fallback={72} lift={table ? table.lift : 0} ratio={ratio} />
             <EdtLayers list={comp.layers.front} />
             {item.hotspots?.length ? <Suspense fallback={null}><DishHotspots hotspots={item.hotspots} /></Suspense> : null}
           </div>

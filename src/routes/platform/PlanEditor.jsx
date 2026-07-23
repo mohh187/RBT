@@ -7,7 +7,7 @@ import { Link } from 'react-router-dom'
 import Icon from '../../components/Icon.jsx'
 import { Spinner, Empty } from '../../components/ui.jsx'
 import { useToast } from '../../components/Toast.jsx'
-import { watchAllTenants } from '../../lib/platform.js'
+import { watchAllTenants, watchAllVenueMeta } from '../../lib/platform.js'
 import { PLANS } from '../../lib/plans.js'
 import {
   watchPlansConfig, savePlansConfig, bulkSetPlan, bulkExtend, setCustomPrice,
@@ -74,7 +74,11 @@ export default function PlanEditor() {
   const [bulkDays, setBulkDays] = useState(30)
   const [busy, setBusy] = useState(false)
 
+  // Custom price overrides live in platformVenueMeta now (the tenant doc is
+  // world-readable); the map keys venue id → {customPrice, note}.
+  const [meta, setMeta] = useState({})
   useEffect(() => watchAllTenants(setTenants), [])
+  useEffect(() => watchAllVenueMeta(setMeta), [])
   useEffect(() => watchPlansConfig((c) => {
     setCfg(c)
     // Only seed the draft the first time (or keep it if user hasn't touched it).
@@ -216,7 +220,7 @@ export default function PlanEditor() {
             </label>
             <div className="divide" style={{ maxHeight: 420, overflowY: 'auto' }}>
               {tenants.map((t) => (
-                <VenueSelectRow key={t.id} t={t} checked={selected.has(t.id)} onToggle={() => toggle(t.id)} price={draft.prices[t.plan || 'enterprise']} />
+                <VenueSelectRow key={t.id} t={t} meta={meta[t.id]} checked={selected.has(t.id)} onToggle={() => toggle(t.id)} price={draft.prices[t.plan || 'enterprise']} />
               ))}
             </div>
           </div>
@@ -227,12 +231,15 @@ export default function PlanEditor() {
 }
 
 // ---- (3) a venue row: checkbox + inline custom price override ----
-function VenueSelectRow({ t, checked, onToggle, price }) {
+function VenueSelectRow({ t, meta, checked, onToggle, price }) {
   const toast = useToast()
-  const [custom, setCustom] = useState(t.customPrice ?? '')
+  // platformVenueMeta first; the tenant-doc field only as a legacy fallback
+  // for a roster the self-heal migration hasn't finished moving yet.
+  const current = meta?.customPrice ?? t.customPrice ?? ''
+  const [custom, setCustom] = useState(current)
   const [saving, setSaving] = useState(false)
-  useEffect(() => { setCustom(t.customPrice ?? '') }, [t.customPrice])
-  const dirty = String(custom) !== String(t.customPrice ?? '')
+  useEffect(() => { setCustom(current) }, [current])
+  const dirty = String(custom) !== String(current)
 
   const saveCustom = async () => {
     setSaving(true)

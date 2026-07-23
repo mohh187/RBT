@@ -98,7 +98,17 @@ const generateMonthlyInvoices = onSchedule(
         // Billing begins only once the platform assigns an explicit plan.
         if (!d.plan) return
         const plan = d.plan
-        const amount = Number(prices[plan]) || 0
+        // Per-venue negotiated price wins over the plan list price. It lives in
+        // the platform-only platformVenueMeta doc (the tenant doc is public);
+        // the tenant-doc field is read only as a legacy pre-migration fallback.
+        // Before this, the console's «سعر خاص» was never billed at all.
+        const metaSnap = await db.doc(`platformVenueMeta/${t.id}`).get().catch(() => null)
+        const meta = metaSnap && metaSnap.exists ? (metaSnap.data() || {}) : {}
+        const rawCustom = meta.customPrice != null ? meta.customPrice : d.customPrice
+        const custom = rawCustom == null ? null : Number(rawCustom)
+        const amount = custom != null && Number.isFinite(custom) && custom >= 0
+          ? custom
+          : (Number(prices[plan]) || 0)
 
         // Idempotency: one invoice per tenant per period.
         const dup = await db.collection('platformInvoices')

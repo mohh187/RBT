@@ -12,6 +12,7 @@ import {
   addDoc,
   updateDoc,
   deleteDoc,
+  deleteField,
   query,
   where,
   orderBy,
@@ -40,8 +41,69 @@ export function watchAllTenants(cb) {
   return onSnapshot(collection(db, 'tenants'), (s) => {
     const rows = list(s)
     rows.sort((a, b) => (b.createdAt?.toMillis?.() || 0) - (a.createdAt?.toMillis?.() || 0))
+    // Self-healing migration: any legacy platform-private fields still sitting
+    // on the world-readable tenant docs get moved the first time a console
+    // screen loads the roster (fire-and-forget; per-tenant failures skipped).
+    migrateVenueMetaOnce(rows).catch(() => {})
     cb(rows)
   }, () => cb([]))
+}
+
+// ---------- private per-venue platform metadata (platformVenueMeta/{tid}) ----------
+// The tenant root doc is PUBLIC (menus render from it), so platform-internal
+// fields must not live there: the console's private note about a venue and the
+// negotiated custom subscription price were world-readable. They live in this
+// platform-only collection now (rules: read platform admins, write superAdmin;
+// billing reads it via Admin SDK). `note` here == the old tenant.platformNote.
+export function watchVenueMeta(tid, cb) {
+  return onSnapshot(doc(db, 'platformVenueMeta', tid), (s) => cb(s.exists() ? s.data() : {}), () => cb({}))
+}
+export async function getVenueMeta(tid) {
+  try {
+    const s = await getDoc(doc(db, 'platformVenueMeta', tid))
+    return s.exists() ? s.data() : {}
+  } catch {
+    return {}
+  }
+}
+export function watchAllVenueMeta(cb) {
+  return onSnapshot(collection(db, 'platformVenueMeta'), (s) => {
+    const map = {}
+    s.docs.forEach((d) => { map[d.id] = d.data() })
+    cb(map)
+  }, () => cb({}))
+}
+export async function setVenueMeta(tid, patch) {
+  await setDoc(doc(db, 'platformVenueMeta', tid), { ...patch, updatedAt: serverTimestamp() }, { merge: true })
+}
+
+// One-shot per session: move legacy platformNote/customPrice off any tenant
+// doc that still carries them, then strip the public copy. Runs as the logged
+// in console admin — a non-super support account simply fails per tenant and
+// the next super session completes the move. Legacy readers keep a fallback
+// until every doc is clean, so a half-finished pass loses nothing.
+let venueMetaMigrated = false
+export async function migrateVenueMetaOnce(tenants) {
+  if (venueMetaMigrated) return 0
+  venueMetaMigrated = true
+  const dirty = (tenants || []).filter((t) => t && (t.platformNote != null || t.customPrice != null))
+  let moved = 0
+  for (const t of dirty) {
+    try {
+      const patch = {}
+      if (t.platformNote != null) patch.note = t.platformNote
+      if (t.customPrice != null) patch.customPrice = t.customPrice
+      await setVenueMeta(t.id, patch)
+      await updateDoc(doc(db, 'tenants', t.id), {
+        platformNote: deleteField(),
+        customPrice: deleteField(),
+        updatedAt: serverTimestamp(),
+      })
+      moved++
+    } catch (_) { /* skip this venue, keep the rest going */ }
+  }
+  if (moved > 0) console.info(`[platform] moved private meta off ${moved} tenant doc(s)`)
+  return moved
 }
 export function watchTenantDoc(tid, cb) {
   return onSnapshot(doc(db, 'tenants', tid), (s) => cb(s.exists() ? { id: s.id, ...s.data() } : null), () => cb(null))

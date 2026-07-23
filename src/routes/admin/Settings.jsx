@@ -7,8 +7,8 @@ import { VENUE_TYPES, venueType, lex, LEX_KEYS, LEX_LABELS } from '../../lib/ven
 const MapRangePicker = lazy(() => import('../../components/MapRangePicker.jsx'))
 import { useI18n, pickLang } from '../../lib/i18n.jsx'
 import { useToast } from '../../components/Toast.jsx'
-import { updateTenant as updTenantRaw, watchCategories, watchStaff, setStaffPin, watchItems, saveItem } from '../../lib/db.js'
-import { hashPin } from '../../lib/pin.js'
+import { updateTenant as updTenantRaw, watchCategories, watchStaff, watchItems, saveItem } from '../../lib/db.js'
+import { setStaffPinSecure, staffHasPin } from '../../lib/pin.js'
 import { uploadImage, uploadFile, shrinkImage } from '../../lib/storage.js'
 import VipCard from '../../components/VipCard.jsx'
 import { planAllows } from '../../lib/plans.js'
@@ -2362,16 +2362,17 @@ export default function Settings() {
                 <div className="small bold">{ar ? 'أرقام الموظفين (4 أرقام)' : 'Staff PINs (4 digits)'}</div>
                 {staffList.filter((s) => s.active !== false).map((s) => (
                   <div key={s.uid || s.id} className="row" style={{ gap: 8, alignItems: 'center' }}>
-                    <span className="small grow" style={{ minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{s.name || s.displayName || '—'} {s.pinHash ? <span className="badge badge-success" style={{ padding: '1px 5px' }}><Icon name="check" size={10} /></span> : null}</span>
+                    <span className="small grow" style={{ minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{s.name || s.displayName || '—'} {staffHasPin(s) ? <span className="badge badge-success" style={{ padding: '1px 5px' }}><Icon name="check" size={10} /></span> : null}</span>
                     <input className="input input-sm num" dir="ltr" type="password" inputMode="numeric" maxLength={4} placeholder="••••" style={{ width: 86, textAlign: 'center' }}
                       onBlur={async (e) => {
                         const v = e.target.value.replace(/[^0-9]/g, '')
                         e.target.value = ''
                         if (v.length !== 4) return
-                        try { await setStaffPin(tenantId, s.uid || s.id, await hashPin(tenantId, v)); toast.success(t('saved')) } catch (_) { toast.error(t('error')) }
+                        // hashed + salted server-side (staffPins) — no hash ever client-side
+                        try { await setStaffPinSecure(tenantId, s.uid || s.id, v); toast.success(t('saved')) } catch (_) { toast.error(t('error')) }
                       }} />
-                    {s.pinHash && <button className="icon-btn" style={{ width: 30, height: 30, color: 'var(--danger)' }} title={ar ? 'مسح الرمز' : 'Clear PIN'}
-                      onClick={async () => { try { await setStaffPin(tenantId, s.uid || s.id, ''); toast.success(t('saved')) } catch (_) { toast.error(t('error')) } }}><Icon name="close" size={13} /></button>}
+                    {staffHasPin(s) && <button className="icon-btn" style={{ width: 30, height: 30, color: 'var(--danger)' }} title={ar ? 'مسح الرمز' : 'Clear PIN'}
+                      onClick={async () => { try { await setStaffPinSecure(tenantId, s.uid || s.id, null); toast.success(t('saved')) } catch (_) { toast.error(t('error')) } }}><Icon name="close" size={13} /></button>}
                   </div>
                 ))}
                 <p className="xs faint" style={{ margin: 0 }}>{ar ? 'قفل تشغيلي ضد العبث على جهاز مفتوح — الأمان الحقيقي يبقى بحساب الدخول. الرمز يُخزن مشفراً (هاش) ولا يمكن استرجاعه.' : 'An operational tamper guard — real security stays with the account. PINs are stored hashed.'}</p>

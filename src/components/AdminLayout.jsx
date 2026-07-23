@@ -7,6 +7,7 @@ import Icon from './Icon.jsx'
 import StaffBell from './StaffBell.jsx'
 import InstallButton from './InstallButton.jsx'
 import { watchActiveOrders, healMemberMirrors, healStaffCapsMirrors } from '../lib/db.js'
+import { migrateStaffPins } from '../lib/pin.js'
 import { CAP } from '../lib/permissions.js'
 import { planAllows, planExpired, EXPIRED_GRACE_DAYS } from '../lib/plans.js'
 import { alertParty } from '../lib/notify.js'
@@ -227,12 +228,25 @@ export default function AdminLayout() {
   // 4. staff caps mirrors: Firestore rules enforce granular permissions from
   // staff/{uid}.caps, which only managers may write. Refresh stale role-default
   // mirrors whenever a manager opens the admin (writes only when out of date).
+  // (New staffers are seeded instantly by the onStaffDocCreated Cloud
+  // Function; this sweep remains the safety net for role-caps edits.)
   useEffect(() => {
     if (!tenantId || !isManager) return
     healStaffCapsMirrors(tenantId, tenant?.roleCaps)
       .then((n) => { if (n > 0) console.info(`[heal] refreshed ${n} staff caps mirrors`) })
       .catch((err) => console.warn('[heal staff caps]', err))
   }, [tenantId, isManager, tenant?.roleCaps])
+
+  // 5. legacy PIN sweep: move any pinHash still sitting on peer-readable staff
+  // docs into the server-only staffPins collection (idempotent; once/session).
+  useEffect(() => {
+    if (!tenantId || !isManager) return
+    const key = `ml.pinmig.${tenantId}`
+    if (sessionStorage.getItem(key)) return
+    migrateStaffPins(tenantId)
+      .then((r) => { sessionStorage.setItem(key, '1'); if (r.moved > 0) console.info(`[heal] migrated ${r.moved} staff PIN(s) to staffPins`) })
+      .catch(() => {})
+  }, [tenantId, isManager])
 
   const doLogout = async () => {
     await logout()

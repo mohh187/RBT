@@ -17,7 +17,7 @@ import { useToast } from '../../components/Toast.jsx'
 import { watchOrdersSince, watchStaff } from '../../lib/db.js'
 import {
   watchTenantDoc, watchActivity, setTenantPlan, setTenantActive, platformUpdateTenant,
-  impersonateTenantOwner, fetchRecentSub,
+  impersonateTenantOwner, fetchRecentSub, watchVenueMeta, setVenueMeta,
 } from '../../lib/platform.js'
 import { PLANS, FEATURE_CATALOG } from '../../lib/plans.js'
 import { PLATFORM_APEX } from '../../lib/domains.js'
@@ -291,7 +291,13 @@ function PlanTab({ tid, tenant, toast, toggleActive, toggling }) {
   const [planStatus, setPlanStatus] = useState(tenant.planStatus || 'active')
   const [expiry, setExpiry] = useState(toDateInput(tenant.planExpiresAt))
   const [features, setFeatures] = useState(tenant.features || {})
+  // The private console note lives in platformVenueMeta now (the tenant doc is
+  // world-readable). Legacy fallback shows an un-migrated tenant's old note
+  // until the roster self-heal moves it.
   const [note, setNote] = useState(tenant.platformNote || '')
+  useEffect(() => watchVenueMeta(tid, (m) => {
+    if (m && m.note != null) setNote(m.note)
+  }), [tid])
   const [aiDaily, setAiDaily] = useState(String(Number(tenant.aiLimits?.daily) || 60))
   const [aiMonthly, setAiMonthly] = useState(String(Number(tenant.aiLimits?.monthly) || 900))
   const [aiExtra, setAiExtra] = useState(String(Number(tenant.aiExtra) || 0))
@@ -365,7 +371,7 @@ function PlanTab({ tid, tenant, toast, toggleActive, toggling }) {
     if (savingNote) return
     setSavingNote(true)
     try {
-      await platformUpdateTenant(tid, { platformNote: note })
+      await setVenueMeta(tid, { note })
       toast.success('حُفظت الملاحظة')
     } catch {
       toast.error('تعذّر حفظ الملاحظة')

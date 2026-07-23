@@ -957,6 +957,9 @@ exports.subscriptionSweep = onSchedule({ schedule: '0 3 * * *', timeZone: 'Asia/
 Object.assign(exports, require('./platformExtensions'))
 Object.assign(exports, require('./campaigns'))
 
+// ---- staff security (server-side salted PIN verify + caps-mirror seeding) ----
+Object.assign(exports, require('./staffSecurity'))
+
 // ---- customer/venue messaging (WhatsApp order updates + Resend emails) ----
 // Register ONLY the triggers (the send helpers stay internal to messaging.js).
 const messaging = require('./messaging')

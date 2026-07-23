@@ -4,7 +4,7 @@
 // existing tenant subscription helpers so activity logging / push stay intact.
 import { doc, getDoc, onSnapshot, setDoc, serverTimestamp } from 'firebase/firestore'
 import { db } from './firebase.js'
-import { setTenantPlan, platformUpdateTenant } from './platform.js'
+import { setTenantPlan, setVenueMeta } from './platform.js'
 import { PLANS } from './plans.js'
 
 const CONFIG_DOC = () => doc(db, 'platformConfig', 'plans')
@@ -73,10 +73,12 @@ export async function bulkExtend(tenants, days) {
   return summarize(results)
 }
 
-// Per-venue custom price override (falls back to the plan's list price when unset).
+// Per-venue custom price override (falls back to the plan's list price when
+// unset). Stored on the platform-only platformVenueMeta doc — never on the
+// world-readable tenant doc; the monthly billing function reads it from there.
 export async function setCustomPrice(tid, amount) {
   const clean = amount === '' || amount === null || amount === undefined ? null : Number(amount)
-  await platformUpdateTenant(tid, { customPrice: Number.isFinite(clean) ? clean : null })
+  await setVenueMeta(tid, { customPrice: Number.isFinite(clean) ? clean : null })
 }
 
 function summarize(results) {
