@@ -307,7 +307,7 @@ export default function StaffProfile({ tid, row, reviews = [], target = 0, curre
                 {deductions.map((d, i) => (
                   <div key={i} className="row-between xs">
                     <span>{d.reason || (ar ? 'خصم' : 'Deduction')}</span>
-                    <span className="row" style={{ gap: 6, alignItems: 'center' }}><span style={{ color: 'var(--danger)' }}>−<Price value={d.amount} currency={currency} lang={lang} /></span><button className="icon-btn" style={{ width: 24, height: 24, color: 'var(--danger)' }} onClick={() => removeDeduction(i)}>✕</button></span>
+                    <span className="row" style={{ gap: 6, alignItems: 'center' }}><span style={{ color: 'var(--danger)' }}>−<Price value={d.amount} currency={currency} lang={lang} /></span><button className="icon-btn" style={{ width: 24, height: 24, color: 'var(--danger)' }} onClick={() => removeDeduction(i)} aria-label="حذف"><Icon name="close" size={14} /></button></span>
                   </div>
                 ))}
                 <div className="row" style={{ gap: 6 }}>

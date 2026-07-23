@@ -132,7 +132,7 @@ export default function Setup() {
                 <button className="btn btn-sm btn-outline" disabled={seeded || !catInput.trim()} onClick={() => { setCats((x) => [...new Set([...x, catInput.trim()])]); setCatInput('') }}>+</button>
               </div>
             </div>
-            {seeded && <p className="xs" style={{ color: 'var(--success)', margin: 0 }}>✓ {ar ? 'أُنشئت الطاولات والأقسام' : 'Tables & categories created'}</p>}
+            {seeded && <p className="xs row" style={{ color: 'var(--success)', margin: 0, gap: 4, alignItems: 'center' }}><Icon name="check" size={12} /> {ar ? 'أُنشئت الطاولات والأقسام' : 'Tables & categories created'}</p>}
           </div>
         )}
 
@@ -160,7 +160,7 @@ export default function Setup() {
             {[
               [ar ? 'المنشأة' : 'Venue', tenant?.name],
               [ar ? 'رابط المنيو' : 'Menu link', `/m/${tenant?.slug || ''}`],
-              [ar ? 'الطاولات والأقسام' : 'Tables & categories', seeded ? (ar ? 'جاهزة ✓' : 'Ready ✓') : (ar ? 'تخطيتها (تضاف لاحقاً)' : 'Skipped')],
+              [ar ? 'الطاولات والأقسام' : 'Tables & categories', seeded ? (ar ? 'جاهزة' : 'Ready') : (ar ? 'تخطيتها (تضاف لاحقاً)' : 'Skipped')],
               [ar ? 'ثيم النظام' : 'System theme', SYSTEM_THEMES.find((x) => x.id === (tenant?.systemTheme || 'classic'))?.[ar ? 'ar' : 'en']],
             ].map(([k, v]) => (
               <div key={k} className="row-between small"><span className="faint">{k}</span><span className="bold">{v}</span></div>

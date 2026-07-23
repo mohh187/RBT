@@ -8,8 +8,8 @@ function fmt(ts) {
   const d = ts?.toDate ? ts.toDate() : ts ? new Date(ts) : null
   if (!d || isNaN(d)) return ''
   try {
-    return d.toLocaleDateString('ar', { day: 'numeric', month: 'short', year: 'numeric' }) +
-      ' · ' + d.toLocaleTimeString('ar', { hour: '2-digit', minute: '2-digit' })
+    return d.toLocaleDateString('ar-SA-u-nu-latn', { day: 'numeric', month: 'short', year: 'numeric' }) +
+      ' · ' + d.toLocaleTimeString('ar-SA-u-nu-latn', { hour: '2-digit', minute: '2-digit' })
   } catch {
     return d.toISOString().slice(0, 16).replace('T', ' ')
   }

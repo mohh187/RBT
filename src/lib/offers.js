@@ -53,8 +53,10 @@ function offerBase(offer, cart, subtotal) {
 
 function discountOf(offer, base) {
   if (base <= 0) return 0
-  const d = offer.type === 'percent' ? base * (Number(offer.value) || 0) / 100 : Math.min(Number(offer.value) || 0, base)
-  return round2(Math.max(0, d))
+  // Cap the discount at the base for BOTH types — a percent > 100 (or a mis-saved
+  // legacy offer) must never discount more than the amount it applies to.
+  const d = offer.type === 'percent' ? base * Math.min(100, Number(offer.value) || 0) / 100 : Math.min(Number(offer.value) || 0, base)
+  return round2(Math.max(0, Math.min(base, d)))
 }
 
 // Returns the single best applicable offer: { offer, discount } | null.

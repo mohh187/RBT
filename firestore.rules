@@ -323,7 +323,11 @@ service cloud.firestore {
           && request.resource.data.total is number
           && request.resource.data.total >= 0
           && request.resource.data.items is list
-          && request.resource.data.items.size() > 0;
+          && request.resource.data.items.size() > 0
+          // Only real staff may mark an order 'cashier'-sourced. onNewOrder trusts
+          // that tag to honor a manual staff discount below the offer floor; a diner
+          // must not be able to forge it to underpay.
+          && (request.resource.data.get('source', '') != 'cashier' || isStaff(tid));
         // Only staff move orders through their lifecycle.
         allow update: if isStaff(tid);
         allow delete: if isManager(tid);

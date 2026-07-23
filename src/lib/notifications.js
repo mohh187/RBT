@@ -105,10 +105,10 @@ export function useNotificationFeed(tenantId) {
     reviews.forEach((r) => {
       if (uid && r.staffUid === uid) {
         out.push({ id: 'rt_' + r.id, kind: 'rating', icon: 'star', color: 'var(--gold)', url: '/portal', at: ms(r.createdAt),
-          title: `${ar ? 'تقييم جديد لك' : 'New rating'} · ${r.rating}★`, body: r.comment || '' })
+          title: `${ar ? 'تقييم جديد لك' : 'New rating'} · ${r.rating}/5`, body: r.comment || '' })
       } else if (isManager && (r.rating || 5) <= 2) {
         out.push({ id: 'lr_' + r.id, kind: 'rating', icon: 'star', color: 'var(--danger)', url: '/admin/hr', at: ms(r.createdAt),
-          title: `${ar ? 'تقييم منخفض' : 'Low rating'} · ${r.rating}★`, body: (r.comment || r.staffName || '').slice(0, 80) })
+          title: `${ar ? 'تقييم منخفض' : 'Low rating'} · ${r.rating}/5`, body: (r.comment || r.staffName || '').slice(0, 80) })
       }
     })
 

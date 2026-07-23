@@ -273,11 +273,12 @@ export default function CashierPOS({ open, onClose, tenantId, tenant, lang = 'ar
     setOpenItemOpen(false); setOiName(''); setOiPrice('')
   }
 
-  const subtotal = cart.reduce((s, l) => s + l.unitPrice * l.qty, 0)
-  const manualDiscount = (() => { const v = Number(discVal) || 0; if (v <= 0) return 0; return discType === 'percent' ? Math.round((subtotal * Math.min(v, 100)) / 100 * 100) / 100 : Math.min(v, subtotal) })()
+  const round2 = (x) => Math.round((Number(x) || 0) * 100) / 100
+  const subtotal = round2(cart.reduce((s, l) => s + l.unitPrice * l.qty, 0))
+  const manualDiscount = (() => { const v = Number(discVal) || 0; if (v <= 0) return 0; return discType === 'percent' ? round2((subtotal * Math.min(v, 100)) / 100) : Math.min(v, subtotal) })()
   const membership = customer?.membership?.active ? customer.membership : null
-  const memberDiscount = membership ? tierDiscountAmount(membership, Math.max(0, subtotal - manualDiscount)) : 0
-  const total = Math.max(0, subtotal - manualDiscount - memberDiscount)
+  const memberDiscount = membership ? round2(tierDiscountAmount(membership, Math.max(0, subtotal - manualDiscount))) : 0
+  const total = round2(Math.max(0, subtotal - manualDiscount - memberDiscount))
   const drinkUnits = cart.reduce((s, l) => s + (l.countsForLoyalty ? l.qty : 0), 0)
   const count = cart.reduce((s, l) => s + l.qty, 0)
   const meta = membership ? (TIER_META[membership.tier] || TIER_META.silver) : null

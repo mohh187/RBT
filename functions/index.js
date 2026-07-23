@@ -68,8 +68,9 @@ function offerBase(offer, cart, subtotal) {
 }
 function discountOf(offer, base) {
   if (base <= 0) return 0
-  const d = offer.type === 'percent' ? base * (Number(offer.value) || 0) / 100 : Math.min(Number(offer.value) || 0, base)
-  return round2(Math.max(0, d))
+  // Cap at base for both types so a percent > 100 can never over-discount (mirrors src/lib/offers.js).
+  const d = offer.type === 'percent' ? base * Math.min(100, Number(offer.value) || 0) / 100 : Math.min(Number(offer.value) || 0, base)
+  return round2(Math.max(0, Math.min(base, d)))
 }
 // Largest legitimate offer discount for this cart (mirrors evaluateOffers).
 function bestOfferDiscount(offers, cart, subtotal, couponCode, isMember, now) {
@@ -193,7 +194,13 @@ exports.onNewOrder = onDocumentCreated('tenants/{tid}/orders/{oid}', async (even
       } catch (_) { /* ignore */ }
     }
   }
-  const expectedMinTotal = Math.max(0, expectedSubtotal - offerMax - loyaltyMax - memberMax)
+  // Staff manual discount (cashier POS). It is NOT one of the offer/loyalty/member
+  // discounts above, so without this term ANY cashier discount pushed total below
+  // expectedMinTotal and the order auto-cancelled. Trusted only for 'cashier'-
+  // sourced orders, which the security rules restrict to authenticated staff;
+  // capped to the cart so it can never drive the floor negative.
+  const staffMax = order.source === 'cashier' ? Math.min(Math.max(0, Number(order.discount) || 0), expectedSubtotal) : 0
+  const expectedMinTotal = Math.max(0, expectedSubtotal - offerMax - loyaltyMax - memberMax - staffMax)
   if ((Number(order.total) || 0) < expectedMinTotal - 0.05) {
     await event.data.ref.update({
       status: 'cancelled',

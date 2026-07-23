@@ -251,7 +251,7 @@ export default function Suppliers() {
               <strong className="small">{ar ? 'المواد المطلوبة وتكلفتها:' : 'Ordered Items & Costs'}</strong>
               {poLines.map(l => (
                 <div key={l.materialId} className="card card-pad stack" style={{ gap: 6, position: 'relative' }}>
-                  <button className="icon-btn xs" style={{ position: 'absolute', top: 8, insetInlineEnd: 8, color: 'var(--danger)' }} onClick={() => removePoLine(l.materialId)}>✕</button>
+                  <button className="icon-btn xs" style={{ position: 'absolute', top: 8, insetInlineEnd: 8, color: 'var(--danger)' }} onClick={() => removePoLine(l.materialId)} aria-label="حذف"><Icon name="close" size={14} /></button>
                   <div className="bold small">{l.name}</div>
                   <div className="row" style={{ gap: 8 }}>
                     <div className="field grow">

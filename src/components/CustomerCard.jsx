@@ -170,7 +170,7 @@ function MemberSection({ ar, lang, currency, policy, m, eligible, totalOrders = 
       </div>
       {cardUrl && (
         <div className="row" style={{ gap: 6 }}>
-          <button className="btn btn-sm btn-outline grow" onClick={copyCard}><Icon name="qr" size={14} /> {copied ? (ar ? 'تم النسخ ✓' : 'Copied ✓') : (ar ? 'نسخ رابط البطاقة' : 'Copy card link')}</button>
+          <button className="btn btn-sm btn-outline grow" onClick={copyCard}><Icon name={copied ? 'check' : 'qr'} size={14} /> {copied ? (ar ? 'تم النسخ' : 'Copied') : (ar ? 'نسخ رابط البطاقة' : 'Copy card link')}</button>
           <a className="btn btn-sm btn-outline grow" href={cardUrl} target="_blank" rel="noreferrer">{ar ? 'فتح البطاقة' : 'Open card'}</a>
         </div>
       )}

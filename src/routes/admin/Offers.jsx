@@ -113,7 +113,8 @@ export default function Offers() {
       nameAr: (form.nameAr || '').trim(),
       nameEn: (form.nameEn || '').trim(),
       type: form.type,
-      value: Number(form.value) || 0,
+      // A percentage over 100 produced free/negative orders. Clamp at save.
+      value: form.type === 'percent' ? Math.min(100, Math.max(0, Number(form.value) || 0)) : Math.max(0, Number(form.value) || 0),
       code: (form.code || '').trim().toUpperCase(),
       minSubtotal: Number(form.minSubtotal) || 0,
       scope: form.scope,
@@ -258,7 +259,7 @@ export default function Offers() {
 
             {/* happy hour window */}
             <div className="field">
-              <label>⏰ {lang === 'ar' ? 'وقت العرض (ساعة سعيدة)' : 'Time window (happy hour)'} <span className="faint xs">({t('optional')})</span></label>
+              <label><Icon name="clock" size={14} /> {lang === 'ar' ? 'وقت العرض (ساعة سعيدة)' : 'Time window (happy hour)'} <span className="faint xs">({t('optional')})</span></label>
               <div className="row" style={{ gap: 8 }}>
                 <input className="input" type="time" value={form.startTime} onChange={(e) => set('startTime', e.target.value)} />
                 <span className="faint">→</span>

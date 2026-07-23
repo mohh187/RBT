@@ -57,7 +57,15 @@ export default function OrderDetail({ tid, orderId, currency = 'SAR', onClose, s
   const receiptUrl = o && tenant?.slug ? `${publicBaseUrl()}/order/${tenant.slug}/${orderId}` : ''
   const genReceipt = async () => { if (!receiptUrl) return; try { setReceiptQr(await qrDataUrl(receiptUrl, { width: 320 })) } catch (_) { /* ignore */ } }
   const copyLink = async () => { try { await navigator.clipboard.writeText(receiptUrl); setCopied(true); setTimeout(() => setCopied(false), 1500) } catch (_) { /* ignore */ } }
-  const doRefund = () => { if (!o) return; refundOrder(tid, orderId, { amount: Number(refundAmt) || o.total, reason: refundReason.trim(), actor, policy: resolveMembershipPolicy(tenant) }); setRefundOpen(false); setRefundAmt(''); setRefundReason('') }
+  const doRefund = () => {
+    if (!o) return
+    // Empty field = full refund (the convenience default); a typed amount is
+    // clamped to [0, total] so an explicit 0 refunds 0 (not the whole order) and
+    // no one can over-refund past the order total.
+    const amount = refundAmt === '' || refundAmt == null ? (o.total || 0) : Math.min(Math.max(0, Number(refundAmt) || 0), o.total || 0)
+    refundOrder(tid, orderId, { amount, reason: refundReason.trim(), actor, policy: resolveMembershipPolicy(tenant) })
+    setRefundOpen(false); setRefundAmt(''); setRefundReason('')
+  }
   const doComp = () => { if (!o) return; compOrder(tid, orderId, { amount: Number(compAmt) || 0, reason: compReason.trim(), actor }); setCompOpen(false); setCompAmt(''); setCompReason('') }
   const canEditOrder = staffActions && ['pending', 'accepted', 'preparing', 'ready'].includes(o?.status)
   const changeTable = (tb) => setOrderTable(tid, orderId, tb ? { tableId: tb.id, tableLabel: tb.label, orderType: 'dine_in' } : { tableId: null, tableLabel: '', orderType: 'takeaway' })
