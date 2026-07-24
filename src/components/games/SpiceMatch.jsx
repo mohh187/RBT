@@ -1,17 +1,25 @@
-// «مطابقة التوابل» — SpiceMatch: a memory-match board where every tile is a
-// hand-drawn spice (inline SVG paths, never an emoji): هيل، زعفران، قرفة،
-// كمون، زنجبيل، قرنفل، سماق، نعناع، كركم، حبة البركة. Level one is a 4x4
-// board, every level after is 4x5, the peek gets shorter, the clock gets
-// tighter, and consecutive matches build a streak multiplier.
+// «توأم البهارات» — SpiceMatch: a memory-match board where every tile is a
+// hand-drawn spice (inline SVG paths, never an emoji). A stage ladder: stage one
+// is a 4x4 board, stage two 4x5, stage three and up 4x6. Each stage the peek
+// gets shorter, the clock gets tighter, and — the real squeeze — you are given a
+// MOVE BUDGET: run out of flips before you clear the board and the round ends.
+// Consecutive matches build a streak multiplier.
+//
+// Progress is saved through onProgress so a guest resumes at their stage with
+// their score.
 //
 // CONTRACT (hub-rendered): fills its parent, play area only, ABSOLUTE score via
 // onScore(). DEVIATION NOTE: this game is pure DOM/SVG, so it runs on one 1s
 // interval instead of a rAF loop — nothing is animated per frame, and the
 // interval is torn down with the component.
-import { useEffect, useRef, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
+import { play } from '../../lib/gameSounds.js'
+import '../../styles/arcade-b.css'
 
 const fmt = (n) => Number(n || 0).toLocaleString('ar-SA-u-nu-latn')
 
+const GAME_ID = 'spiceMatch'
+const PROG_V = 2
 const BEST_KEY = 'rbt_game_spicematch_best'
 const readBest = () => { try { return Number(localStorage.getItem(BEST_KEY)) || 0 } catch (_) { return 0 } }
 const writeBest = (v) => { try { localStorage.setItem(BEST_KEY, String(v)) } catch (_) { /* private mode */ } }
@@ -27,6 +35,8 @@ const SPICES = [
   { id: 'nana', name: 'نعناع', bg: '#e6f6ec', ring: '#3f9e5e' },
   { id: 'kurkum', name: 'كركم', bg: '#fdf2da', ring: '#e0a11a' },
   { id: 'baraka', name: 'حبة البركة', bg: '#eceef2', ring: '#2f3440' },
+  { id: 'filfil', name: 'فلفل حار', bg: '#fdeae7', ring: '#c33221' },
+  { id: 'luban', name: 'لبان', bg: '#fbf3df', ring: '#c99a3a' },
 ]
 
 // Every spice is drawn with paths so the board stays emoji-free and prints
@@ -119,6 +129,30 @@ function SpiceArt({ id }) {
           <path d="M5 31h30" stroke="#a97104" strokeWidth="2.2" strokeLinecap="round" />
         </svg>
       )
+    case 'filfil':
+      return (
+        <svg viewBox="0 0 40 40" className="gmsm-art" focusable="false" aria-hidden="true">
+          <path d="M15 9c.4 3 1 5.4 2.6 7.6 3 4 8.4 6.4 9.6 11.6 1 4.2-2.2 8.2-6.4 8s-8.4-3.6-9.2-9c-.9-6.2 1.2-12.4 3.4-16.2z" fill="#cf3524" />
+          <path d="M27 28c.6-2-.2-4-1.6-5.4" stroke="#f0a596" strokeWidth="1.6" fill="none" strokeLinecap="round" />
+          <path d="M15 9c-1.2-1.8-3.2-2.4-5.4-2M15 9c1.8-1.2 4-1.2 5.4.4" stroke="#3f8f4e" strokeWidth="2.2" fill="none" strokeLinecap="round" />
+        </svg>
+      )
+    case 'luban':
+      return (
+        <svg viewBox="0 0 40 40" className="gmsm-art" focusable="false" aria-hidden="true">
+          <g fill="#e6c274">
+            <ellipse cx="15" cy="16" rx="6.4" ry="7.4" />
+            <ellipse cx="25.5" cy="22" rx="5.8" ry="6.8" />
+            <ellipse cx="16.5" cy="28" rx="4.6" ry="5.2" />
+          </g>
+          <g fill="rgba(255,255,255,.5)">
+            <ellipse cx="13" cy="13.5" rx="2" ry="2.6" /><ellipse cx="23.5" cy="19.5" rx="1.7" ry="2.2" />
+          </g>
+          <g fill="#c39a44">
+            <circle cx="17.5" cy="18" r="1" /><circle cx="27" cy="24" r=".9" />
+          </g>
+        </svg>
+      )
     default:
       return (
         <svg viewBox="0 0 40 40" className="gmsm-art" focusable="false" aria-hidden="true">
@@ -153,54 +187,91 @@ const buildDeck = (pairs) => {
   return shuffle(cards)
 }
 
-const levelSeconds = (lvl) => (lvl === 1 ? 60 : lvl === 2 ? 70 : Math.max(40, 70 - (lvl - 2) * 6))
-const levelPairs = (lvl) => (lvl === 1 ? 8 : 10)
+const levelSeconds = (lvl) => (lvl === 1 ? 60 : lvl === 2 ? 66 : Math.max(42, 66 - (lvl - 2) * 6))
+const levelPairs = (lvl) => (lvl === 1 ? 8 : lvl === 2 ? 10 : 12)
+// a finite flip budget that tightens as the board grows
+const levelBudget = (lvl, pairs) => pairs + Math.max(4, Math.round(pairs * (lvl >= 3 ? 0.5 : lvl === 2 ? 0.75 : 1)))
 const spiceOf = (sid) => SPICES.find((s) => s.id === sid) || SPICES[0]
 
-export default function SpiceMatch({ onScore, onExit, lang = 'ar', brand = '#0e7490', items = [], playerName = '' }) {
+export default function SpiceMatch({
+  onScore, onExit, lang = 'ar', brand = '#0e7490', items = [], playerName = '',
+  onProgress, resumeState,
+}) {
+  const saved = useMemo(() => {
+    const s = resumeState
+    return s && s.game === GAME_ID && s.v === PROG_V && Number(s.stage) > 0 ? s : null
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
+
   const [phase, setPhase] = useState('ready') // ready | play | clear | over
-  const [level, setLevel] = useState(1)
+  const [level, setLevel] = useState(saved ? Number(saved.stage) : 1)
   const [cards, setCards] = useState([])
   const [up, setUp] = useState([])
   const [matched, setMatched] = useState([])
-  const [moves, setMoves] = useState(0)
+  const [movesLeft, setMovesLeft] = useState(0)
   const [streak, setStreak] = useState(0)
-  const [score, setScore] = useState(0)
+  const [score, setScore] = useState(saved ? Number(saved.score) || 0 : 0)
   const [timeLeft, setTimeLeft] = useState(60)
   const [peek, setPeek] = useState(false)
   const [bonus, setBonus] = useState(0)
   const [pop, setPop] = useState(null)
+  const [overReason, setOverReason] = useState('time')
   const [best, setBest] = useState(readBest)
 
   const onScoreRef = useRef(onScore)
+  const onProgressRef = useRef(onProgress)
   const peekTimer = useRef(0)
+  const scoreRef = useRef(score)
+  const levelRef = useRef(level)
 
   useEffect(() => { onScoreRef.current = onScore }, [onScore])
+  useEffect(() => { onProgressRef.current = onProgress }, [onProgress])
+  useEffect(() => { scoreRef.current = score }, [score])
+  useEffect(() => { levelRef.current = level }, [level])
   useEffect(() => { if (typeof onScoreRef.current === 'function') onScoreRef.current(score) }, [score])
   useEffect(() => () => clearTimeout(peekTimer.current), [])
 
-  const startLevel = (lvl, keepScore) => {
+  const report = (done, stageVal, scoreVal) => {
+    try {
+      onProgressRef.current?.({
+        game: GAME_ID, v: PROG_V,
+        stage: stageVal != null ? stageVal : levelRef.current,
+        score: scoreVal != null ? scoreVal : scoreRef.current,
+        done: !!done, completed: false, at: Date.now(),
+      })
+    } catch (_) { /* best-effort */ }
+  }
+
+  const startLevel = (lvl, keepScore, startScore) => {
     clearTimeout(peekTimer.current)
+    const pairs = levelPairs(lvl)
     setLevel(lvl)
-    setCards(buildDeck(levelPairs(lvl)))
+    levelRef.current = lvl
+    setCards(buildDeck(pairs))
     setUp([])
     setMatched([])
-    setMoves(0)
+    setMovesLeft(levelBudget(lvl, pairs))
     setStreak(0)
     setTimeLeft(levelSeconds(lvl))
     setPop(null)
-    if (!keepScore) setScore(0)
+    if (!keepScore) { setScore(0); scoreRef.current = 0 }
+    else if (typeof startScore === 'number') { setScore(startScore); scoreRef.current = startScore }
     setPeek(true)
     setPhase('play')
-    peekTimer.current = setTimeout(() => setPeek(false), lvl >= 3 ? 1000 : 1700)
+    play('deal')
+    report(false, lvl) // resume point at the start of each stage
+    peekTimer.current = setTimeout(() => setPeek(false), lvl >= 3 ? 900 : lvl === 2 ? 1300 : 1700)
   }
 
-  const endGame = () => {
+  const endGame = (reason) => {
     clearTimeout(peekTimer.current)
     setPeek(false)
+    setOverReason(reason || 'time')
     setPhase('over')
-    if (typeof onScoreRef.current === 'function') onScoreRef.current(score)
-    if (score > readBest()) { writeBest(score); setBest(score) }
+    if (typeof onScoreRef.current === 'function') onScoreRef.current(scoreRef.current)
+    if (scoreRef.current > readBest()) { writeBest(scoreRef.current); setBest(scoreRef.current) }
+    report(true)
+    play('lose')
   }
 
   // countdown — one interval, paused during the peek and on every non-play phase
@@ -211,18 +282,19 @@ export default function SpiceMatch({ onScore, onExit, lang = 'ar', brand = '#0e7
   }, [phase, peek])
 
   useEffect(() => {
-    if (phase === 'play' && timeLeft <= 0) endGame()
-  }, [timeLeft, phase])
+    if (phase === 'play' && timeLeft <= 0) endGame('time')
+  }, [timeLeft, phase]) // eslint-disable-line react-hooks/exhaustive-deps
 
   // resolve a pair
   useEffect(() => {
     if (up.length !== 2) return undefined
     const [a, b] = up
     const same = cards[a] && cards[b] && cards[a].sid === cards[b].sid
-    setMoves((m) => m + 1)
+    setMovesLeft((m) => Math.max(0, m - 1))
     if (same) {
       const ns = streak + 1
       const gain = 50 + 25 * Math.min(ns, 6)
+      play('capture', { gain: 0.5 })
       const t = setTimeout(() => {
         setMatched((prev) => prev.concat([a, b]))
         setUp([])
@@ -232,6 +304,7 @@ export default function SpiceMatch({ onScore, onExit, lang = 'ar', brand = '#0e7
       }, 330)
       return () => clearTimeout(t)
     }
+    play('lose', { gain: 0.32 })
     const t = setTimeout(() => { setUp([]); setStreak(0) }, 760)
     return () => clearTimeout(t)
   }, [up, cards, streak])
@@ -240,20 +313,32 @@ export default function SpiceMatch({ onScore, onExit, lang = 'ar', brand = '#0e7
   useEffect(() => {
     if (phase !== 'play' || !cards.length) return
     if (matched.length < cards.length) return
-    const b = timeLeft * 10
+    const b = timeLeft * 10 + movesLeft * 15
+    const ns = scoreRef.current + b
+    scoreRef.current = ns
     setBonus(b)
-    setScore((s) => s + b)
+    setScore(ns)
     setPhase('clear')
-  }, [matched, cards, phase, timeLeft])
+    play('win', { gain: 0.55 })
+    report(false, level + 1, ns) // next-stage resume point, with the bonus folded in
+  }, [matched, cards, phase, timeLeft]) // eslint-disable-line react-hooks/exhaustive-deps
+
+  // out of flips — the squeeze that makes the budget matter
+  useEffect(() => {
+    if (phase !== 'play' || peek) return
+    if (!cards.length || up.length !== 0) return
+    if (movesLeft <= 0 && matched.length < cards.length) endGame('moves')
+  }, [movesLeft, up, peek, phase, matched, cards]) // eslint-disable-line react-hooks/exhaustive-deps
 
   const flip = (i) => {
     if (phase !== 'play' || peek) return
     if (up.length >= 2) return
     if (up.includes(i) || matched.includes(i)) return
+    play('card', { gain: 0.5 })
     setUp(up.concat([i]))
   }
 
-  const rows = cards.length > 16 ? 5 : 4
+  const rows = cards.length > 20 ? 6 : cards.length > 16 ? 5 : 4
   const rtl = lang !== 'en'
   const pairsLeft = Math.max(0, (cards.length - matched.length) / 2)
 
@@ -266,8 +351,8 @@ export default function SpiceMatch({ onScore, onExit, lang = 'ar', brand = '#0e7
       <div className="gmsm-stage">
         <div className="gmsm-bar">
           <span className="gmx-pill gmx-pill-score">{fmt(score)}</span>
-          <span className="gmx-pill">مستوى {fmt(level)}</span>
-          <span className="gmx-pill">نقلات {fmt(moves)}</span>
+          <span className="gmx-pill arb-stage-pill">المرحلة {fmt(level)}</span>
+          <span className={`gmx-pill${movesLeft <= 3 ? ' is-warn' : ''}`}>نقلات {fmt(movesLeft)}</span>
           {streak > 1 && <span className="gmx-pill gmx-pill-hot">تتابع ×{fmt(streak)}</span>}
           <span className={`gmx-pill gmsm-clock${timeLeft <= 10 ? ' is-warn' : ''}`}>{fmt(timeLeft)} ث</span>
         </div>
@@ -319,9 +404,18 @@ export default function SpiceMatch({ onScore, onExit, lang = 'ar', brand = '#0e7
               <span className="gmsm-chip"><SpiceArt id="qirfa" /></span>
               <span className="gmsm-chip"><SpiceArt id="zafaran" /></span>
             </div>
-            <h3 className="gmx-title">مطابقة التوابل</h3>
-            <p className="gmx-line">تظهر البطاقات للحظة ثم تُقلب — اعثر على أزواج التوابل قبل انتهاء الوقت. المطابقات المتتالية ترفع مضاعف التتابع.</p>
-            <button type="button" className="gmx-btn" onClick={() => startLevel(1, false)}>ابدأ</button>
+            <h3 className="gmx-title">توأم البهارات</h3>
+            <p className="gmx-line">تظهر البطاقات للحظة ثم تُقلب — اعثر على أزواج التوابل قبل نفاد الوقت أو النقلات. كل مرحلة لوحها أكبر ونقلاتها أقل، والمطابقات المتتالية ترفع المضاعف.</p>
+            {saved ? (
+              <div className="gmx-actions">
+                <button type="button" className="gmx-btn" onClick={() => startLevel(Number(saved.stage), true, Number(saved.score) || 0)}>
+                  تابع من المرحلة {fmt(saved.stage)}
+                </button>
+                <button type="button" className="gmx-btn ghost" onClick={() => startLevel(1, false)}>من البداية</button>
+              </div>
+            ) : (
+              <button type="button" className="gmx-btn" onClick={() => startLevel(1, false)}>ابدأ</button>
+            )}
             {best > 0 && <p className="gmx-sub">أفضل نتيجة {fmt(best)}</p>}
           </div>
         </div>
@@ -332,7 +426,7 @@ export default function SpiceMatch({ onScore, onExit, lang = 'ar', brand = '#0e7
           <div className="gmx-card">
             <h3 className="gmx-title">اكتمل المستوى {fmt(level)}</h3>
             <div className="gmx-big">{fmt(score)}</div>
-            <p className="gmx-line">مكافأة الوقت {fmt(bonus)} نقطة — المستوى التالي أكبر وأسرع.</p>
+            <p className="gmx-line">مكافأة الوقت والنقلات {fmt(bonus)} نقطة — المستوى التالي أكبر وأسرع.</p>
             <div className="gmx-actions">
               <button type="button" className="gmx-btn" onClick={() => startLevel(level + 1, true)}>المستوى التالي</button>
               {typeof onExit === 'function' && (
@@ -346,10 +440,10 @@ export default function SpiceMatch({ onScore, onExit, lang = 'ar', brand = '#0e7
       {phase === 'over' && (
         <div className="gmx-veil">
           <div className="gmx-card">
-            <h3 className="gmx-title">انتهى الوقت</h3>
+            <h3 className="gmx-title">{overReason === 'moves' ? 'نفدت النقلات' : 'انتهى الوقت'}</h3>
             <div className="gmx-big">{fmt(score)}</div>
             <p className="gmx-line">
-              {playerName ? `${playerName}، ` : ''}وصلت إلى المستوى {fmt(level)} في {fmt(moves)} نقلة
+              {playerName ? `${playerName}، ` : ''}بلغت المستوى {fmt(level)}
             </p>
             <p className="gmx-sub">أفضل نتيجة {fmt(Math.max(best, score))}</p>
             <div className="gmx-actions">

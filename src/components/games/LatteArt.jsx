@@ -1,29 +1,75 @@
-// «فن اللاتيه» — LatteArt: three latte-art patterns (قلب / توليب / روزيتا) are
-// ghosted onto the crema and the player traces each one with a single
-// continuous drag. The score is an HONEST geometric match: both the target and
-// the drawn path are resampled to equal arc-length points and compared with a
-// symmetric point-to-segment (chamfer) distance, so shortcuts, over-shoots and
+// «فن اللاتيه» — LatteArt: latte-art patterns are ghosted onto the crema and the
+// player traces each one with a single continuous drag. The score is an HONEST
+// geometric match: both the target and the drawn path are resampled to equal
+// arc-length points and compared with a symmetric point-to-segment (chamfer)
+// distance plus an ordered-sequence term, so shortcuts, over-shoots and
 // half-finished strokes are all punished the way they should be.
+//
+// STAGES (مراحل): a real ladder. Each stage hands you a set of patterns to pour;
+// clearing the set triggers a between-stages beat, then the next stage gives you
+// LESS time per pour and introduces HARDER shapes (a five-petal flower, a
+// spiral). A pour graded below the spill line costs one of three cups; run out
+// and the round ends. Progress is saved through onProgress so a guest resumes at
+// their stage with their score.
 //
 // CONTRACT (hub-rendered): fills its parent, play area only, ABSOLUTE score via
 // onScore(). Canvas art only — no emojis, Latin digits, Arabic copy, pointer
 // events, single rAF loop, dPR aware, full teardown on unmount.
-import { useEffect, useRef, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
+import { play } from '../../lib/gameSounds.js'
+import '../../styles/arcade-b.css'
 
 const fmt = (n) => Number(n || 0).toLocaleString('ar-SA-u-nu-latn')
 
+const GAME_ID = 'latteArt'
+const PROG_V = 2
 const BEST_KEY = 'rbt_game_latteart_best'
 const readBest = () => { try { return Number(localStorage.getItem(BEST_KEY)) || 0 } catch (_) { return 0 } }
 const writeBest = (v) => { try { localStorage.setItem(BEST_KEY, String(v)) } catch (_) { /* private mode */ } }
 
+// key, arabic name, score multiplier, and the earliest stage it appears in
 const PATTERNS = [
-  { key: 'heart', name: 'قلب', mult: 1 },
-  { key: 'tulip', name: 'توليب', mult: 1.25 },
-  { key: 'rosetta', name: 'روزيتا', mult: 1.5 },
+  { key: 'heart', name: 'قلب', mult: 1, diff: 1 },
+  { key: 'wave', name: 'موجة', mult: 1.15, diff: 1 },
+  { key: 'tulip', name: 'توليب', mult: 1.3, diff: 1 },
+  { key: 'spiral', name: 'حلزون', mult: 1.45, diff: 2 },
+  { key: 'rosetta', name: 'روزيتا', mult: 1.6, diff: 2 },
+  { key: 'flower', name: 'زهرة', mult: 1.8, diff: 3 },
 ]
-const ROUND_LIMIT = 22 // seconds per pattern — keeps a round near one minute
-const SAMPLES = 72     // resample resolution used on both paths
-const MAXPTS = 2400    // pre-allocated capacity for the raw drawn stroke
+const patternByKey = (k) => PATTERNS.find((p) => p.key === k) || PATTERNS[0]
+
+const LIVES = 3
+const FAIL_ACC = 0.32          // a pour below this spills the cup
+const STAGE_HOLD = 1.1
+const SAMPLES = 72
+const MAXPTS = 2400
+const patternsForStage = (n) => Math.min(4, 2 + n)
+const stageSeconds = (n) => Math.max(9, 20 - (n - 1) * 2)
+
+// choose the patterns for a stage: eligible by difficulty, ramped hardest-last
+function chooseStage(stageNum) {
+  const pool = PATTERNS.filter((p) => p.diff <= stageNum)
+  const src = pool.length ? pool : PATTERNS
+  const count = patternsForStage(stageNum)
+  const out = []
+  let last = -1
+  for (let i = 0; i < count; i++) {
+    // bias toward harder patterns as the stage fills up
+    const bias = i / Math.max(1, count - 1)
+    let idx
+    let tries = 0
+    do {
+      const r = Math.random()
+      const pick = r < 0.5 + bias * 0.4 ? src[Math.min(src.length - 1, Math.floor(bias * src.length + Math.random() * 2))] : src[Math.floor(Math.random() * src.length)]
+      idx = src.indexOf(pick)
+      tries += 1
+    } while (idx === last && src.length > 1 && tries < 4)
+    last = idx
+    out.push(src[idx].key)
+  }
+  out.sort((a, b) => patternByKey(a).mult - patternByKey(b).mult)
+  return out
+}
 
 // ---------- geometry helpers (no allocations in the hot path) ----------
 function polyLen(a, n) {
@@ -32,7 +78,6 @@ function polyLen(a, n) {
   return L
 }
 
-// even arc-length resampling of a flat [x,y,...] polyline into `m` points
 function resample(src, n, out, m) {
   if (n < 2) return 0
   const total = polyLen(src, n)
@@ -82,7 +127,6 @@ function ptSeg(px, py, ax, ay, bx, by) {
   return Math.hypot(px - (ax + vx * t), py - (ay + vy * t))
 }
 
-// mean distance from every point of A to the closest place on polyline B
 function chamfer(A, na, B, nb) {
   if (na < 1 || nb < 2) return Infinity
   let sum = 0
@@ -99,13 +143,6 @@ function chamfer(A, na, B, nb) {
   return sum / na
 }
 
-// Chamfer alone is a point-CLOUD metric, so it happily gives full marks to a
-// half-finished rosetta (its pull-through stroke lies on top of its own
-// zigzag). This compares the two paths as ORDERED sequences instead: both are
-// already resampled by arc length, so point i of each is at the same fraction
-// of its stroke, and a shortcut immediately falls out of step. Closed patterns
-// may be started anywhere and traced either way round, so we take the best
-// score over every rotation and both directions.
 function ordered(A, B, n) {
   let best = Infinity
   for (let dir = 0; dir < 2; dir++) {
@@ -117,7 +154,7 @@ function ordered(A, B, n) {
         const dx = A[2 * i] - B[2 * j]
         const dy = A[2 * i + 1] - B[2 * j + 1]
         sum += Math.sqrt(dx * dx + dy * dy)
-        if (sum >= best * n) { bail = true; break } // already worse than the winner
+        if (sum >= best * n) { bail = true; break }
       }
       if (!bail && sum / n < best) best = sum / n
     }
@@ -125,7 +162,7 @@ function ordered(A, B, n) {
   return best
 }
 
-// ---------- the three patterns, written straight into a flat array ----------
+// ---------- the patterns, written straight into a flat array ----------
 function buildPattern(kind, cx, cy, R, out) {
   if (kind === 'heart') {
     const N = 150
@@ -138,12 +175,43 @@ function buildPattern(kind, cx, cy, R, out) {
     }
     return N
   }
+  if (kind === 'wave') {
+    const N = 140
+    for (let i = 0; i < N; i++) {
+      const s = i / (N - 1)
+      out[2 * i] = cx + (-0.86 + s * 1.72) * R
+      out[2 * i + 1] = cy + Math.sin(s * Math.PI * 4) * R * 0.34
+    }
+    return N
+  }
   if (kind === 'tulip') {
-    // three-petal rose: r = cos(3t), rotated so one petal points up
     const N = 190
     for (let i = 0; i < N; i++) {
       const t = (i / (N - 1)) * Math.PI
       const r = Math.cos(3 * t) * R * 0.86
+      const a = t - Math.PI / 2
+      out[2 * i] = cx + r * Math.cos(a)
+      out[2 * i + 1] = cy + r * Math.sin(a)
+    }
+    return N
+  }
+  if (kind === 'spiral') {
+    const N = 180
+    const turns = 2.4
+    for (let i = 0; i < N; i++) {
+      const s = i / (N - 1)
+      const a = s * Math.PI * 2 * turns - Math.PI / 2
+      const r = R * (0.12 + 0.82 * s)
+      out[2 * i] = cx + r * Math.cos(a)
+      out[2 * i + 1] = cy + r * Math.sin(a)
+    }
+    return N
+  }
+  if (kind === 'flower') {
+    const N = 200
+    for (let i = 0; i < N; i++) {
+      const t = (i / (N - 1)) * Math.PI
+      const r = Math.cos(5 * t) * R * 0.9
       const a = t - Math.PI / 2
       out[2 * i] = cx + r * Math.cos(a)
       out[2 * i + 1] = cy + r * Math.sin(a)
@@ -167,27 +235,43 @@ function buildPattern(kind, cx, cy, R, out) {
   return N
 }
 
-export default function LatteArt({ onScore, onExit, lang = 'ar', brand = '#0e7490', items = [], playerName = '' }) {
+export default function LatteArt({
+  onScore, onExit, lang = 'ar', brand = '#0e7490', items = [], playerName = '',
+  onProgress, resumeState,
+}) {
   const rootRef = useRef(null)
   const cvsRef = useRef(null)
   const startRef = useRef(() => {})
   const nextRef = useRef(() => {})
+  const finishRef = useRef(() => {})
   const onScoreRef = useRef(onScore)
+  const onProgressRef = useRef(onProgress)
   const brandRef = useRef(brand)
 
-  const [stage, setStage] = useState('ready') // ready | draw | result | over
+  const saved = useMemo(() => {
+    const s = resumeState
+    return s && s.game === GAME_ID && s.v === PROG_V && Number(s.stage) > 0 ? s : null
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
+
+  const [view, setView] = useState('ready') // ready | draw | result | stageEnd | over
   const [score, setScore] = useState(0)
-  const [idx, setIdx] = useState(0)
+  const [stageNum, setStageNum] = useState(saved ? Number(saved.stage) : 1)
+  const [lives, setLives] = useState(LIVES)
+  const [pIndex, setPIndex] = useState(0)
+  const [pCount, setPCount] = useState(3)
+  const [pName, setPName] = useState('قلب')
   const [acc, setAcc] = useState(0)
   const [gained, setGained] = useState(0)
-  const [tleft, setTleft] = useState(ROUND_LIMIT)
+  const [spill, setSpill] = useState(false)
+  const [tleft, setTleft] = useState(20)
   const [best, setBest] = useState(readBest)
 
   useEffect(() => { onScoreRef.current = onScore }, [onScore])
+  useEffect(() => { onProgressRef.current = onProgress }, [onProgress])
   useEffect(() => { brandRef.current = brand }, [brand])
   useEffect(() => { if (typeof onScoreRef.current === 'function') onScoreRef.current(score) }, [score])
 
-  // the venue's own drink gets named on the cup
   const drinkName = (() => {
     const list = Array.isArray(items) ? items : []
     const hit = list.find((it) => /لات|قهو|كابتش|موكا|شاي|اسبرس|إسبرس/.test(String((it && it.nameAr) || '')))
@@ -205,12 +289,13 @@ export default function LatteArt({ onScore, onExit, lang = 'ar', brand = '#0e749
 
     const st = {
       w: 0, h: 0, cx: 0, cy: 0, R: 60, raf: 0, last: 0, rm,
-      stage: 'ready', pi: 0, score: 0, timeLeft: ROUND_LIMIT,
+      view: 'ready', stage: 1, lives: LIVES, score: 0,
+      keys: [], pi: 0, limit: 20, timeLeft: 20, shownTime: -1, hold: 0,
       target: new Float32Array(440), tn: 0,
       raw: new Float32Array(MAXPTS * 2), rn: 0,
       sT: new Float32Array(SAMPLES * 2), sD: new Float32Array(SAMPLES * 2), sn: 0,
-      drawing: false, pid: -1, reveal: 0, accuracy: 0, swirl: 0, shownTime: -1,
-      crema: null, drops: [], accs: [0, 0, 0],
+      drawing: false, pid: -1, reveal: 0, accuracy: 0, swirl: 0,
+      crema: null, drops: [],
     }
 
     const buildCrema = () => {
@@ -220,6 +305,11 @@ export default function LatteArt({ onScore, onExit, lang = 'ar', brand = '#0e749
       g.addColorStop(0.86, '#8a5530')
       g.addColorStop(1, '#653c22')
       st.crema = g
+    }
+
+    const rebuildTarget = () => {
+      const k = st.keys[st.pi] || 'heart'
+      st.tn = buildPattern(k, st.cx, st.cy, st.R, st.target)
     }
 
     const layout = () => {
@@ -234,49 +324,87 @@ export default function LatteArt({ onScore, onExit, lang = 'ar', brand = '#0e749
       cvs.height = Math.round(st.h * dpr)
       ctx.setTransform(dpr, 0, 0, dpr, 0, 0)
       buildCrema()
-      st.tn = buildPattern(PATTERNS[st.pi].key, st.cx, st.cy, st.R, st.target)
+      rebuildTarget()
       st.rn = 0
       st.sn = 0
     }
 
-    const loadPattern = (i) => {
+    const reportProgress = (done) => {
+      try {
+        onProgressRef.current?.({
+          game: GAME_ID, v: PROG_V, stage: st.stage, score: Math.round(st.score),
+          done: !!done, completed: false, at: Date.now(),
+        })
+      } catch (_) { /* best-effort */ }
+    }
+
+    const loadPour = (i) => {
       st.pi = i
-      st.tn = buildPattern(PATTERNS[i].key, st.cx, st.cy, st.R, st.target)
+      rebuildTarget()
       st.rn = 0
       st.sn = 0
       st.reveal = 0
       st.accuracy = 0
       st.drops.length = 0
-      st.timeLeft = ROUND_LIMIT
-      st.stage = 'draw'
-      setStage('draw')
-      setIdx(i)
-      setTleft(ROUND_LIMIT)
+      st.timeLeft = st.limit
+      st.view = 'draw'
+      setView('draw')
+      setPIndex(i)
+      setPName(patternByKey(st.keys[i] || 'heart').name)
+      setTleft(Math.ceil(st.limit))
     }
 
-    const start = () => {
-      st.score = 0
-      st.accs[0] = 0
-      st.accs[1] = 0
-      st.accs[2] = 0
-      setScore(0)
+    const loadStage = (n) => {
+      st.stage = n
+      st.limit = stageSeconds(n)
+      st.keys = chooseStage(n)
+      setStageNum(n)
+      setPCount(st.keys.length)
+      loadPour(0)
+    }
+
+    const start = (cfg) => {
+      st.score = Math.max(0, Math.floor(Number(cfg && cfg.score) || 0))
+      st.lives = LIVES
+      setScore(st.score)
+      setLives(LIVES)
       setAcc(0)
       setGained(0)
-      loadPattern(0)
+      setSpill(false)
+      play('deal')
+      loadStage(Math.max(1, Math.floor(Number(cfg && cfg.stage) || 1)))
     }
     startRef.current = start
 
     const finish = () => {
-      st.stage = 'over'
-      setStage('over')
+      st.view = 'over'
+      setView('over')
       setScore(st.score)
       if (typeof onScoreRef.current === 'function') onScoreRef.current(st.score)
       if (st.score > readBest()) { writeBest(st.score); setBest(st.score) }
+      reportProgress(true)
+      play('lose')
+    }
+    finishRef.current = finish
+
+    const clearStage = () => {
+      st.score += 100 + st.stage * 40
+      st.hold = STAGE_HOLD
+      st.view = 'stageEnd'
+      setScore(st.score)
+      setView('stageEnd')
+      play('win', { gain: 0.55 })
+      reportProgress(false)
     }
 
     const advance = () => {
-      if (st.pi >= PATTERNS.length - 1) finish()
-      else loadPattern(st.pi + 1)
+      if (st.view === 'stageEnd') { loadStage(st.stage + 1); return }
+      if (st.pi >= st.keys.length - 1) {
+        if (st.lives <= 0) finish()
+        else clearStage()
+      } else {
+        loadPour(st.pi + 1)
+      }
     }
     nextRef.current = advance
 
@@ -287,24 +415,35 @@ export default function LatteArt({ onScore, onExit, lang = 'ar', brand = '#0e749
         const nd = resample(st.raw, st.rn, st.sD, SAMPLES)
         const nt = resample(st.target, st.tn, st.sT, SAMPLES)
         if (nd && nt) {
-          const d1 = chamfer(st.sT, nt, st.sD, nd) // did they cover the target
-          const d2 = chamfer(st.sD, nd, st.sT, nt) // did they stray off it
-          const seq = ordered(st.sT, st.sD, SAMPLES) // did they actually walk it
+          const d1 = chamfer(st.sT, nt, st.sD, nd)
+          const d2 = chamfer(st.sD, nd, st.sT, nt)
+          const seq = ordered(st.sT, st.sD, SAMPLES)
           const mean = 0.35 * ((d1 + d2) / 2) + 0.65 * seq
           a = Math.max(0, Math.min(1, 1 - mean / tol))
           st.sn = nd
         }
       }
       st.accuracy = a
-      st.accs[st.pi] = Math.round(a * 100)
-      const pts = Math.round(a * 100 * PATTERNS[st.pi].mult)
+      const pts = Math.round(a * 100 * patternByKey(st.keys[st.pi] || 'heart').mult)
       st.score += pts
       st.reveal = st.rm ? 1 : 0
-      st.stage = 'result'
-      setStage('result')
+      const spilled = a < FAIL_ACC
+      if (spilled) { st.lives -= 1; setLives(st.lives) }
+      st.view = 'result'
+      setView('result')
       setAcc(Math.round(a * 100))
       setGained(pts)
+      setSpill(spilled)
       setScore(st.score)
+      if (spilled) {
+        play('lose', { gain: 0.5 })
+        if (st.lives <= 0) {
+          // let the result card show, then the "التالي" button finishes; but a
+          // dead run should read as over on its own — reveal then finish.
+        }
+      } else {
+        play(a > 0.75 ? 'win' : 'capture', { gain: 0.5 })
+      }
       if (!st.rm && a > 0.55) {
         for (let i = 0; i < 14; i++) {
           st.drops.push({
@@ -322,7 +461,7 @@ export default function LatteArt({ onScore, onExit, lang = 'ar', brand = '#0e749
       return [e.clientX - b.left, e.clientY - b.top]
     }
     const onDown = (e) => {
-      if (st.stage !== 'draw' || st.drawing) return
+      if (st.view !== 'draw' || st.drawing || st.hold > 0) return
       e.preventDefault()
       const [x, y] = local(e)
       st.drawing = true
@@ -330,6 +469,7 @@ export default function LatteArt({ onScore, onExit, lang = 'ar', brand = '#0e749
       st.rn = 1
       st.raw[0] = x
       st.raw[1] = y
+      play('card', { gain: 0.4 })
       try { cvs.setPointerCapture(e.pointerId) } catch (_) { /* not captureable */ }
     }
     const onMove = (e) => {
@@ -349,7 +489,6 @@ export default function LatteArt({ onScore, onExit, lang = 'ar', brand = '#0e749
       st.drawing = false
       st.pid = -1
       try { cvs.releasePointerCapture(e.pointerId) } catch (_) { /* ignore */ }
-      // an accidental tap is not a stroke — let them try again
       if (st.rn < 4 || polyLen(st.raw, st.rn) < st.R * 0.4) { st.rn = 0; return }
       grade()
     }
@@ -370,7 +509,6 @@ export default function LatteArt({ onScore, onExit, lang = 'ar', brand = '#0e749
 
     const draw = () => {
       const { w, h, cx, cy, R } = st
-      // room backdrop
       ctx.fillStyle = '#17110c'
       ctx.fillRect(0, 0, w, h)
       const bg = brandRef.current
@@ -379,13 +517,11 @@ export default function LatteArt({ onScore, onExit, lang = 'ar', brand = '#0e749
       ctx.fillRect(0, 0, w, h)
       ctx.globalAlpha = 1
 
-      // saucer
       ctx.fillStyle = 'rgba(255,255,255,.07)'
       ctx.beginPath()
       ctx.ellipse(cx, cy + R * 0.16, R * 1.36, R * 1.2, 0, 0, Math.PI * 2)
       ctx.fill()
 
-      // ceramic cup rim
       ctx.fillStyle = '#f4f6f8'
       ctx.beginPath()
       ctx.arc(cx, cy, R * 1.13, 0, Math.PI * 2)
@@ -395,7 +531,6 @@ export default function LatteArt({ onScore, onExit, lang = 'ar', brand = '#0e749
       ctx.arc(cx, cy, R * 1.06, 0, Math.PI * 2)
       ctx.fill()
 
-      // crema
       ctx.fillStyle = st.crema
       ctx.beginPath()
       ctx.arc(cx, cy, R, 0, Math.PI * 2)
@@ -406,7 +541,6 @@ export default function LatteArt({ onScore, onExit, lang = 'ar', brand = '#0e749
       ctx.arc(cx, cy, R, 0, Math.PI * 2)
       ctx.clip()
 
-      // slow crema swirl
       ctx.strokeStyle = 'rgba(255,224,186,.10)'
       ctx.lineWidth = R * 0.09
       for (let k = 0; k < 3; k++) {
@@ -415,8 +549,7 @@ export default function LatteArt({ onScore, onExit, lang = 'ar', brand = '#0e749
         ctx.stroke()
       }
 
-      // ghosted target
-      if (st.stage === 'draw' || st.stage === 'ready') {
+      if (st.view === 'draw' || st.view === 'ready') {
         ctx.strokeStyle = 'rgba(255,246,232,.30)'
         ctx.lineWidth = Math.max(4, R * 0.10)
         ctx.lineCap = 'round'
@@ -426,24 +559,20 @@ export default function LatteArt({ onScore, onExit, lang = 'ar', brand = '#0e749
         ctx.setLineDash([])
       }
 
-      // poured milk — the player's stroke
-      const live = st.stage === 'draw' && st.rn >= 2
-      const shown = st.stage === 'result'
+      const live = st.view === 'draw' && st.rn >= 2
+      const shown = st.view === 'result'
       if (live || shown) {
         const arr = shown && st.sn ? st.sD : st.raw
         const n = shown && st.sn ? st.sn : st.rn
         const upto = shown ? st.reveal : 1
         ctx.lineCap = 'round'
         ctx.lineJoin = 'round'
-        // soft milk halo
         ctx.strokeStyle = 'rgba(255,252,244,.35)'
         ctx.lineWidth = Math.max(9, R * 0.20)
         strokePath(arr, n, upto)
-        // milk core
         ctx.strokeStyle = '#fffaf0'
         ctx.lineWidth = Math.max(5, R * 0.115)
         strokePath(arr, n, upto)
-        // pour head
         if (shown && st.reveal < 1) {
           const i = Math.max(1, Math.min(n - 1, Math.round(n * st.reveal)))
           ctx.fillStyle = '#fff'
@@ -453,7 +582,6 @@ export default function LatteArt({ onScore, onExit, lang = 'ar', brand = '#0e749
         }
       }
 
-      // milk droplets on a good pour
       for (let i = 0; i < st.drops.length; i++) {
         const d = st.drops[i]
         ctx.globalAlpha = Math.max(0, 1 - d.t / d.life) * 0.8
@@ -465,14 +593,12 @@ export default function LatteArt({ onScore, onExit, lang = 'ar', brand = '#0e749
       ctx.globalAlpha = 1
       ctx.restore()
 
-      // rim shine
       ctx.strokeStyle = 'rgba(255,255,255,.5)'
       ctx.lineWidth = 2
       ctx.beginPath()
       ctx.arc(cx, cy, R * 1.09, Math.PI * 1.05, Math.PI * 1.75)
       ctx.stroke()
 
-      // cup label
       ctx.fillStyle = 'rgba(255,255,255,.55)'
       ctx.font = '700 12px system-ui, "Segoe UI", Tahoma, sans-serif'
       ctx.textAlign = 'center'
@@ -485,8 +611,9 @@ export default function LatteArt({ onScore, onExit, lang = 'ar', brand = '#0e749
       const dt = st.last ? Math.min(0.05, (now - st.last) / 1000) : 0
       st.last = now
       if (!st.rm) st.swirl += dt * 0.22
+      if (st.hold > 0) st.hold = Math.max(0, st.hold - dt)
 
-      if (st.stage === 'draw') {
+      if (st.view === 'draw') {
         st.timeLeft -= dt
         const nx = Math.max(0, Math.ceil(st.timeLeft))
         if (nx !== st.shownTime) { st.shownTime = nx; setTleft(nx) }
@@ -495,7 +622,7 @@ export default function LatteArt({ onScore, onExit, lang = 'ar', brand = '#0e749
           grade()
         }
       }
-      if (st.stage === 'result' && st.reveal < 1) {
+      if (st.view === 'result' && st.reveal < 1) {
         st.reveal = Math.min(1, st.reveal + dt * 1.6)
       }
       for (let i = st.drops.length - 1; i >= 0; i--) {
@@ -524,8 +651,9 @@ export default function LatteArt({ onScore, onExit, lang = 'ar', brand = '#0e749
   }, [])
 
   const rtl = lang !== 'en'
-  const restart = () => startRef.current()
-  const gradeTxt = acc >= 90 ? 'باريستا محترف' : acc >= 70 ? 'سكب نظيف' : acc >= 45 ? 'قريب جداً' : 'حاول مرة أخرى'
+  const restart = (cfg) => startRef.current(cfg || null)
+  const deadRun = lives <= 0
+  const gradeTxt = spill ? 'انسكب الحليب' : acc >= 90 ? 'باريستا محترف' : acc >= 70 ? 'سكب نظيف' : acc >= 45 ? 'قريب جداً' : 'حاول أفضل'
 
   return (
     <div
@@ -536,34 +664,54 @@ export default function LatteArt({ onScore, onExit, lang = 'ar', brand = '#0e749
     >
       <canvas ref={cvsRef} className="gmx-canvas" />
 
-      {(stage === 'draw' || stage === 'result') && (
+      {(view === 'draw' || view === 'result' || view === 'stageEnd') && (
         <div className="gmx-hud">
           <span className="gmx-pill gmx-pill-score">{fmt(score)}</span>
-          <span className="gmx-pill">{PATTERNS[idx].name} {fmt(idx + 1)}/{fmt(PATTERNS.length)}</span>
-          {stage === 'draw' && (
+          <span className="gmx-pill arb-stage-pill">المرحلة {fmt(stageNum)}</span>
+          <span className="gmx-pill">{pName} {fmt(pIndex + 1)}/{fmt(pCount)}</span>
+          {view === 'draw' && (
             <span className={`gmx-pill${tleft <= 5 ? ' is-warn' : ''}`}>{fmt(tleft)} ث</span>
           )}
+          <span className="gmx-pill gmx-lives" aria-label={`الأكواب ${lives}`}>
+            {[0, 1, 2].map((i) => <i key={i} className={`gmx-life${i < lives ? '' : ' off'}`} />)}
+          </span>
         </div>
       )}
 
-      {stage === 'draw' && (
+      {view === 'draw' && (
         <div className="gmla-hint">ارسم الشكل الباهت بحركة واحدة متصلة دون رفع إصبعك</div>
       )}
 
-      {stage === 'result' && (
+      {view === 'result' && (
         <div className="gmla-result">
-          <div className="gmla-acc">
+          <div className={`gmla-acc${spill ? ' spill' : ''}`}>
             <b>{fmt(acc)}</b>
             <span>% دقة</span>
           </div>
           <p className="gmla-grade">{gradeTxt} — {fmt(gained)} نقطة</p>
-          <button type="button" className="gmx-btn" onClick={() => nextRef.current()}>
-            {idx >= PATTERNS.length - 1 ? 'النتيجة' : 'الشكل التالي'}
+          <button type="button" className="gmx-btn" onClick={() => (deadRun ? finishRef.current() : nextRef.current())}>
+            {deadRun ? 'انتهت الأكواب' : (pIndex >= pCount - 1 ? 'أنهِ المرحلة' : 'الشكل التالي')}
           </button>
         </div>
       )}
 
-      {stage === 'ready' && (
+      {view === 'stageEnd' && (
+        <div className="gmx-veil">
+          <div className="gmx-card">
+            <h3 className="gmx-title">اكتملت المرحلة {fmt(stageNum)}</h3>
+            <div className="gmx-big">{fmt(score)}</div>
+            <p className="gmx-line">المرحلة التالية وقتها أقصر وأشكالها أصعب.</p>
+            <div className="gmx-actions">
+              <button type="button" className="gmx-btn" onClick={() => nextRef.current()}>المرحلة التالية</button>
+              {typeof onExit === 'function' && (
+                <button type="button" className="gmx-btn ghost" onClick={onExit}>إنهاء</button>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {view === 'ready' && (
         <div className="gmx-veil">
           <div className="gmx-card">
             <div className="gmx-emblem gmla-emblem" aria-hidden="true">
@@ -576,24 +724,33 @@ export default function LatteArt({ onScore, onExit, lang = 'ar', brand = '#0e749
               </svg>
             </div>
             <h3 className="gmx-title">فن اللاتيه</h3>
-            <p className="gmx-line">تتبّع الشكل الباهت على الكريما بحركة سحب واحدة متصلة. كلما اقترب خطك من الشكل ارتفعت نسبة الدقة — ثلاثة أشكال في الجولة.</p>
-            <button type="button" className="gmx-btn" onClick={restart}>ابدأ السكب</button>
+            <p className="gmx-line">تتبّع الشكل الباهت على الكريما بحركة سحب واحدة متصلة. كل مرحلة أشكال أكثر ووقت أقل — وسكب ضعيف يكسر كوباً. لديك ثلاثة أكواب.</p>
+            {saved ? (
+              <div className="gmx-actions">
+                <button type="button" className="gmx-btn" onClick={() => restart({ stage: Number(saved.stage), score: Number(saved.score) || 0 })}>
+                  تابع من المرحلة {fmt(saved.stage)}
+                </button>
+                <button type="button" className="gmx-btn ghost" onClick={() => restart()}>من البداية</button>
+              </div>
+            ) : (
+              <button type="button" className="gmx-btn" onClick={() => restart()}>ابدأ السكب</button>
+            )}
             {best > 0 && <p className="gmx-sub">أفضل نتيجة {fmt(best)}</p>}
           </div>
         </div>
       )}
 
-      {stage === 'over' && (
+      {view === 'over' && (
         <div className="gmx-veil">
           <div className="gmx-card">
             <h3 className="gmx-title">انتهت الجولة</h3>
             <div className="gmx-big">{fmt(score)}</div>
             <p className="gmx-line">
-              {playerName ? `${playerName}، ` : ''}متوسط دقتك في الأشكال الثلاثة
+              {playerName ? `${playerName}، ` : ''}بلغت المرحلة {fmt(stageNum)}
             </p>
             <p className="gmx-sub">أفضل نتيجة {fmt(Math.max(best, score))}</p>
             <div className="gmx-actions">
-              <button type="button" className="gmx-btn" onClick={restart}>جولة جديدة</button>
+              <button type="button" className="gmx-btn" onClick={() => restart()}>جولة جديدة</button>
               {typeof onExit === 'function' && (
                 <button type="button" className="gmx-btn ghost" onClick={onExit}>إنهاء</button>
               )}

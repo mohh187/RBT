@@ -83,6 +83,7 @@ export const GAME_TAGS = [
 export const GAMES = [
   {
     id: 'fishing',
+    cover: { motif: 'fishing', palette: ['#0b3d55', '#12849c', '#7fe3d6'], players: '1' },
     ar: 'صياد البحر',
     en: 'Sea Fisher',
     desc: 'أنزل الصنارة واصطد أكبر عدد من الأسماك في خمس وأربعين ثانية.',
@@ -93,6 +94,7 @@ export const GAMES = [
   },
   {
     id: 'waiterDash',
+    cover: { motif: 'tray', palette: ['#4a2410', '#c46a1c', '#ffd08a'], players: '1', stages: true },
     ar: 'سباق النادل',
     en: 'Waiter Dash',
     desc: 'اجرِ بالصينية بين الطاولات، اجمع الأكواب وحافظ على اتزانك.',
@@ -103,6 +105,7 @@ export const GAMES = [
   },
   {
     id: 'prizeWheel',
+    cover: { motif: 'wheel', palette: ['#331a52', '#7c46c9', '#ffcf5c'], players: '1' },
     ar: 'دولاب الحظ',
     en: 'Prize Wheel',
     desc: 'دورة واحدة في كل جلسة — أدر الدولاب واكسب نقاطك.',
@@ -113,6 +116,7 @@ export const GAMES = [
   },
   {
     id: 'orderRush',
+    cover: { motif: 'ticket', palette: ['#16224d', '#3f5bd6', '#9fc0ff'], players: '1', stages: true },
     ar: 'رتب الطلب',
     en: 'Order Rush',
     desc: 'احفظ طلب الزبون ثم أعد ترتيب أصنافه بالتسلسل الصحيح.',
@@ -123,6 +127,7 @@ export const GAMES = [
   },
   {
     id: 'catchBasket',
+    cover: { motif: 'basket', palette: ['#123320', '#2f8f4e', '#b8f08a'], players: '1', stages: true },
     ar: 'سلة التمر',
     en: 'Catch Basket',
     desc: 'حرّك السلة والتقط التمر والحلوى، وتجنّب الفاسد منها.',
@@ -133,6 +138,7 @@ export const GAMES = [
   },
   {
     id: 'tasteQuiz',
+    cover: { motif: 'quiz', palette: ['#3d1330', '#b0367c', '#ffb3d9'], players: '1', stages: true },
     ar: 'اختبار الذوق',
     en: 'Taste Quiz',
     desc: 'عشرة أسئلة مبنية على قائمة المكان نفسها.',
@@ -143,6 +149,7 @@ export const GAMES = [
   },
   {
     id: 'cakeTower',
+    cover: { motif: 'cake', palette: ['#43213a', '#d2568f', '#ffe0c2'], players: '1', stages: true },
     ar: 'برج الكيك',
     en: 'Cake Tower',
     desc: 'كدّس طبقات الكيك بدقة وابنِ أطول برج ممكن.',
@@ -153,6 +160,7 @@ export const GAMES = [
   },
   {
     id: 'latteArt',
+    cover: { motif: 'latte', palette: ['#33200f', '#8a5a2b', '#f3ddc0'], players: '1', stages: true },
     ar: 'فن اللاتيه',
     en: 'Latte Art',
     desc: 'اسكب الحليب وارسم نقشة اللاتيه كما في النموذج.',
@@ -163,6 +171,7 @@ export const GAMES = [
   },
   {
     id: 'spiceMatch',
+    cover: { motif: 'match', palette: ['#3d1c0d', '#c2691f', '#ffcf7a'], players: '1', stages: true },
     ar: 'توأم البهارات',
     en: 'Spice Match',
     desc: 'اقلب البطاقات وطابق البهارات المتشابهة قبل انتهاء الوقت.',
@@ -173,6 +182,7 @@ export const GAMES = [
   },
   {
     id: 'perfectGrill',
+    cover: { motif: 'grill', palette: ['#40140f', '#cc3f26', '#ffb26b'], players: '1', stages: true },
     ar: 'الشواء المثالي',
     en: 'Perfect Grill',
     desc: 'اقلب اللحم في اللحظة الصحيحة — لا نيء ولا محترق.',
@@ -183,6 +193,7 @@ export const GAMES = [
   },
   {
     id: 'bubblePop',
+    cover: { motif: 'bubbles', palette: ['#152a44', '#4d7fd6', '#8fe4f0'], players: '1', stages: true },
     ar: 'فقاعات الشاي',
     en: 'Bubble Pop',
     desc: 'فرقع الفقاعات المتشابهة واصنع أطول سلسلة.',
@@ -195,6 +206,7 @@ export const GAMES = [
   // ---- knowledge & brain training (useful, not just time-killing) ----
   {
     id: 'knowledgeQuiz',
+    cover: { motif: 'bulb', palette: ['#132145', '#3552a8', '#ffd76b'], players: '1', stages: true },
     ar: 'موسوعة الأسئلة',
     en: 'Knowledge Quiz',
     desc: 'أسئلة في الدين والمجتمع والجغرافيا والاقتصاد والعلوم والفن — مع شرح بعد كل إجابة.',
@@ -206,6 +218,7 @@ export const GAMES = [
   },
   {
     id: 'brainPuzzles',
+    cover: { motif: 'jigsaw', palette: ['#20143f', '#5b46c4', '#c3b2ff', '#ffd27a'], players: '1', stages: true },
     ar: 'ألغاز الذكاء',
     en: 'Brain Puzzles',
     desc: 'متتابعات ومنطق وتحليل بصري بمراحل متصاعدة تقوّي التفكير.',
@@ -217,6 +230,7 @@ export const GAMES = [
   },
   {
     id: 'wordRiddles',
+    cover: { motif: 'letters', palette: ['#3a2410', '#b0741d', '#ffe1a8'], players: '1', stages: true },
     ar: 'ألغاز الكلمات',
     en: 'Word Riddles',
     desc: 'أحاجي وأمثال ومفردات عربية بمراحل تُحفظ وتُستكمل.',
@@ -230,6 +244,7 @@ export const GAMES = [
   // ---- insight: psychology-based, not divination ----
   {
     id: 'tasteProfile',
+    cover: { motif: 'flavor', palette: ['#2a1330', '#9c3d80', '#ffd0e6'], players: '1', stages: true },
     ar: 'ذوقك يحكي عنك',
     en: 'Your Taste, Read',
     desc: 'اختيارات بين صنفين من قائمة المكان، ثم قراءة لشخصيتك وترشيحات مبنية عليها.',
@@ -241,6 +256,7 @@ export const GAMES = [
   },
   {
     id: 'mindMirror',
+    cover: { motif: 'mirror', palette: ['#122740', '#3f74b0', '#c6e2ff'], players: '1', stages: true },
     ar: 'مرآة الشخصية',
     en: 'Mind Mirror',
     desc: 'اثنا عشر موقفاً تتغيّر بحسب إجاباتك، ثم صورة شخصية مفصّلة.',
@@ -252,6 +268,7 @@ export const GAMES = [
   },
   {
     id: 'decisionStyle',
+    cover: { motif: 'scale', palette: ['#123026', '#2c8a6a', '#ffdf9e'], players: '1', stages: true },
     ar: 'كيف تقرر؟',
     en: 'How You Decide',
     desc: 'ثمانية مواقف قصيرة تكشف أسلوبك في اتخاذ القرار وخلاصة عملية.',
@@ -267,6 +284,7 @@ export const GAMES = [
   // min/maxPlayers drive the seat count the lobby waits for.
   {
     id: 'ludo',
+    cover: { motif: 'ludo', palette: ['#1d1a2e', '#3d3660', '#f7f4ee'], players: '2-4', vsCpu: true },
     ar: 'الليدو',
     en: 'Ludo',
     desc: 'اللعبة الكلاسيكية بأربعة ألوان — أخرج قطعك بستة، كُل قطع الخصم، وأوصلها إلى المركز.',
@@ -285,6 +303,7 @@ export const GAMES = [
   },
   {
     id: 'chess',
+    cover: { motif: 'chess', palette: ['#16232e', '#5b7182', '#e9eef3'], players: '2', vsCpu: true },
     ar: 'الشطرنج',
     en: 'Chess',
     desc: 'شطرنج كامل القواعد — التبييت والأخذ بالمرور والترقية، وحركة غير قانونية مستحيلة.',
@@ -299,6 +318,7 @@ export const GAMES = [
   },
   {
     id: 'dominoes',
+    cover: { motif: 'domino', palette: ['#0f2a22', '#1f6b53', '#f5f1e6', '#16202a'], players: '2-4', vsCpu: true },
     ar: 'الدومينو',
     en: 'Dominoes',
     desc: 'دومينو الخليج — افتح بأعلى دبل، طابق الطرفين، واسحب حتى تلعب. أول من يبلغ 101 يفوز.',
@@ -313,6 +333,7 @@ export const GAMES = [
   },
   {
     id: 'wist',
+    cover: { motif: 'fan', palette: ['#0e2a26', '#1d6b57', '#f2e6cf', '#d9455f'], players: '4', vsCpu: true },
     ar: 'الوِست',
     en: 'Wist',
     desc: 'وِست بالمزايدة والشراكات — أربعة لاعبون، فريقان، ثلاث عشرة أكلة.',
@@ -332,6 +353,7 @@ export const GAMES = [
   },
   {
     id: 'jackaroo',
+    cover: { motif: 'marbles', palette: ['#101f3a', '#3a63b8', '#ffd27a', '#f2e6cf'], players: '4', vsCpu: true },
     ar: 'الجكارو',
     en: 'Jackaroo',
     desc: 'جكارو بالورق والبِلي — فريقان، أخرج بِلْيَك بالآص أو الشايب، والسبعة تنقسم.',
@@ -346,6 +368,7 @@ export const GAMES = [
   },
   {
     id: 'haree',
+    cover: { motif: 'fireFan', palette: ['#2a0f14', '#c0392b', '#f2e6cf', '#ffb347'], players: '2-4', vsCpu: true },
     ar: 'الحريق',
     en: 'Hareeg',
     desc: 'حريق 14 — شدّتان وجوكرات، افتتح بخمسين ونقطة، وارمِ بلا غطاء. من بلغ 31 احترق وخرج، وآخر من يبقى يفوز.',
@@ -367,6 +390,11 @@ export const GAMES = [
 // shelves (ألغاز / معرفة / شخصية) empty, which read as a broken screen. Owners
 // narrow the list in Settings when they want to.
 export const DEFAULT_GAME_IDS = GAMES.map((g) => g.id)
+
+// The «جديد» shelf tag — a plain, hand-kept list of the newest / freshly rebuilt
+// titles. Editable at a glance so the owner can retire a tag once a game is no
+// longer new. The hub reads it; nothing else depends on it.
+export const NEW_GAME_IDS = ['haree', 'knowledgeQuiz', 'brainPuzzles', 'wordRiddles', 'tasteProfile', 'mindMirror', 'decisionStyle']
 
 export function gameById(id) {
   return GAMES.find((g) => g.id === id) || null

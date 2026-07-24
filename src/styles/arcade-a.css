@@ -1,0 +1,494 @@
+/* ===========================================================================
+   arcade-a.css — the shared skin for PACK A, the four reflex-arcade games:
+     • «صياد البحر»  (WaitGame.jsx)     — fishing, adapter-wrapped (root .wg-overlay)
+     • «سباق النادل» (WaiterDash.jsx)   — three-lane runner
+     • «سلة التمر»   (CatchBasket.jsx)  — falling catch
+     • «فقاعات الشاي»(BubblePop.jsx)     — rising-pearl popper
+
+   OWNERSHIP: owned by the PACK A agent. Deliberately isolated from index.css
+   (repo rule — never edit that file). Every selector is prefixed `arc-`, plus
+   the four `wg-overlay`/`wg-x` hooks the fishing adapter in games.js relies on.
+
+   HARD REPO RULES honoured here:
+     • no scrollbars ever — nothing here scrolls
+     • no emoji — every glyph is inline SVG drawn by the JSX
+     • only transform / opacity animate in keyframes; layout props stay static
+     • the whole pack goes still under prefers-reduced-motion (jump cuts)
+
+   LOOK: the house «majlis game table» skin — deep felt greens over dark walnut
+   with soft gold accents, cream only where a surface must read as lit. Phone
+   portrait (390x844) and venue TV (1920x1080) are both first-class: every size
+   is a clamp() over vmin so type and chrome scale with the screen, never crop.
+   =========================================================================== */
+
+.arc-root,
+.wg-overlay.arc-fish {
+  --arc-brand: #0e7490;
+  --arc-ink: #f4f7fa;
+  --arc-dim: rgba(244, 247, 250, 0.64);
+  --arc-faint: rgba(244, 247, 250, 0.4);
+  --arc-line: rgba(255, 255, 255, 0.12);
+  --arc-surface: rgba(255, 255, 255, 0.07);
+  --arc-glass: rgba(9, 17, 22, 0.62);
+  --arc-glass-deep: rgba(6, 12, 16, 0.86);
+  --arc-gold: #e7c46a;
+  --arc-gold-deep: #b8923c;
+  --arc-ease: cubic-bezier(0.22, 1, 0.36, 1);
+  --arc-spring: cubic-bezier(0.34, 1.42, 0.5, 1);
+
+  position: absolute;
+  inset: 0;
+  overflow: hidden;
+  box-sizing: border-box;
+  color: var(--arc-ink);
+  font-family: inherit;
+  touch-action: none;
+  user-select: none;
+  -webkit-user-select: none;
+  -webkit-tap-highlight-color: transparent;
+}
+.arc-root *,
+.arc-root *::before,
+.arc-root *::after { box-sizing: border-box; }
+
+/* The fishing overlay predates the contract; the adapter already positions it.
+   Only re-skin it — never re-position it (that is the adapter's job). */
+.wg-overlay.arc-fish {
+  display: block;
+  background: linear-gradient(180deg, #bfe7ff 0%, #7fc4e6 22%, #167ba8 40%, #083b66 100%);
+}
+
+.arc-canvas {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  display: block;
+  touch-action: none;
+}
+
+/* ---------------------------------------------------------------------------
+   HUD — top overlay. pointer-events:none so taps fall through to the canvas
+   (trap 3: overlays must never steal a play tap). Interactive bits opt back in.
+   --------------------------------------------------------------------------- */
+.arc-hud {
+  position: absolute;
+  top: 0;
+  inset-inline: 0;
+  z-index: 4;
+  display: flex;
+  align-items: flex-start;
+  gap: clamp(6px, 1.6vmin, 16px);
+  padding: clamp(8px, 2vmin, 22px) clamp(10px, 2.2vmin, 26px);
+  pointer-events: none;
+}
+.arc-hud-l { display: flex; flex-direction: column; gap: clamp(4px, 1vmin, 9px); min-width: 0; }
+.arc-hud-r { margin-inline-start: auto; display: flex; align-items: center; gap: clamp(5px, 1.4vmin, 12px); }
+
+/* stage pill + its progress track */
+.arc-stage {
+  display: inline-flex;
+  align-items: center;
+  gap: clamp(6px, 1.4vmin, 12px);
+  padding: clamp(4px, 1vmin, 9px) clamp(9px, 1.8vmin, 18px);
+  border-radius: 999px;
+  background: var(--arc-glass);
+  border: 1px solid var(--arc-line);
+  box-shadow: 0 2px 10px rgba(0, 0, 0, 0.32), inset 0 1px 0 rgba(255, 255, 255, 0.06);
+  backdrop-filter: blur(7px);
+  -webkit-backdrop-filter: blur(7px);
+  white-space: nowrap;
+}
+.arc-stage-k {
+  font-size: clamp(9px, 1.5vmin, 15px);
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  color: var(--arc-gold);
+}
+.arc-stage-n {
+  font-size: clamp(15px, 2.6vmin, 27px);
+  font-weight: 900;
+  line-height: 1;
+  color: var(--arc-ink);
+  font-variant-numeric: tabular-nums;
+}
+.arc-stage-nm {
+  font-size: clamp(10px, 1.6vmin, 16px);
+  font-weight: 700;
+  color: var(--arc-dim);
+  max-width: 40vw;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.arc-track {
+  width: clamp(96px, 26vmin, 340px);
+  height: clamp(5px, 0.9vmin, 9px);
+  border-radius: 999px;
+  background: rgba(0, 0, 0, 0.4);
+  border: 1px solid var(--arc-line);
+  overflow: hidden;
+}
+.arc-track > i {
+  display: block;
+  height: 100%;
+  border-radius: 999px;
+  background: linear-gradient(90deg, var(--arc-gold-deep), var(--arc-gold));
+  transform-origin: left center;
+  transition: transform 0.28s var(--arc-ease);
+}
+[dir="rtl"] .arc-track > i { transform-origin: right center; }
+
+/* chips (combo, timer, pressure...) */
+.arc-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: clamp(4px, 1vmin, 9px) clamp(9px, 1.7vmin, 17px);
+  border-radius: 999px;
+  background: var(--arc-glass);
+  border: 1px solid var(--arc-line);
+  box-shadow: 0 2px 10px rgba(0, 0, 0, 0.3);
+  backdrop-filter: blur(7px);
+  -webkit-backdrop-filter: blur(7px);
+  font-size: clamp(11px, 1.8vmin, 18px);
+  font-weight: 800;
+  color: var(--arc-ink);
+  white-space: nowrap;
+  font-variant-numeric: tabular-nums;
+}
+.arc-chip.is-gold { color: #10130c; background: linear-gradient(135deg, var(--arc-gold), var(--arc-gold-deep)); border-color: transparent; }
+.arc-chip.is-brand { background: color-mix(in srgb, var(--arc-brand) 78%, #000); border-color: transparent; }
+.arc-chip.is-warn { background: rgba(200, 62, 48, 0.66); border-color: transparent; color: #fff; }
+.arc-chip svg { display: block; }
+/* a soft pulse the frame the chip meaning changes */
+.arc-chip.is-beat { animation: arc-beat 0.42s var(--arc-spring); }
+@keyframes arc-beat { 0% { transform: scale(1); } 45% { transform: scale(1.18); } 100% { transform: scale(1); } }
+
+/* lives — hearts drawn as inline SVG in the JSX */
+.arc-lives { display: inline-flex; align-items: center; gap: clamp(3px, 0.8vmin, 7px); }
+.arc-life {
+  width: clamp(15px, 2.4vmin, 26px);
+  height: clamp(15px, 2.4vmin, 26px);
+  display: block;
+  color: #ff5d6c;
+  filter: drop-shadow(0 1px 3px rgba(0, 0, 0, 0.45));
+  transition: transform 0.3s var(--arc-spring), opacity 0.3s var(--arc-ease), color 0.3s var(--arc-ease);
+}
+.arc-life.is-lost { color: rgba(255, 255, 255, 0.16); transform: scale(0.7); }
+.arc-life.is-hit { animation: arc-lifepop 0.5s var(--arc-ease); }
+@keyframes arc-lifepop { 0%, 100% { transform: scale(1); } 30% { transform: scale(1.5); } 60% { transform: scale(0.6); } }
+
+/* ---------------------------------------------------------------------------
+   Between-stages banner beat. pointer-events:none, mounts for ~1.7s, plays in
+   then out. transform + opacity only.
+   --------------------------------------------------------------------------- */
+.arc-banner {
+  position: absolute;
+  inset: 0;
+  z-index: 6;
+  display: grid;
+  place-items: center;
+  pointer-events: none;
+}
+.arc-banner-card {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: clamp(4px, 1vmin, 10px);
+  padding: clamp(18px, 4vmin, 48px) clamp(30px, 8vmin, 96px);
+  border-radius: clamp(18px, 3vmin, 34px);
+  background: radial-gradient(120% 120% at 50% 0%, rgba(28, 46, 42, 0.94), rgba(8, 15, 13, 0.96));
+  border: 1px solid var(--arc-gold-deep);
+  box-shadow: 0 24px 70px rgba(0, 0, 0, 0.6), inset 0 1px 0 rgba(255, 255, 255, 0.08);
+  will-change: transform, opacity;
+  animation: arc-banner 1.7s var(--arc-ease) both;
+}
+.arc-banner-k {
+  font-size: clamp(12px, 2vmin, 22px);
+  font-weight: 800;
+  letter-spacing: 0.14em;
+  color: var(--arc-gold);
+}
+.arc-banner-num {
+  font-size: clamp(46px, 12vmin, 150px);
+  font-weight: 900;
+  line-height: 0.92;
+  color: var(--arc-ink);
+  text-shadow: 0 4px 24px rgba(0, 0, 0, 0.5);
+  font-variant-numeric: tabular-nums;
+}
+.arc-banner-sub {
+  font-size: clamp(13px, 2.3vmin, 26px);
+  font-weight: 700;
+  color: var(--arc-dim);
+  text-align: center;
+  max-width: 20ch;
+}
+.arc-banner-sub b { color: var(--arc-gold); }
+@keyframes arc-banner {
+  0% { transform: scale(0.6); opacity: 0; }
+  14% { transform: scale(1.06); opacity: 1; }
+  22% { transform: scale(1); opacity: 1; }
+  78% { transform: scale(1); opacity: 1; }
+  100% { transform: scale(1.04); opacity: 0; }
+}
+
+/* ---------------------------------------------------------------------------
+   Toast — small transient in-play feedback ("+50", "مرحلة!"). pointer-events off.
+   --------------------------------------------------------------------------- */
+.arc-toasts {
+  position: absolute;
+  top: clamp(58px, 12vmin, 150px);
+  inset-inline: 0;
+  z-index: 5;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 6px;
+  pointer-events: none;
+}
+.arc-toast {
+  padding: clamp(5px, 1.1vmin, 11px) clamp(12px, 2.2vmin, 24px);
+  border-radius: 999px;
+  background: var(--arc-glass-deep);
+  border: 1px solid var(--arc-line);
+  font-size: clamp(13px, 2.2vmin, 24px);
+  font-weight: 900;
+  color: var(--arc-gold);
+  will-change: transform, opacity;
+  animation: arc-toast 1.15s var(--arc-ease) both;
+}
+.arc-toast.is-plain { color: var(--arc-ink); }
+@keyframes arc-toast {
+  0% { transform: translateY(10px) scale(0.8); opacity: 0; }
+  16% { transform: translateY(0) scale(1); opacity: 1; }
+  70% { transform: translateY(0) scale(1); opacity: 1; }
+  100% { transform: translateY(-22px) scale(1); opacity: 0; }
+}
+
+/* ---------------------------------------------------------------------------
+   Veil — the ready / paused / game-over full cards. pointer-events:auto.
+   --------------------------------------------------------------------------- */
+.arc-veil {
+  position: absolute;
+  inset: 0;
+  z-index: 8;
+  display: grid;
+  place-items: center;
+  padding: clamp(16px, 4vmin, 48px);
+  background: radial-gradient(120% 90% at 50% 38%, rgba(8, 16, 20, 0.72), rgba(3, 8, 11, 0.94));
+  backdrop-filter: blur(4px);
+  -webkit-backdrop-filter: blur(4px);
+  animation: arc-fade 0.32s var(--arc-ease) both;
+}
+@keyframes arc-fade { from { opacity: 0; } to { opacity: 1; } }
+
+.arc-card {
+  width: min(92%, clamp(300px, 62vmin, 640px));
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: clamp(9px, 1.8vmin, 20px);
+  text-align: center;
+  padding: clamp(20px, 4vmin, 52px) clamp(18px, 4vmin, 56px);
+  border-radius: clamp(18px, 3vmin, 32px);
+  background:
+    radial-gradient(140% 90% at 50% -10%, rgba(255, 255, 255, 0.08), transparent 60%),
+    linear-gradient(180deg, rgba(22, 34, 31, 0.96), rgba(9, 16, 14, 0.98));
+  border: 1px solid var(--arc-line);
+  box-shadow: 0 30px 80px rgba(0, 0, 0, 0.6), inset 0 1px 0 rgba(255, 255, 255, 0.07);
+  animation: arc-rise 0.4s var(--arc-spring) both;
+}
+@keyframes arc-rise { from { transform: translateY(16px) scale(0.96); opacity: 0; } to { transform: none; opacity: 1; } }
+
+.arc-emblem {
+  width: clamp(56px, 11vmin, 128px);
+  height: clamp(56px, 11vmin, 128px);
+  display: block;
+  filter: drop-shadow(0 8px 22px rgba(0, 0, 0, 0.4));
+}
+
+.arc-card-title {
+  font-size: clamp(21px, 4.4vmin, 46px);
+  font-weight: 900;
+  letter-spacing: -0.01em;
+  color: var(--arc-ink);
+  margin: 0;
+}
+.arc-card-line {
+  margin: 0;
+  max-width: 36ch;
+  font-size: clamp(13px, 2.1vmin, 22px);
+  line-height: 1.7;
+  color: var(--arc-dim);
+}
+.arc-card-line b { color: var(--arc-gold); }
+.arc-card-big {
+  font-size: clamp(46px, 11vmin, 128px);
+  font-weight: 900;
+  line-height: 1;
+  color: var(--arc-gold);
+  text-shadow: 0 6px 30px rgba(231, 196, 106, 0.28);
+  font-variant-numeric: tabular-nums;
+}
+.arc-card-big em { font-style: normal; font-size: 0.34em; font-weight: 800; color: var(--arc-dim); margin-inline-start: 0.4em; }
+
+/* a row of end-of-run stats */
+.arc-stats {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: clamp(8px, 2vmin, 22px);
+  width: 100%;
+}
+.arc-stat {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 2px;
+  min-width: clamp(64px, 14vmin, 130px);
+  padding: clamp(8px, 1.6vmin, 16px) clamp(10px, 2vmin, 20px);
+  border-radius: clamp(12px, 2vmin, 20px);
+  background: var(--arc-surface);
+  border: 1px solid var(--arc-line);
+}
+.arc-stat b { font-size: clamp(18px, 3.2vmin, 34px); font-weight: 900; color: var(--arc-ink); line-height: 1; font-variant-numeric: tabular-nums; }
+.arc-stat em { font-style: normal; font-size: clamp(10px, 1.6vmin, 16px); font-weight: 700; color: var(--arc-dim); }
+.arc-stat.is-record b { color: var(--arc-gold); }
+.arc-stat.is-record { border-color: var(--arc-gold-deep); }
+
+.arc-sub { margin: 0; font-size: clamp(11px, 1.7vmin, 17px); font-weight: 700; color: var(--arc-faint); }
+.arc-record {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: clamp(4px, 1vmin, 9px) clamp(12px, 2vmin, 20px);
+  border-radius: 999px;
+  background: linear-gradient(135deg, rgba(231, 196, 106, 0.22), rgba(184, 146, 60, 0.14));
+  border: 1px solid var(--arc-gold-deep);
+  color: var(--arc-gold);
+  font-size: clamp(11px, 1.8vmin, 18px);
+  font-weight: 800;
+  animation: arc-beat 0.5s var(--arc-spring);
+}
+
+.arc-actions { display: flex; flex-wrap: wrap; gap: clamp(8px, 1.6vmin, 16px); justify-content: center; width: 100%; margin-top: clamp(2px, 1vmin, 8px); }
+.arc-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  min-height: clamp(44px, 6.4vmin, 66px);
+  padding: 0 clamp(20px, 3.4vmin, 40px);
+  border: 0;
+  border-radius: clamp(12px, 2vmin, 20px);
+  font: inherit;
+  font-size: clamp(15px, 2.3vmin, 24px);
+  font-weight: 800;
+  color: #fff;
+  cursor: pointer;
+  background: linear-gradient(135deg, color-mix(in srgb, var(--arc-brand) 92%, #fff), color-mix(in srgb, var(--arc-brand) 74%, #000));
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.4), inset 0 1px 0 rgba(255, 255, 255, 0.18);
+  transition: transform 0.14s var(--arc-ease), box-shadow 0.14s var(--arc-ease);
+}
+.arc-btn svg { display: block; }
+.arc-btn:active { transform: scale(0.96); }
+.arc-btn.is-gold { color: #14170d; background: linear-gradient(135deg, var(--arc-gold), var(--arc-gold-deep)); }
+.arc-btn.ghost {
+  color: var(--arc-ink);
+  background: transparent;
+  border: 1px solid var(--arc-line);
+  box-shadow: none;
+}
+.arc-btn:focus-visible { outline: 3px solid color-mix(in srgb, var(--arc-brand) 60%, #fff); outline-offset: 3px; }
+
+/* how-to line + silent-rule hint (trap 4: any removed option is stated) */
+.arc-how {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: clamp(8px, 1.6vmin, 18px);
+  margin: 0;
+}
+.arc-how span {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: clamp(11px, 1.7vmin, 17px);
+  font-weight: 700;
+  color: var(--arc-dim);
+}
+.arc-how span svg { color: var(--arc-gold); }
+
+.arc-hint {
+  position: absolute;
+  inset-inline: 0;
+  bottom: clamp(12px, 3vmin, 40px);
+  z-index: 5;
+  display: flex;
+  justify-content: center;
+  pointer-events: none;
+}
+.arc-hint > span {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  padding: clamp(6px, 1.2vmin, 12px) clamp(14px, 2.4vmin, 26px);
+  border-radius: 999px;
+  background: var(--arc-glass-deep);
+  border: 1px solid var(--arc-line);
+  font-size: clamp(12px, 1.9vmin, 19px);
+  font-weight: 700;
+  color: var(--arc-ink);
+  animation: arc-toast-hold 2.6s var(--arc-ease) both;
+}
+@keyframes arc-toast-hold {
+  0% { transform: translateY(10px); opacity: 0; }
+  10% { transform: none; opacity: 1; }
+  85% { transform: none; opacity: 1; }
+  100% { transform: translateY(6px); opacity: 0; }
+}
+
+/* standalone close (fishing on the order page). The games-hub adapter hides
+   .wg-x; here it is the guest's only way out, so keep it reachable. */
+.arc-x {
+  position: absolute;
+  top: clamp(8px, 2vmin, 20px);
+  inset-inline-end: clamp(8px, 2vmin, 20px);
+  z-index: 7;
+  width: clamp(38px, 6vmin, 56px);
+  height: clamp(38px, 6vmin, 56px);
+  display: grid;
+  place-items: center;
+  border: 0;
+  border-radius: 50%;
+  background: rgba(0, 0, 0, 0.4);
+  color: #fff;
+  cursor: pointer;
+  pointer-events: auto;
+}
+
+/* ---------------------------------------------------------------------------
+   Per-game emblem tints (the emblem art itself is inline SVG in each JSX).
+   --------------------------------------------------------------------------- */
+.arc-emblem.is-spin { animation: arc-spin 9s linear infinite; }
+@keyframes arc-spin { to { transform: rotate(360deg); } }
+
+/* ---------------------------------------------------------------------------
+   Reduced motion — collapse every beat to a jump cut.
+   --------------------------------------------------------------------------- */
+@media (prefers-reduced-motion: reduce) {
+  .arc-banner-card,
+  .arc-toast,
+  .arc-veil,
+  .arc-card,
+  .arc-record,
+  .arc-chip.is-beat,
+  .arc-life.is-hit,
+  .arc-hint > span,
+  .arc-emblem.is-spin { animation: none !important; }
+  .arc-track > i { transition: none; }
+  .arc-btn { transition: none; }
+  .arc-life { transition: none; }
+}

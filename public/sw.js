@@ -3,7 +3,7 @@
    offline fallback. */
 
 // Bump on deploy to drop stale/bad cached assets (activate purges old caches).
-const CACHE = 'rbt360-v3'
+const CACHE = 'rbt360-v4'
 const APP_SHELL = ['/', '/index.html', '/favicon.svg', '/manifest.webmanifest']
 
 self.addEventListener('install', (event) => {
@@ -28,12 +28,24 @@ self.addEventListener('fetch', (event) => {
   if (url.origin !== self.location.origin) return // never cache Firestore/Storage/CDN
 
   if (req.mode === 'navigate') {
-    event.respondWith(fetch(req).catch(() => caches.match('/index.html')))
+    // ALWAYS resolve to a real Response. `caches.match` returns undefined when
+    // nothing is cached (every fresh dev server, and prod right after the
+    // activate purge), and respondWith(undefined) throws "Failed to convert
+    // value to 'Response'" — which surfaced as an uncaught sw.js error and a
+    // rejected FetchEvent while the app was reloading. Fall through network →
+    // cached shell → Response.error() (a normal network-error the page can
+    // handle), never undefined.
+    event.respondWith(
+      fetch(req).catch(async () => (await caches.match('/index.html')) || (await caches.match('/')) || Response.error()),
+    )
     return
   }
   // network-first, fall back to cache when offline. Only cache OK, same-origin
   // "basic" responses so an error page / 4xx / 5xx never gets persisted and
   // served offline (which would white-screen the app after a bad deploy).
+  // On a miss return Response.error(), NOT the undefined caches.match yields —
+  // undefined makes respondWith throw; Response.error() lets the app's own
+  // vite:preloadError reload handler catch a failed chunk fetch normally.
   event.respondWith(
     fetch(req)
       .then((res) => {
@@ -43,7 +55,7 @@ self.addEventListener('fetch', (event) => {
         }
         return res
       })
-      .catch(() => caches.match(req)),
+      .catch(async () => (await caches.match(req)) || Response.error()),
   )
 })
 

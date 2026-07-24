@@ -1,6 +1,6 @@
 import { lazy, Suspense, useEffect, useRef, useState } from 'react'
 import { useParams, Link } from 'react-router-dom'
-import { resolveSlug, watchOrder, createReview, createComplaint, notifyArrival, getTenant } from '../../lib/db.js'
+import { resolveSlug, watchOrder, createReview, createComplaint, notifyArrival, getTenant, listItems } from '../../lib/db.js'
 import SocialLinks, { socialHref } from '../../components/SocialLinks.jsx'
 import Sheet from '../../components/Sheet.jsx'
 import { useI18n } from '../../lib/i18n.jsx'
@@ -25,10 +25,14 @@ import { createVenueReview } from '../../lib/reviewImport.js'
 const NotificationSettings = lazy(() => import('../../components/NotificationSettings.jsx'))
 import WaitGame, { getBestScore } from '../../components/WaitGame.jsx'
 import { deviceKey } from '../../lib/device.js'
+import { gamesFor } from '../../lib/games.js'
 // heavy/rarely-opened guest overlays
 const Leaderboard = lazy(() => import('../../components/Leaderboard.jsx'))
 const KitchenTwin = lazy(() => import('../../components/KitchenTwin.jsx'))
 const YearWrapped = lazy(() => import('../../components/YearWrapped.jsx'))
+// The full games hub — reused verbatim so a wait-game launch goes through the
+// exact same registration gate, lobby and scoring as «ركن الألعاب».
+const GamesCenter = lazy(() => import('../../components/GamesCenter.jsx'))
 
 const STEPS = ['pending', 'accepted', 'preparing', 'ready', 'served']
 const STEP_LABEL = {
@@ -61,6 +65,13 @@ export default function OrderStatus() {
   const [arriving, setArriving] = useState(false)
   const [paying, setPaying] = useState(false)
   const [gameOpen, setGameOpen] = useState(false)
+  // The configurable post-order wait game (tenant.waitGame). Opens the real
+  // games hub on top of this screen; the strip below announces «طلبك جاهز» over
+  // it without ever tearing the game down mid-round.
+  const [waitHubOpen, setWaitHubOpen] = useState(false)
+  const [waitHubGame, setWaitHubGame] = useState('')
+  const [waitItems, setWaitItems] = useState(null)
+  const [readyStrip, setReadyStrip] = useState(true)
   const [boardOpen, setBoardOpen] = useState(false)
   const [twinOpen, setTwinOpen] = useState(false)
   const [lastScore, setLastScore] = useState(0)
@@ -112,6 +123,47 @@ export default function OrderStatus() {
   const driverKm = (dGeo && dCust) ? distanceMeters(dGeo, dCust) / 1000 : null
   const etaMin = (driverKm != null && order.delivery?.status === 'on_way') ? Math.max(1, Math.round((driverKm / 30) * 60)) : null
   const currency = order.currency || 'SAR'
+
+  // ---- post-order wait game (venue setting: tenant.waitGame) ----------------
+  // { enabled, gameId }: gameId is a specific enabled game or 'auto'. When the
+  // chosen game is 'auto' — or a game the venue has since disabled — a game is
+  // picked deterministically from the enabled set by hashing the order id, so a
+  // given order always offers the same game (no flicker across re-renders).
+  const waitCfg = venue?.waitGame
+  const waitOn = waitCfg?.enabled === true
+  const waitEnabledGames = venue ? gamesFor(venue) : []
+  const waitGameId = (() => {
+    if (!waitOn || !waitEnabledGames.length) return ''
+    const want = waitCfg?.gameId
+    if (want && want !== 'auto') {
+      const g = waitEnabledGames.find((x) => x.id === want)
+      if (g) return g.id
+    }
+    let hsh = 0
+    const s = String(orderId || '')
+    for (let i = 0; i < s.length; i += 1) hsh = (hsh * 31 + s.charCodeAt(i)) >>> 0
+    return waitEnabledGames[hsh % waitEnabledGames.length].id
+  })()
+  const waitGameObj = waitGameId ? waitEnabledGames.find((g) => g.id === waitGameId) : null
+  const waitGameName = waitGameObj ? (lang === 'en' ? (waitGameObj.en || waitGameObj.ar) : waitGameObj.ar) : ''
+  const waitFrame = etaMin != null
+    ? (lang === 'ar' ? `الوقت المتوقّع نحو ${etaMin} دقيقة` : `about ${etaMin} min to go`)
+    : (lang === 'ar' ? 'نحضّر طلبك الآن' : 'we are preparing your order')
+
+  // Load the full menu once (some games build their content from it), then open
+  // the hub straight onto the chosen game. Registration is handled inside the
+  // hub's own gate — this never bypasses it.
+  const openWaitGame = async () => {
+    if (!waitGameId) return
+    let its = waitItems
+    if (its == null) {
+      try { its = (await listItems(tid)) || [] } catch (_) { its = [] }
+      setWaitItems(its)
+    }
+    setReadyStrip(true)
+    setWaitHubGame(waitGameId)
+    setWaitHubOpen(true)
+  }
 
   const canRate = (order.status === 'served' || order.status === 'paid') && !rated && (order.items || []).some((l) => l.itemId)
   const submitRatings = async () => {
@@ -307,8 +359,35 @@ export default function OrderStatus() {
           </div>
         )}
 
-        {/* «صياد البحر» — the waiting mini-game, while the kitchen works. Venue-togglable. */}
-        {!cancelled && currentIdx < STEPS.indexOf('ready') && venue?.waitGameEnabled !== false && (
+        {/* «العب وأنت تنتظر» — the venue-chosen wait game (tenant.waitGame),
+            launched through the real games hub so its registration gate, lobby
+            and scoring are exactly the hub's. Shown until the order is served. */}
+        {!cancelled && waitOn && waitGameId && currentIdx < STEPS.indexOf('served') && (
+          <button
+            type="button" className="wg-invite" onClick={openWaitGame}
+            style={{ background: 'linear-gradient(135deg, #7c3aed, #0e7490)' }}
+          >
+            <span className="wg-invite-ico" aria-hidden="true">
+              <svg width="24" height="24" viewBox="0 0 24 24" fill="none">
+                <rect x="4" y="4" width="16" height="16" rx="4.5" stroke="currentColor" strokeWidth="1.7" />
+                <circle cx="9" cy="9" r="1.4" fill="currentColor" />
+                <circle cx="15" cy="9" r="1.4" fill="currentColor" />
+                <circle cx="12" cy="12" r="1.4" fill="currentColor" />
+                <circle cx="9" cy="15" r="1.4" fill="currentColor" />
+                <circle cx="15" cy="15" r="1.4" fill="currentColor" />
+              </svg>
+            </span>
+            <span className="wg-invite-txt">
+              <b>{lang === 'ar' ? 'العب وأنت تنتظر' : 'Play while you wait'}</b>
+              <span>{lang === 'ar' ? `«${waitGameName}» — ${waitFrame}` : `${waitGameName} — ${waitFrame}`}</span>
+            </span>
+          </button>
+        )}
+
+        {/* «صياد البحر» — the legacy waiting mini-game. Shown only when the venue
+            has NOT configured the newer tenant.waitGame picker, so the two never
+            appear together. Venue-togglable via the older waitGameEnabled flag. */}
+        {!cancelled && !venue?.waitGame && currentIdx < STEPS.indexOf('ready') && venue?.waitGameEnabled !== false && (
           <button type="button" className="wg-invite" onClick={() => setGameOpen(true)}>
             <span className="wg-invite-ico"><Icon name="play" size={22} /></span>
             <span className="wg-invite-txt">
@@ -327,6 +406,49 @@ export default function OrderStatus() {
           <Suspense fallback={null}>
             <Leaderboard open onClose={() => setBoardOpen(false)} tenantId={tid} lang={lang} myScore={lastScore} deviceId={gameDeviceId} />
           </Suspense>
+        )}
+
+        {/* The wait game runs in the full games hub, mounted over this screen.
+            openGameId drives its own gate/lobby so registration is never skipped. */}
+        {waitHubOpen && (
+          <Suspense fallback={null}>
+            <GamesCenter
+              open
+              onClose={() => setWaitHubOpen(false)}
+              tenantId={tid}
+              tenant={venue}
+              items={waitItems || []}
+              lang={lang}
+              openGameId={waitHubGame}
+            />
+          </Suspense>
+        )}
+
+        {/* «طلبك جاهز» over the game — the order flipped to ready/served while the
+            guest is still playing. It never tears the round down: a thin strip
+            above the hub (z 401 > hub 330), dismissable, with a way back. */}
+        {waitHubOpen && readyStrip && (order.status === 'ready' || order.status === 'served' || paid) && (
+          <div
+            role="status"
+            style={{
+              position: 'fixed', insetInlineStart: 0, insetInlineEnd: 0, top: 0, zIndex: 401,
+              display: 'flex', alignItems: 'center', gap: 10,
+              padding: 'calc(10px + env(safe-area-inset-top, 0px)) 14px 10px',
+              background: 'var(--success)', color: '#fff', boxShadow: '0 4px 18px rgba(0,0,0,.28)',
+            }}
+          >
+            <Icon name="bellRing" size={18} style={{ flex: 'none' }} />
+            <span className="small bold" style={{ flex: 1 }}>{lang === 'ar' ? 'طلبك جاهز' : 'Your order is ready'}</span>
+            <button
+              type="button" onClick={() => setWaitHubOpen(false)}
+              style={{ flex: 'none', border: '1px solid rgba(255,255,255,.6)', background: 'rgba(255,255,255,.16)', color: '#fff', borderRadius: 999, padding: '5px 12px', fontWeight: 800, fontSize: 12.5, cursor: 'pointer' }}
+            >{lang === 'ar' ? 'عرض الطلب' : 'View order'}</button>
+            <button
+              type="button" onClick={() => setReadyStrip(false)}
+              aria-label={lang === 'ar' ? 'إخفاء' : 'Dismiss'}
+              style={{ flex: 'none', border: 'none', background: 'transparent', color: '#fff', padding: 4, cursor: 'pointer', display: 'grid', placeItems: 'center' }}
+            ><Icon name="close" size={16} /></button>
+          </div>
         )}
 
         {/* «توأم المطبخ» — live per-item progress straight from the kitchen screen */}

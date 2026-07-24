@@ -15,9 +15,11 @@ import { useI18n } from '../../lib/i18n.jsx'
 import { Spinner } from '../../components/ui.jsx'
 import Icon from '../../components/Icon.jsx'
 import { CAP } from '../../lib/permissions.js'
-import { listCustomers } from '../../lib/db.js'
+import { listCustomers, updateTenant } from '../../lib/db.js'
 import { fmtNum } from '../../lib/format.js'
 import { PLAY_AI_GUARD_AR } from '../../lib/gameMemory.js'
+import { gamesFor } from '../../lib/games.js'
+import { useToast } from '../../components/Toast.jsx'
 
 import PlayOverview from '../../components/play/PlayOverview.jsx'
 import PlayersTable from '../../components/play/PlayersTable.jsx'
@@ -107,6 +109,31 @@ export default function GuestPlay({ onCreateCampaign }) {
   const { tenantId, tenant, isManager, can } = useAuth()
   const allowed = isManager || can(CAP.VIEW_REPORTS) || can(CAP.MANAGE_CAMPAIGNS)
   const aiAllowed = can(CAP.USE_ASSISTANT)
+  const toast = useToast()
+
+  // ---- post-order wait game (venue setting: tenant.waitGame) ----------------
+  // Only settings-capable staff may write it; the picker offers every ENABLED
+  // game plus «تلقائي» (rotate across orders). Saved through the same
+  // updateTenant path every other tenant setting uses.
+  const canSettings = isManager || can(CAP.MANAGE_SETTINGS)
+  const enabledGames = useMemo(() => gamesFor(tenant), [tenant])
+  const [wg, setWg] = useState(() => ({
+    enabled: tenant?.waitGame?.enabled === true,
+    gameId: tenant?.waitGame?.gameId || 'auto',
+  }))
+  useEffect(() => {
+    setWg({ enabled: tenant?.waitGame?.enabled === true, gameId: tenant?.waitGame?.gameId || 'auto' })
+  }, [tenant?.waitGame?.enabled, tenant?.waitGame?.gameId])
+  const saveWait = async (patch) => {
+    const next = { enabled: wg.enabled, gameId: wg.gameId || 'auto', ...patch }
+    setWg(next)
+    try {
+      await updateTenant(tenantId, { waitGame: next })
+      toast.success?.(ar ? 'تم حفظ إعداد لعبة الانتظار' : 'Wait-game setting saved')
+    } catch (_) {
+      toast.error?.(ar ? 'تعذّر حفظ الإعداد' : 'Could not save setting')
+    }
+  }
 
   const [tab, setTab] = useState('overview')
   const [periodKey, setPeriodKey] = useState('d30')
@@ -217,6 +244,56 @@ export default function GuestPlay({ onCreateCampaign }) {
           )}
         </div>
       </div>
+
+      {canSettings && (
+        <div className="gp-card" style={{ display: 'grid', gap: 12 }}>
+          <div className="gp-head-t">
+            <strong>{ar ? 'لعبة الانتظار بعد الطلب' : 'Post-order wait game'}</strong>
+            <span className="gp-num">{ar ? 'تظهر على شاشة تتبّع الطلب' : 'Shown on the order-tracking screen'}</span>
+          </div>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 12 }}>
+            <span className="gp-hint" style={{ margin: 0 }}>
+              {ar ? 'اعرض لعبة يقضي بها الضيف وقت انتظار طلبه.' : 'Offer a game to entertain the guest while the order is prepared.'}
+            </span>
+            <button
+              type="button" role="switch" aria-checked={wg.enabled}
+              aria-label={ar ? 'تفعيل لعبة الانتظار' : 'Enable wait game'}
+              onClick={() => saveWait({ enabled: !wg.enabled })}
+              style={{ flex: 'none', width: 46, height: 26, borderRadius: 999, border: '1px solid var(--border)', background: wg.enabled ? 'var(--brand)' : 'var(--surface-2)', position: 'relative', cursor: 'pointer', padding: 0 }}
+            >
+              <span style={{ position: 'absolute', top: 2, insetInlineStart: wg.enabled ? 22 : 2, width: 20, height: 20, borderRadius: '50%', background: '#fff', boxShadow: '0 1px 3px rgba(0,0,0,.3)' }} />
+            </button>
+          </div>
+          {wg.enabled && (
+            enabledGames.length ? (
+              <div style={{ display: 'grid', gap: 8 }}>
+                <span className="gp-hint" style={{ margin: 0 }}>{ar ? 'اختر اللعبة:' : 'Pick the game:'}</span>
+                <div className="gp-scroll-x">
+                  <div className="gp-tabs">
+                    <button
+                      type="button" className={`chip${wg.gameId === 'auto' ? ' active' : ''}`}
+                      aria-pressed={wg.gameId === 'auto'} onClick={() => saveWait({ gameId: 'auto' })}
+                    >{ar ? 'تلقائي' : 'Auto'}</button>
+                    {enabledGames.map((g) => (
+                      <button
+                        key={g.id} type="button" className={`chip${wg.gameId === g.id ? ' active' : ''}`}
+                        aria-pressed={wg.gameId === g.id} onClick={() => saveWait({ gameId: g.id })}
+                      >{ar ? g.ar : g.en}</button>
+                    ))}
+                  </div>
+                </div>
+                <span className="gp-hint" style={{ margin: 0 }}>
+                  {ar ? '«تلقائي» يوزّع الألعاب على الطلبات بالتناوب.' : '“Auto” rotates games across orders.'}
+                </span>
+              </div>
+            ) : (
+              <span className="gp-hint" style={{ margin: 0 }}>
+                {ar ? 'لا توجد ألعاب مفعّلة في هذا المكان بعد.' : 'No games are enabled at this venue yet.'}
+              </span>
+            )
+          )}
+        </div>
+      )}
 
       <div className="gp-scroll-x">
         <div className="gp-tabs">

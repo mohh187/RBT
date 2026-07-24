@@ -1032,3 +1032,250 @@
 }
 .gh-past-h svg { color: var(--gh-brand); filter: brightness(1.4); }
 .gh-past > .sp-card { margin-bottom: 0; }
+
+/* ===========================================================================
+   PER-GAME COVERS + HORIZONTAL SHELVES
+   ---------------------------------------------------------------------------
+   Each game is a poster-ratio cover: an original SVG scene (drawn in
+   GamesCenter's renderScene) under a large Arabic name and a truthful feature
+   strip. Shelves scroll horizontally with a hidden scrollbar; the leading
+   party shelf leads with a wide featured hero card. Only transform/opacity
+   animate; the whole block goes still under prefers-reduced-motion.
+   =========================================================================== */
+
+/* ---- a shelf: one horizontal, snap-scrolling row ---- */
+.gh-shelf {
+  display: flex;
+  gap: 12px;
+  overflow-x: auto;
+  overflow-y: hidden;
+  scroll-snap-type: x proximity;
+  scroll-padding-inline: var(--gh-pad);
+  overscroll-behavior-x: contain;
+  -webkit-overflow-scrolling: touch;
+  scrollbar-width: none;
+  -ms-overflow-style: none;
+  /* full-bleed to the body's edges, then re-indent the first/last card so it
+     lines up with the surrounding content margin */
+  margin-inline: calc(var(--gh-pad) * -1);
+  padding: 4px var(--gh-pad) 6px;
+}
+.gh-shelf::-webkit-scrollbar { width: 0; height: 0; }
+
+/* ---- the cover card ---- */
+.gh-cover {
+  position: relative;
+  flex: 0 0 clamp(150px, 45vw, 190px);
+  width: clamp(150px, 45vw, 190px);
+  aspect-ratio: 3 / 4;
+  scroll-snap-align: start;
+  display: block;
+  padding: 0;
+  border: 0;
+  border-radius: 20px;
+  overflow: hidden;
+  background: var(--cd, #10202c);
+  box-shadow:
+    inset 0 0 0 1px rgba(255, 255, 255, 0.08),
+    0 12px 26px -18px rgba(0, 0, 0, 0.95);
+  color: var(--gh-ink);
+  font: inherit;
+  text-align: start;
+  cursor: pointer;
+  transition: transform 0.2s var(--gh-ease), box-shadow 0.2s ease;
+  will-change: transform;
+}
+.gh-cover:active { transform: scale(0.975); }
+@media (hover: hover) and (pointer: fine) {
+  .gh-cover:hover {
+    transform: translateY(-3px);
+    box-shadow:
+      inset 0 0 0 1px color-mix(in srgb, var(--ch, #38bdf8) 42%, transparent),
+      0 22px 42px -22px rgba(0, 0, 0, 0.95);
+  }
+}
+
+.gh-cover-art { display: block; width: 100%; height: 100%; pointer-events: none; }
+.gh-cover-art svg { display: block; width: 100%; height: 100%; }
+.gh-cover > .gh-cover-art { position: absolute; inset: 0; z-index: 0; }
+
+/* a soft top sheen + hairline so the plate reads as a physical tile */
+.gh-cover-sheen {
+  position: absolute;
+  inset: 0;
+  z-index: 1;
+  pointer-events: none;
+  border-radius: inherit;
+  background: linear-gradient(180deg, rgba(255, 255, 255, 0.15), rgba(255, 255, 255, 0) 42%, rgba(0, 0, 0, 0.06) 80%);
+  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.1);
+}
+
+/* top-left stack: «جديد», resume, prize */
+.gh-cover-tl {
+  position: absolute;
+  inset-block-start: 8px;
+  inset-inline-start: 8px;
+  z-index: 3;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 5px;
+  max-width: 72%;
+}
+.gh-tag-new {
+  display: inline-flex;
+  align-items: center;
+  padding: 3px 9px;
+  border-radius: 999px;
+  background: linear-gradient(180deg, color-mix(in srgb, var(--gh-brand) 84%, #fff), var(--gh-brand));
+  color: #fff;
+  font-size: 10px;
+  font-weight: 900;
+  letter-spacing: 0.3px;
+  white-space: nowrap;
+  box-shadow: 0 5px 13px -5px rgba(0, 0, 0, 0.7), inset 0 1px 0 rgba(255, 255, 255, 0.32);
+}
+
+/* top-right: personal best for this game */
+.gh-cover-best {
+  position: absolute;
+  inset-block-start: 8px;
+  inset-inline-end: 8px;
+  z-index: 3;
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  padding: 3px 8px;
+  border-radius: 999px;
+  background: rgba(8, 14, 20, 0.5);
+  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.18);
+  backdrop-filter: blur(6px);
+  -webkit-backdrop-filter: blur(6px);
+  font-size: 11px;
+  font-weight: 800;
+  font-variant-numeric: tabular-nums;
+  color: #ffe08a;
+}
+.gh-cover-best svg { color: #ffd166; flex: 0 0 auto; }
+
+/* bottom band: name + feature strip, over the SVG's own scrim */
+.gh-cover-info {
+  position: absolute;
+  inset-inline: 0;
+  inset-block-end: 0;
+  z-index: 2;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 28px 11px 11px;
+  /* a self-contained scrim so the name is legible over any scene, even where a
+     wide crop hides the SVG's own bottom gradient */
+  background: linear-gradient(180deg, rgba(6, 10, 14, 0) 0%, rgba(6, 10, 14, 0.5) 48%, rgba(6, 10, 14, 0.82) 100%);
+}
+.gh-cover-name {
+  font-size: 15.5px;
+  font-weight: 900;
+  line-height: 1.24;
+  letter-spacing: -0.3px;
+  color: #fff;
+  text-shadow: 0 1px 9px rgba(0, 0, 0, 0.55);
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+  overflow-wrap: anywhere;
+}
+.gh-cover-hook {
+  font-size: 12px;
+  line-height: 1.55;
+  color: rgba(255, 255, 255, 0.82);
+  text-shadow: 0 1px 6px rgba(0, 0, 0, 0.5);
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+
+.gh-feat-strip { display: flex; flex-wrap: wrap; gap: 5px; margin-top: 1px; }
+.gh-feat {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 3px 7px;
+  border-radius: 999px;
+  background: rgba(8, 14, 20, 0.5);
+  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.16);
+  backdrop-filter: blur(6px);
+  -webkit-backdrop-filter: blur(6px);
+  font-size: 10.5px;
+  font-weight: 800;
+  white-space: nowrap;
+  color: #eaf1f6;
+}
+.gh-feat svg { flex: 0 0 auto; opacity: 0.85; }
+
+/* ---- the featured hero card (leading party shelf) ---- */
+.gh-cover-hero {
+  flex: none;
+  width: 100%;
+  aspect-ratio: 16 / 9;
+  border-radius: 24px;
+  margin-block-end: 2px;
+}
+.gh-cover-hero .gh-cover-info { max-width: 62%; padding: 15px 17px 17px; gap: 8px; }
+.gh-cover-hero .gh-cover-name { font-size: 24px; -webkit-line-clamp: 1; line-clamp: 1; }
+.gh-cover-hero .gh-feat { font-size: 11.5px; padding: 4px 9px; }
+.gh-cover-cta {
+  position: absolute;
+  inset-block-end: 17px;
+  inset-inline-end: 17px;
+  z-index: 3;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 10px 16px;
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--gh-brand) 86%, #fff);
+  color: #fff;
+  font-size: 13px;
+  font-weight: 800;
+  white-space: nowrap;
+  box-shadow: 0 12px 24px -10px rgba(0, 0, 0, 0.85), inset 0 1px 0 rgba(255, 255, 255, 0.28);
+}
+.gh-cover-cta svg { flex: 0 0 auto; }
+
+/* hero heading a touch larger */
+.gh-sect-h-hero .gh-sect-t { font-size: 19px; letter-spacing: -0.4px; }
+
+/* ---- the gate thumbnail reuses the same cover art ---- */
+.gh-gate-art > .gh-cover-art { border-radius: inherit; }
+
+/* ---- the featured hero is a PHONE-ONLY enhancement ----
+   On the phone it leads full-width; on wider screens (tablet / venue TV) it is
+   hidden and the shelf's wide-only lead card takes over, so the party row is a
+   clean run of equal covers with no empty void. */
+.gh-only-wide { display: none; }
+@media (min-width: 700px) {
+  .gh-only-phone { display: none !important; }
+  .gh-only-wide { display: block; }
+}
+
+/* ---- readable on the venue TV: bigger covers + type on wide screens ---- */
+@media (min-width: 700px) {
+  .gh-cover { flex-basis: clamp(184px, 22vw, 236px); width: clamp(184px, 22vw, 236px); }
+  .gh-cover-name { font-size: 17px; }
+}
+@media (min-width: 1200px) {
+  .gh-cover { flex-basis: 224px; width: 224px; }
+  .gh-cover-name { font-size: 18.5px; }
+  .gh-feat { font-size: 11.5px; padding: 3px 8px; }
+}
+
+/* ---- motion off ---- */
+@media (prefers-reduced-motion: reduce) {
+  .gh-cover { transition: none; }
+  .gh-cover:hover, .gh-cover:active { transform: none; }
+  .gh-shelf { scroll-snap-type: none; }
+}

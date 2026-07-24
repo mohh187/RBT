@@ -3,21 +3,34 @@
 // piece while the needle is inside the green band to flip it; the dead centre
 // of the band is a perfect flip. Tap too early and it comes off raw (the sweep
 // restarts, you lose the tempo); tap too late — or don't tap at all — and it
-// chars and costs a life. Two clean flips finish a piece and a fresh one hits
-// the grill. Levels add pieces, speed up the sweep and shrink the green band.
+// chars and costs a life. Two clean flips finish a piece.
+//
+// STAGES (مراحل): a real ladder. Each stage asks you to plate a set number of
+// pieces; clearing one triggers a between-stages beat (a banner + a short
+// breather while the grill rests), then the next stage sweeps FASTER, its green
+// band SHRINKS, and past stage two a second and third piece share the grate.
+// Different ingredients cook at different speeds — fish is quick, vegetables are
+// forgiving — so the ideal moment moves with what is on the fire. Progress is
+// saved through onProgress, so a guest resumes at their stage with their score.
 //
 // CONTRACT (hub-rendered): fills its parent, play area only, ABSOLUTE score via
 // onScore(). All art is canvas paths — no emojis, Latin digits, Arabic copy,
 // pointer events, one rAF loop, dPR aware, torn down on unmount.
-import { useEffect, useRef, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
+import { play } from '../../lib/gameSounds.js'
+import '../../styles/arcade-b.css'
 
 const fmt = (n) => Number(n || 0).toLocaleString('ar-SA-u-nu-latn')
 
+const GAME_ID = 'perfectGrill'
+const PROG_V = 2
 const BEST_KEY = 'rbt_game_perfectgrill_best'
 const readBest = () => { try { return Number(localStorage.getItem(BEST_KEY)) || 0 } catch (_) { return 0 } }
 const writeBest = (v) => { try { localStorage.setItem(BEST_KEY, String(v)) } catch (_) { /* private mode */ } }
 
 const LIVES = 3
+const STAGE_TARGET = 4          // pieces to plate to clear a stage
+const STAGE_HOLD = 1.1          // grill rests while the stage banner shows
 const GENERIC = [
   { kind: 0, name: 'لحم' },
   { kind: 1, name: 'سمك' },
@@ -25,6 +38,8 @@ const GENERIC = [
 ]
 const FISH_RE = /سمك|سلمون|هامور|روبيان|جمبري|بحري|تونة/
 const VEG_RE = /خضار|بطاط|فطر|كوسا|باذنجان|فلفل|ذرة|سلط|حلوم/
+// fish cooks quicker, vegetables are more forgiving — the ideal window moves
+const KIND_DUR = [1, 0.82, 1.2]
 
 function rr(ctx, x, y, w, h, r) {
   const rad = Math.max(0, Math.min(r, w / 2, h / 2))
@@ -39,23 +54,37 @@ function rr(ctx, x, y, w, h, r) {
 
 const mix = (a, b, t) => Math.round(a + (b - a) * Math.max(0, Math.min(1, t)))
 const rgb = (r, g, b) => `rgb(${r},${g},${b})`
+const slotsForStage = (s) => (s <= 1 ? 1 : s === 2 ? 2 : 3)
 
-export default function PerfectGrill({ onScore, onExit, lang = 'ar', brand = '#0e7490', items = [], playerName = '' }) {
+export default function PerfectGrill({
+  onScore, onExit, lang = 'ar', brand = '#0e7490', items = [], playerName = '',
+  onProgress, resumeState,
+}) {
   const rootRef = useRef(null)
   const cvsRef = useRef(null)
   const startRef = useRef(() => {})
   const onScoreRef = useRef(onScore)
+  const onProgressRef = useRef(onProgress)
   const brandRef = useRef(brand)
   const menuRef = useRef([])
+
+  const saved = useMemo(() => {
+    const s = resumeState
+    return s && s.game === GAME_ID && s.v === PROG_V && Number(s.stage) > 0 ? s : null
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
 
   const [phase, setPhase] = useState('ready') // ready | play | over
   const [score, setScore] = useState(0)
   const [lives, setLives] = useState(LIVES)
-  const [level, setLevel] = useState(1)
+  const [stage, setStage] = useState(saved ? Number(saved.stage) : 1)
+  const [plated, setPlated] = useState(0)
   const [streak, setStreak] = useState(0)
+  const [banner, setBanner] = useState(null)
   const [best, setBest] = useState(readBest)
 
   useEffect(() => { onScoreRef.current = onScore }, [onScore])
+  useEffect(() => { onProgressRef.current = onProgress }, [onProgress])
   useEffect(() => { brandRef.current = brand }, [brand])
   useEffect(() => { if (typeof onScoreRef.current === 'function') onScoreRef.current(score) }, [score])
 
@@ -81,12 +110,12 @@ export default function PerfectGrill({ onScore, onExit, lang = 'ar', brand = '#0
 
     const st = {
       w: 0, h: 0, raf: 0, last: 0, rm, phase: 'ready',
-      slots: [], nSlots: 1, level: 1, flips: 0, score: 0, lives: LIVES, streak: 0,
-      smoke: [], shake: 0, glow: 0, glowT: 0,
+      slots: [], nSlots: 1, stage: 1, plated: 0, score: 0, lives: LIVES, streak: 0,
+      hold: 0, smoke: [], shake: 0, glow: 0, glowT: 0,
     }
 
-    const sweepDur = () => Math.max(0.85, 2.25 - st.level * 0.16)
-    const bandW = () => Math.max(0.085, 0.22 - st.level * 0.016)
+    const sweepDur = () => Math.max(0.8, 2.2 - st.stage * 0.15)
+    const bandW = () => Math.max(0.08, 0.22 - st.stage * 0.016)
 
     const zone = (s) => {
       const bw = bandW()
@@ -104,7 +133,7 @@ export default function PerfectGrill({ onScore, onExit, lang = 'ar', brand = '#0
       s.sear = 0
       s.char = 0
       s.t = 0
-      s.dur = sweepDur()
+      s.dur = sweepDur() * (KIND_DUR[pick.kind] || 1)
       s.state = 'cook'
       s.anim = 0
       s.flash = 0
@@ -120,28 +149,41 @@ export default function PerfectGrill({ onScore, onExit, lang = 'ar', brand = '#0
     }
 
     const syncSlots = () => {
-      const want = st.level >= 3 ? 3 : st.level >= 2 ? 2 : 1
+      const want = slotsForStage(st.stage)
       while (st.slots.length < want) st.slots.push(mkSlot())
       st.nSlots = st.slots.length
     }
 
-    const start = () => {
+    const reportProgress = (done) => {
+      try {
+        onProgressRef.current?.({
+          game: GAME_ID, v: PROG_V, stage: st.stage, score: Math.round(st.score),
+          done: !!done, completed: false, at: Date.now(),
+        })
+      } catch (_) { /* best-effort */ }
+    }
+
+    const start = (cfg) => {
       st.slots.length = 0
       st.smoke.length = 0
-      st.level = 1
-      st.flips = 0
-      st.score = 0
+      st.stage = Math.max(1, Math.floor(Number(cfg && cfg.stage) || 1))
+      st.plated = 0
+      st.score = Math.max(0, Math.floor(Number(cfg && cfg.score) || 0))
       st.lives = LIVES
       st.streak = 0
+      st.hold = 0
       st.shake = 0
       st.glow = 0
       syncSlots()
       st.phase = 'play'
       setPhase('play')
-      setScore(0)
+      setScore(st.score)
       setLives(LIVES)
-      setLevel(1)
+      setStage(st.stage)
+      setPlated(0)
       setStreak(0)
+      setBanner(null)
+      play('deal')
     }
     startRef.current = start
 
@@ -151,6 +193,23 @@ export default function PerfectGrill({ onScore, onExit, lang = 'ar', brand = '#0
       setScore(st.score)
       if (typeof onScoreRef.current === 'function') onScoreRef.current(st.score)
       if (st.score > readBest()) { writeBest(st.score); setBest(st.score) }
+      reportProgress(true)
+      play('lose')
+    }
+
+    const clearStage = () => {
+      st.stage += 1
+      st.plated = 0
+      st.hold = STAGE_HOLD
+      st.glow = st.rm ? 0.3 : 1
+      st.score += 120 + st.stage * 25
+      syncSlots()
+      setStage(st.stage)
+      setPlated(0)
+      setScore(st.score)
+      setBanner({ stage: st.stage })
+      play('win', { gain: 0.5 })
+      reportProgress(false)
     }
 
     const puff = (x, y, n, col) => {
@@ -180,21 +239,29 @@ export default function PerfectGrill({ onScore, onExit, lang = 'ar', brand = '#0
       puff(st.w * 0.83, py, 16, '60,52,48')
       setStreak(0)
       setLives(st.lives)
+      play('lose', { gain: 0.5 })
       if (st.lives <= 0) endGame()
     }
 
+    const plate = () => {
+      st.plated += 1
+      setPlated(st.plated)
+      if (st.plated >= STAGE_TARGET) clearStage()
+    }
+
     const flip = (s, py) => {
-      if (s.state !== 'cook') return
+      if (s.state !== 'cook' || st.hold > 0) return
       const p = s.t
       if (p < s.g0) {
         s.flash = 1
         s.flashTxt = 'نيء'
         s.flashCol = '#7fc7ff'
         s.t = 0
-        s.dur = sweepDur()
+        s.dur = sweepDur() * (KIND_DUR[s.kind] || 1)
         zone(s)
         st.streak = 0
         setStreak(0)
+        play('click', { gain: 0.5 })
         return
       }
       if (p > s.g1) { burn(s, py); return }
@@ -203,29 +270,27 @@ export default function PerfectGrill({ onScore, onExit, lang = 'ar', brand = '#0
       const half = (s.g1 - s.g0) / 2
       const perfect = Math.abs(p - mid) <= half * 0.34
       st.streak += 1
-      st.flips += 1
       s.side += 1
       s.sear = Math.min(1, s.sear + 0.55)
-      const gain = perfect ? 100 + st.level * 20 : 40 + st.level * 10
+      const gain = perfect ? 100 + st.stage * 20 : 40 + st.stage * 10
       st.score += gain + Math.min(60, (st.streak - 1) * 10)
       s.flash = 1
       s.flashTxt = perfect ? 'مثالي' : 'ممتاز'
       s.flashCol = perfect ? '#ffd166' : '#8ee06f'
-      if (perfect) st.glow = 1
+      if (perfect) { st.glow = 1; play('capture', { gain: 0.55 }) } else play('move', { gain: 0.6 })
       puff(st.w * 0.83, py, perfect ? 10 : 5, '255,214,150')
 
       if (s.side >= 2) {
         s.state = 'done'
         s.anim = 0
         st.score += 80
+        play('turn', { gain: 0.5 })
+        plate()
       } else {
         s.t = 0
-        s.dur = sweepDur() * 0.92
+        s.dur = sweepDur() * 0.92 * (KIND_DUR[s.kind] || 1)
         zone(s)
       }
-
-      const nl = Math.min(8, 1 + Math.floor(st.flips / 6))
-      if (nl !== st.level) { st.level = nl; syncSlots(); setLevel(nl) }
       setScore(st.score)
       setStreak(st.streak)
     }
@@ -236,7 +301,7 @@ export default function PerfectGrill({ onScore, onExit, lang = 'ar', brand = '#0
     const geo = { bandH: 0, y0: 0 }
     const relayout = () => {
       const usable = Math.max(60, st.h - TOPPAD - BOTPAD)
-      geo.bandH = Math.min(usable / st.nSlots, 176)
+      geo.bandH = Math.min(usable / st.nSlots, 220)
       geo.y0 = TOPPAD + (usable - geo.bandH * st.nSlots) / 2
     }
 
@@ -252,7 +317,7 @@ export default function PerfectGrill({ onScore, onExit, lang = 'ar', brand = '#0
     }
 
     const onDown = (e) => {
-      if (st.phase !== 'play') return
+      if (st.phase !== 'play' || st.hold > 0) return
       e.preventDefault()
       const b = cvs.getBoundingClientRect()
       const y = e.clientY - b.top
@@ -284,7 +349,6 @@ export default function PerfectGrill({ onScore, onExit, lang = 'ar', brand = '#0
       ctx.fillStyle = rgb(r1, g1, b1)
 
       if (s.kind === 1) {
-        // fish fillet — pointed oval
         ctx.beginPath()
         ctx.moveTo(-R * 1.15, 0)
         ctx.quadraticCurveTo(-R * 0.35, -R * 0.78, R * 0.55, -R * 0.5)
@@ -303,7 +367,6 @@ export default function PerfectGrill({ onScore, onExit, lang = 'ar', brand = '#0
           ctx.stroke()
         }
       } else if (s.kind === 2) {
-        // vegetable round with a seeded core
         ctx.beginPath()
         ctx.arc(0, 0, R * 0.95, 0, Math.PI * 2)
         ctx.fill()
@@ -320,7 +383,6 @@ export default function PerfectGrill({ onScore, onExit, lang = 'ar', brand = '#0
           ctx.fill()
         }
       } else {
-        // steak — irregular rounded blob
         ctx.beginPath()
         ctx.moveTo(-R * 1.1, -R * 0.1)
         ctx.quadraticCurveTo(-R * 0.95, -R * 0.8, -R * 0.1, -R * 0.72)
@@ -336,7 +398,6 @@ export default function PerfectGrill({ onScore, onExit, lang = 'ar', brand = '#0
         ctx.fill()
       }
 
-      // sear marks appear as the piece cooks
       ctx.shadowBlur = 0
       if (done > 0.02) {
         ctx.strokeStyle = `rgba(52,26,14,${0.55 * done * (1 - ch * 0.5)})`
@@ -349,7 +410,6 @@ export default function PerfectGrill({ onScore, onExit, lang = 'ar', brand = '#0
           ctx.stroke()
         }
       }
-      // char crust
       if (ch > 0.02) {
         ctx.fillStyle = `rgba(20,14,10,${0.45 * ch})`
         ctx.beginPath()
@@ -361,11 +421,9 @@ export default function PerfectGrill({ onScore, onExit, lang = 'ar', brand = '#0
 
     const drawGauge = (s, x0, x1, y, gh) => {
       const wid = x1 - x0
-      // track
       ctx.fillStyle = 'rgba(0,0,0,.5)'
       rr(ctx, x0, y - gh / 2, wid, gh, gh / 2)
       ctx.fill()
-      // heat ramp
       ctx.save()
       rr(ctx, x0 + 2, y - gh / 2 + 2, wid - 4, gh - 4, (gh - 4) / 2)
       ctx.clip()
@@ -375,14 +433,12 @@ export default function PerfectGrill({ onScore, onExit, lang = 'ar', brand = '#0
       g.addColorStop(1, '#8e2a1c')
       ctx.fillStyle = g
       ctx.fillRect(x0, y - gh / 2, wid, gh)
-      // green band
       ctx.fillStyle = 'rgba(120,225,120,.92)'
       ctx.fillRect(x0 + wid * s.g0, y - gh / 2, wid * (s.g1 - s.g0), gh)
       ctx.fillStyle = 'rgba(255,255,255,.5)'
       ctx.fillRect(x0 + wid * ((s.g0 + s.g1) / 2) - 1, y - gh / 2, 2, gh)
       ctx.restore()
-      // needle
-      if (s.state === 'cook') {
+      if (s.state === 'cook' && st.hold <= 0) {
         const nx = x0 + wid * s.t
         ctx.strokeStyle = '#fff'
         ctx.lineWidth = 3
@@ -395,7 +451,6 @@ export default function PerfectGrill({ onScore, onExit, lang = 'ar', brand = '#0
         ctx.arc(nx, y - gh / 2 - 7, 3.6, 0, Math.PI * 2)
         ctx.fill()
       }
-      // side pips
       ctx.fillStyle = 'rgba(255,255,255,.75)'
       for (let k = 0; k < 2; k++) {
         ctx.beginPath()
@@ -410,7 +465,6 @@ export default function PerfectGrill({ onScore, onExit, lang = 'ar', brand = '#0
       ctx.save()
       if (st.shake > 0.01) ctx.translate((Math.random() - 0.5) * 8 * st.shake, (Math.random() - 0.5) * 8 * st.shake)
 
-      // grill body + ember bed
       ctx.fillStyle = '#160f0c'
       ctx.fillRect(-16, -16, w + 32, h + 32)
       const eg = ctx.createLinearGradient(0, 0, 0, h)
@@ -420,7 +474,6 @@ export default function PerfectGrill({ onScore, onExit, lang = 'ar', brand = '#0
       ctx.fillStyle = eg
       ctx.fillRect(0, 0, w, h)
 
-      // embers (deterministic grid, gently pulsing)
       const flick = st.rm ? 0.5 : 0.5 + 0.5 * Math.sin(st.glowT * 2.4)
       for (let i = 0; i < 22; i++) {
         const ex = ((i * 97) % Math.max(1, w - 20)) + 10
@@ -433,7 +486,6 @@ export default function PerfectGrill({ onScore, onExit, lang = 'ar', brand = '#0
       }
       ctx.globalAlpha = 1
 
-      // grate bars
       ctx.strokeStyle = 'rgba(220,220,230,.10)'
       ctx.lineWidth = 5
       for (let y = 14; y < h; y += 26) {
@@ -452,17 +504,15 @@ export default function PerfectGrill({ onScore, onExit, lang = 'ar', brand = '#0
         const s = st.slots[i]
         if (!s) continue
         const cy = geo.y0 + (i + 0.5) * geo.bandH
-        const R = Math.min(geo.bandH * 0.28, w * 0.11, 44)
-        const gh = Math.max(12, Math.min(20, geo.bandH * 0.17))
+        const R = Math.min(geo.bandH * 0.28, w * 0.11, 56)
+        const gh = Math.max(12, Math.min(22, geo.bandH * 0.16))
 
-        // slot plate
         ctx.fillStyle = 'rgba(255,255,255,.035)'
         rr(ctx, 6, cy - geo.bandH * 0.42, w - 12, geo.bandH * 0.84, 16)
         ctx.fill()
 
         drawGauge(s, gx0, gx1, cy + (s.name ? 4 : 0), gh)
 
-        // item name above the gauge
         if (s.name) {
           ctx.fillStyle = 'rgba(255,255,255,.72)'
           ctx.font = '700 12px system-ui, "Segoe UI", Tahoma, sans-serif'
@@ -471,7 +521,6 @@ export default function PerfectGrill({ onScore, onExit, lang = 'ar', brand = '#0
           ctx.fillText(s.name, (gx0 + gx1) / 2, cy - gh - 8)
         }
 
-        // the piece, with its done/burnt reaction
         const pop = s.state === 'done' ? 1 + Math.sin(Math.min(1, s.anim / 0.35) * Math.PI) * 0.16 : 1
         drawPiece(s, pieceX, cy, R * pop)
         if (s.state === 'done') {
@@ -484,7 +533,6 @@ export default function PerfectGrill({ onScore, onExit, lang = 'ar', brand = '#0
           ctx.globalAlpha = 1
         }
 
-        // verdict flash
         if (s.flash > 0.01) {
           ctx.globalAlpha = Math.min(1, s.flash)
           ctx.fillStyle = s.flashCol
@@ -496,7 +544,6 @@ export default function PerfectGrill({ onScore, onExit, lang = 'ar', brand = '#0
         }
       }
 
-      // smoke and sparks
       for (let i = 0; i < st.smoke.length; i++) {
         const p = st.smoke[i]
         ctx.globalAlpha = Math.max(0, 1 - p.t / p.life) * 0.5
@@ -524,20 +571,25 @@ export default function PerfectGrill({ onScore, onExit, lang = 'ar', brand = '#0
 
       if (st.phase === 'play') {
         relayout()
-        for (let i = 0; i < st.nSlots; i++) {
-          if (st.phase !== 'play') break
-          const s = st.slots[i]
-          if (!s) continue
-          s.flash = Math.max(0, s.flash - dt * 1.6)
-          if (s.state === 'cook') {
-            s.t += dt / s.dur
-            if (s.t >= 1) { s.t = 1; burn(s, geo.y0 + (i + 0.5) * geo.bandH) }
-          } else {
-            s.anim += dt
-            if (s.state === 'burnt' && !st.rm && s.anim < 0.7 && Math.random() < 0.4) {
-              st.smoke.push({ x: st.w * 0.83 + (Math.random() - 0.5) * 22, y: geo.y0 + (i + 0.5) * geo.bandH, vx: (Math.random() - 0.5) * 16, vy: -30 - Math.random() * 26, r: 6 + Math.random() * 9, t: 0, life: 1.1, col: '70,62,58' })
+        if (st.hold > 0) {
+          st.hold -= dt
+          if (st.hold <= 0) { st.hold = 0; setBanner(null) }
+        } else {
+          for (let i = 0; i < st.nSlots; i++) {
+            if (st.phase !== 'play') break
+            const s = st.slots[i]
+            if (!s) continue
+            s.flash = Math.max(0, s.flash - dt * 1.6)
+            if (s.state === 'cook') {
+              s.t += dt / s.dur
+              if (s.t >= 1) { s.t = 1; burn(s, geo.y0 + (i + 0.5) * geo.bandH) }
+            } else {
+              s.anim += dt
+              if (s.state === 'burnt' && !st.rm && s.anim < 0.7 && Math.random() < 0.4) {
+                st.smoke.push({ x: st.w * 0.83 + (Math.random() - 0.5) * 22, y: geo.y0 + (i + 0.5) * geo.bandH, vx: (Math.random() - 0.5) * 16, vy: -30 - Math.random() * 26, r: 6 + Math.random() * 9, t: 0, life: 1.1, col: '70,62,58' })
+              }
+              if (s.anim >= (s.state === 'burnt' ? 0.95 : 0.7)) { if (st.phase === 'play') respawn(s) }
             }
-            if (s.anim >= (s.state === 'burnt' ? 0.95 : 0.7)) { if (st.phase === 'play') respawn(s) }
           }
         }
       }
@@ -571,7 +623,7 @@ export default function PerfectGrill({ onScore, onExit, lang = 'ar', brand = '#0
   }, [])
 
   const rtl = lang !== 'en'
-  const restart = () => startRef.current()
+  const restart = (cfg) => startRef.current(cfg || null)
 
   return (
     <div
@@ -585,11 +637,19 @@ export default function PerfectGrill({ onScore, onExit, lang = 'ar', brand = '#0
       {phase === 'play' && (
         <div className="gmx-hud">
           <span className="gmx-pill gmx-pill-score">{fmt(score)}</span>
-          <span className="gmx-pill">مستوى {fmt(level)}</span>
+          <span className="gmx-pill arb-stage-pill">المرحلة {fmt(stage)}</span>
+          <span className="gmx-pill">طبق {fmt(plated)}/{fmt(STAGE_TARGET)}</span>
           {streak > 1 && <span className="gmx-pill gmx-pill-hot">تتابع ×{fmt(streak)}</span>}
           <span className="gmx-pill gmx-lives" aria-label={`الأرواح ${lives}`}>
             {[0, 1, 2].map((i) => <i key={i} className={`gmx-life${i < lives ? '' : ' off'}`} />)}
           </span>
+        </div>
+      )}
+
+      {banner && phase === 'play' && (
+        <div className="arb-banner" key={banner.stage}>
+          <span className="arb-banner-k">المرحلة {fmt(banner.stage)}</span>
+          <span className="arb-banner-n">أسرع، ونطاق أضيق</span>
         </div>
       )}
 
@@ -600,8 +660,17 @@ export default function PerfectGrill({ onScore, onExit, lang = 'ar', brand = '#0
               <span className="gmpg-bar"><i /></span>
             </div>
             <h3 className="gmx-title">الشواية المثالية</h3>
-            <p className="gmx-line">المؤشر يتحرك نحو خط الاحتراق — اضغط على القطعة عندما يصل إلى المنطقة الخضراء لتقلبها. مبكراً تخرج نيئة، ومتأخراً تحترق وتخسر حياة.</p>
-            <button type="button" className="gmx-btn" onClick={restart}>أشعل الشواية</button>
+            <p className="gmx-line">المؤشر يتحرك نحو خط الاحتراق — اضغط على القطعة عندما يصل إلى المنطقة الخضراء لتقلبها. مبكراً تخرج نيئة، ومتأخراً تحترق. كل مرحلة أسرع، ونطاقها أضيق.</p>
+            {saved ? (
+              <div className="gmx-actions">
+                <button type="button" className="gmx-btn" onClick={() => restart({ stage: Number(saved.stage), score: Number(saved.score) || 0 })}>
+                  تابع من المرحلة {fmt(saved.stage)}
+                </button>
+                <button type="button" className="gmx-btn ghost" onClick={() => restart()}>من البداية</button>
+              </div>
+            ) : (
+              <button type="button" className="gmx-btn" onClick={() => restart()}>أشعل الشواية</button>
+            )}
             {best > 0 && <p className="gmx-sub">أفضل نتيجة {fmt(best)}</p>}
           </div>
         </div>
@@ -613,11 +682,11 @@ export default function PerfectGrill({ onScore, onExit, lang = 'ar', brand = '#0
             <h3 className="gmx-title">احترقت الطلبات</h3>
             <div className="gmx-big">{fmt(score)}</div>
             <p className="gmx-line">
-              {playerName ? `${playerName}، ` : ''}وصلت إلى المستوى {fmt(level)}
+              {playerName ? `${playerName}، ` : ''}بلغت المرحلة {fmt(stage)}
             </p>
             <p className="gmx-sub">أفضل نتيجة {fmt(Math.max(best, score))}</p>
             <div className="gmx-actions">
-              <button type="button" className="gmx-btn" onClick={restart}>العب مرة أخرى</button>
+              <button type="button" className="gmx-btn" onClick={() => restart()}>العب مرة أخرى</button>
               {typeof onExit === 'function' && (
                 <button type="button" className="gmx-btn ghost" onClick={onExit}>إنهاء</button>
               )}

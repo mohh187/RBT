@@ -9,16 +9,24 @@
 // Stages are rebuilt deterministically from (seed, stageIndex), so resuming
 // restores the EXACT same puzzles the player left behind.
 //
+// Premium layer (PACK C): a generous countdown ring per puzzle, a streak meter,
+// a stage map on entry, the point-costed hint as the game's one lifeline, a
+// rich reveal and an end-of-run summary. Chrome lives in src/styles/quizzes.css.
+//
 // Contract: play area only. onProgress persists, resumeState restores. No
 // Firestore access from here.
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { Fragment, useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import Icon from '../Icon.jsx'
+import { play } from '../../lib/gameSounds.js'
 import { buildStage, STAGE_COUNT, PUZZLE_FAMILIES, stageLevel } from '../../lib/puzzleBank.js'
-import '../../styles/knowledge.css'
+import '../../styles/quizzes.css'
 
 export const GAME_ID = 'brainPuzzles'
 const PER_STAGE = 6
 const HINT_COST = 8
+
+// generous per-puzzle time — enough to actually think, tense near the end
+const puzzleSeconds = (level) => (level >= 3 ? 75 : level === 2 ? 60 : 45)
 
 const TXT = {
   ar: {
@@ -38,18 +46,22 @@ const TXT = {
     skip: 'تخطّي',
     next: 'التالي',
     endStage: 'إنهاء المرحلة',
-    stageDone: 'انتهت المرحلة',
+    stageDone: 'أُنجزت المرحلة',
     goNext: 'المرحلة التالية',
     right: 'إجابة صحيحة',
     wrong: 'إجابة خاطئة',
     skipped: 'تخطّيت اللغز',
+    timeout: 'انتهى الوقت',
     correctIs: 'الصحيح',
     over: 'اكتمل التحدي',
     points: 'نقطة',
     solved: 'ألغاز محلولة',
     again: 'من البداية',
     memWatch: 'احفظ التسلسل',
-    memReady: 'استعد',
+    accuracy: 'الدقة',
+    bestStreak: 'أطول تتابع',
+    stageReached: 'أعلى مرحلة',
+    stMeter: ['متتالية', 'ملتهب', 'متّقد', 'أسطوري'],
   },
   en: {
     title: 'Brain Puzzles',
@@ -68,23 +80,27 @@ const TXT = {
     skip: 'Skip',
     next: 'Next',
     endStage: 'Finish stage',
-    stageDone: 'Stage complete',
+    stageDone: 'Stage cleared',
     goNext: 'Next stage',
     right: 'Correct',
     wrong: 'Wrong',
     skipped: 'Skipped',
+    timeout: 'Time up',
     correctIs: 'Correct',
     over: 'Challenge complete',
     points: 'points',
     solved: 'solved',
     again: 'Start over',
     memWatch: 'Memorize the sequence',
-    memReady: 'Get ready',
+    accuracy: 'accuracy',
+    bestStreak: 'Best streak',
+    stageReached: 'Stage reached',
+    stMeter: ['Streak', 'On fire', 'Blazing', 'Legendary'],
   },
 }
 
 // ---------------------------------------------------------------- art ----
-export function PuzzleArt({ art, color = '#ffd98a', small = false }) {
+export function PuzzleArt({ art, color = '#ecc873', small = false }) {
   if (!art) return null
 
   if (art.type === 'grid') {
@@ -94,13 +110,13 @@ export function PuzzleArt({ art, color = '#ffd98a', small = false }) {
     const pad = 3
     const box = s + pad * 2
     return (
-      <div className="kn-art">
+      <div className="qz-art">
         <svg viewBox={`0 0 ${box} ${box}`} width={box} height={box} role="img" aria-hidden="true">
           {Array.from({ length: n + 1 }, (_, i) => (
-            <line key={`h${i}`} x1={pad} y1={pad + i * cell} x2={pad + s} y2={pad + i * cell} className="kn-line-s" />
+            <line key={`h${i}`} x1={pad} y1={pad + i * cell} x2={pad + s} y2={pad + i * cell} className="qz-line-s" />
           ))}
           {Array.from({ length: n + 1 }, (_, i) => (
-            <line key={`v${i}`} x1={pad + i * cell} y1={pad} x2={pad + i * cell} y2={pad + s} className="kn-line-s" />
+            <line key={`v${i}`} x1={pad + i * cell} y1={pad} x2={pad + i * cell} y2={pad + s} className="qz-line-s" />
           ))}
         </svg>
       </div>
@@ -112,10 +128,10 @@ export function PuzzleArt({ art, color = '#ffd98a', small = false }) {
     const w = art.w * c
     const h = art.h * c
     return (
-      <div className="kn-art">
+      <div className="qz-art">
         <svg viewBox={`0 0 ${w} ${h}`} width={w} height={h} style={{ color }} role="img" aria-hidden="true">
           {art.cells.map(([r, cc], i) => (
-            <rect key={i} x={cc * c + 1} y={r * c + 1} width={c - 2} height={c - 2} rx={3} className="kn-cell" />
+            <rect key={i} x={cc * c + 1} y={r * c + 1} width={c - 2} height={c - 2} rx={3} className="qz-cell" />
           ))}
         </svg>
       </div>
@@ -124,7 +140,7 @@ export function PuzzleArt({ art, color = '#ffd98a', small = false }) {
 
   if (art.type === 'letters') {
     return (
-      <div className="kn-letters">
+      <div className="qz-letters">
         {art.letters.map((ch, i) => (
           <b key={i} className={i === art.blank ? 'gap' : ''}>{i === art.blank ? '؟' : ch}</b>
         ))}
@@ -133,6 +149,73 @@ export function PuzzleArt({ art, color = '#ffd98a', small = false }) {
   }
 
   return null
+}
+
+// ---------------------------------------------------------- shared UI ----
+function Ring({ frac, secs, danger }) {
+  const R = 19
+  const C = 2 * Math.PI * R
+  const off = C * (1 - Math.max(0, Math.min(1, frac)))
+  return (
+    <div className={`qz-ring${danger ? ' danger' : ''}`}>
+      <svg viewBox="0 0 44 44" aria-hidden="true">
+        <circle className="qz-ring-bg" cx="22" cy="22" r={R} strokeWidth="4" />
+        <circle className="qz-ring-fg" cx="22" cy="22" r={R} strokeWidth="4" strokeDasharray={C} strokeDashoffset={off} transform="rotate(-90 22 22)" />
+      </svg>
+      <b>{secs}</b>
+    </div>
+  )
+}
+
+function StreakMeter({ streak, labels }) {
+  if (streak < 2) return null
+  const flames = Math.min(5, streak - 1)
+  const tier = streak >= 9 ? 'legend' : streak >= 6 ? 'blaze' : streak >= 4 ? 'hot' : ''
+  const label = streak >= 9 ? labels[3] : streak >= 6 ? labels[2] : streak >= 4 ? labels[1] : labels[0]
+  return (
+    <span className={`qz-streak ${tier}`.trim()}>
+      <span className="qz-flames">
+        {Array.from({ length: flames }, (_, i) => <i key={i}><Icon name="flame" size={13} /></i>)}
+      </span>
+      <span className="qz-slabel">{label}</span>
+      <span>x{streak}</span>
+    </span>
+  )
+}
+
+function StageMap({ total, current, cleared }) {
+  return (
+    <div className="qz-map">
+      {Array.from({ length: total }, (_, i) => {
+        const done = i < cleared
+        const cur = i === current && !done
+        const cls = done ? 'qz-node done' : cur ? 'qz-node cur' : 'qz-node'
+        return (
+          <Fragment key={i}>
+            {i > 0 && <span className={`qz-link${i <= cleared ? ' done' : ''}`} />}
+            <span className={cls}>
+              <span className="qz-medal">{done ? <Icon name="check" size={15} /> : i + 1}</span>
+            </span>
+          </Fragment>
+        )
+      })}
+    </div>
+  )
+}
+
+function AccRing({ pct, label }) {
+  const R = 52
+  const C = 2 * Math.PI * R
+  const off = C * (1 - Math.max(0, Math.min(100, pct)) / 100)
+  return (
+    <div className="qz-acc">
+      <svg viewBox="0 0 120 120" aria-hidden="true">
+        <circle className="qz-acc-bg" cx="60" cy="60" r={R} strokeWidth="9" />
+        <circle className="qz-acc-fg" cx="60" cy="60" r={R} strokeWidth="9" strokeDasharray={C} strokeDashoffset={off} transform="rotate(-90 60 60)" />
+      </svg>
+      <b><u>{pct}%</u><span>{label}</span></b>
+    </div>
+  )
 }
 
 const newSeed = () => Math.floor(Math.random() * 1e9) + 1
@@ -158,17 +241,18 @@ export default function BrainPuzzles({
   const [solved, setSolved] = useState(saved ? Number(saved.solved) || 0 : 0)
   const [attempted, setAttempted] = useState(saved ? Number(saved.attempted) || 0 : 0)
   const [streak, setStreak] = useState(0)
-  const [picked, setPicked] = useState(null) // index | -1 skipped
+  const [bestStreak, setBestStreak] = useState(saved ? Number(saved.bestStreak) || 0 : 0)
+  const [picked, setPicked] = useState(null) // index | -1 skipped/timeout
+  const [way, setWay] = useState('pick') // pick | skip | timeout
   const [hintOn, setHintOn] = useState(false)
   const [marks, setMarks] = useState([])
+  const [left, setLeft] = useState(60)
 
   const usedRef = useRef(new Set(Array.isArray(saved?.usedIds) ? saved.usedIds : []))
-  // Snapshot as of the start of the current stage. Mid-stage saves report THIS
-  // one, so a resume rebuilds the very same stage from (seed, stage) instead of
-  // regenerating a different one out of a half-consumed pool.
   const preUsedRef = useRef(Array.isArray(saved?.usedIds) ? [...saved.usedIds] : [])
   const p = pool[pi] || null
   const accent = brand || '#0e7490'
+  const secs = puzzleSeconds(stageLevel(stage))
   const famLabel = useMemo(() => {
     const map = {}
     PUZZLE_FAMILIES.forEach((f) => { map[f.id] = lang === 'en' ? f.en : f.ar })
@@ -184,11 +268,12 @@ export default function BrainPuzzles({
       score: extra.score !== undefined ? extra.score : score,
       solved: extra.solved !== undefined ? extra.solved : solved,
       attempted: extra.attempted !== undefined ? extra.attempted : attempted,
+      bestStreak: extra.bestStreak !== undefined ? extra.bestStreak : bestStreak,
       usedIds: [...preUsedRef.current],
       done: !!extra.done,
       at: Date.now(),
     })
-  }, [seed, stage, score, solved, attempted])
+  }, [seed, stage, score, solved, attempted, bestStreak])
 
   const loadStage = useCallback((sd, stageIdx) => {
     const st = buildStage(stageIdx, PER_STAGE, sd, usedRef.current)
@@ -200,6 +285,7 @@ export default function BrainPuzzles({
     setHintOn(false)
     setMarks([])
     setPhase(st[0].kind === 'memory' ? 'flash' : 'q')
+    play('deal')
     return true
   }, [])
 
@@ -210,7 +296,7 @@ export default function BrainPuzzles({
       usedRef.current = new Set()
       preUsedRef.current = []
       setSeed(sd)
-      setScore(0); setSolved(0); setAttempted(0)
+      setScore(0); setSolved(0); setAttempted(0); setBestStreak(0)
       onScoreRef.current?.(0)
     }
     setStage(st)
@@ -226,29 +312,51 @@ export default function BrainPuzzles({
     return () => clearTimeout(id)
   }, [phase, p])
 
-  const resolve = (idx) => {
+  // per-puzzle countdown (only while a question is live)
+  useEffect(() => {
+    if (phase !== 'q' || !p) return undefined
+    setLeft(secs)
+    const t0 = Date.now()
+    const iv = setInterval(() => {
+      const rem = secs - (Date.now() - t0) / 1000
+      if (rem <= 0) { clearInterval(iv); setLeft(0); resolve(-1, 'timeout') }
+      else setLeft(rem)
+    }, 100)
+    return () => clearInterval(iv)
+  }, [phase, pi, secs]) // eslint-disable-line react-hooks/exhaustive-deps
+
+  function resolve(idx, how = 'pick') {
     if (!p || phase !== 'q') return
     const hit = idx === p.answer
     setPicked(idx)
+    setWay(how)
     setMarks((m) => [...m, hit])
     const nextAttempted = attempted + 1
     setAttempted(nextAttempted)
 
     let nextScore = score
     let nextSolved = solved
+    let nextBest = bestStreak
     if (hit) {
-      const gain = Math.max(4, p.points - (hintOn ? HINT_COST : 0)) + Math.min(10, streak * 2)
+      const speed = Math.round((Math.max(0, left) / secs) * 5)
+      const gain = Math.max(4, p.points - (hintOn ? HINT_COST : 0)) + speed + Math.min(10, streak * 2)
       nextScore = score + gain
       nextSolved = solved + 1
+      const ns = streak + 1
+      nextBest = Math.max(bestStreak, ns)
       setScore(nextScore)
       setSolved(nextSolved)
-      setStreak(streak + 1)
+      setStreak(ns)
+      setBestStreak(nextBest)
       onScoreRef.current?.(nextScore)
+      play('win', { gain: 0.4 })
+      if (ns % 3 === 0) play('turn', { gain: 0.5 })
     } else {
       setStreak(0)
+      play('lose', { gain: how === 'skip' ? 0.35 : 0.5 })
     }
     setPhase('reveal')
-    report({ score: nextScore, solved: nextSolved, attempted: nextAttempted })
+    report({ score: nextScore, solved: nextSolved, attempted: nextAttempted, bestStreak: nextBest })
   }
 
   const advance = () => {
@@ -262,13 +370,15 @@ export default function BrainPuzzles({
     }
     preUsedRef.current = [...usedRef.current]
     setPhase('stageEnd')
+    play('win', { gain: 0.7 })
     report({ stage: stage + 1 })
   }
 
   const nextStage = () => {
     const ns = stage + 1
-    if (ns >= STAGE_COUNT) { setPhase('over'); report({ stage: ns, done: true }); return }
+    if (ns >= STAGE_COUNT) { setPhase('over'); report({ stage: ns, done: true }); play('win'); return }
     setStage(ns)
+    setStreak(0)
     if (!loadStage(seed, ns)) { setPhase('over'); report({ stage: ns, done: true }) }
   }
 
@@ -278,34 +388,40 @@ export default function BrainPuzzles({
     const ns = Math.max(0, score - HINT_COST)
     setScore(ns)
     onScoreRef.current?.(ns)
+    play('card')
   }
+
+  const accPct = attempted ? Math.round((solved / attempted) * 100) : 0
 
   // ------------------------------------------------------------ views --
   if (phase === 'intro') {
     return (
-      <div className="kn-card">
-        <strong className="kn-title">{t.title}</strong>
-        <p className="kn-line">{t.how}</p>
-        <p className="kn-line faint">{t.note}</p>
-        {saved && (
-          <>
-            <div className="kn-resume">
-              <Icon name="reload" size={18} />
-              <span>{t.resumeAt((Number(saved.stage) || 0) + 1)}</span>
-            </div>
-            <button type="button" className="kn-btn" style={{ background: accent }} onClick={() => begin(false)}>
-              <Icon name="play" size={16} /> {t.resume}
-            </button>
-          </>
-        )}
-        <button
-          type="button"
-          className={saved ? 'kn-btn ghost' : 'kn-btn'}
-          style={saved ? undefined : { background: accent }}
-          onClick={() => begin(true)}
-        >
-          <Icon name={saved ? 'repeat' : 'play'} size={16} /> {saved ? t.fresh : t.start}
-        </button>
+      <div className="qz-root" style={{ '--qz-brand': accent }} dir={lang === 'ar' ? 'rtl' : 'ltr'}>
+        <div className="qz-card">
+          <span className="qz-crest brand"><Icon name="shapes" size={34} /></span>
+          <strong className="qz-title">{t.title}</strong>
+          <p className="qz-line">{t.how}</p>
+          <p className="qz-line faint">{t.note}</p>
+          {saved && (
+            <>
+              <StageMap total={STAGE_COUNT} current={Number(saved.stage) || 0} cleared={Number(saved.stage) || 0} />
+              <div className="qz-resume">
+                <span className="qz-ci"><Icon name="reload" size={18} /></span>
+                <span>{t.resumeAt((Number(saved.stage) || 0) + 1)}</span>
+              </div>
+              <button type="button" className="qz-btn gold" onClick={() => begin(false)}>
+                <Icon name="play" size={16} /> {t.resume}
+              </button>
+            </>
+          )}
+          <button
+            type="button"
+            className={saved ? 'qz-btn ghost' : 'qz-btn'}
+            onClick={() => begin(true)}
+          >
+            <Icon name={saved ? 'repeat' : 'play'} size={16} /> {saved ? t.fresh : t.start}
+          </button>
+        </div>
       </div>
     )
   }
@@ -313,27 +429,42 @@ export default function BrainPuzzles({
   if (phase === 'stageEnd') {
     const hits = marks.filter(Boolean).length
     return (
-      <div className="kn-card">
-        <strong className="kn-title">{t.stageDone}</strong>
-        <span className="kn-big">{hits}/{marks.length}</span>
-        <p className="kn-line">{score} {t.points}</p>
-        <p className="kn-line faint">{t.stage} {stage + 1} {t.of} {STAGE_COUNT}</p>
-        <button type="button" className="kn-btn" style={{ background: accent }} onClick={nextStage}>
-          <Icon name="next" size={16} /> {stage + 1 >= STAGE_COUNT ? t.endStage : t.goNext}
-        </button>
+      <div className="qz-root" style={{ '--qz-brand': accent }} dir={lang === 'ar' ? 'rtl' : 'ltr'}>
+        <div className="qz-card">
+          {[0, 1, 2, 3, 4, 5].map((i) => (
+            <span key={i} className="qz-spark" style={{ '--sx': `${(i - 2.5) * 26}px`, '--sy': '-46px', left: `${44 + i * 3}%`, animationDelay: `${i * 60}ms` }} />
+          ))}
+          <span className="qz-crest"><Icon name="award" size={34} /></span>
+          <strong className="qz-title">{t.stageDone}</strong>
+          <span className="qz-big">{hits}/{marks.length}</span>
+          <StageMap total={STAGE_COUNT} current={stage + 1} cleared={stage + 1} />
+          <p className="qz-line">{score} {t.points}</p>
+          <button type="button" className="qz-btn gold" onClick={nextStage}>
+            <Icon name={stage + 1 >= STAGE_COUNT ? 'award' : 'next'} size={16} /> {stage + 1 >= STAGE_COUNT ? t.endStage : t.goNext}
+          </button>
+        </div>
       </div>
     )
   }
 
   if (phase === 'over') {
     return (
-      <div className="kn-card">
-        <strong className="kn-title">{t.over}</strong>
-        <span className="kn-big">{score}</span>
-        <p className="kn-line">{playerName ? `${playerName} — ` : ''}{solved} {t.of} {attempted} {t.solved}</p>
-        <button type="button" className="kn-btn" style={{ background: accent }} onClick={() => begin(true)}>
-          <Icon name="repeat" size={16} /> {t.again}
-        </button>
+      <div className="qz-root" style={{ '--qz-brand': accent }} dir={lang === 'ar' ? 'rtl' : 'ltr'}>
+        <div className="qz-card">
+          <span className="qz-crest"><Icon name="award" size={34} /></span>
+          <strong className="qz-title">{t.over}</strong>
+          {playerName ? <p className="qz-line">{playerName}</p> : null}
+          <AccRing pct={accPct} label={t.accuracy} />
+          <div className="qz-stats">
+            <div className="qz-stat"><span className="qz-ci"><Icon name="star" size={16} /></span><b>{score}</b><span>{t.points}</span></div>
+            <div className="qz-stat"><span className="qz-ci"><Icon name="flame" size={16} /></span><b>{bestStreak}</b><span>{t.bestStreak}</span></div>
+            <div className="qz-stat"><span className="qz-ci"><Icon name="trending" size={16} /></span><b>{Math.min(stage + 1, STAGE_COUNT)}</b><span>{t.stageReached}</span></div>
+          </div>
+          <p className="qz-line faint">{solved} {t.of} {attempted} {t.solved}</p>
+          <button type="button" className="qz-btn gold" onClick={() => begin(true)}>
+            <Icon name="repeat" size={16} /> {t.again}
+          </button>
+        </div>
       </div>
     )
   }
@@ -342,89 +473,98 @@ export default function BrainPuzzles({
   const revealing = phase === 'reveal'
   const flashing = phase === 'flash'
   const artChoices = p.choices.some((c) => c.art)
+  const frac = Math.max(0, left) / secs
+  const danger = left < 6
 
   return (
-    <div className="kn-wrap">
-      <div className="kn-top">
-        <div className="kn-steps">
-          {Array.from({ length: pool.length }, (_, i) => {
-            const mark = marks[i]
-            const cls = mark === undefined ? 'kn-step' : mark ? 'kn-step done' : 'kn-step miss'
-            return <span key={i} className={cls}><i style={{ background: accent }} /></span>
-          })}
+    <div className="qz-root" style={{ '--qz-brand': accent }} dir={lang === 'ar' ? 'rtl' : 'ltr'}>
+      <div className="qz-wrap">
+        <div className="qz-hud">
+          <div className="qz-pips">
+            {Array.from({ length: pool.length }, (_, i) => {
+              const mark = marks[i]
+              const cls = mark === undefined ? (i === pi ? 'qz-pip cur' : 'qz-pip') : mark ? 'qz-pip done' : 'qz-pip miss'
+              return <span key={i} className={cls}><i /></span>
+            })}
+          </div>
+          <div className="qz-meta">
+            <span className="qz-chip solid">{t.stage} {stage + 1}/{STAGE_COUNT}</span>
+            <span className="qz-chip">{famLabel[p.family] || ''}</span>
+            <span className="qz-chip">{t.level} {stageLevel(stage)}</span>
+            <StreakMeter streak={streak} labels={t.stMeter} />
+            <span className="qz-spacer" />
+            {!flashing && <Ring frac={frac} secs={Math.max(0, Math.ceil(left))} danger={danger} />}
+          </div>
         </div>
-        <div className="kn-meta">
-          <span className="kn-tag solid" style={{ background: accent }}>{t.stage} {stage + 1}/{STAGE_COUNT}</span>
-          <span className="kn-tag">{t.puzzle} {pi + 1}/{pool.length}</span>
-          <span className="kn-tag">{famLabel[p.family] || ''}</span>
-          <span className="kn-tag">{t.level} {stageLevel(stage)}</span>
-          {streak > 1 && <span className="kn-tag solid" style={{ background: accent }}>x{streak}</span>}
-        </div>
-      </div>
 
-      <div className="kn-body">
-        {flashing ? (
-          <>
-            <p className="kn-sub">{t.memWatch}</p>
-            <span className="kn-flash">{p.show}</span>
-          </>
-        ) : (
-          <>
-            <p className="kn-q">{p.prompt}</p>
-            {p.sub && <p className="kn-sub"><span className="kn-seq">{p.sub}</span></p>}
-            {p.art && <PuzzleArt art={p.art} color={accent} />}
-            <div className={`kn-opts${artChoices ? ' art' : ''}`}>
-              {p.choices.map((c, i) => {
-                const state = revealing ? (i === p.answer ? ' good' : (i === picked ? ' bad' : ' off')) : ''
-                return (
-                  <button
-                    key={`${p.id}-${i}`}
-                    type="button"
-                    className={`kn-opt${artChoices ? ' art' : ''}${state}`}
-                    disabled={revealing}
-                    onClick={() => resolve(i)}
-                  >
-                    {c.art ? <PuzzleArt art={c.art} color={accent} small /> : c.label}
-                  </button>
-                )
-              })}
+        <div className="qz-body">
+          {flashing ? (
+            <div className="qz-plate">
+              <span className="qz-kicker"><Icon name="zap" size={13} /> {t.memWatch}</span>
+              <span className="qz-flash">{p.show}</span>
             </div>
-            {hintOn && !revealing && (
-              <div className="kn-reveal">
-                <b>{t.hint}</b>
-                <p>{p.hint}</p>
+          ) : (
+            <>
+              <div className="qz-plate">
+                <span className="qz-kicker"><Icon name="shapes" size={13} /> {t.puzzle} {pi + 1}/{pool.length}</span>
+                <p className="qz-q">{p.prompt}</p>
+                {p.sub && <p className="qz-sub"><span className="qz-seq">{p.sub}</span></p>}
+                {p.art && <div style={{ marginTop: 10 }}><PuzzleArt art={p.art} color={accent} /></div>}
               </div>
-            )}
-            {revealing && (
-              <div className={`kn-reveal ${picked === p.answer ? 'good' : 'bad'}`}>
-                <b className={picked === p.answer ? 'good' : 'bad'}>
-                  {picked === -1 ? t.skipped : picked === p.answer ? t.right : t.wrong}
-                  {picked !== p.answer && !artChoices ? ` — ${t.correctIs}: ${p.choices[p.answer].label}` : ''}
-                </b>
-                <p>{p.explain}</p>
+              <div className={`qz-opts${artChoices ? ' art' : ''}`}>
+                {p.choices.map((c, i) => {
+                  const state = revealing ? (i === p.answer ? ' good' : (i === picked ? ' bad' : ' off')) : ''
+                  return (
+                    <button
+                      key={`${p.id}-${i}`}
+                      type="button"
+                      className={`qz-opt${artChoices ? ' art' : ''}${state}`}
+                      disabled={revealing}
+                      onClick={() => resolve(i)}
+                    >
+                      {c.art ? <PuzzleArt art={c.art} color={accent} small /> : c.label}
+                    </button>
+                  )
+                })}
               </div>
-            )}
-          </>
-        )}
-      </div>
+              {hintOn && !revealing && (
+                <div className="qz-reveal">
+                  <span className="qz-reveal-h"><Icon name="zap" size={15} /> {t.hint}</span>
+                  <p>{p.hint}</p>
+                </div>
+              )}
+              {revealing && (
+                <div className={`qz-reveal ${picked === p.answer ? 'good' : 'bad'}`}>
+                  <span className={`qz-reveal-h ${picked === p.answer ? 'good' : 'bad'}`}>
+                    <Icon name={picked === p.answer ? 'ok' : 'warning'} size={15} />
+                    {picked === -1 ? (way === 'timeout' ? t.timeout : t.skipped) : picked === p.answer ? t.right : t.wrong}
+                  </span>
+                  {picked !== p.answer && !artChoices && <span className="qz-correct-was">{t.correctIs}: {p.choices[p.answer].label}</span>}
+                  <p>{p.explain}</p>
+                </div>
+              )}
+            </>
+          )}
+        </div>
 
-      <div className="kn-foot">
-        {phase === 'q' && !hintOn && (
-          <button type="button" className="kn-btn ghost" onClick={useHint}>
-            <Icon name="zap" size={15} /> {t.hintCost}
-          </button>
-        )}
-        {phase === 'q' && (
-          <button type="button" className="kn-btn ghost" onClick={() => resolve(-1)}>
-            <Icon name="next" size={15} /> {t.skip}
-          </button>
-        )}
-        {revealing && (
-          <button type="button" className="kn-btn" style={{ background: accent }} onClick={advance}>
-            <Icon name={pi + 1 >= pool.length ? 'ok' : 'next'} size={16} />
-            {pi + 1 >= pool.length ? t.endStage : t.next}
-          </button>
-        )}
+        <div className="qz-foot">
+          {phase === 'q' && !hintOn && (
+            <button type="button" className="qz-btn ghost live" onClick={useHint}>
+              <Icon name="zap" size={15} /> {t.hintCost}
+            </button>
+          )}
+          {phase === 'q' && (
+            <button type="button" className="qz-btn ghost" onClick={() => resolve(-1, 'skip')}>
+              <Icon name="next" size={15} /> {t.skip}
+            </button>
+          )}
+          {revealing && (
+            <button type="button" className="qz-btn" onClick={advance}>
+              <Icon name={pi + 1 >= pool.length ? 'ok' : 'next'} size={16} />
+              {pi + 1 >= pool.length ? t.endStage : t.next}
+            </button>
+          )}
+        </div>
       </div>
     </div>
   )

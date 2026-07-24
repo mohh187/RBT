@@ -16,8 +16,8 @@
 import '../styles/gameshub.css'
 import { Suspense, lazy, useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import Icon from './Icon.jsx'
-import GamePromo, { GameThumb, gameName, gameHook, gameArt } from './games/GamePromo.jsx'
-import { gamesFor, gameById } from '../lib/games.js'
+import GamePromo, { gameName, gameHook } from './games/GamePromo.jsx'
+import { gamesFor, gameById, NEW_GAME_IDS } from '../lib/games.js'
 import { startPlay, saveProgress, finishPlay } from '../lib/gameMemory.js'
 import { registerCustomer } from '../lib/db.js'
 import { getLocalCustomer, setLocalCustomer } from '../lib/customer.js'
@@ -97,6 +97,10 @@ const TXT = {
     limit: 'الحد',
     done: 'تمام',
     inCup: 'ضمن البطولة',
+    newTag: 'جديد',
+    featStages: 'مراحل',
+    featCpu: 'ضد الكمبيوتر',
+    play: 'العب الآن',
   },
   en: {
     hub: 'Games Corner',
@@ -149,6 +153,10 @@ const TXT = {
     limit: 'Limit',
     done: 'Done',
     inCup: 'In the tournament',
+    newTag: 'New',
+    featStages: 'Stages',
+    featCpu: 'vs CPU',
+    play: 'Play now',
   },
 }
 
@@ -292,12 +300,566 @@ function readArchetype(p) {
   return ''
 }
 
+// ===========================================================================
+// PER-GAME COVERS — original SVG scenes, drawn here so the hub owns its shelf
+// art end-to-end. Every game carries a declarative
+//     cover: { motif, palette, players, stages, vsCpu }     (see lib/games.js)
+// `renderScene` turns a motif into an original SVG scene painted over the
+// game's own gradient; `renderCard` frames it with a large Arabic name and a
+// truthful feature strip. The promo splash keeps its own tiles (GamePromo).
+//
+// The four engine traps proven in this repo this week are honoured throughout:
+//  1) SVG children are positioned with the UNITLESS attribute transform
+//     (transform="translate(x y)") — never a CSS px transform.
+//  2) depth is drawn with plain shapes + gradients — never filter="url(#…)".
+//  3) the whole cover is ONE <button>; the art is aria-hidden with
+//     pointer-events:none in CSS, so the hit area never exceeds the card.
+//  4) the feature strip only ever states what is true for that game.
+// All motif geometry lives in a local 0..100 box, placed by CoverArt into the
+// upper region of the card so the name band below never crops the focal object.
+// ===========================================================================
+const NEW_SET = new Set(NEW_GAME_IDS)
+const COVER_FALLBACK = ['#123448', '#2a5a72', '#7fd3e6']
+function coverPalette(g) {
+  const p = Array.isArray(g?.cover?.palette)
+    ? g.cover.palette.filter((x) => /^#[0-9a-f]{3,8}$/i.test(x))
+    : []
+  return p.length >= 3 ? p : COVER_FALLBACK
+}
+
+// Universal game symbols — my own copies. A card suit, a domino face and the
+// four Ludo colours are domain facts, not any app's proprietary artwork.
+const CV_LUDO = ['#d92b3a', '#16a34a', '#e0a409', '#2563eb']
+const CV_JAK = ['#38bdf8', '#fbbf24', '#818cf8', '#fb7185']
+const CV_FLAVOR = ['#e0662a', '#e8b53a', '#3f9d54', '#2f8fb0', '#8a5cc4', '#d64d7a']
+const CV_SUIT = {
+  spade: 'M12 3s-8 6.5-8 11.2c0 2.8 2 4.4 4.2 4.4 1.4 0 2.6-.6 3.2-1.6L10.2 21.5h3.6L12.6 17c.6 1 1.8 1.6 3.2 1.6 2.2 0 4.2-1.6 4.2-4.4C20 9.5 12 3 12 3z',
+  heart: 'M12 20.5S3.5 14.6 3.5 9.4C3.5 6.7 5.6 4.8 8 4.8c1.8 0 3.2 1 4 2.3.8-1.3 2.2-2.3 4-2.3 2.4 0 4.5 1.9 4.5 4.6 0 5.2-8.5 11.1-8.5 11.1z',
+  diamond: 'M12 3l7.5 9-7.5 9-7.5-9z',
+  club: 'M12 3.2 a4.1 4.1 0 0 1 3.4 6.4 a4.1 4.1 0 1 1 -1.9 6.2 l.4 5.6 h-3.8 l.4-5.6 a4.1 4.1 0 1 1 -1.9-6.2 a4.1 4.1 0 0 1 3.4-6.4 z',
+}
+const CV_DOMPIPS = {
+  0: [], 1: [[0.5, 0.5]], 2: [[0.3, 0.28], [0.7, 0.72]],
+  3: [[0.28, 0.26], [0.5, 0.5], [0.72, 0.74]],
+  4: [[0.3, 0.28], [0.7, 0.28], [0.3, 0.72], [0.7, 0.72]],
+  5: [[0.3, 0.28], [0.7, 0.28], [0.5, 0.5], [0.3, 0.72], [0.7, 0.72]],
+  6: [[0.3, 0.24], [0.7, 0.24], [0.3, 0.5], [0.7, 0.5], [0.3, 0.76], [0.7, 0.76]],
+}
+// A stylised chess knight + king, authored here in a 40-unit box.
+const CV_KNIGHT = 'M13 34 C10 30 9.4 24 12.6 20 C10 21.4 8 20 8.6 17.4 C9.4 13.6 11.8 10 15.4 7.8 L14.8 3.8 L18.4 6.8 C20.4 5.6 22.9 5.6 24.9 7.1 L23.7 3.2 C28 4.9 31.2 8.6 32.2 13.2 C33.6 19.4 32 25.8 28.2 29.8 C30.4 31 31.4 32.4 31.4 34 Z'
+const CV_KING = 'M20 12 C13.8 13 9.6 16.6 8.6 21.2 C7.8 25.4 9.7 28.6 12 30.2 H28 C30.3 28.6 32.2 25.4 31.4 21.2 C30.4 16.6 26.2 13 20 12 Z'
+
+function CvDie({ x, y, s, ink = '#2a2320' }) {
+  const r = s * 0.13
+  const P = [[0.28, 0.28], [0.28, 0.5], [0.28, 0.72], [0.72, 0.28], [0.72, 0.5], [0.72, 0.72]]
+  return (
+    <g transform={`translate(${x} ${y})`}>
+      <rect x="1.6" y={s * 0.09 + 1.6} width={s} height={s} rx={s * 0.22} fill="#000" opacity="0.24" />
+      <rect width={s} height={s} rx={s * 0.22} fill="#fbfaf5" />
+      <rect x="0.6" y="0.6" width={s - 1.2} height={s - 1.2} rx={s * 0.2} fill="none" stroke="#000" strokeOpacity="0.12" strokeWidth="0.7" />
+      {P.map(([fx, fy], i) => <circle key={i} cx={fx * s} cy={fy * s} r={r} fill={ink} />)}
+    </g>
+  )
+}
+
+function CvDomino({ x, y, w, h, a, b, face, ink, rot }) {
+  const half = h / 2
+  const pr = w * 0.096
+  const spot = (nn, oy) => (CV_DOMPIPS[nn] || []).map(([fx, fy], i) => (
+    <circle key={`${nn}-${i}`} cx={x + fx * w} cy={oy + fy * half} r={pr} fill={ink} />
+  ))
+  const cx = x + w / 2
+  const cy = y + h / 2
+  return (
+    <g transform={rot ? `rotate(${rot} ${cx} ${cy})` : undefined}>
+      <rect x={x + 1.2} y={y + 1.8} width={w} height={h} rx={w * 0.16} fill="#000" opacity="0.22" />
+      <rect x={x} y={y} width={w} height={h} rx={w * 0.16} fill={face} />
+      <rect x={x} y={y} width={w} height={h} rx={w * 0.16} fill="none" stroke="#000" strokeOpacity="0.16" strokeWidth="0.7" />
+      <line x1={x + w * 0.14} y1={y + half} x2={x + w * 0.86} y2={y + half} stroke={ink} strokeOpacity="0.45" strokeWidth="0.9" />
+      {spot(a, y)}
+      {spot(b, y + half)}
+    </g>
+  )
+}
+
+function CvCard({ angle, px, py, suit, ink, face, w = 23, h = 33 }) {
+  const top = py - h
+  const left = px - w / 2
+  return (
+    <g transform={`rotate(${angle} ${px} ${py})`}>
+      <rect x={left + 1.2} y={top + 1.6} width={w} height={h} rx="3.2" fill="#000" opacity="0.18" />
+      <rect x={left} y={top} width={w} height={h} rx="3.2" fill={face} />
+      <rect x={left} y={top} width={w} height={h} rx="3.2" fill="none" stroke="#000" strokeOpacity="0.13" strokeWidth="0.6" />
+      <g transform={`translate(${left + 1.8} ${top + 1.6}) scale(0.26)`}><path d={CV_SUIT[suit]} fill={ink} /></g>
+      <g transform={`translate(${px - 6} ${top + h / 2 - 6}) scale(0.5)`}><path d={CV_SUIT[suit]} fill={ink} /></g>
+    </g>
+  )
+}
+
+function renderScene(motif, C) {
+  const [deep, mid, hi] = C
+  const accent = C[3] || hi
+  switch (motif) {
+    case 'ludo': {
+      const yards = [[0, 0], [9, 0], [9, 9], [0, 9]]
+      const lanes = [[1, 7, 5, 1], [7, 1, 1, 5], [9, 7, 5, 1], [7, 9, 1, 5]]
+      const goals = ['M6 6L6 9L7.5 7.5Z', 'M6 6L9 6L7.5 7.5Z', 'M9 6L9 9L7.5 7.5Z', 'M6 9L9 9L7.5 7.5Z']
+      return (
+        <g>
+          <ellipse cx="40" cy="66" rx="34" ry="7" fill="#000" opacity="0.22" />
+          <g transform="translate(12 10) scale(3.6)">
+            <rect x="-0.4" y="-0.4" width="15.8" height="15.8" rx="1" fill={deep} />
+            <rect width="15" height="15" rx="0.7" fill={hi} />
+            {yards.map(([yx, yy], s) => (
+              <g key={s}>
+                <rect x={yx} y={yy} width="6" height="6" rx="0.7" fill={CV_LUDO[s]} />
+                <rect x={yx + 0.9} y={yy + 0.9} width="4.2" height="4.2" rx="0.5" fill={hi} />
+                {[[2, 2], [4, 2], [2, 4], [4, 4]].map(([dx, dy]) => (
+                  <circle key={`${dx}-${dy}`} cx={yx + dx} cy={yy + dy} r="0.6" fill={CV_LUDO[s]} />
+                ))}
+              </g>
+            ))}
+            {lanes.map(([lx, ly, lw, lh], s) => <rect key={s} x={lx} y={ly} width={lw} height={lh} fill={CV_LUDO[s]} opacity="0.9" />)}
+            {goals.map((d, s) => <path key={s} d={d} fill={CV_LUDO[s]} />)}
+            <rect x="0" y="0" width="15" height="15" rx="0.7" fill="none" stroke={deep} strokeOpacity="0.5" strokeWidth="0.12" />
+          </g>
+          <CvDie x={58} y={2} s={22} ink={deep} />
+        </g>
+      )
+    }
+    case 'chess':
+      return (
+        <g>
+          <ellipse cx="50" cy="70" rx="36" ry="7" fill="#000" opacity="0.22" />
+          <g transform="rotate(-9 46 46)">
+            {[0, 1, 2, 3].map((r) => [0, 1, 2, 3].map((f) => (
+              <rect key={`${r}-${f}`} x={22 + f * 12} y={22 + r * 12} width="12" height="12" fill={(r + f) % 2 ? mid : hi} />
+            )))}
+            <rect x="22" y="22" width="48" height="48" fill="none" stroke={deep} strokeOpacity="0.6" strokeWidth="1.4" />
+          </g>
+          <g transform="translate(52 20) scale(0.62)">
+            <ellipse cx="20" cy="41" rx="16" ry="4" fill="#000" opacity="0.2" />
+            <path d={CV_KING} fill={deep} stroke={hi} strokeWidth="1.4" strokeLinejoin="round" />
+            <path d="M18.5 3h3v3h3v3h-3v3h-3v-3h-3V6h3z" fill={deep} stroke={hi} strokeWidth="1.4" strokeLinejoin="round" />
+            <rect x="10" y="30" width="20" height="4" rx="1.4" fill={deep} stroke={hi} strokeWidth="1.4" />
+            <rect x="7.5" y="34" width="25" height="5" rx="2" fill={deep} stroke={hi} strokeWidth="1.4" />
+          </g>
+          <g transform="translate(20 22) scale(0.82)">
+            <ellipse cx="20" cy="40" rx="15" ry="4" fill="#000" opacity="0.22" />
+            <path d={CV_KNIGHT} fill={hi} stroke={deep} strokeWidth="1.4" strokeLinejoin="round" />
+            <rect x="9" y="33.5" width="22" height="4" rx="1.4" fill={hi} stroke={deep} strokeWidth="1.4" />
+            <rect x="6.5" y="37.5" width="27" height="5" rx="2" fill={hi} stroke={deep} strokeWidth="1.4" />
+          </g>
+        </g>
+      )
+    case 'domino': {
+      const ink = C[3] || deep
+      return (
+        <g>
+          <ellipse cx="50" cy="72" rx="36" ry="7" fill="#000" opacity="0.2" />
+          <CvDomino x={20} y={26} w={22} h={44} a={3} b={5} face={hi} ink={ink} rot={-15} />
+          <CvDomino x={58} y={30} w={22} h={44} a={2} b={4} face={hi} ink={ink} rot={14} />
+          <CvDomino x={39} y={16} w={22} h={44} a={6} b={6} face={hi} ink={ink} />
+        </g>
+      )
+    }
+    case 'fan': {
+      const red = C[3] || '#d9455f'
+      const fan = [
+        { angle: -21, suit: 'club', ink: deep },
+        { angle: -7, suit: 'diamond', ink: red },
+        { angle: 7, suit: 'heart', ink: red },
+        { angle: 21, suit: 'spade', ink: deep },
+      ]
+      return (
+        <g>
+          <ellipse cx="50" cy="76" rx="30" ry="6" fill="#000" opacity="0.2" />
+          {fan.map((f) => <CvCard key={f.angle} angle={f.angle} px={50} py={90} suit={f.suit} ink={f.ink} face={hi} />)}
+        </g>
+      )
+    }
+    case 'fireFan': {
+      const ember = C[3] || '#ffb347'
+      return (
+        <g>
+          <path d="M50 8 C60 22 58 30 54 38 C60 34 62 26 61 20 C66 30 66 42 58 50 C64 49 69 44 71 38 C73 50 66 60 52 62 C40 63 32 55 34 44 C35 38 39 34 41 36 C39 28 44 18 50 8 Z" fill={mid} opacity="0.5" />
+          <path d="M50 20 C56 30 55 36 52 42 C57 40 58 34 57 30 C60 38 58 47 51 51 C44 52 39 47 40 40 C41 34 46 28 50 20 Z" fill={ember} opacity="0.9" />
+          <ellipse cx="50" cy="76" rx="30" ry="6" fill="#000" opacity="0.2" />
+          <CvCard angle={-16} px={50} py={92} suit="heart" ink={mid} face={hi} />
+          <CvCard angle={2} px={50} py={92} suit="spade" ink={deep} face={hi} />
+          <CvCard angle={18} px={50} py={92} suit="diamond" ink={mid} face={hi} />
+        </g>
+      )
+    }
+    case 'marbles': {
+      const holes = 16
+      return (
+        <g>
+          <ellipse cx="46" cy="74" rx="34" ry="7" fill="#000" opacity="0.2" />
+          <circle cx="46" cy="42" r="28" fill="none" stroke={mid} strokeWidth="10" opacity="0.7" />
+          <circle cx="46" cy="42" r="28" fill="none" stroke={hi} strokeWidth="1" opacity="0.4" />
+          {Array.from({ length: holes }).map((_, i) => {
+            const a = (i / holes) * Math.PI * 2 - Math.PI / 2
+            return <circle key={i} cx={(46 + Math.cos(a) * 28).toFixed(2)} cy={(42 + Math.sin(a) * 28).toFixed(2)} r="2.6" fill={deep} opacity="0.6" />
+          })}
+          {CV_JAK.map((col, i) => {
+            const a = (i / 4) * Math.PI * 2 - Math.PI / 2
+            const mx = 46 + Math.cos(a) * 28
+            const my = 42 + Math.sin(a) * 28
+            return (
+              <g key={col}>
+                <circle cx={mx.toFixed(2)} cy={(my + 1).toFixed(2)} r="6.4" fill="#000" opacity="0.2" />
+                <circle cx={mx.toFixed(2)} cy={my.toFixed(2)} r="6.4" fill={col} stroke={deep} strokeWidth="1" />
+                <circle cx={(mx - 2).toFixed(2)} cy={(my - 2.2).toFixed(2)} r="2" fill="#fff" opacity="0.7" />
+              </g>
+            )
+          })}
+          <circle cx="46" cy="42" r="9" fill={deep} opacity="0.4" />
+          <g transform="rotate(14 74 60)">
+            <rect x="63" y="42" width="24" height="34" rx="3.2" fill={accent} />
+            <rect x="63" y="42" width="24" height="34" rx="3.2" fill="none" stroke="#000" strokeOpacity="0.14" strokeWidth="0.6" />
+            <g transform="translate(66 46) scale(0.62)"><path d={CV_SUIT.spade} fill={deep} /></g>
+          </g>
+        </g>
+      )
+    }
+    case 'fishing':
+      return (
+        <g>
+          <path d="M-6 66 q13 -7 26 0 t26 0 t26 0 t26 0 v40 H-6 Z" fill={mid} opacity="0.5" />
+          <path d="M-6 78 q13 -7 26 0 t26 0 t26 0 t26 0 v30 H-6 Z" fill={hi} opacity="0.32" />
+          <path d="M84 -8 v10 M84 2 L60 44" stroke={hi} strokeWidth="1.6" fill="none" strokeLinecap="round" opacity="0.9" />
+          <path d="M60 44 q-4 5 1 8 q4 2 5 -2" stroke={hi} strokeWidth="1.6" fill="none" strokeLinecap="round" />
+          <g transform="translate(30 50)">
+            <ellipse cx="1" cy="9" rx="12" ry="3" fill="#000" opacity="0.18" />
+            <ellipse cx="0" cy="0" rx="14" ry="9" fill={hi} />
+            <path d="M12 0 l11 -7 v14 z" fill={hi} />
+            <circle cx="-7" cy="-2" r="2" fill={deep} />
+            <path d="M-3 4 q4 3 9 1" stroke={deep} strokeWidth="1" fill="none" opacity="0.4" />
+          </g>
+        </g>
+      )
+    case 'tray':
+      return (
+        <g>
+          <ellipse cx="50" cy="70" rx="34" ry="6" fill="#000" opacity="0.2" />
+          <ellipse cx="50" cy="58" rx="38" ry="12" fill={deep} />
+          <ellipse cx="50" cy="55" rx="38" ry="12" fill={mid} />
+          <ellipse cx="50" cy="55" rx="30" ry="8.5" fill={hi} opacity="0.35" />
+          <path d="M34 54 q-2 0 -2 -3 v-8 h12 v8 q0 3 -2 3 z" fill={hi} />
+          <ellipse cx="38" cy="43" rx="6" ry="2" fill={deep} opacity="0.35" />
+          <path d="M46 46 q4 -1 4 3 t-4 3" fill="none" stroke={hi} strokeWidth="2" />
+          <path d="M58 54 q-2 0 -2 -3 v-6 h11 v6 q0 3 -2 3 z" fill={hi} />
+          <ellipse cx="63.5" cy="45" rx="5.5" ry="2" fill={deep} opacity="0.35" />
+          <path d="M38 36 q-3 -4 0 -8 M63 38 q-3 -4 0 -8" fill="none" stroke={hi} strokeWidth="1.6" strokeLinecap="round" opacity="0.5" />
+        </g>
+      )
+    case 'wheel': {
+      const segs = 8
+      const cx = 50; const cy = 46; const R = 30
+      const pt = (deg, r) => [cx + Math.cos(deg * Math.PI / 180) * r, cy + Math.sin(deg * Math.PI / 180) * r]
+      return (
+        <g>
+          <ellipse cx="50" cy="76" rx="30" ry="6" fill="#000" opacity="0.2" />
+          <circle cx={cx} cy={cy} r={R + 3} fill={deep} />
+          {Array.from({ length: segs }).map((_, i) => {
+            const [x0, y0] = pt(i * (360 / segs) - 90, R)
+            const [x1, y1] = pt((i + 1) * (360 / segs) - 90, R)
+            return <path key={i} d={`M${cx} ${cy} L${x0.toFixed(2)} ${y0.toFixed(2)} A${R} ${R} 0 0 1 ${x1.toFixed(2)} ${y1.toFixed(2)} Z`} fill={i % 2 ? mid : hi} opacity={i % 2 ? 0.7 : 0.95} />
+          })}
+          <circle cx={cx} cy={cy} r={R} fill="none" stroke={deep} strokeOpacity="0.4" strokeWidth="1" />
+          <circle cx={cx} cy={cy} r="6" fill={deep} />
+          <circle cx={cx} cy={cy} r="6" fill="none" stroke={hi} strokeWidth="1.4" opacity="0.6" />
+          <path d={`M${cx - 5} ${cy - R - 6} L${cx + 5} ${cy - R - 6} L${cx} ${cy - R + 4} Z`} fill={hi} />
+        </g>
+      )
+    }
+    case 'ticket':
+      return (
+        <g>
+          <ellipse cx="50" cy="76" rx="30" ry="6" fill="#000" opacity="0.2" />
+          <g transform="rotate(-9 40 44)">
+            <rect x="26" y="18" width="36" height="52" rx="5" fill={mid} opacity="0.6" />
+          </g>
+          <g transform="rotate(6 60 46)">
+            <rect x="41.5" y="16" width="38" height="56" rx="5" fill="#000" opacity="0.18" />
+            <rect x="40" y="14" width="38" height="56" rx="5" fill={hi} />
+            <path d="M46 26 h26 M46 34 h26 M46 42 h20 M46 50 h24" stroke={deep} strokeWidth="2.4" strokeLinecap="round" opacity="0.55" />
+            <circle cx="66" cy="60" r="7" fill={mid} />
+            <path d="M63 60 l2 2.4 l4 -4.6" fill="none" stroke={hi} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
+          </g>
+        </g>
+      )
+    case 'basket':
+      return (
+        <g>
+          <circle cx="34" cy="14" r="6" fill={hi} opacity="0.9" />
+          <circle cx="58" cy="8" r="4.6" fill={mid} />
+          <circle cx="70" cy="22" r="5.4" fill={hi} opacity="0.7" />
+          <circle cx="48" cy="26" r="4" fill={accent} opacity="0.6" />
+          <ellipse cx="50" cy="72" rx="30" ry="6" fill="#000" opacity="0.2" />
+          <path d="M26 46 h48 l-6 26 a5 5 0 0 1 -5 4 H37 a5 5 0 0 1 -5 -4 Z" fill={mid} />
+          <path d="M26 46 h48 l-1.4 6 H27.4 Z" fill={hi} opacity="0.85" />
+          <path d="M34 54 l3 20 M50 54 v20 M66 54 l-3 20" stroke={deep} strokeWidth="1.6" opacity="0.35" />
+          <path d="M32 50 q18 -12 36 0" fill="none" stroke={hi} strokeWidth="2" opacity="0.5" />
+        </g>
+      )
+    case 'quiz':
+      return (
+        <g>
+          <ellipse cx="50" cy="74" rx="30" ry="6" fill="#000" opacity="0.2" />
+          <rect x="22" y="18" width="56" height="42" rx="12" fill={mid} opacity="0.65" />
+          <path d="M40 60 l-2 12 l14 -10 z" fill={mid} opacity="0.65" />
+          <path d="M42 34 a9 9 0 1 1 11 9 v4" fill="none" stroke={hi} strokeWidth="5.5" strokeLinecap="round" strokeLinejoin="round" />
+          <circle cx="47.5" cy="53" r="3.4" fill={hi} />
+          <circle cx="70" cy="16" r="5" fill={hi} opacity="0.5" />
+        </g>
+      )
+    case 'cake':
+      return (
+        <g>
+          <ellipse cx="50" cy="74" rx="32" ry="6" fill="#000" opacity="0.2" />
+          <rect x="24" y="58" width="52" height="16" rx="6" fill={mid} />
+          <rect x="30" y="44" width="40" height="15" rx="6" fill={hi} opacity="0.92" />
+          <rect x="36" y="31" width="28" height="14" rx="6" fill={mid} />
+          <rect x="42" y="20" width="16" height="12" rx="5" fill={hi} />
+          <path d="M30 50 q5 6 10 0 q5 6 10 0 q5 6 10 0" fill="none" stroke={accent} strokeWidth="2" opacity="0.55" />
+          <circle cx="50" cy="14" r="4.4" fill={accent} />
+          <path d="M50 10 q3 -5 6 -4" fill="none" stroke={hi} strokeWidth="1.4" opacity="0.6" />
+        </g>
+      )
+    case 'latte':
+      return (
+        <g>
+          <ellipse cx="48" cy="72" rx="30" ry="6" fill="#000" opacity="0.2" />
+          <ellipse cx="48" cy="46" rx="34" ry="20" fill={mid} opacity="0.55" />
+          <ellipse cx="48" cy="44" rx="24" ry="15" fill={deep} />
+          <ellipse cx="48" cy="43" rx="22" ry="13.5" fill={hi} />
+          <g fill={mid} opacity="0.9">
+            <path d="M48 33 q7 10 0 21 q-7 -11 0 -21 Z" />
+            <path d="M48 37 q-9 3 -13 8 q9 -1 13 -4 Z" opacity="0.7" />
+            <path d="M48 37 q9 3 13 8 q-9 -1 -13 -4 Z" opacity="0.7" />
+          </g>
+          <path d="M70 40 q9 3 0 10" fill="none" stroke={deep} strokeWidth="4" />
+          <path d="M70 41 q7 2.5 0 8" fill="none" stroke={hi} strokeWidth="1.4" opacity="0.5" />
+        </g>
+      )
+    case 'match': {
+      const cards = [
+        [22, 22, true], [46, 22, false], [70, 22, false],
+        [22, 50, false], [46, 50, false], [70, 50, true],
+      ]
+      return (
+        <g>
+          {cards.map(([cx, cy, on], i) => (
+            <g key={i}>
+              <rect x={cx} y={cy} width="20" height="24" rx="4" fill={on ? hi : mid} opacity={on ? 0.95 : 0.5} />
+              {on ? (
+                <g transform={`translate(${cx + 5} ${cy + 5})`} fill={deep}>
+                  <path d="M5 0 C7 4 7 7 5 10 C3 7 3 4 5 0 Z" />
+                  <circle cx="5" cy="6" r="2.4" opacity="0.6" />
+                </g>
+              ) : (
+                <circle cx={cx + 10} cy={cy + 12} r="3.4" fill={hi} opacity="0.3" />
+              )}
+            </g>
+          ))}
+        </g>
+      )
+    }
+    case 'grill':
+      return (
+        <g>
+          <path d="M50 12 q16 18 7 32 q-3 6 -7 8 q-4 -2 -7 -8 q-9 -14 7 -32 Z" fill={mid} />
+          <path d="M50 26 q9 11 4 20 q-2 4 -4 5 q-2 -1 -4 -5 q-5 -9 4 -20 Z" fill={accent} opacity="0.75" />
+          <ellipse cx="50" cy="66" rx="34" ry="8" fill={deep} />
+          <path d="M20 64 h60 M22 68 h56 M26 72 h48" stroke={mid} strokeWidth="2.4" strokeLinecap="round" opacity="0.85" />
+          <ellipse cx="42" cy="64" rx="8" ry="3.4" fill={accent} opacity="0.85" />
+          <ellipse cx="62" cy="66" rx="7" ry="3" fill={hi} opacity="0.7" />
+        </g>
+      )
+    case 'bubbles': {
+      const b = [
+        [40, 44, 18, mid, 0.75], [64, 30, 13, hi, 0.85], [70, 54, 15, mid, 0.6],
+        [50, 62, 9, hi, 0.55], [30, 26, 8, hi, 0.5], [78, 20, 6, hi, 0.4],
+      ]
+      return (
+        <g>
+          {b.map(([x, y, r, col, o], i) => (
+            <g key={i}>
+              <circle cx={x} cy={y} r={r} fill={col} opacity={o} />
+              <circle cx={x - r * 0.35} cy={y - r * 0.38} r={r * 0.24} fill="#fff" opacity="0.55" />
+            </g>
+          ))}
+        </g>
+      )
+    }
+    case 'bulb':
+      return (
+        <g>
+          <circle cx="50" cy="40" r="30" fill={mid} opacity="0.35" />
+          <path d="M50 6 v-4 M28 16 l-3 -3 M72 16 l3 -3 M18 40 h-5 M82 40 h5" stroke={hi} strokeWidth="2.6" strokeLinecap="round" opacity="0.6" />
+          <circle cx="50" cy="38" r="23" fill={hi} />
+          <path d="M40 60 h20 l-2 6 h-16 z" fill={mid} />
+          <path d="M43 63.5 h14 M45 68.5 h10" stroke={deep} strokeWidth="1.6" opacity="0.6" />
+          <path d="M42 32 a9 9 0 1 1 12 8.4 q-4 2.7 -4 6.6" fill="none" stroke={deep} strokeWidth="5" strokeLinecap="round" strokeLinejoin="round" />
+          <circle cx="50" cy="53" r="3" fill={deep} />
+          <path d="M44 74 h12 v1.5 a6 6 0 0 1 -12 0 z" fill={mid} />
+        </g>
+      )
+    case 'jigsaw':
+      return (
+        <g>
+          <rect x="26" y="20" width="26" height="26" rx="5" fill={hi} />
+          <rect x="26" y="52" width="26" height="26" rx="5" fill={mid} />
+          <rect x="54" y="52" width="26" height="26" rx="5" fill={hi} />
+          <circle cx="39" cy="49" r="4.6" fill={hi} />
+          <circle cx="57" cy="65" r="4.6" fill={mid} />
+          <rect x="54" y="20" width="26" height="26" rx="5" fill={deep} opacity="0.28" />
+          <rect x="54" y="20" width="26" height="26" rx="5" fill="none" stroke={hi} strokeOpacity="0.5" strokeWidth="1.4" strokeDasharray="4 4" />
+          <g transform="rotate(10 70 12)">
+            <rect x="58" y="2" width="24" height="24" rx="5" fill={accent} />
+            <circle cx="82" cy="14" r="4.4" fill={accent} />
+            <rect x="58" y="2" width="24" height="24" rx="5" fill="none" stroke="#000" strokeOpacity="0.15" strokeWidth="1" />
+          </g>
+        </g>
+      )
+    case 'letters': {
+      const cell = (x, y, fill) => <rect x={x} y={y} width="18" height="18" rx="3.4" fill={fill} />
+      return (
+        <g>
+          {[26, 46, 66].map((x) => <g key={`r${x}`}>{cell(x, 38, hi)}</g>)}
+          {cell(46, 18, hi)}
+          {cell(46, 58, hi)}
+          {cell(46, 38, mid)}
+          <g fill="none" stroke={deep} strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round" opacity="0.78">
+            <path d="M31 42 v10 M31 52 h7" />
+            <path d="M69 42 l4 8 l4 -8" />
+            <path d="M51 22 h8 M55 22 v10" />
+            <path d="M51 62 v10 M59 62 v10 M51 67 h8" />
+          </g>
+        </g>
+      )
+    }
+    case 'flavor': {
+      const cx = 50; const cy = 42; const R = 30
+      const pt = (deg, r) => [cx + Math.cos(deg * Math.PI / 180) * r, cy + Math.sin(deg * Math.PI / 180) * r]
+      return (
+        <g>
+          <ellipse cx="50" cy="72" rx="30" ry="6" fill="#000" opacity="0.2" />
+          {CV_FLAVOR.map((col, i) => {
+            const [x0, y0] = pt(i * 60 - 90, R)
+            const [x1, y1] = pt(i * 60 - 30, R)
+            return <path key={col} d={`M${cx} ${cy} L${x0.toFixed(2)} ${y0.toFixed(2)} A${R} ${R} 0 0 1 ${x1.toFixed(2)} ${y1.toFixed(2)} Z`} fill={col} opacity="0.92" />
+          })}
+          <circle cx={cx} cy={cy} r={R} fill="none" stroke={deep} strokeOpacity="0.4" strokeWidth="1.4" />
+          <circle cx={cx} cy={cy} r="8" fill={deep} />
+          <circle cx={cx} cy={cy} r="8" fill="none" stroke={hi} strokeWidth="1.4" opacity="0.6" />
+          <path d={`M${cx} ${cy} L${cx + 3} ${cy - 2} L${pt(-54, R + 4)[0].toFixed(2)} ${pt(-54, R + 4)[1].toFixed(2)} L${cx - 3} ${cy + 2} Z`} fill={hi} />
+          <circle cx={cx} cy={cy} r="3.4" fill={hi} />
+        </g>
+      )
+    }
+    case 'mirror': {
+      const bust = 'M20 84 C21 64 28 60 36 58 C29 50 28 40 33 32 C38 24 47 20 54 25 C58 28 57 34 55 37 L58 42 L53 45 L58 50 L52 54 L56 58 L50 62 L50 84 Z'
+      return (
+        <g>
+          <rect x="44" y="14" width="12" height="72" fill={hi} opacity="0.12" />
+          <path d="M50 16 v68" stroke={hi} strokeWidth="2" strokeLinecap="round" opacity="0.5" />
+          <path d={bust} fill={mid} />
+          <path d={bust} fill={hi} opacity="0.45" transform="matrix(-1 0 0 1 100 0)" />
+          <path d={bust} fill="none" stroke={deep} strokeWidth="1.2" opacity="0.4" />
+        </g>
+      )
+    }
+    case 'scale':
+      return (
+        <g>
+          <ellipse cx="50" cy="80" rx="24" ry="5" fill="#000" opacity="0.2" />
+          <path d="M47 34 h6 v44 h-6 z" fill={mid} />
+          <path d="M34 78 h32 l-5 7 h-22 z" fill={mid} />
+          <path d="M37 81.5 h26" stroke={deep} strokeWidth="1.4" opacity="0.5" />
+          <path d="M50 26 l6 9 h-12 z" fill={hi} />
+          <path d="M24 33 L76 41" fill="none" stroke={hi} strokeWidth="4" strokeLinecap="round" />
+          <path d="M25 34 v10 M75 41 v12" stroke={hi} strokeWidth="1.4" opacity="0.7" />
+          <path d="M15 44 q10 10 20 0 z" fill={hi} />
+          <path d="M65 53 q10 10 20 0 z" fill={hi} />
+        </g>
+      )
+    default:
+      return (
+        <g>
+          <circle cx="50" cy="44" r="30" fill={mid} opacity="0.4" />
+          <circle cx="50" cy="44" r="30" fill="none" stroke={hi} strokeWidth="2" opacity="0.5" />
+          <circle cx="50" cy="44" r="18" fill="none" stroke={hi} strokeWidth="3" opacity="0.75" />
+          <circle cx="50" cy="44" r="7" fill={hi} />
+        </g>
+      )
+  }
+}
+
+// The gradient plate + scene. `translate(25 22)` drops the local 0..100 motif
+// box into the upper region of the 150x200 cover; the bottom scrim rect keeps
+// the HTML name band legible over any palette. Slice-cropped, so it fills every
+// aspect it is placed in (shelf card, hero, gate thumb) without letterboxing.
+function CoverArt({ game, className = '', top = false }) {
+  const C = coverPalette(game)
+  const [deep, mid] = C
+  const motif = game?.cover?.motif || 'default'
+  const gid = `gcv-${String(game?.id || 'x').replace(/[^A-Za-z0-9_-]/g, '')}`
+  // A wide hero crops the tall viewBox to a horizontal band; aligning to the
+  // TOP keeps the focal motif (which lives in the upper region) in view rather
+  // than showing only the empty lower plate.
+  const par = top ? 'xMidYMin slice' : 'xMidYMid slice'
+  return (
+    <span className={`gh-cover-art ${className}`} aria-hidden="true">
+      <svg viewBox="0 0 150 200" preserveAspectRatio={par} focusable="false">
+        <defs>
+          <linearGradient id={`${gid}-p`} x1="0.1" y1="0" x2="0.55" y2="1">
+            <stop offset="0" stopColor={mid} />
+            <stop offset="1" stopColor={deep} />
+          </linearGradient>
+          <radialGradient id={`${gid}-h`} cx="0.5" cy="0.14" r="0.85">
+            <stop offset="0" stopColor="#ffffff" stopOpacity="0.24" />
+            <stop offset="0.55" stopColor="#ffffff" stopOpacity="0" />
+          </radialGradient>
+          <linearGradient id={`${gid}-s`} x1="0" y1="0" x2="0" y2="1">
+            <stop offset="0" stopColor={deep} stopOpacity="0" />
+            <stop offset="1" stopColor={deep} stopOpacity="0.85" />
+          </linearGradient>
+        </defs>
+        <rect width="150" height="200" fill={`url(#${gid}-p)`} />
+        <rect width="150" height="200" fill={`url(#${gid}-h)`} />
+        <g transform="translate(25 22)">{renderScene(motif, C)}</g>
+        <rect y="104" width="150" height="96" fill={`url(#${gid}-s)`} />
+      </svg>
+    </span>
+  )
+}
+
+// The feature strip — never more than what is true. Party games carry a seat
+// range + «ضد الكمبيوتر»; staged games carry «مراحل»; a one-shot round carries
+// only its seat count.
+function coverFeatures(g, t) {
+  const cv = g?.cover || {}
+  const out = []
+  if (cv.players) out.push({ k: 'p', icon: 'customers', label: cv.players, ltr: true })
+  if (cv.stages) out.push({ k: 's', icon: 'layers', label: t.featStages })
+  if (cv.vsCpu) out.push({ k: 'c', icon: 'grid', label: t.featCpu })
+  return out
+}
+
 export default function GamesCenter({
   open, onClose, tenantId, tenant, items = [], lang = 'ar', table = null,
   onIdentify, onGamePlay,
   // Set when the guest arrived from an invite link (/join → menu?room=&game=).
   // The hub then skips promo and browse and drops straight onto that board.
   joinRoomId = '', joinGameId = '',
+  // Direct-open a single game through the NORMAL gate/lobby flow (used by the
+  // post-order «العب وأنت تنتظر» card). Default '' changes nothing: the effect
+  // below no-ops. Unlike joinGameId this needs no room — it simply drives the
+  // hub's own pickGame once, so registration is never bypassed.
+  openGameId = '',
 }) {
   const t = TXT[lang] || TXT.ar
   useScrollLock(open) // full-screen games hub: lock the menu behind it
@@ -686,6 +1248,29 @@ export default function GamesCenter({
     startGame(id)
   }, [store.registered, startGame, rememberScroll, enabled, t])
 
+  // Direct-open from the post-order wait card: run the guest's chosen game
+  // through the very same pickGame the shelves use, once per mount. It respects
+  // the gate (unregistered → registration first), routes a party game to the
+  // lobby, and simply does nothing when the id is empty or the venue disabled it.
+  const autoOpenedRef = useRef(false)
+  useEffect(() => {
+    if (!open || autoOpenedRef.current) return
+    if (!openGameId || !gameById(openGameId)) return
+    if (!enabled.some((g) => g.id === openGameId)) return
+    // Deferred to a macrotask on purpose: the hub's [tenantId] reset effect sets
+    // the initial view (promo/browse), and under StrictMode's double effect
+    // invoke it runs a second time AFTER this one — a synchronous pickGame here
+    // would be clobbered back to promo. A timeout lands the pick after the whole
+    // mount settles (the same reason the joinGameId path gets away with it: its
+    // enterRoom is async). Cleared on cleanup so it never fires post-unmount.
+    const id = setTimeout(() => {
+      if (autoOpenedRef.current) return
+      autoOpenedRef.current = true
+      pickGame(openGameId)
+    }, 0)
+    return () => clearTimeout(id)
+  }, [open, openGameId, enabled, pickGame])
+
   const submitGate = async (e) => {
     e?.preventDefault?.()
     const nm = String(form.name || '').trim()
@@ -950,41 +1535,53 @@ export default function GamesCenter({
   const inGame = view === 'play' && active
   const roomPending = !!room && room.status === 'lobby'
 
-  const renderCard = (g) => {
-    const art = gameArt(g, brand)
+  // One game cover: an original SVG scene under a large Arabic name and a
+  // truthful feature strip. `hero` renders the wider featured card for the
+  // leading party shelf. Every card is a single button wired to pickGame, so
+  // the gate / lobby / solo / room routing is entirely unchanged.
+  const renderCard = (g, opts = {}) => {
+    const hero = !!opts.hero
+    const pal = coverPalette(g)
     const best = store.best?.[g.id] || 0
     const hasResume = Boolean(resumeFor(g.id))
     const hasPrize = hasAnyReward || rewardGameIds.has(g.id)
+    const isNew = NEW_SET.has(g.id)
+    const feats = coverFeatures(g, t)
     return (
       <button
-        key={g.id}
+        key={opts.key || g.id}
         type="button"
-        className="gh-card gh-press"
-        style={{ '--card-hi': art.c[2], '--card-deep': art.c[0] }}
+        className={`gh-cover gh-press${hero ? ' gh-cover-hero' : ''}${opts.className ? ` ${opts.className}` : ''}`}
+        style={{ '--cd': pal[0], '--cm': pal[1], '--ch': pal[2] }}
         onClick={() => pickGame(g.id)}
+        aria-label={gameName(g, lang)}
       >
-        <span className="gh-card-art">
-          <GameThumb game={g} brand={brand} />
-          <span className="gh-card-chips">
-            {hasResume ? <span className="gh-chip gh-chip-resume"><Icon name="reload" size={11} />{t.resume}</span> : null}
-            {hasPrize ? <span className="gh-chip gh-chip-prize"><Icon name="offers" size={11} />{t.prize}</span> : null}
-          </span>
+        <CoverArt game={g} top={hero} />
+        <span className="gh-cover-sheen" aria-hidden="true" />
+        <span className="gh-cover-tl">
+          {isNew ? <span className="gh-tag-new">{t.newTag}</span> : null}
+          {hasResume ? <span className="gh-chip gh-chip-resume"><Icon name="reload" size={11} />{t.resume}</span> : null}
+          {hasPrize ? <span className="gh-chip gh-chip-prize"><Icon name="offers" size={11} />{t.prize}</span> : null}
         </span>
-        <span className="gh-card-body">
-          <strong className="gh-card-nm">{gameName(g, lang)}</strong>
-          <span className="gh-card-hook">{gameHook(g, lang)}</span>
-          <span className="gh-card-foot">
-            {best > 0 ? (
-              <>
-                <Icon name="star" size={11} />
-                <b>{fmt(best)}</b>
-                <em>{t.best}</em>
-              </>
-            ) : (
-              <em className="faint">{t.noBest}</em>
-            )}
-          </span>
+        {best > 0 ? (
+          <span className="gh-cover-best" title={t.best}><Icon name="star" size={11} />{fmt(best)}</span>
+        ) : null}
+        <span className="gh-cover-info">
+          <strong className="gh-cover-name">{gameName(g, lang)}</strong>
+          {hero ? <span className="gh-cover-hook">{gameHook(g, lang)}</span> : null}
+          {feats.length ? (
+            <span className="gh-feat-strip">
+              {feats.map((f) => (
+                <span key={f.k} className="gh-feat" dir={f.ltr ? 'ltr' : undefined}>
+                  <Icon name={f.icon} size={12} />{f.label}
+                </span>
+              ))}
+            </span>
+          ) : null}
         </span>
+        {hero ? (
+          <span className="gh-cover-cta"><Icon name="play" size={17} />{t.play}</span>
+        ) : null}
       </button>
     )
   }
@@ -1118,7 +1715,7 @@ export default function GamesCenter({
       ) : view === 'gate' ? (
         <form className="gh-body gh-gate gh-fade" onSubmit={submitGate}>
           <span className="gh-gate-art">
-            {pendingGame ? <GameThumb game={pendingGame} brand={brand} /> : null}
+            {pendingGame ? <CoverArt game={pendingGame} /> : null}
           </span>
           <strong className="gh-gate-title">{t.gateTitle}</strong>
           {pendingGame ? (
@@ -1301,19 +1898,44 @@ export default function GamesCenter({
               ) : null}
 
               {shown.map((c, si) => {
-                // The leading shelf (when the guest has not filtered) gets the
-                // hero treatment: bigger art, a reason to care, and room for
-                // its cards to breathe.
+                // The leading shelf (when the guest has not filtered) leads with
+                // a wide featured hero card; every shelf then scrolls as a
+                // horizontal row so the covers keep a consistent, poster-like
+                // ratio at both phone and TV widths.
                 const hero = si === 0 && cat === 'all' && c.hero
+                const [featGame, ...restGames] = c.games
+                const heading = (
+                  <h3 className={`gh-sect-h${hero ? ' gh-sect-h-hero' : ''}`}>
+                    <Icon name={c.icon} size={hero ? 16 : 14} />
+                    <span className="gh-sect-t">{lang === 'en' ? c.en : c.ar}</span>
+                    {c.tag && lang !== 'en' ? <em className="gh-sect-tag">{c.tag}</em> : null}
+                    <span className="gh-sect-n">{fmt(c.games.length)}</span>
+                  </h3>
+                )
+                if (hero && featGame) {
+                  // The featured card is a phone-only enhancement: on the phone
+                  // it leads full-width as a hero, with the rest in the shelf
+                  // below. On wider screens (tablet / venue TV) the hero is
+                  // hidden and the shelf carries EVERY party game as an equal
+                  // cover, so the row fills the width with no empty void. The
+                  // featured game is therefore rendered twice — once as the
+                  // phone hero, once as the shelf's wide-only lead — each with a
+                  // distinct React key so the two never collide.
+                  return (
+                    <section key={c.id} className="gh-sect gh-sect-hero">
+                      {heading}
+                      {renderCard(featGame, { hero: true, className: 'gh-only-phone', key: `${featGame.id}-hero` })}
+                      <div className="gh-shelf">
+                        {renderCard(featGame, { className: 'gh-only-wide', key: `${featGame.id}-lead` })}
+                        {restGames.map((g) => renderCard(g))}
+                      </div>
+                    </section>
+                  )
+                }
                 return (
-                  <section key={c.id} className={`gh-sect${hero ? ' gh-sect-hero' : ''}`}>
-                    <h3 className="gh-sect-h">
-                      <Icon name={c.icon} size={hero ? 16 : 14} />
-                      <span className="gh-sect-t">{lang === 'en' ? c.en : c.ar}</span>
-                      {c.tag && lang !== 'en' ? <em className="gh-sect-tag">{c.tag}</em> : null}
-                      <span className="gh-sect-n">{fmt(c.games.length)}</span>
-                    </h3>
-                    <div className={`gh-grid${hero ? ' gh-grid-hero' : ''}`}>{c.games.map(renderCard)}</div>
+                  <section key={c.id} className="gh-sect">
+                    {heading}
+                    <div className="gh-shelf">{c.games.map((g) => renderCard(g))}</div>
                   </section>
                 )
               })}
