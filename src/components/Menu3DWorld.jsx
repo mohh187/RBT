@@ -8,6 +8,7 @@ import ItemFx from './ItemFx.jsx'
 import DishHotspots from './DishHotspots.jsx'
 import { Price } from './Riyal.jsx'
 import { Spinner } from './ui.jsx'
+import { can3D } from './ARViewer.jsx'
 
 /**
  * Menu3DWorld — «عالم المنيو ثلاثي الأبعاد».
@@ -65,6 +66,10 @@ export default function Menu3DWorld({ open, onClose, items = [], cats = [], lang
   const reduced = usePrefersReduced()
 
   const [mv, setMv] = useState('loading') // loading | ready | error
+  // Decided once: does this device even have WebGL and enough muscle for 3D? On a
+  // bottom-tier phone this whole world (it mounts up to 3 live contexts) is what
+  // would OOM the tab, so we decline it up-front and never import model-viewer.
+  const [capable] = useState(() => can3D())
   const [active, setActive] = useState(0)
   const [arFailed, setArFailed] = useState(false)
   const [loaded, setLoaded] = useState(() => ({}))
@@ -86,7 +91,7 @@ export default function Menu3DWorld({ open, onClose, items = [], cats = [], lang
 
   // Load the custom element only once the world is actually opened (heavy bundle).
   useEffect(() => {
-    if (!open) return undefined
+    if (!open || !capable) return undefined
     let alive = true
     setMv('loading')
     import('../lib/ar3d.js')
@@ -94,7 +99,7 @@ export default function Menu3DWorld({ open, onClose, items = [], cats = [], lang
       .then(() => { if (alive) setMv('ready') })
       .catch(() => { if (alive) setMv('error') })
     return () => { alive = false }
-  }, [open])
+  }, [open, capable])
 
   // Fresh state each time the world opens.
   useEffect(() => {
@@ -188,6 +193,12 @@ export default function Menu3DWorld({ open, onClose, items = [], cats = [], lang
           <span className="m3d-empty-orb" aria-hidden="true"><Icon name="layers" size={30} /></span>
           <strong>{ar ? 'لا توجد مجسمات بعد' : 'No 3D dishes yet'}</strong>
           <p>{ar ? 'حوّل أصنافك إلى مجسمات من محرر الصنف، وستظهر هنا في عالم ثلاثي الأبعاد.' : 'Turn your items into 3D models from the item editor and they will appear here.'}</p>
+        </div>
+      ) : !capable ? (
+        <div className="m3d-empty">
+          <span className="m3d-empty-orb" aria-hidden="true"><Icon name="shapes" size={30} /></span>
+          <strong>{ar ? 'جهازك لا يدعم العرض ثلاثي الأبعاد' : "Your device can't show 3D"}</strong>
+          <p>{ar ? 'يمكنك تصفّح صور الأصناف كالمعتاد من القائمة.' : 'You can browse the item photos as usual from the menu.'}</p>
         </div>
       ) : mv === 'error' ? (
         <div className="m3d-empty">

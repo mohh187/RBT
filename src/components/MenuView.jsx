@@ -45,6 +45,7 @@ import { getLocalCustomer, setLocalCustomer, isRegisterDismissed, dismissRegiste
 import { resolveSkin } from '../lib/skins.js'
 import { distanceMeters, getPosition } from '../lib/geo.js'
 import { startPayment } from '../lib/payments.js'
+import ARViewer from './ARViewer.jsx'
 import EditorialLayout, { EditorialItemStage, buttonSkinVars, EditorialRoomBg } from './menuThemes/EditorialLayout.jsx'
 import OceanArtLayout from './menuThemes/OceanArtLayout.jsx'
 import ChromeSkin from './ChromeSkin.jsx'
@@ -1945,15 +1946,11 @@ export function ItemSheet({ item, tenant, currency, tenantId, onClose, onAdd, de
 // skin. Renders <model-viewer>: real AR via Scene Viewer (Android) / Quick Look
 // (iOS) with camera-controls 3D preview inline. Loaded lazily (heavy bundle).
 function ArStage({ item, tenant, lang, onClose }) {
-  const [state, setState] = useState('loading') // loading | ready | error
-  useEffect(() => {
-    let alive = true
-    import('../lib/ar3d.js')
-      .then((m) => m.loadModelViewer())
-      .then(() => { if (alive) setState('ready') })
-      .catch(() => { if (alive) setState('error') })
-    return () => { alive = false }
-  }, [])
+  const ar = lang === 'ar'
+  // <ARViewer> owns loading/unsupported/error + the single-context teardown; we
+  // keep its coarse phase to gate our own hint, and forward the AR-session status.
+  const [phase, setPhase] = useState('loading') // loading | ready | unsupported | error
+  const [arFailed, setArFailed] = useState(false)
   useEffect(() => {
     const onKey = (e) => { if (e.key === 'Escape') onClose() }
     window.addEventListener('keydown', onKey)
@@ -1964,40 +1961,23 @@ function ArStage({ item, tenant, lang, onClose }) {
   // iPhone Quick Look accepts ONLY USDZ — the realistic pipeline stores one
   // alongside the GLB (item.model3dUsdzUrl); an uploaded .usdz main model works too.
   const usdz = item.model3dUsdzUrl || (isUsdzMain ? item.model3dUrl : '')
-  const ar = lang === 'ar'
-  // Honest AR feedback: model-viewer reports 'ar-status' failed when the OS
-  // can't start AR (missing ARCore, in-app browser, unsupported device).
-  const [arFailed, setArFailed] = useState(false)
-  const bindAr = (el) => {
-    if (!el || el._rbtArBound) return
-    el._rbtArBound = true
-    el.addEventListener('ar-status', (e) => { if (e?.detail?.status === 'failed') setArFailed(true) })
-  }
+  const name = ar ? (item.nameAr || item.nameEn) : (item.nameEn || item.nameAr)
   return (
     <div className="ar-stage" data-artheme={tenant?.ar?.style || 'noir'} onClick={(e) => e.stopPropagation()}>
       <div className="ar-stage-head">
-        <strong>{ar ? (item.nameAr || item.nameEn) : (item.nameEn || item.nameAr)}</strong>
+        <strong>{name}</strong>
         <button type="button" className="icon-btn" onClick={onClose} aria-label="close" style={{ color: 'inherit' }}><Icon name="close" size={20} /></button>
       </div>
       <div className="ar-stage-body" style={{ position: 'relative' }}>
-        {state === 'loading' && <div className="center" style={{ height: '100%' }}><Spinner /></div>}
-        {state === 'error' && <p className="small" style={{ textAlign: 'center', opacity: 0.8, padding: 24 }}>{ar ? 'تعذر تحميل عارض المجسمات — تحقق من اتصالك' : 'Could not load the 3D viewer'}</p>}
-        {state === 'ready' && (glb || usdz) && (
-          <model-viewer
-            ref={bindAr}
-            src={glb || undefined}
-            ios-src={usdz || undefined}
-            ar=""
-            ar-modes="scene-viewer webxr quick-look"
-            ar-scale="auto"
-            camera-controls=""
-            auto-rotate=""
-            shadow-intensity="1"
-            loading="eager"
-            style={{ width: '100%', height: '100%', background: 'transparent' }}
-          />
-        )}
-        {state === 'ready' && <ItemFx kind={item.effect} scale={1.4} />}
+        <ARViewer
+          glb={glb}
+          usdz={usdz}
+          alt={name}
+          lang={lang}
+          onPhaseChange={setPhase}
+          onArStatus={(s) => { if (s === 'failed') setArFailed(true) }}
+        />
+        {phase === 'ready' && <ItemFx kind={item.effect} scale={1.4} />}
       </div>
       {arFailed ? (
         <p className="ar-stage-hint" style={{ color: 'var(--danger, #e5484d)' }}>
@@ -2005,9 +1985,9 @@ function ArStage({ item, tenant, lang, onClose }) {
             ? 'تعذر بدء الواقع المعزز على هذا الجهاز: على أندرويد ثبّت «Google Play Services for AR» من المتجر وافتح الرابط في Chrome نفسه (لا من متصفح داخل تطبيق آخر)، وعلى آيفون افتح في Safari.'
             : 'AR could not start: on Android install "Google Play Services for AR" and open in Chrome itself (not an in-app browser); on iPhone use Safari.'}
         </p>
-      ) : (
+      ) : (phase !== 'unsupported' && phase !== 'error') ? (
         <p className="ar-stage-hint">{ar ? 'اضغط أيقونة AR داخل العارض ثم وجّه الكاميرا إلى الطاولة — سيقف الصنف عليها فعلياً.' : 'Tap the AR icon inside the viewer and point at your table.'}</p>
-      )}
+      ) : null}
     </div>
   )
 }

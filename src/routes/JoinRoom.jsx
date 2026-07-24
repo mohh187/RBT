@@ -37,6 +37,33 @@ import '../styles/room.css'
 
 const MAX_NAME = 24
 
+// Mirror the invite-link registration into the games hub's per-device store.
+// The hub gates on `store.registered` read from `rbt_games_<tid>` — NOT from
+// `ml.customer`, which is all this page used to write. Without this seed an
+// invited guest who registered right here is asked for their name and phone
+// AGAIN the first time they open any game, and the venue's tournament cards
+// stay hidden from them. One write, so a single registration counts everywhere.
+//
+// The key string and the fields (`registered`, `name`, `phone`, `promoSeen`)
+// MUST stay identical to src/components/GamesCenter.jsx (`storeKey` / the
+// `EMPTY_STORE` shape / what its own gate writes in `submitGate`). The hub only
+// ever READS this store, so writing it from here can never fight the hub. We
+// merge onto whatever is already there so a returning guest keeps their best
+// scores, points and resume state. `tid` here is the tenant DOCUMENT id from
+// the /join/:tid route — the very id MenuView resolves the slug to — so both
+// sides address the same `rbt_games_<id>` key.
+const gamesStoreKey = (tid) => `rbt_games_${tid || 'x'}`
+function seedGamesRegistration(tid, { name, phone }) {
+  try {
+    const key = gamesStoreKey(tid)
+    let prev = {}
+    try { prev = JSON.parse(localStorage.getItem(key) || '{}') || {} } catch (_) { prev = {} }
+    if (prev.registered && prev.name) return // already known here; don't stomp
+    const next = { ...prev, registered: true, name, phone: phone || '', promoSeen: true }
+    localStorage.setItem(key, JSON.stringify(next))
+  } catch (_) { /* storage off — the guest still plays, worst case re-registers once */ }
+}
+
 export default function JoinRoom() {
   const { tid, roomId } = useParams()
   const [sp] = useSearchParams()
@@ -137,6 +164,8 @@ export default function JoinRoom() {
     try {
       const { seat } = await joinRoom({ tid, roomId, player: { id: myId, name: nm, phone } })
       setLocalCustomer({ name: nm, phone })
+      // ...and into the games hub's own store, so the hub's gate never re-asks.
+      seedGamesRegistration(tid, { name: nm, phone })
       // CRM registration is best-effort and never blocks getting into the game.
       if (phone) registerCustomer(tid, { name: nm, phone }).catch(() => {})
       heartbeat({ tid, roomId, playerId: myId })

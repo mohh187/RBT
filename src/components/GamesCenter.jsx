@@ -1029,6 +1029,15 @@ export default function GamesCenter({
     // tomorrow — the room doc itself is not queryable by participant.
     rememberRoom(tenantId, rid)
     setRoomId(rid)
+    // Re-assert the active game AFTER the await. On the invite mount `setActiveId`
+    // above (line ~1012) runs before `g.load()`, then the [tenantId] reset effect
+    // fires later in the same mount and clobbers activeId back to null — so by the
+    // time we land here `view` becomes 'play' but `active` would be null and the
+    // board never mounts (the render falls through to the browse shelf). `id` was
+    // captured at the top of enterRoom, so it survives the clobber. On the lobby
+    // and solo paths this is a harmless no-op (id is already the active game).
+    setActiveId(id)
+    activeRef.current = id
     setView('play')
     setRunKey((k) => k + 1)
   }, [tenantId, enabled, t])

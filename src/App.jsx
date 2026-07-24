@@ -2,7 +2,7 @@ import { lazy, Suspense, useEffect, useState } from 'react'
 import { Routes, Route, Navigate, useLocation, useNavigate } from 'react-router-dom'
 import { useAuth } from './lib/auth.jsx'
 import { useI18n } from './lib/i18n.jsx'
-import ChunkBoundary from './components/ChunkBoundary.jsx'
+import ErrorBoundary from './components/ErrorBoundary.jsx'
 import { CAP } from './lib/permissions.js'
 import { FullSpinner } from './components/ui.jsx'
 import { isPlatformHost, resolveHostVenue } from './lib/domains.js'
@@ -294,10 +294,13 @@ export default function App() {
       <OfflineBanner />
       <UploadProgress />
       <LiquidFilters />
-    {/* Routes are code-split, so a dead network or a fresh deploy can make a
-        chunk fetch fail. Without this boundary that throw unmounts everything
-        and the visitor gets a white screen. */}
-    <ChunkBoundary routeKey={location.pathname} lang={lang}>
+    {/* Route-level boundary. Two jobs: (1) a dead network or fresh deploy can
+        make a code-split chunk fetch fail — that self-heals with one reload;
+        (2) a genuine render crash in ONE screen now shows an inline recovery
+        card RIGHT HERE, while the app shell above (offline banner, uploads)
+        stays mounted — instead of blanking or re-throwing to the full-screen
+        root. resetKey=path so navigating to another screen clears it. */}
+    <ErrorBoundary variant="route" resetKey={location.pathname} lang={lang} label={location.pathname}>
     <Suspense fallback={<FullSpinner />}>
     <Routes>
       {/* public marketing + auth (venue menu at root on a custom domain) */}
@@ -565,7 +568,7 @@ export default function App() {
       <Route path="*" element={<NotFound />} />
     </Routes>
     </Suspense>
-    </ChunkBoundary>
+    </ErrorBoundary>
     </>
   )
 }

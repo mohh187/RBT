@@ -53,7 +53,7 @@ import TablePaint from './TablePaint.jsx'
 // to the venue's chosen start second and loops the chosen window, leaving the
 // muted/autoplay/loop attributes untouched so iOS autoplay survives.
 import { useVideoTrim } from '../../lib/useVideoTrim.js'
-import { loadModelViewer } from '../../lib/ar3d.js'
+import ARViewer from '../ARViewer.jsx'
 import '../../styles/menuwall.css'
 
 // Built by a parallel agent — lazy + catch so a missing module never crashes
@@ -1668,16 +1668,13 @@ export function EditorialItemStage({ item, tenant = null, currency, onClose, onA
   // stage never offered them, so from this theme they were unreachable. The
   // viewer library is loaded only when the guest actually asks for it.
   const [arOpen, setArOpen] = useState(false)
-  const [arReady, setArReady] = useState(false)
+  // Loading/unsupported/error is now owned by <ARViewer> (it guards WebGL, keeps
+  // exactly one live context, and tears it down on close). We only track its
+  // coarse phase so the "drag to rotate" hint hides when there is no live model.
+  const [arPhase, setArPhase] = useState('')
   const glbSrc = item.model3dUrl && !/\.usdz(\?|$)/i.test(item.model3dUrl) ? item.model3dUrl : (item.arStandeeUrl || '')
   const usdzSrc = item.model3dUsdzUrl || (/\.usdz(\?|$)/i.test(item.model3dUrl || '') ? item.model3dUrl : '')
   const arOk = (tenant ? tenant.ar?.enabled !== false : true) && !!(glbSrc || usdzSrc)
-  useEffect(() => {
-    if (!arOpen) return undefined
-    let alive = true
-    loadModelViewer().then(() => { if (alive) setArReady(true) }).catch(() => {})
-    return () => { alive = false }
-  }, [arOpen])
   // The FLIP is the stage's own entrance. When there is no origin rect (opened
   // from a pairing chip) there is no FLIP, so the dish plays the entrance the
   // venue chose for it instead of simply appearing.
@@ -2016,28 +2013,16 @@ export function EditorialItemStage({ item, tenant = null, currency, onClose, onA
           <button type="button" className="edt-stg-x edt-ar-x" onClick={() => setArOpen(false)} aria-label={t('close')}>
             <Icon name="close" size={20} />
           </button>
-          {arReady ? (
-            <model-viewer
-              class="edt-ar-viewer"
-              src={glbSrc || undefined}
-              ios-src={usdzSrc || undefined}
-              alt={name}
-              ar=""
-              ar-modes="scene-viewer webxr quick-look"
-              ar-scale="auto"
-              camera-controls=""
-              auto-rotate=""
-              exposure="1"
-              loading="eager"
-            />
-          ) : (
-            <div className="edt-ar-wait">{ar ? 'جارٍ تحميل المجسّم…' : 'Loading the model…'}</div>
+          <div className="edt-ar-viewer">
+            <ARViewer glb={glbSrc} usdz={usdzSrc} alt={name} lang={lang} onPhaseChange={setArPhase} />
+          </div>
+          {arPhase !== 'unsupported' && arPhase !== 'error' && (
+            <p className="edt-ar-hint">
+              {ar
+                ? 'حرّك بإصبعك لتدويره — وزر AR داخل العارض يضعه على طاولتك إن دعم جهازك ذلك.'
+                : 'Drag to rotate — the AR button inside places it on your table where the device supports it.'}
+            </p>
           )}
-          <p className="edt-ar-hint">
-            {ar
-              ? 'حرّك بإصبعك لتدويره — وزر AR داخل العارض يضعه على طاولتك إن دعم جهازك ذلك.'
-              : 'Drag to rotate — the AR button inside places it on your table where the device supports it.'}
-          </p>
         </div>
       )}
     </div>,
