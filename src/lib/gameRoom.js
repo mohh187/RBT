@@ -138,6 +138,7 @@ const ERRORS = {
   'not-your-turn': 'انتظر دورك.',
   'not-playing': 'الجولة غير جارية الآن.',
   'state-too-big': 'حالة اللعبة كبيرة جداً على غرفة واحدة.',
+  'bad-state': 'تعذّر حفظ حالة اللعبة. حدّث الصفحة وأعد المحاولة.',
   permission: 'لا تملك صلاحية الوصول لهذه الغرفة.',
   offline: 'أنت غير متصل بالإنترنت.',
 }
@@ -148,6 +149,10 @@ export function roomErrorText(err) {
   if (ERRORS[code]) return ERRORS[code]
   if (String(code).includes('permission-denied')) return ERRORS.permission
   if (String(code).includes('unavailable')) return ERRORS.offline
+  // A data-shape rejection from the Firestore SDK (e.g. an unsupported value)
+  // used to fall through to the opaque generic message — the nested-array
+  // room-start bug hid here for exactly this reason. Name it instead.
+  if (String(code).includes('invalid-argument')) return ERRORS['bad-state']
   return 'حدث خطأ غير متوقع. أعد المحاولة.'
 }
 
@@ -182,10 +187,41 @@ function assertStateSize(state) {
   const n = stateBytes(state)
   if (n > MAX_STATE_BYTES) fail('state-too-big')
   if (n > SOFT_STATE_BYTES) {
-     
+
     console.warn(`[gameRoom] state is ${n} bytes — over the ${SOFT_STATE_BYTES} soft budget. Trim it before it hits ${MAX_STATE_BYTES}.`)
   }
   return state
+}
+
+// STATE IS PERSISTED AS A JSON STRING, not a nested object.
+//
+// Firestore forbids NESTED ARRAYS — an array whose own elements are arrays.
+// Several games' states use exactly that: Wist / Haree / Jackaroo hold
+// `hands: [[], [], [], []]` and Ludo holds `tokens: [[...], ...]`. The client
+// SDK rejects such a write LOCALLY with `invalid-argument: Nested arrays are
+// not supported` before the RPC ever leaves the device, so every multiplayer
+// round of those games failed the instant startGame wrote the deal — surfacing
+// as the opaque «حدث خطأ غير متوقع». (Confirmed by real-browser reproduction:
+// Dominoes, whose state has no nested array, started fine; Wist did not.)
+//
+// Encoding the whole state object as one string sidesteps the entire class:
+// a string has no array structure for Firestore to object to, it stays opaque
+// to the security rules (which only inspect roomId / gameId / players / moves),
+// and it costs nothing but a stringify/parse. Encode on every write, decode on
+// every read. A legacy room whose `state` is still a plain object decodes
+// unchanged, so nothing in flight breaks during rollout.
+function encodeState(state) {
+  try { return JSON.stringify(stripUndefined(state) ?? {}) } catch (_) { return '{}' }
+}
+function decodeState(state) {
+  if (typeof state === 'string') {
+    try { return JSON.parse(state) } catch (_) { return {} }
+  }
+  return state || {}
+}
+function decodeRoom(room) {
+  if (!room || !('state' in room)) return room
+  return { ...room, state: decodeState(room.state) }
 }
 
 // NO PHONE NUMBER GOES IN HERE. A room document is world-readable AND
@@ -296,7 +332,7 @@ export async function createRoom({
     // No turn until the host starts; games that want a clock set turnMs.
     turn: { seat: 0, startedAt: 0, deadlineAt: null },
     turnMs: Math.max(0, Number(turnMs) || 0),
-    state: stripUndefined(initialState) || {},
+    state: encodeState(initialState),
     moves: [],
     winnerSeat: null,
     endedAt: null,
@@ -417,7 +453,7 @@ export async function startGame({ tid, roomId, playerId, initialState, turnMs, f
     }
     if (initialState !== undefined) {
       assertStateSize(initialState)
-      patch.state = stripUndefined(initialState) || {}
+      patch.state = encodeState(initialState)
     }
     if (ms) patch.turnMs = ms
     tx.update(ref, patch)
@@ -449,7 +485,7 @@ export async function applyMove({ tid, roomId, seat, move, reduce, allowOutOfTur
     const ref = roomRef(tid, roomId)
     const snap = await tx.get(ref)
     if (!snap.exists()) fail('not-found')
-    const room = { id: snap.id, ...snap.data() }
+    const room = decodeRoom({ id: snap.id, ...snap.data() })
     const now = Date.now()
 
     if (room.status !== 'playing') fail(room.status === 'ended' ? 'ended' : 'not-playing')
@@ -493,7 +529,7 @@ export async function applyMove({ tid, roomId, seat, move, reduce, allowOutOfTur
     const moves = [...(Array.isArray(room.moves) ? room.moves : []), entry].slice(-MAX_MOVES)
 
     const patch = {
-      state: stripUndefined(out.state) ?? {},
+      state: encodeState(out.state),
       moves,
       updatedAt: now,
     }
@@ -533,7 +569,8 @@ export async function applyMove({ tid, roomId, seat, move, reduce, allowOutOfTur
     }
 
     tx.update(ref, patch)
-    return { applied: true, state: patch.state, status: patch.status || room.status }
+    // return the DECODED state object, never the stored string
+    return { applied: true, state: out.state, status: patch.status || room.status }
   }))
 }
 
@@ -556,10 +593,10 @@ export function watchRoom(tid, roomId, cb, onError) {
         cb?.(null, err)
         return
       }
-      cb?.({ id: snap.id, ...snap.data() }, null)
+      cb?.(decodeRoom({ id: snap.id, ...snap.data() }), null)
     },
     (err) => {
-       
+
       console.warn('[gameRoom] watchRoom', err?.code || err)
       cb?.(null, err)
       onError?.(err)
@@ -726,5 +763,5 @@ export function inviteUrl(tid, roomId, slug, tableToken) {
 export async function getRoom(tid, roomId) {
   if (!firebaseReady || !tid || !roomId) return null
   const snap = await getDoc(roomRef(tid, roomId)).catch(() => null)
-  return snap && snap.exists() ? { id: snap.id, ...snap.data() } : null
+  return snap && snap.exists() ? decodeRoom({ id: snap.id, ...snap.data() }) : null
 }
