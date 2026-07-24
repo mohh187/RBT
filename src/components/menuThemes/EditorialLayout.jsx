@@ -1155,13 +1155,25 @@ function bgVideoStyle(bg) {
 // The backdrop layer. Mounted as a direct child of the photo box (list) or the
 // hero band (stage) so it fills that whole area, always behind the dish, always
 // transparent to touch, and never anywhere near a line of text.
-function EdtBackdrop({ bg }) {
+function EdtBackdrop({ bg, active = true }) {
   // The hook runs unconditionally (Rules of Hooks — the early returns come
   // after it). bg.trim arrives resolved from the contract (resolveComposition
   // reads item.bgVideoTrim); the theme adds no parsing of its own. Under
   // prefers-reduced-motion the trim still applies: loadedmetadata seeks to the
   // start second, so the held first frame is the TRIMMED first frame.
   const trimRef = useVideoTrim(bg && bg.kind === 'video' ? bg.trim : null)
+  // A backdrop video keeps a hardware decoder alive as long as it plays, and
+  // mobile hard-caps decoders — a menu with several video-backdrop dishes
+  // scrolling by would pin N of them and blow the memory ceiling («تنكسر
+  // الصفحة»). Pause the moment the dish is not the one on screen; resume when
+  // it is. This is independent of the near-gate that unmounts far sections.
+  useEffect(() => {
+    const v = trimRef.current
+    if (!v) return undefined
+    if (active) { const p = v.play(); if (p) p.catch(() => {}) }
+    else { try { v.pause() } catch (_) { /* ignore */ } }
+    return undefined
+  }, [active, trimRef])
   if (!bg) return null
   if (bg.kind === 'video') {
     // A moving backdrop is motion like any other: under prefers-reduced-motion
@@ -1171,7 +1183,7 @@ function EdtBackdrop({ bg }) {
       <video
         ref={trimRef}
         className="edt-backdrop" style={bgVideoStyle(bg)} src={bg.url} aria-hidden="true"
-        autoPlay={!still} loop={!still} preload={still ? 'metadata' : 'auto'}
+        autoPlay={!still && active} loop={!still} preload={still ? 'metadata' : 'auto'}
         muted playsInline
       />
     )
@@ -1207,7 +1219,7 @@ function EdtBackdrop({ bg }) {
 //     tree order and follows the same lift translate, so the squashed ground
 //     shadow stays glued to the plate base a table has seated lower.
 // With tilt 0 the box is null and this renders byte-identically to before.
-function EdtDish({ comp, src, anim = '', bind = null, onLoad = null, fallback = 64, lift = 0, ratio = 0 }) {
+function EdtDish({ comp, src, anim = '', bind = null, onLoad = null, fallback = 64, lift = 0, ratio = 0, loading = '' }) {
   const box = imgTiltBoxStyle(comp.img, lift)
   const photo = imgStyle(comp.img, comp.shadow) || {}
   const style = { ...photo }
@@ -1219,7 +1231,7 @@ function EdtDish({ comp, src, anim = '', bind = null, onLoad = null, fallback = 
   if (src && ratio > 0) style.aspectRatio = String(ratio)
   const has = Object.keys(style).length > 0
   const dish = src
-    ? <img className="edt-dish" ref={bind} onLoad={onLoad} src={src} alt="" decoding="async" style={has ? style : undefined} />
+    ? <img className="edt-dish" ref={bind} onLoad={onLoad} src={src} alt="" decoding="async" loading={loading || undefined} style={has ? style : undefined} />
     : <span className="edt-noimg"><Icon name="coffee" size={fallback} /></span>
   const fx = comp.fx ? (
     <span className="edt-fx" aria-hidden="true" style={style.transform ? { transform: style.transform } : undefined}>
@@ -1439,17 +1451,34 @@ function EdtSection({ it, idx, catLabel, currency, offers, lang, t, onOpen, allI
   const ref = useRef(null)
   const { fit, bind, nodeRef, onLoad } = useImgFit()
   const [inview, setInview] = useState(false)
+  // THE MEMORY GATE. A dish's heavy media — the photo, the video backdrop, the
+  // WebGL/3D props, the effect layers — is mounted only while the section is
+  // NEAR the viewport, and unmounted once it scrolls far away. Without this,
+  // every one of a venue's 50+ full-screen dishes keeps its decoded photo (up
+  // to ~10 MB each) and any video decoder alive at once, which is exactly the
+  // out-of-memory that crashes a weak phone on a heavy menu («تنكسر الصفحة»).
+  // content-visibility helps ONLY on iOS 18+/modern Chrome; unmounting the
+  // subtree bounds memory on EVERY engine, including the iOS 15-17 phones that
+  // ignore content-visibility. The section itself keeps min-height:var(--edt-h)
+  // (index.css) so removing the media never collapses it or jumps the scroll,
+  // and FLIP still works because a dish can only be tapped while it is near.
+  // The first few start mounted (above the fold, no first-paint blank).
+  const [near, setNear] = useState(idx < 3)
   const [added, setAdded] = useState('')
   const addedTimer = useRef(0)
   useEffect(() => {
     const el = ref.current
     // No observer means no arrival signal, and the entrance animation below
     // starts the photo at opacity 0 — so fall straight through to "arrived"
-    // rather than leaving a dish permanently invisible.
-    if (!el || typeof IntersectionObserver === 'undefined') { setInview(true); return undefined }
+    // (and "near", so the media mounts) rather than leaving a dish invisible.
+    if (!el || typeof IntersectionObserver === 'undefined') { setInview(true); setNear(true); return undefined }
     const io = new IntersectionObserver((entries) => entries.forEach((e) => setInview(e.isIntersecting)), { threshold: 0.35 })
+    // A wide margin so a dish's media is ready ~1.5 screens before it appears
+    // and released ~1.5 screens after it leaves — the swap never shows on screen.
+    const nearIo = new IntersectionObserver((entries) => entries.forEach((e) => setNear(e.isIntersecting)), { rootMargin: '150% 0px' })
     io.observe(el)
-    return () => io.disconnect()
+    nearIo.observe(el)
+    return () => { io.disconnect(); nearIo.disconnect() }
   }, [])
   useEffect(() => () => clearTimeout(addedTimer.current), [])
 
@@ -1505,15 +1534,23 @@ function EdtSection({ it, idx, catLabel, currency, offers, lang, t, onOpen, allI
         <span className="edt-glow" aria-hidden="true" />
         {/* the material the dish stands on + its garnish scatter: the behind
             layer paints under the photo, the front layer over it. Arrival is
-            tied to the same in-view flag the text uses. */}
-        <DishProps item={dpItem} active={inview} catName={catLabel} />
-        <EdtBackdrop bg={comp.bg} />
-        <EdtLayers list={comp.layers.behind} />
-        <EdtDish comp={comp} src={it.imageUrl} anim={animAttr(comp)} bind={bind} onLoad={onLoad} fallback={64} lift={secTable ? secTable.lift : 0} />
-        <EdtLayers list={comp.layers.front} />
+            tied to the same in-view flag the text uses. Mounted only while
+            NEAR the viewport (the memory gate above); the .edt-photo box and
+            the section keep their reserved height, so nothing collapses. The
+            photo is lazily loaded so a cold, fast scroll never decodes a dish
+            the diner shot past. */}
+        {near ? (
+          <>
+            <DishProps item={dpItem} active={inview} catName={catLabel} />
+            <EdtBackdrop bg={comp.bg} active={inview} />
+            <EdtLayers list={comp.layers.behind} />
+            <EdtDish comp={comp} src={it.imageUrl} anim={animAttr(comp)} bind={bind} onLoad={onLoad} fallback={64} lift={secTable ? secTable.lift : 0} loading="lazy" />
+            <EdtLayers list={comp.layers.front} />
+          </>
+        ) : null}
         <span className="edt-vignette" aria-hidden="true" />
         <button type="button" className="edt-photo-open" onClick={open} aria-label={name} tabIndex={-1} disabled={out} />
-        {it.hotspots?.length ? <Suspense fallback={null}><DishHotspots hotspots={it.hotspots} /></Suspense> : null}
+        {near && it.hotspots?.length ? <Suspense fallback={null}><DishHotspots hotspots={it.hotspots} /></Suspense> : null}
       </div>
       <div className="edt-main">
         <EdtTable tb={secTable} />
