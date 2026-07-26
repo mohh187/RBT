@@ -319,11 +319,17 @@ service cloud.firestore {
         // list/query: staff only (prevents enumerating all orders).
         allow list: if isStaff(tid);
         // A suspended venue (active == false) stops accepting orders.
+        // BOTH tenant reads go through .get() WITH A DEFAULT: rules ERROR on a
+        // direct read of a missing key, and an errored condition denies the
+        // write. Most tenants never touched the pause toggle, so ordersPaused
+        // does not exist on their doc — every diner order at those venues was
+        // rejected as permission-denied («المتجر لا يستقبل الطلبات حالياً»
+        // at كافيه مزاج فال, confirmed by reading the live doc: no such field).
         allow create: if true
-          && get(/databases/$(database)/documents/tenants/$(tid)).data.active != false
+          && get(/databases/$(database)/documents/tenants/$(tid)).data.get('active', true) != false
           // ordering paused (kitchen slammed / closed early) blocks diner orders;
           // staff (cashier) may still ring up at the counter.
-          && (get(/databases/$(database)/documents/tenants/$(tid)).data.ordersPaused != true || isStaff(tid))
+          && (get(/databases/$(database)/documents/tenants/$(tid)).data.get('ordersPaused', false) != true || isStaff(tid))
           // 'pending' = cash/terminal (reaches staff now); 'awaiting_payment' =
           // online, held until the payment settles (server flips it to 'pending').
           && (request.resource.data.status == 'pending'
