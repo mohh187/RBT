@@ -56,6 +56,7 @@ import { useVideoTrim } from '../../lib/useVideoTrim.js'
 import ARViewer from '../ARViewer.jsx'
 import { basePrice, variantHasOwnPrice } from '../../lib/pricing.js'
 import { scrollSectionIntoView, scrollSectionToTop, stuckOffset } from '../../lib/scrollToSection.js'
+import { hasWebGL, preferLightweight, heavyLayerBudget } from '../../lib/deviceCaps.js'
 import '../../styles/menuwall.css'
 
 // Built by a parallel agent — lazy + catch so a missing module never crashes
@@ -933,7 +934,7 @@ const prefersStill = () => { try { return window.matchMedia('(prefers-reduced-mo
 // be paged out.
 const isNarrow = () => { try { return window.matchMedia('(max-width: 820px)').matches } catch (_) { return false } }
 
-function EdtDecorPiece({ d, mv, rtl }) {
+function EdtDecorPiece({ d, mv, rtl, allow3d = null }) {
   const { place, blend, dur } = decorPlace(d, rtl)
   const outer = blend ? { mixBlendMode: blend } : undefined
   const motion = d.motion || undefined
@@ -960,7 +961,7 @@ function EdtDecorPiece({ d, mv, rtl }) {
           // anyway, so the piece was invisible cost. On a narrow viewport we render
           // only the light pool (glow) where the 3D piece would sit; the full 3D
           // stays on desktop/tablet where the memory budget is real.
-          ? (mv && !isNarrow() ? (
+          ? ((mv && (allow3d ? allow3d.has(d.id) : true)) ? (
             <model-viewer
               class="edt-dec-mv" data-motion={spin3d ? undefined : motion} style={art} src={d.url}
               interaction-prompt="none" loading="lazy" disable-zoom="" disable-tap=""
@@ -980,7 +981,7 @@ function EdtDecorPiece({ d, mv, rtl }) {
 // back (on the wall, under the content), front (over the content) and top
 // (clear of even the sticky bars).
 const DEPTH_TIERS = ['back', 'front', 'top']
-function EdtDecorZones({ anchors, byAnchor, mv, rtl }) {
+function EdtDecorZones({ anchors, byAnchor, mv, rtl, allow3d = null }) {
   const out = []
   anchors.forEach((a) => {
     const list = byAnchor[a] || []
@@ -993,7 +994,7 @@ function EdtDecorZones({ anchors, byAnchor, mv, rtl }) {
           key={`${a}-${depth}`} className="edt-dec-zone"
           data-anchor={a} data-depth={depth} aria-hidden="true"
         >
-          {part.map((d, i) => <EdtDecorPiece key={`${d.id}-${i}`} d={d} mv={mv} rtl={rtl} />)}
+          {part.map((d, i) => <EdtDecorPiece key={`${d.id}-${i}`} d={d} mv={mv} rtl={rtl} allow3d={allow3d} />)}
         </span>,
       )
     })
@@ -1338,7 +1339,35 @@ export default function EditorialLayout({ tenant = null, cats, itemsByCat, visib
   const decor = useMemo(() => resolveDecor(tenant), [JSON.stringify(tenant && tenant.menuDecor) || '']) // eslint-disable-line react-hooks/exhaustive-deps
   // don't even import the ~450KB model-viewer runtime on phones — 3D decor is
   // desktop/tablet only (see EdtDecorPiece), so the mobile bundle stays lean.
-  const mv = useModelViewer(!isNarrow() && decor.all.some((d) => d.kind === 'model'))
+  // 3D DECOR ON PHONES: a budget, not a ban.
+  // The blanket "no <model-viewer> below 820px" was the RADICAL fix for a real
+  // iOS crash — a WebGL context on top of the 56-section list and a background
+  // video tipped WKWebView over its memory ceiling and killed the tab. But it
+  // also meant a venue that hung a lantern and a sign saw NOTHING of them on the
+  // phone, which is where most diners are. So the phone now gets a strict
+  // BUDGET: at most one live context, only on a device that actually has WebGL
+  // and does not look weak, and at roughly half size (see --edt-dec-h in
+  // menuwall.css). Everything over budget still renders its light pool, so the
+  // composition reads the same. navigator.deviceMemory does not exist on iOS,
+  // so the cap is 1 there rather than heavyLayerBudget()'s optimistic 3.
+  const narrow3dBudget = useMemo(() => {
+    if (!isNarrow()) return Infinity
+    if (!hasWebGL() || preferLightweight()) return 0
+    return Math.min(1, heavyLayerBudget())
+  }, [])
+  // Which pieces may be live 3D: the first N models in render order.
+  const allow3d = useMemo(() => {
+    if (narrow3dBudget === Infinity) return null // desktop: every model renders
+    const ok = new Set()
+    let left = narrow3dBudget
+    for (const d of decor.all) {
+      if (d.kind !== 'model') continue
+      if (left <= 0) break
+      ok.add(d.id); left -= 1
+    }
+    return ok
+  }, [decor, narrow3dBudget])
+  const mv = useModelViewer(decor.all.some((d) => d.kind === 'model') && (!isNarrow() || narrow3dBudget > 0))
 
   // The venue's button skin — vars stamped on the wrap, index.css dresses the
   // buttons themselves.
@@ -1487,9 +1516,9 @@ export default function EditorialLayout({ tenant = null, cats, itemsByCat, visib
       style={{ '--edt-top': stickyTop, ...secVars, ...(wall ? { '--edt-panel': wall.panel, '--edt-vig': wall.vignette } : {}), ...(btnVars || {}), ...(shadowVars(shadows) || {}), ...(inkStyle || {}) }}
     >
       {roomOn ? null : <EdtWall wall={wall} />}
-      <EdtDecorZones anchors={PAGE_ANCHORS} byAnchor={decor.byAnchor} mv={mv} rtl={rtl} />
+      <EdtDecorZones anchors={PAGE_ANCHORS} byAnchor={decor.byAnchor} mv={mv} rtl={rtl} allow3d={allow3d} />
       {portalRoot && decor.header.length
-        ? createPortal(<EdtDecorZones anchors={HEADER_ANCHORS} byAnchor={decor.byAnchor} mv={mv} rtl={rtl} />, portalRoot)
+        ? createPortal(<EdtDecorZones anchors={HEADER_ANCHORS} byAnchor={decor.byAnchor} mv={mv} rtl={rtl} allow3d={allow3d} />, portalRoot)
         : null}
       {portalRoot && decor.screen.length
         ? createPortal(<EdtDecorZones anchors={SCREEN_ANCHORS} byAnchor={decor.byAnchor} mv={mv} rtl={rtl} />, portalRoot)
