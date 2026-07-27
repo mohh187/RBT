@@ -226,7 +226,7 @@ export default function Reports() {
                 <span className="small">{e.category}{e.note ? ` · ${e.note}` : ''}</span>
                 <span className="row" style={{ gap: 8, alignItems: 'center' }}>
                   <span className="price small"><Price value={e.amount} currency={currency} lang={lang} /></span>
-                  {isManager && <button className="icon-btn" style={{ width: 24, height: 24, color: 'var(--danger)' }} onClick={() => deleteExpense(tenantId, e.id)}><Icon name="delete" size={13} /></button>}
+                  {isManager && <button className="icon-btn" style={{ width: 'var(--tap)', height: 'var(--tap)', color: 'var(--danger)' }} onClick={() => deleteExpense(tenantId, e.id)} aria-label={ar ? 'حذف المصروف' : 'Delete expense'}><Icon name="delete" size={16} /></button>}
                 </span>
               </div>
             ))}

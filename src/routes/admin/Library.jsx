@@ -73,7 +73,7 @@ const bestCT = (f) => {
   const ext = extOf(f.name)
   return VIDEO_CT[ext] || AUDIO_CT[ext] || t || 'application/octet-stream'
 }
-const fmtMB = (size) => (size > 0 ? `${(size / (1024 * 1024)).toFixed(1)} MB` : '')
+const fmtMB = (size) => (size > 0 ? `${(size / (1024 * 1024)).toFixed(1)}MB` : '')
 const extBadge = (m) => {
   const e = extOf(m.name || m.url).replace(/[?#].*$/, '')
   return (e && e.length <= 5 ? e : 'file').toUpperCase()

@@ -578,7 +578,6 @@ export default function Items() {
               </button>
               <button className="btn btn-sm btn-outline" onClick={(e) => toggleStar(it, e)} title={lang === 'ar' ? 'صنف مميّز' : 'Featured'} style={{ color: it.featured ? 'var(--gold)' : 'var(--text-muted)' }}><Icon name="star" size={14} /></button>
               <button className="btn btn-sm btn-outline" disabled={dupBusy === it.id} onClick={(e) => dup(it, e)} title={lang === 'ar' ? 'تكرار الصنف' : 'Duplicate'}><Icon name="copy" size={14} /></button>
-            <button className="btn btn-sm btn-outline" onClick={(e) => hideFromMenu(it, e)} title={lang === 'ar' ? 'إخفاء من المنيو نهائياً (تبقى البيانات والتقارير)' : 'Hide from the menu (keeps data and reports)'} aria-label={lang === 'ar' ? 'إخفاء من المنيو' : 'Hide from menu'}><Icon name="eyeOff" size={14} /></button>
               <button className="btn btn-sm btn-outline" onClick={(e) => hideFromMenu(it, e)} title={lang === 'ar' ? 'إخفاء من المنيو نهائياً (تبقى البيانات والتقارير)' : 'Hide from the menu (keeps data and reports)'} aria-label={lang === 'ar' ? 'إخفاء من المنيو' : 'Hide from menu'}><Icon name="eyeOff" size={14} /></button>
               {(it.model3dUrl || it.arStandeeUrl) && (
                 <button className="btn btn-sm btn-outline" onClick={(e) => { e.stopPropagation(); setStudioItem(it) }} title={lang === 'ar' ? 'استوديو المجسم' : '3D studio'} style={{ color: 'var(--brand)' }}><Icon name="layers" size={14} /></button>

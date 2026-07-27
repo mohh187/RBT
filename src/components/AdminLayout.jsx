@@ -153,6 +153,9 @@ export default function AdminLayout() {
   }, [tenant?.name, tenant?.logoUrl, tenant?.slug])
   const visibleNav = navItems.filter(allowed)
   const [moreOpen, setMoreOpen] = useState(false)
+  // «المزيد» is the ONLY route to 33 destinations and was one undifferentiated
+  // scroll — reaching «تسجيل الخروج» or «الدعم» meant ~3 screens of dragging.
+  const [moreQ, setMoreQ] = useState('')
   // Global search (everything in the system): topbar button or Ctrl/Cmd+K.
   const [searchOpen, setSearchOpen] = useState(false)
   useEffect(() => {
@@ -338,7 +341,9 @@ export default function AdminLayout() {
             </NavLink>
           ))}
           {moreGroups.map((g) => {
-            const items = g.items.filter(allowed)
+            const q = moreQ.trim().toLowerCase()
+            const items = g.items.filter(allowed).filter((l) => !q
+              || l.label.ar.toLowerCase().includes(q) || l.label.en.toLowerCase().includes(q))
             if (!items.length) return null
             return (
               <div key={g.title.en} className="admin-side-group">
@@ -471,8 +476,15 @@ export default function AdminLayout() {
       </nav>
       </div>
 
-      <Sheet open={moreOpen} onClose={() => setMoreOpen(false)} title={t('more')}>
+      <Sheet open={moreOpen} onClose={() => { setMoreOpen(false); setMoreQ('') }} title={t('more')}>
         <div className="stack" style={{ gap: 'var(--sp-3)' }}>
+          <input
+            className="input"
+            value={moreQ}
+            onChange={(e) => setMoreQ(e.target.value)}
+            placeholder={lang === 'ar' ? 'ابحث في الأقسام…' : 'Filter sections…'}
+            aria-label={lang === 'ar' ? 'ابحث في الأقسام' : 'Filter sections'}
+          />
           <InstallButton />
           {/* The app bar cannot hold six 46px controls next to the venue name on
               a phone, so these three live here instead — nothing is lost. */}

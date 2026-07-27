@@ -400,7 +400,7 @@ export default function Campaigns() {
           <strong className="small">{ar ? 'قوالبك المحفوظة' : 'Saved templates'}</strong>
           <div className="row" style={{ gap: 8, flexWrap: 'wrap' }}>
             {templates.map((c) => (
-              <div key={c.id} className="card card-pad row" style={{ gap: 8, alignItems: 'center', maxWidth: 340 }}>
+              <div key={c.id} className="card card-pad row" style={{ gap: 8, alignItems: 'center', maxWidth: 'min(340px, 100%)' }}>
                 <div className="grow" style={{ minWidth: 0 }}>
                   <div className="small bold" style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{c.title || (ar ? 'قالب' : 'Template')}</div>
                   <div className="xs faint" style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{c.text}</div>

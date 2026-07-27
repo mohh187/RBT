@@ -259,9 +259,15 @@ export default function GuestPlay({ onCreateCampaign }) {
               type="button" role="switch" aria-checked={wg.enabled}
               aria-label={ar ? 'تفعيل لعبة الانتظار' : 'Enable wait game'}
               onClick={() => saveWait({ enabled: !wg.enabled })}
-              style={{ flex: 'none', width: 46, height: 26, borderRadius: 999, border: '1px solid var(--border)', background: wg.enabled ? 'var(--brand)' : 'var(--surface-2)', position: 'relative', cursor: 'pointer', padding: 0 }}
+              /* The master on/off for the whole post-order wait game — the most
+                 consequential control on the page — was a 26px-tall tap target.
+                 The switch KEEPS its 46x26 look; the button around it is now a
+                 full 44px touch area. */
+              style={{ flex: 'none', width: 46, height: 44, border: 0, background: 'none', position: 'relative', cursor: 'pointer', padding: 0, display: 'grid', placeItems: 'center' }}
             >
-              <span style={{ position: 'absolute', top: 2, insetInlineStart: wg.enabled ? 22 : 2, width: 20, height: 20, borderRadius: '50%', background: '#fff', boxShadow: '0 1px 3px rgba(0,0,0,.3)' }} />
+              <span style={{ position: 'relative', display: 'block', width: 46, height: 26, borderRadius: 999, border: '1px solid var(--border)', background: wg.enabled ? 'var(--brand)' : 'var(--surface-2)', transition: 'background var(--dur-fast)' }}>
+                <span style={{ position: 'absolute', top: 2, insetInlineStart: wg.enabled ? 22 : 2, width: 20, height: 20, borderRadius: '50%', background: '#fff', boxShadow: '0 1px 3px rgba(0,0,0,.3)', transition: 'inset-inline-start var(--dur-fast)' }} />
+              </span>
             </button>
           </div>
           {wg.enabled && (

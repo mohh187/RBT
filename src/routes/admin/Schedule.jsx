@@ -99,7 +99,7 @@ export default function Schedule() {
                 </div>
                 <button className="btn btn-sm btn-outline" onClick={() => fillWeek(m)} title={ar ? 'تعبئة الأسبوع بالدوام الافتراضي' : 'Fill week with default shift'}><Icon name="repeat" size={14} /></button>
               </div>
-              <div className="row" style={{ gap: 6, overflowX: 'auto', paddingBottom: 4 }}>
+              <div className="row scroll-x" style={{ gap: 6, paddingBottom: 4 }}>
                 {days.map((d) => {
                   const iso = isoDate(d)
                   const s = shiftOf(m.uid, iso)

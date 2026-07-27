@@ -308,3 +308,11 @@
   .ga-toggle { margin-inline-start: auto; }
   .ga-figs { grid-template-columns: repeat(auto-fit, minmax(120px, 1fr)); }
 }
+
+
+/* coarse pointer floor — the hub's 11 period/tab chips were all 36px tall and
+   its only outbound link was an 18px underlined run of text. */
+@media (pointer: coarse) {
+  .ga-chip { min-height: 42px; padding-block: 10px; }
+  .ga-link { display: inline-flex; align-items: center; min-height: 40px; }
+}

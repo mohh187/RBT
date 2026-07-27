@@ -196,7 +196,7 @@ export default function Customers() {
               <div className="grow">
                 <div className="bold" style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}>
                   {c.name || (lang === 'ar' ? 'عميل' : 'Guest')}
-                  {c.membership?.active && TIER_META[c.membership.tier] ? <span className="badge" style={{ background: 'transparent', borderColor: TIER_META[c.membership.tier].color, color: TIER_META[c.membership.tier].color, padding: '0 5px' }}>{TIER_META[c.membership.tier].emoji} {lang === 'ar' ? TIER_META[c.membership.tier].ar : TIER_META[c.membership.tier].en}</span> : null}
+                  {c.membership?.active && TIER_META[c.membership.tier] ? <span className="badge" style={{ background: 'transparent', borderColor: TIER_META[c.membership.tier].color, color: TIER_META[c.membership.tier].color, padding: '0 5px' }}><Icon name="award" size={11} style={{ verticalAlign: '-1px' }} /> {lang === 'ar' ? TIER_META[c.membership.tier].ar : TIER_META[c.membership.tier].en}</span> : null}
                   {c.staffRating ? <span className="xs" style={{ color: 'var(--gold, #e0a82e)' }}><Icon name="star" size={11} fill="currentColor" strokeWidth={1.4} /> {c.staffRating}</span> : null}
                 </div>
                 <div className="xs faint num" dir="ltr">{c.phone}</div>

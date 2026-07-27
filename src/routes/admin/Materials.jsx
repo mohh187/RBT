@@ -88,7 +88,7 @@ export default function Materials() {
     <div className="stack" style={{ gap: 'var(--sp-4)' }}>
       {/* Overview stats */}
       <div className="stat-grid" style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))', gap: 'var(--sp-3)' }}>
-        <div className="stat card card-pad" style={{ display: 'flex', alignItems: 'center', gap: 'var(--sp-3)', borderLeft: '4px solid var(--brand)', boxShadow: 'var(--sh-1)' }}>
+        <div className="stat card card-pad" style={{ display: 'flex', alignItems: 'center', gap: 'var(--sp-3)', borderInlineStart: '4px solid var(--brand)', boxShadow: 'var(--sh-1)' }}>
           <div className="center" style={{ width: 40, height: 40, borderRadius: '50%', background: 'var(--brand-soft)', color: 'var(--brand)' }}>
             <Icon name="inventory" size={20} />
           </div>
@@ -98,7 +98,7 @@ export default function Materials() {
           </div>
         </div>
         
-        <div className="stat card card-pad" style={{ display: 'flex', alignItems: 'center', gap: 'var(--sp-3)', borderLeft: `4px solid ${lowCount > 0 ? 'var(--danger)' : 'var(--success)'}`, boxShadow: 'var(--sh-1)' }}>
+        <div className="stat card card-pad" style={{ display: 'flex', alignItems: 'center', gap: 'var(--sp-3)', borderInlineStart: `4px solid ${lowCount > 0 ? 'var(--danger)' : 'var(--success)'}`, boxShadow: 'var(--sh-1)' }}>
           <div className="center" style={{ width: 40, height: 40, borderRadius: '50%', background: lowCount > 0 ? 'var(--danger-soft)' : 'var(--success-soft)', color: lowCount > 0 ? 'var(--danger)' : 'var(--success)' }}>
             <Icon name="warning" size={20} />
           </div>
@@ -108,7 +108,7 @@ export default function Materials() {
           </div>
         </div>
         
-        <div className="stat card card-pad" style={{ display: 'flex', alignItems: 'center', gap: 'var(--sp-3)', borderLeft: '4px solid var(--gold)', boxShadow: 'var(--sh-1)' }}>
+        <div className="stat card card-pad" style={{ display: 'flex', alignItems: 'center', gap: 'var(--sp-3)', borderInlineStart: '4px solid var(--gold)', boxShadow: 'var(--sh-1)' }}>
           <div className="center" style={{ width: 40, height: 40, borderRadius: '50%', background: 'var(--warning-soft)', color: 'var(--gold)' }}>
             <Icon name="wallet" size={20} />
           </div>
@@ -186,7 +186,7 @@ export default function Materials() {
                 key={m.id}
                 className="card card-pad stack"
                 style={{
-                  borderLeft: `4px solid ${stateColor}`,
+                  borderInlineStart: `4px solid ${stateColor}`,
                   boxShadow: 'var(--sh-1)',
                   gap: 'var(--sp-2)',
                   position: 'relative',
