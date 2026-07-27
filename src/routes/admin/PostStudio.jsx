@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from 'react'
+import { useSearchParams } from 'react-router-dom'
 import { collection, doc, addDoc, updateDoc, deleteDoc, onSnapshot, query, orderBy, limit, serverTimestamp } from 'firebase/firestore'
 import { db } from '../../lib/firebase.js'
 import { useAuth } from '../../lib/auth.jsx'
@@ -83,10 +84,24 @@ export default function PostStudio() {
   const canWrite = can(CAP.MANAGE_CAMPAIGNS)
   const canStories = can(CAP.MANAGE_STORIES)
   const brand = tenant?.brandColor || tenant?.themeColor || '#7c2d2d'
+  const [sp, setSp] = useSearchParams()
 
   const [items, setItems] = useState(null)
   const [drafts, setDrafts] = useState(null)
   const [tab, setTab] = useState('ai')
+
+  // «استخدمها في منشور» from the assistant (or anywhere else) lands here with
+  // ?image=<url>: the picture becomes a real draft straight away instead of the
+  // user having to find it again in the library.
+  useEffect(() => {
+    const incoming = sp.get('image')
+    if (!incoming || !tenantId || !canWrite) return
+    const url = decodeURIComponent(incoming)
+    addMarketingPost(tenantId, { imageUrl: url, kind: 'ai', caption: '' })
+      .then(() => { setTab('drafts'); toast.success(ar ? 'أُضيفت الصورة إلى المسودات' : 'Image added to drafts') })
+      .catch(() => toast.error(ar ? 'تعذّرت إضافة الصورة' : 'Could not add the image'))
+      .finally(() => { const n = new URLSearchParams(sp); n.delete('image'); setSp(n, { replace: true }) })
+  }, [sp, tenantId, canWrite])
 
   // ---- AI generation state ----
   const [aiItemId, setAiItemId] = useState('')

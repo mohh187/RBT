@@ -6,6 +6,7 @@ import { useI18n } from '../../lib/i18n.jsx'
 import { useToast } from '../../components/Toast.jsx'
 import { Spinner, Empty } from '../../components/ui.jsx'
 import Icon from '../../components/Icon.jsx'
+import Viewer, { useViewer } from '../../components/Viewer.jsx'
 import { watchMedia, deleteMedia, listItems } from '../../lib/db.js'
 import { db, storage } from '../../lib/firebase.js'
 import { randomToken } from '../../lib/format.js'
@@ -250,6 +251,15 @@ export default function Library() {
   // first screenful opened it OFF-SCREEN — nothing appeared to happen and every
   // per-asset action was unreachable from a phone. Bring it to the user.
   const detailRef = useRef(null)
+  // Any asset opens full-screen — Viewer.jsx existed but nothing imported it, so
+  // no image, video or file could be opened anywhere in the system. Opening the
+  // whole visible list (not just the one tapped) gives prev/next for free.
+  const viewer = useViewer()
+  const openViewer = (m) => {
+    const list = (live || []).map((x) => ({ url: x.url, name: x.name, kind: x.kind, size: x.size, contentType: x.contentType }))
+    const at = Math.max(0, list.findIndex((x) => x.url === m.url))
+    viewer.open(list.length ? list : [{ url: m.url, name: m.name, kind: m.kind }], at)
+  }
   useEffect(() => {
     if (!detailId || !detailRef.current) return
     const id = requestAnimationFrame(() => {
@@ -778,11 +788,18 @@ export default function Library() {
       {/* single-item detail strip + per-image AI actions */}
       {detail && !selMode && !refPick && (
         <div className="card card-pad lib-detail" ref={detailRef}>
-          <div className={`lib-detail-thumb ${busyId === detail.id ? 'ai-scanning' : ''}`}>
+          <button
+            type="button"
+            className={`lib-detail-thumb ${busyId === detail.id ? 'ai-scanning' : ''}`}
+            onClick={() => openViewer(detail)}
+            title={ar ? 'فتح بالحجم الكامل' : 'Open full size'}
+            aria-label={ar ? 'فتح بالحجم الكامل' : 'Open full size'}
+          >
             {detail.kind === 'image' ? <img src={detail.url} alt="" />
               : detail.kind === 'video' ? <video src={detail.url} preload="metadata" muted playsInline />
                 : <Icon name={detail.kind === 'audio' ? 'sound' : 'file'} size={28} className="muted" />}
-          </div>
+            <span className="lib-open-hint" aria-hidden="true"><Icon name="search" size={16} /></span>
+          </button>
           <div className="stack grow" style={{ gap: 7, minWidth: 220 }}>
             <div className="row" style={{ gap: 6, alignItems: 'center', flexWrap: 'wrap' }}>
               <span className="small bold lib-name grow" style={{ minWidth: 0 }} title={detail.name}>{detail.name || detail.kind}</span>
@@ -827,6 +844,7 @@ export default function Library() {
               </div>
             )}
             <div className="row" style={{ gap: 6, flexWrap: 'wrap' }}>
+              <button className="btn btn-sm btn-outline" onClick={() => openViewer(detail)}><Icon name="search" size={14} /> {ar ? 'فتح' : 'Open'}</button>
               <button className="btn btn-sm btn-outline" onClick={() => copyUrl(detail)}><Icon name="copy" size={14} /> {ar ? 'نسخ الرابط' : 'Copy link'}</button>
               <button className="btn btn-sm btn-outline" onClick={() => download(detail)}><Icon name="download" size={14} /> {ar ? 'تحميل' : 'Download'}</button>
               <button className="btn btn-sm btn-outline" style={{ color: 'var(--danger)' }} onClick={() => removeOne(detail)}><Icon name="delete" size={14} /> {ar ? 'حذف' : 'Delete'}</button>
@@ -922,11 +940,17 @@ export default function Library() {
                   <button className={`lib-star ${m.fav ? 'on' : ''}`} title={ar ? 'المفضلة' : 'Favorite'}
                     onClick={(e) => { e.stopPropagation(); toggleFav(m) }}><Icon name="star" size={12} /></button>
                 )}
+                {!selMode && !refPick && (
+                  <button className="lib-openbtn" title={ar ? 'فتح بالحجم الكامل' : 'Open full size'}
+                    aria-label={ar ? 'فتح بالحجم الكامل' : 'Open full size'}
+                    onClick={(e) => { e.stopPropagation(); openViewer(m) }}><Icon name="search" size={12} /></button>
+                )}
               </div>
             )
           })}
         </div>
       )}
+      <Viewer {...viewer.viewerProps} />
     </div>
   )
 }

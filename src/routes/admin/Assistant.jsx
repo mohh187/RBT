@@ -1,7 +1,9 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { useAuth } from '../../lib/auth.jsx'
 import { useI18n } from '../../lib/i18n.jsx'
+import { useNavigate } from 'react-router-dom'
 import Icon from '../../components/Icon.jsx'
+import Viewer, { useViewer, inferKind } from '../../components/Viewer.jsx'
 import Markdown from '../../components/Markdown.jsx'
 import { runAssistant, aiConfigured } from '../../lib/aiBridge.js'
 import { getAiUsage } from '../../lib/db.js'
@@ -62,10 +64,45 @@ function RunningTimer({ since, ar }) {
   return <span className="xs num" style={{ color: 'var(--brand)', fontWeight: 700 }}> · {ar ? 'جارٍ التنفيذ' : 'running'} {s.toFixed(0)}{ar ? ' ث' : 's'}</span>
 }
 
+// Every media URL a tool result carries, in a shape Viewer understands. Tools
+// return different keys (url / imageUrl / urls / images), so this is the single
+// place that knows how to read them — add a key here and the whole chat shows it.
+function resultMedia(res) {
+  if (!res || typeof res !== 'object') return []
+  const out = []
+  const push = (u, name) => {
+    const url = typeof u === 'string' ? u : u?.url
+    if (!url || !/^https?:/i.test(url)) return
+    if (out.some((x) => x.url === url)) return
+    out.push({ url, name: name || u?.name || '' })
+  }
+  push(res.url, res.name)
+  push(res.imageUrl, res.name)
+  push(res.fileUrl, res.fileName)
+  for (const key of ['urls', 'images', 'files', 'media']) {
+    if (Array.isArray(res[key])) res[key].forEach((x) => push(x))
+  }
+  return out
+}
+
 export default function Assistant() {
   const { lang } = useI18n()
   const { tenantId, tenant, profile } = useAuth()
   const toast = useToast()
+  // Anything a tool produced (a generated image, an exported file) is shown in
+  // the conversation and can be opened full-screen — previously the assistant
+  // only said "done" and the picture lived somewhere the user had to hunt for.
+  const viewer = useViewer()
+  const navigate = useNavigate()
+  // The campaign composer already picks up a draft from sessionStorage
+  // (?draft=1). Sending the picture's link with it keeps one code path instead
+  // of inventing a second one.
+  const useInCampaign = (url) => {
+    try {
+      sessionStorage.setItem('rbt_campaign_draft', JSON.stringify({ title: '', text: url }))
+    } catch (_) { /* storage off — the composer still opens, just empty */ }
+    navigate('/admin/campaigns?draft=1')
+  }
   const ar = lang === 'ar'
   const actor = profile?.displayName || profile?.email || ''
   const p = (cmd) => (ar ? cmd.p.ar : cmd.p.en)
@@ -360,6 +397,40 @@ export default function Assistant() {
                     {m.tookMs != null && <span className="xs faint num"> · {(m.tookMs / 1000).toFixed(1)}{ar ? ' ث' : 's'}</span>}
                   </div>
                   <code>{JSON.stringify(m.args)}</code>
+                  {m.result && resultMedia(m.result).length > 0 && (
+                    <div className="ai-result-media">
+                      {resultMedia(m.result).map((it, k) => (
+                        <div key={k} className="ai-media-card">
+                          <button
+                            type="button"
+                            className="ai-media-thumb"
+                            onClick={() => viewer.open(resultMedia(m.result), k)}
+                            title={ar ? 'فتح بالحجم الكامل' : 'Open full size'}
+                          >
+                            {inferKind(it) === 'image'
+                              ? <img src={it.url} alt="" loading="lazy" />
+                              : inferKind(it) === 'video'
+                                ? <video src={it.url} preload="metadata" muted playsInline />
+                                : <Icon name="file" size={22} className="faint" />}
+                          </button>
+                          <div className="ai-media-acts">
+                            <button className="btn btn-sm btn-outline" onClick={() => viewer.open(resultMedia(m.result), k)}>
+                              <Icon name="search" size={13} /> {ar ? 'فتح' : 'Open'}
+                            </button>
+                            <button className="btn btn-sm btn-outline" onClick={() => navigate(`/admin/posts-studio?image=${encodeURIComponent(it.url)}`)}>
+                              <Icon name="camera" size={13} /> {ar ? 'استخدمها في منشور' : 'Use in a post'}
+                            </button>
+                            <button className="btn btn-sm btn-outline" onClick={() => useInCampaign(it.url)}>
+                              <Icon name="bellRing" size={13} /> {ar ? 'أرفقها بحملة' : 'Attach to a campaign'}
+                            </button>
+                            <a className="btn btn-sm btn-outline" href={it.url} target="_blank" rel="noreferrer" download>
+                              <Icon name="download" size={13} /> {ar ? 'تحميل' : 'Download'}
+                            </a>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  )}
                   {m.result && (
                     <div className="xs" style={{ marginTop: 3, color: m.result.error ? 'var(--danger)' : 'var(--success)', fontWeight: 700 }}>
                       {m.result.error ? <span className="row" style={{ gap: 4, alignItems: 'center', display: 'inline-flex' }}><Icon name="close" size={12} /> {m.result.error}</span> : (m.result.ok !== false ? <span className="row" style={{ gap: 4, alignItems: 'center', display: 'inline-flex' }}><Icon name="check" size={12} /> {ar ? 'تم بنجاح' : 'done'}{m.result.id ? ` · ${m.result.id}` : ''}</span> : <span className="row" style={{ gap: 4, alignItems: 'center', display: 'inline-flex' }}><Icon name="warning" size={12} /> {JSON.stringify(m.result).slice(0, 90)}</span>)}
@@ -509,6 +580,7 @@ export default function Assistant() {
           </div>
         )}
       </Sheet>
+      <Viewer {...viewer.viewerProps} />
     </div>
   )
 }
