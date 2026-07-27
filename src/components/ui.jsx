@@ -1,5 +1,5 @@
 import Icon from './Icon.jsx'
-import { LogoMark } from './Logo.jsx'
+import { RbtMark, RbtWordmark } from './BrandMark.jsx'
 
 // Tiny shared UI atoms.
 export function Spinner({ lg }) {
@@ -41,13 +41,9 @@ export function Stepper({ value, onChange, min = 1, max = 99 }) {
 
 export function BrandMark({ name }) {
   return (
-    <span className="brand-mark">
-      <LogoMark size={32} />
-      {name ? (
-        <span className="brand-word">{name}</span>
-      ) : (
-        <span className="brand-word">rbt<span className="brand-word-accent">360</span></span>
-      )}
+    <span className="brand-mark brand-mark-official">
+      <RbtMark size={30} />
+      {name ? <span className="brand-word">{name}</span> : <RbtWordmark size={17} />}
     </span>
   )
 }

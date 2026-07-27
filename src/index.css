@@ -42,6 +42,8 @@
   /* ===== Type ===== */
   --font-body: 'Tajawal', system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
   --font-display: 'Tajawal', system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
+  /* Latin brand lockup «RBT 360» + tagline — geometric sans to match the official logotype */
+  --font-brand: 'Montserrat', 'IBM Plex Sans Arabic', system-ui, sans-serif;
   --fs-xs: 0.75rem;
   --fs-sm: 0.8125rem;
   --fs-base: 0.9375rem;
@@ -3097,6 +3099,8 @@ body[data-theme='dark'] .pos-fullscreen[data-systheme='glass'] { background: var
   color: var(--text);
 }
 .brand-mark svg { border-radius: 9px; box-shadow: 0 3px 10px -3px color-mix(in srgb, var(--brand) 55%, transparent); flex: none; }
+/* official artwork lockup — transparent logo images: no chip radius/shadow */
+.brand-mark-official img { border-radius: 0; box-shadow: none; flex: none; }
 .brand-word { line-height: 1; }
 .brand-word-accent { color: var(--brand); }
 .brand-mark .dot {
@@ -7166,6 +7170,18 @@ body:has(.edt-roombg) .venue-bg { display: none; }
      is already what separates the bar from the room. */
   border-bottom: none;
   box-shadow: none;
+}
+/* «علامة الجرس ناشبة — لو زول داير يضغط ع كلمة الحلى ما بيقدر»: the fixed
+   notification bell (z-index 60) used to sit exactly ON this sticky bar and
+   swallowed every tap aimed at the chips beneath it — in RTL that is the END
+   of the strip, i.e. the LAST categories (الحلى). Decor is pointer-events
+   none everywhere, so the bell was the one remaining tap thief. On the
+   editorial menu it now drops just BELOW the category bar (bar = 9px pad +
+   34px chip + 10px pad + 1px line ≈ 54px, +12px clearance), floating over
+   the dish stage like any fab, clear of the chips at every width and at
+   every horizontal scroll offset of the strip. */
+[data-menu-layout='editorial'] .m-fab-bell {
+  top: calc(var(--appbar-h) + var(--safe-t) + 66px);
 }
 .edt-cats {
   display: flex;

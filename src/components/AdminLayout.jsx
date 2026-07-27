@@ -13,6 +13,7 @@ import { planAllows, planExpired, EXPIRED_GRACE_DAYS } from '../lib/plans.js'
 import { alertParty } from '../lib/notify.js'
 import { useCompactUI } from '../lib/useCompactUI.js'
 import { systemThemeAttr, useSystemThemeBody } from '../lib/systemThemes.js'
+import { applyVenueFavicon, restorePlatformFavicon } from '../lib/pwa.js'
 import PinLock from './PinLock.jsx'
 import AppBackground from './AppBackground.jsx'
 import { requestLock } from '../lib/pin.js'
@@ -141,6 +142,15 @@ export default function AdminLayout() {
   // Nav is filtered by BOTH role capability and the venue's subscription plan.
   const allowed = (n) => (!n.cap || can(n.cap)) && (!n.anyOf || n.anyOf.some((c) => can(c))) && (!n.feature || planAllows(tenant, n.feature))
   useSystemThemeBody(tenant, 'admin') // portaled sheets/toasts pick the theme up from <body>
+  // The venue's own tab identity: its logo as favicon + its name as the title,
+  // restored to the platform's when the dashboard unmounts.
+  useEffect(() => {
+    if (!tenant?.name) return
+    const prevTitle = document.title
+    document.title = tenant.name
+    applyVenueFavicon(tenant, tenant.slug)
+    return () => { document.title = prevTitle; restorePlatformFavicon() }
+  }, [tenant?.name, tenant?.logoUrl, tenant?.slug])
   const visibleNav = navItems.filter(allowed)
   const [moreOpen, setMoreOpen] = useState(false)
   // Global search (everything in the system): topbar button or Ctrl/Cmd+K.

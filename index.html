@@ -6,34 +6,38 @@
          keyboard OVERLAYS the layout instead of squeezing it (Chrome/Android) -->
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover, interactive-widget=overlays-content" />
     <!-- theme-color is kept in sync with the live page background at runtime
-         (src/lib/themeColor.js) so the mobile browser chrome never shows a white band -->
-    <meta name="theme-color" content="#7c2d2d" />
+         (src/lib/themeColor.js) so the mobile browser chrome never shows a white band.
+         Static default = RBT 360 brand navy (platform surfaces). -->
+    <meta name="theme-color" content="#0D1533" />
     <!-- installed-PWA: let app content fill under the status bar (no white inset) -->
     <meta name="apple-mobile-web-app-capable" content="yes" />
     <meta name="mobile-web-app-capable" content="yes" />
     <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
-    <meta name="apple-mobile-web-app-title" content="rbt360" />
-    <meta name="description" content="rbt360 — نظام تشغيل متكامل للمقاهي والمطاعم: منيو رقمي وطلب بالباركود، كاشير ومطبخ لحظي، مخزون، عروض وولاء، وفوترة متوافقة مع زاتكا — وبدون أي عمولة على طلباتك." />
+    <meta name="apple-mobile-web-app-title" content="RBT 360" />
+    <meta name="description" content="RBT 360 — نظام تشغيل متكامل للمقاهي والمطاعم: منيو رقمي وطلب بالباركود، كاشير ومطبخ لحظي، مخزون، عروض وولاء، وفوترة متوافقة مع زاتكا — وبدون أي عمولة على طلباتك." />
 
     <!-- Open Graph / social sharing -->
     <meta property="og:type" content="website" />
-    <meta property="og:site_name" content="rbt360" />
-    <meta property="og:title" content="rbt360 — نظام تشغيل مقهاك ومطعمك" />
-    <meta property="og:description" content="شغّل مقهاك كله من نظام واحد عربي: منيو وطلب بالباركود، كاشير ومطبخ لحظي، مخزون ومساعد ذكي، وفوترة متوافقة مع زاتكا — بدون أي عمولة. ابدأ مجاناً." />
-    <!-- absolute URL (crawlers ignore relative); TODO: replace with a 1200x630 PNG card — most scrapers skip SVG -->
-    <meta property="og:image" content="https://rbt360sa.com/favicon.svg" />
+    <meta property="og:site_name" content="RBT 360" />
+    <meta property="og:title" content="RBT 360 — نظام تشغيل منشأتك" />
+    <meta property="og:description" content="شغّل منشأتك كلها من نظام واحد عربي: منيو وطلب بالباركود، كاشير ومطبخ لحظي، مخزون ومساعد ذكي، وفوترة متوافقة مع زاتكا — بدون أي عمولة. ابدأ مجاناً." />
+    <meta property="og:image" content="https://rbt360sa.com/brand/og.png" />
+    <meta property="og:image:width" content="1200" />
+    <meta property="og:image:height" content="630" />
     <meta name="twitter:card" content="summary_large_image" />
-    <meta name="twitter:title" content="rbt360 — نظام تشغيل مقهاك ومطعمك" />
+    <meta name="twitter:title" content="RBT 360 — نظام تشغيل منشأتك" />
     <meta name="twitter:description" content="نظام تشغيل متكامل للمقاهي والمطاعم — بدون أي عمولة. ابدأ مجاناً." />
-    <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
+    <meta name="twitter:image" content="https://rbt360sa.com/brand/og.png" />
+    <!-- Platform defaults — venue routes override icon/title/manifest at runtime -->
+    <link rel="icon" type="image/png" href="/brand/favicon.png" />
     <link rel="manifest" href="/manifest.webmanifest" />
-    <link rel="apple-touch-icon" href="/favicon.svg" />
+    <link rel="apple-touch-icon" href="/brand/apple-touch-icon.png" />
 
     <!-- Fonts: Tajawal (app) + IBM Plex Sans Arabic (marketing/auth) -->
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
     <link
-      href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans+Arabic:wght@400;500;600;700&family=Tajawal:wght@400;500;700;800;900&display=swap"
+      href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans+Arabic:wght@400;500;600;700&family=Montserrat:wght@700;800;900&family=Tajawal:wght@400;500;700;800;900&display=swap"
       rel="stylesheet"
     />
 
@@ -53,7 +57,7 @@
       })();
     </script>
 
-    <title>rbt360</title>
+    <title>RBT 360</title>
   </head>
   <body>
     <div id="root"></div>

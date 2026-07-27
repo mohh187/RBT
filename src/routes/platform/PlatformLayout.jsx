@@ -9,6 +9,7 @@ import Icon from '../../components/Icon.jsx'
 import { watchChatThreads, watchActivity, registerPlatformPush } from '../../lib/platform.js'
 import { alertParty, requestNotifyPermission, notifyState } from '../../lib/notify.js'
 import PlatformSearch from '../../components/PlatformSearch.jsx'
+import '../../styles/platform-brand.css'
 
 // Grouped navigation (24 screens). Sidebar shows all with faint section headers;
 // the mobile bottom-nav shows the 5 essentials. Ctrl/Cmd+K opens the search.
@@ -61,10 +62,35 @@ function UnreadDot({ count }) {
   if (!count) return null
   return (
     <span className="num" style={{
-      background: 'var(--danger)', color: 'var(--on-brand)', borderRadius: 99, fontSize: 10,
+      background: 'var(--rbt-badge, var(--danger))', color: 'var(--rbt-on-badge, var(--on-brand))', borderRadius: 99, fontSize: 10,
       minWidth: 17, height: 17, display: 'inline-grid', placeItems: 'center', padding: '0 4px', fontWeight: 800,
     }}>{count > 99 ? '99+' : count}</span>
   )
+}
+
+// RBT 360 mark — the OFFICIAL owner-supplied artwork (public/brand/), same
+// asset the shared src/components/BrandMark.jsx renders. The traced export
+// carries transparent margins inside its square box, so scale(1.42) makes the
+// VISIBLE mark match the requested size (overflow is transparent — no
+// clipping/layout side effects).
+function RbtMark({ size = 32 }) {
+  return (
+    <img
+      className="rbt-mark"
+      src="/brand/logo-mark.svg"
+      alt=""
+      aria-hidden="true"
+      width={size}
+      height={size}
+      draggable={false}
+      style={{ objectFit: 'contain', transform: 'scale(1.42)', transformOrigin: 'center' }}
+    />
+  )
+}
+
+// Latin lockup «RBT 360» — the 360 carries the brand gradient.
+function RbtWord() {
+  return <strong className="rbt-word">RBT <span className="g360">360</span></strong>
 }
 
 export default function PlatformLayout() {
@@ -119,6 +145,13 @@ export default function PlatformLayout() {
   const { user, logout } = useAuth()
   const { toggleTheme, theme } = useI18n()
   const navigate = useNavigate()
+
+  // Every /platform route carries the RBT 360 console identity in the tab.
+  useEffect(() => {
+    const prev = document.title
+    document.title = 'RBT 360 — الكونسول'
+    return () => { document.title = prev }
+  }, [])
   const [threads, setThreads] = useState([])
   const [pushOn, setPushOn] = useState(notifyState() === 'granted')
   const [searchOpen, setSearchOpen] = useState(false)
@@ -165,11 +198,12 @@ export default function PlatformLayout() {
     <div className="admin-shell platform-scope" style={{ '--sidebar-w': '236px' }}>
       <aside className="admin-sidebar">
         <div className="admin-brand-row">
-          <Link to="/platform" className="admin-brand">
-            <span className="dot" style={{ width: 30, height: 30, borderRadius: 10, background: 'var(--brand)', color: 'var(--on-brand)', display: 'grid', placeItems: 'center', flex: 'none' }}>
-              <Icon name="sparkles" size={17} />
+          <Link to="/platform" className="admin-brand rbt-brand">
+            <RbtMark size={34} />
+            <span className="rbt-brand-text">
+              <RbtWord />
+              <span className="rbt-tagline">CONNECT · BUILD · SCALE</span>
             </span>
-            <strong style={{ fontSize: 'var(--fs-md)' }}>لوحة المنصّة</strong>
           </Link>
         </div>
         <nav className="admin-side-nav">
@@ -200,12 +234,11 @@ export default function PlatformLayout() {
 
       <div className="admin-main">
         <header className="app-bar">
-          <Link to="/platform" className="row app-bar-brand" style={{ gap: 8 }}>
-            <span className="dot" style={{ width: 28, height: 28, borderRadius: 9, background: 'var(--brand)', color: 'var(--on-brand)', display: 'grid', placeItems: 'center' }}>
-              <Icon name="sparkles" size={16} />
-            </span>
-            <strong style={{ fontSize: 'var(--fs-md)' }}>لوحة المنصّة</strong>
+          <Link to="/platform" className="row app-bar-brand rbt-brand" style={{ gap: 8 }}>
+            <RbtMark size={26} />
+            <RbtWord />
           </Link>
+          <span className="rbt-console-tag">الكونسول</span>
           <div className="grow" />
           <button className="icon-btn" onClick={() => setSearchOpen(true)} aria-label="بحث في المنصة" title="بحث في المنصة (Ctrl+K)">
             <Icon name="search" />

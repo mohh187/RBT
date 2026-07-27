@@ -208,6 +208,38 @@ export default function MenuView({ tenant, tenantId, items, categories, offers =
     return () => keys.forEach((k) => node.style.removeProperty(k))
   }, [menuPortalRoot, inkKeyMv, inkWallKeyMv, theme]) // eslint-disable-line react-hooks/exhaustive-deps
 
+  // ---- per-venue share + install identity ------------------------------------
+  // The server shell (functions/venueMeta.js via the /m/** rewrite) already
+  // carries these for crawlers; this effect keeps the LIVE document in sync
+  // after hydration/SPA navigation so the tab title, share sheets and
+  // "Add to Home Screen" all present the VENUE, never the platform.
+  useEffect(() => {
+    if (preview || !tenant?.name || typeof document === 'undefined') return undefined
+    const prevTitle = document.title
+    document.title = tenant.name
+    const ensure = (sel, make) => {
+      let el = document.head.querySelector(sel)
+      if (!el) { el = make(); document.head.appendChild(el) }
+      return el
+    }
+    const setLinkTag = (rel, href) => ensure(`link[rel="${rel}"]`, () => {
+      const l = document.createElement('link'); l.setAttribute('rel', rel); return l
+    }).setAttribute('href', href)
+    const setOg = (prop, content) => ensure(`meta[property="${prop}"]`, () => {
+      const mEl = document.createElement('meta'); mEl.setAttribute('property', prop); return mEl
+    }).setAttribute('content', content)
+    // manifest -> the server endpoint (prod only: vite dev has no functions
+    // rewrite, where pwa.js's blob manifest already covers install)
+    if (tenant.slug && import.meta.env.PROD) setLinkTag('manifest', `/m/${encodeURIComponent(tenant.slug)}/manifest.webmanifest`)
+    if (tenant.logoUrl) setLinkTag('apple-touch-icon', tenant.logoUrl)
+    // og fallback for JS-running share surfaces (crawlers get the server tags)
+    setOg('og:title', tenant.name)
+    if (tenant.descAr) setOg('og:description', tenant.descAr)
+    const ogImg = tenant.coverUrl || tenant.logoUrl
+    if (ogImg) setOg('og:image', ogImg)
+    return () => { document.title = prevTitle }
+  }, [preview, tenant?.name, tenant?.slug, tenant?.logoUrl, tenant?.coverUrl, tenant?.descAr])
+
   const navigate = useNavigate()
   const [activeCat, setActiveCat] = useState('all')
   const [search, setSearch] = useState('')

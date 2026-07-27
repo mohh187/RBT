@@ -1,0 +1,265 @@
+/* =====================================================================
+   RBT 360 — brand skin for the CENTRAL platform console (/platform).
+   Scoped entirely to .platform-scope, so venue dashboards (/admin) and
+   venue menus are untouched. Loaded by PlatformLayout.jsx, i.e. AFTER
+   index.css in the cascade — equal-specificity declarations here win
+   by order; the doubled .platform-scope.platform-scope additionally
+   guards the palette against lazy-chunk CSS injection order surprises.
+
+   Identity: deep navy surfaces; the RBT gradient (blue → violet →
+   magenta) is used ONLY as accent — active nav, primary actions,
+   badges, focus rings, hairlines — and flows into every screen's
+   charts/badges through the shared vars (--brand / --accent / --info).
+   No animations are added beyond the transitions index.css already
+   declares (all covered by its prefers-reduced-motion guard).
+   ===================================================================== */
+
+/* ---------- 1 · Palette — light ------------------------------------ */
+.platform-scope.platform-scope {
+  /* RBT primitives. The SVG mark reads the stops as CSS vars, so the
+     same component self-brightens on navy / dark surfaces. */
+  --rbt-stop-1: #2f5cf5;
+  --rbt-stop-2: #7a3bf2;
+  --rbt-stop-3: #e0219e;
+  --rbt-grad: linear-gradient(115deg, #2f5cf5, #7a3bf2 52%, #e0219e);
+  --rbt-grad-line: linear-gradient(to left, #2f5cf5, #7a3bf2 52%, #e0219e);
+  /* deepened stops so white text on the gradient stays ≥ 4.5:1 */
+  --rbt-grad-btn: linear-gradient(115deg, #2b4fe0, #6d33e6 55%, #c81c92);
+  --rbt-badge: #c62828;
+  --rbt-on-badge: #ffffff;
+
+  --bg: #f4f6fe;
+  --bg-2: #e9edfb;
+  --surface: #ffffff;
+  --surface-2: #eef1fc;
+  --text: #141b3c;
+  --text-muted: #4c5478;
+  --text-faint: #8b91b5;
+  --border: #e3e6f5;
+  --border-strong: #ccd2ea;
+
+  --brand-base: #2f5cf5;
+  --accent-base: #e0219e;
+  --brand: #2b4fe0;          /* 6.4:1 on white */
+  --brand-strong: #1d3ac0;
+  --brand-soft: color-mix(in srgb, #2f5cf5 10%, #ffffff);
+  --on-brand: #ffffff;
+  --accent: #b8148c;         /* 6.0:1 on white */
+  --info: #4f46e5;
+  --ring: color-mix(in srgb, #2f5cf5 42%, transparent);
+
+  background:
+    radial-gradient(1100px 420px at 100% -10%, color-mix(in srgb, #2f5cf5 10%, transparent), transparent),
+    radial-gradient(820px 380px at 0% 0%, color-mix(in srgb, #e0219e 6%, transparent), transparent),
+    var(--bg);
+}
+
+/* ---------- 1b · Palette — dark ------------------------------------ */
+[data-theme='dark'] .platform-scope.platform-scope {
+  --rbt-stop-1: #5b82ff;
+  --rbt-stop-2: #a565ff;
+  --rbt-stop-3: #ff4fc3;
+  --rbt-grad: linear-gradient(115deg, #5b82ff, #a565ff 52%, #ff4fc3);
+  --rbt-grad-line: linear-gradient(to left, #5b82ff, #a565ff 52%, #ff4fc3);
+  --rbt-grad-btn: linear-gradient(115deg, #2f53ea, #7a3bf2 55%, #d31d97);
+  --rbt-badge: #e5484d;
+  --rbt-on-badge: #ffffff;
+
+  --bg: #080b20;
+  --bg-2: #0e1230;
+  --surface: #12163a;
+  --surface-2: #1b2050;
+  --text: #edf0ff;
+  --text-muted: #a6adda;
+  --text-faint: #6d74a3;
+  --border: #262c5c;
+  --border-strong: #363e78;
+
+  --brand-base: #2f5cf5;
+  --accent-base: #e0219e;
+  --brand: #8da5ff;          /* 7.4:1 on --surface */
+  --brand-strong: #6f8dff;
+  --brand-soft: color-mix(in srgb, #2f5cf5 30%, #12163a);
+  --on-brand: #0b1030;       /* dark ink on the light periwinkle brand */
+  --accent: #f26ec7;
+  --info: #8f9bff;
+  --ring: color-mix(in srgb, #8da5ff 45%, transparent);
+
+  background:
+    radial-gradient(1000px 460px at 100% -12%, color-mix(in srgb, #2f5cf5 20%, transparent), transparent),
+    radial-gradient(780px 380px at 0% 0%, color-mix(in srgb, #e0219e 12%, transparent), transparent),
+    var(--bg);
+}
+
+/* ---------- 2 · Sidebar — fixed RBT navy chrome (both themes) ------ */
+/* Re-declaring the shared vars ON the sidebar re-themes everything
+   inside it (nav links, section titles, foot buttons) without touching
+   any markup — the "command center" chrome the brand asks for. */
+.platform-scope .admin-sidebar {
+  --text: #f1f3ff;
+  --text-muted: #a8b0e0;
+  --text-faint: #6a72a8;
+  --surface: #10153d;
+  --surface-2: rgba(126, 134, 255, 0.13);
+  --border: #232a5c;
+  --border-strong: #343d7e;
+  --brand: #9db1ff;
+  --brand-strong: #8da5ff;
+  --danger: #ff8d8d;         /* logout row: 7.8:1 on the navy */
+  --ring: color-mix(in srgb, #9db1ff 55%, transparent);
+  /* bright stop set → the SVG mark + gradient text glow on navy */
+  --rbt-stop-1: #5b82ff;
+  --rbt-stop-2: #a565ff;
+  --rbt-stop-3: #ff4fc3;
+  --rbt-grad-line: linear-gradient(to left, #5b82ff, #a565ff 52%, #ff4fc3);
+  --rbt-badge: #ff9d9d;
+  --rbt-on-badge: #380a0d;
+
+  background:
+    radial-gradient(340px 220px at 50% -60px, rgba(122, 59, 242, 0.30), transparent 70%),
+    linear-gradient(180deg, #0c1136 0%, #111744 55%, #0d1240 100%);
+  border-inline-end: 1px solid #1f2757;
+}
+[data-theme='dark'] .platform-scope .admin-sidebar {
+  background:
+    radial-gradient(340px 220px at 50% -60px, rgba(122, 59, 242, 0.24), transparent 70%),
+    linear-gradient(180deg, #0a0e2c 0%, #0f1439 55%, #0b102f 100%);
+  border-inline-end-color: #1c2350;
+}
+
+.platform-scope .admin-side-nav a { position: relative; }
+.platform-scope .admin-side-nav a:hover {
+  background: rgba(126, 134, 255, 0.10);
+  color: #ffffff;
+}
+.platform-scope .admin-side-nav a.active {
+  background: linear-gradient(105deg, rgba(47, 92, 245, 0.42), rgba(122, 59, 242, 0.36) 55%, rgba(224, 33, 158, 0.32));
+  color: #ffffff;
+  box-shadow: inset 0 0 0 1px rgba(140, 140, 255, 0.30);
+}
+/* gradient tab indicator on the reading edge (logical → correct in RTL) */
+.platform-scope .admin-side-nav a.active::after {
+  content: '';
+  position: absolute;
+  inset-inline-start: 0;
+  top: 25%;
+  bottom: 25%;
+  width: 3px;
+  border-radius: 999px;
+  background: linear-gradient(180deg, #5b82ff, #ff4fc3);
+}
+.platform-scope .admin-side-title { letter-spacing: 0.06em; }
+
+/* ---------- 3 · App bar — surface + gradient hairline --------------- */
+.platform-scope .app-bar {
+  background: color-mix(in srgb, var(--surface) 92%, transparent);
+  -webkit-backdrop-filter: blur(12px);
+  backdrop-filter: blur(12px);
+  border-bottom: none;
+  box-shadow: none;
+}
+.platform-scope .app-bar::after {
+  content: '';
+  position: absolute;
+  inset-inline: 0;
+  bottom: 0;
+  height: 2px;
+  background: var(--rbt-grad-line);
+  pointer-events: none;
+}
+.platform-scope .bottom-nav { border-top: 1px solid var(--border); }
+
+/* ---------- 4 · Brand lockup (mark + wordmark + tagline) ------------ */
+.rbt-brand { display: flex; align-items: center; gap: 10px; min-width: 0; }
+.rbt-mark { flex: none; display: block; }
+.admin-sidebar .rbt-mark { filter: drop-shadow(0 3px 10px rgba(101, 78, 255, 0.35)); }
+.rbt-brand-text { display: flex; flex-direction: column; gap: 2px; min-width: 0; line-height: 1.1; }
+/* Latin lockup — force LTR inside the RTL shell so «RBT 360» never flips */
+.rbt-word {
+  font-family: var(--font-brand, 'Montserrat', system-ui, sans-serif);
+  font-weight: 800;
+  font-size: 1.05rem;
+  letter-spacing: 0.02em;
+  color: var(--text);
+  white-space: nowrap;
+  direction: ltr;
+  unicode-bidi: isolate;
+}
+.rbt-word .g360 {
+  background: var(--rbt-grad-line, linear-gradient(to left, #2f5cf5, #7a3bf2 52%, #e0219e));
+  -webkit-background-clip: text;
+  background-clip: text;
+  -webkit-text-fill-color: transparent;
+  color: transparent;
+}
+.rbt-tagline {
+  font-family: var(--font-brand, 'Montserrat', system-ui, sans-serif);
+  font-size: 8px;
+  font-weight: 700;
+  letter-spacing: 0.24em;
+  color: var(--text-faint);
+  white-space: nowrap;
+  direction: ltr;
+  unicode-bidi: isolate;
+}
+/* «الكونسول» pill in the header — gradient border, quiet inside */
+.rbt-console-tag {
+  font-size: var(--fs-xs);
+  font-weight: 800;
+  color: var(--text-muted);
+  padding: 3px 10px;
+  border-radius: 999px;
+  border: 1px solid transparent;
+  white-space: nowrap;
+  background:
+    linear-gradient(var(--surface), var(--surface)) padding-box,
+    var(--rbt-grad-line) border-box;
+}
+/* collapsed icon-rail (shared rule hides strongs; hide our text stack too) */
+[data-collapsed='true'] .rbt-brand-text { display: none; }
+
+/* ---------- 5 · Accents: actions, chips ----------------------------- */
+.platform-scope .btn-primary {
+  background-image: var(--rbt-grad-btn);
+  background-color: #2b4fe0; /* paint-order fallback */
+  color: #ffffff;
+  border-color: transparent;
+}
+.platform-scope .chip.active {
+  background: var(--rbt-grad-btn);
+  color: #ffffff;
+  border-color: transparent;
+}
+
+/* ---------- 6 · Cards / stat tiles — refined, branded keyline ------- */
+.platform-scope .card,
+.platform-scope .stat {
+  border-color: color-mix(in srgb, #2f5cf5 8%, var(--border));
+  box-shadow:
+    0 1px 2px rgba(16, 22, 60, 0.05),
+    0 12px 32px -26px rgba(16, 22, 60, 0.28);
+}
+[data-theme='dark'] .platform-scope .card,
+[data-theme='dark'] .platform-scope .stat {
+  border-color: #2a3166;
+  box-shadow:
+    0 1px 2px rgba(0, 0, 0, 0.35),
+    0 14px 36px -26px rgba(0, 0, 0, 0.6);
+}
+.platform-scope .stat { position: relative; overflow: hidden; }
+.platform-scope .stat::before {
+  content: '';
+  position: absolute;
+  inset-inline: 0;
+  top: 0;
+  height: 2px;
+  background: var(--rbt-grad-line);
+  opacity: 0.55;
+  pointer-events: none;
+}
+.platform-scope .page-title { letter-spacing: -0.01em; }
+.platform-scope table th {
+  color: var(--text-faint);
+  font-size: var(--fs-xs);
+  letter-spacing: 0.04em;
+}

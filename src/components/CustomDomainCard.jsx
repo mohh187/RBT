@@ -58,7 +58,7 @@ export default function CustomDomainCard({ tenant, tenantId }) {
         <Icon name="share" size={18} style={{ color: 'var(--brand)' }} />
         <strong>{ar ? 'النطاق المخصّص' : 'Custom domain'}</strong>
       </div>
-      <p className="xs faint" style={{ margin: 0 }}>{ar ? `اعرض منيوك على نطاقك الخاص (menu.مقهاك.com) أو نطاق فرعي (${suggestedSub || 'اسمك.' + PLATFORM_APEX}) بدل الرابط العام.` : `Serve your menu from your own domain or a ${PLATFORM_APEX} subdomain instead of the shared link.`}</p>
+      <p className="xs faint" style={{ margin: 0 }}>{ar ? `اعرض منيوك على نطاقك الخاص (menu.منشأتك.com) أو نطاق فرعي (${suggestedSub || 'اسمك.' + PLATFORM_APEX}) بدل الرابط العام.` : `Serve your menu from your own domain or a ${PLATFORM_APEX} subdomain instead of the shared link.`}</p>
 
       {/* Automatic subdomain — live for every venue with zero setup (resolved by slug). */}
       {suggestedSub && (

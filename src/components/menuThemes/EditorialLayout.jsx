@@ -1368,28 +1368,95 @@ export default function EditorialLayout({ tenant = null, cats, itemsByCat, visib
     const c = (cats || []).find((x) => x.id === id)
     return c ? pickLang(c, 'name', lang) : (lang === 'ar' ? 'القائمة' : 'Menu')
   }
-  // Category order when browsing everything; the filtered list when searching
-  // or when a single category chip is active.
-  const flat = useMemo(() => {
-    if (filtered) return visibleItems
+  // THE WHOLE MENU in category order, kept whether or not a chip has filtered
+  // the stage: the progress read-out below counts against this full list
+  // («ماف عداد يكون زي 44/58 يوريك باقي كم صنف»), so the diner always knows
+  // their place in the venue's ENTIRE menu, not just inside the open category.
+  const orderAll = useMemo(() => {
     const out = []
     ;(cats || []).forEach((c) => (itemsByCat[c.id] || []).forEach((it) => out.push(it)))
     ;(itemsByCat._uncat || []).forEach((it) => out.push(it))
     return out
-  }, [filtered, visibleItems, cats, itemsByCat])
+  }, [cats, itemsByCat])
+  // Category order when browsing everything; the filtered list when searching
+  // or when a single category chip is active.
+  const flat = useMemo(() => (filtered ? visibleItems : orderAll), [filtered, visibleItems, orderAll])
 
   // Progress: which section currently owns the viewport. Sections ride the
   // PAGE scroll (no inner scroller — it trapped the scroll under the hero),
   // so the IO root is the viewport itself.
+  //
+  // NOT a visibility-ratio threshold any more. The old { threshold: 0.55 }
+  // could never fire on a section TALLER than the viewport (its visible share
+  // tops out below 55%), so on long dishes the read-out — and the chip
+  // highlight fed from it — simply froze («اللاين ما بيتحرك»). The observer
+  // now watches a thin band across the MIDDLE of the screen (rootMargin cuts
+  // 45% off the top and bottom): whichever section crosses the centre band is
+  // current, whatever its height.
   useEffect(() => {
     const root = stageRef.current
     if (!root || typeof IntersectionObserver === 'undefined') return undefined
     const io = new IntersectionObserver((entries) => {
       entries.forEach((e) => { if (e.isIntersecting) setCur(Number(e.target.dataset.idx) || 0) })
-    }, { threshold: 0.55 })
+    }, { rootMargin: '-45% 0px -45% 0px', threshold: 0 })
     root.querySelectorAll('.edt-sec').forEach((el) => io.observe(el))
     return () => io.disconnect()
   }, [flat])
+
+  // SCROLL-SPY («ليه اذا نزلت تحت الخط ما بيتحرك؟»): while the diner browses
+  // the whole menu, the lit chip FOLLOWS the section on screen instead of
+  // sitting dead on «الكل», and the bar drags the live chip into view by
+  // itself. A chip tap still filters exactly as before — the spy only drives
+  // the highlight. `cur` is clamped because a fresh filter shrinks `flat`
+  // before the observer has re-fired.
+  const curItem = flat.length ? flat[Math.min(cur, flat.length - 1)] : null
+  const spyCat = !filtered && curItem && (cats || []).some((c) => c.id === curItem.categoryId)
+    ? curItem.categoryId
+    : null
+  const liveCat = filtered ? activeCat : (spyCat || 'all')
+  const catsRef = useRef(null)
+  useEffect(() => {
+    const sc = catsRef.current
+    if (!sc) return
+    const el = sc.querySelector('.edt-chip.on')
+    if (!el) return
+    // Centre the lit chip in the strip. Measured with rects, not offsetLeft,
+    // so the same arithmetic holds under RTL (negative scrollLeft) and LTR.
+    const sr = sc.getBoundingClientRect()
+    const cr = el.getBoundingClientRect()
+    const delta = (cr.left + cr.width / 2) - (sr.left + sr.width / 2)
+    if (Math.abs(delta) < 2) return
+    try { sc.scrollBy({ left: delta, behavior: prefersReduced() ? 'auto' : 'smooth' }) } catch (_) { sc.scrollLeft += delta }
+  }, [liveCat])
+
+  // Tapping a chip while deep in the page used to leave the diner stranded at
+  // the OLD list's scroll offset (often past the end of a short category).
+  // Re-anchor the first dish of the fresh stage just under the sticky bar —
+  // only when the stage top has already left the screen, so a tap at the top
+  // of the menu never moves anything.
+  const barRef = useRef(null)
+  const pickCat = (id) => {
+    onPickCat(id)
+    requestAnimationFrame(() => {
+      const st = stageRef.current
+      if (!st) return
+      const r = st.getBoundingClientRect()
+      if (r.top >= 0) return
+      const bar = barRef.current
+      const barBottom = bar ? bar.getBoundingClientRect().bottom : 0
+      const y = Math.max(0, window.scrollY + r.top - barBottom)
+      try { window.scrollTo({ top: y, behavior: prefersReduced() ? 'auto' : 'smooth' }) } catch (_) { window.scrollTo(0, y) }
+    })
+  }
+
+  // «عداد يكون زي 44/58»: the read-out is the dish's position across the WHOLE
+  // menu even when a category chip has filtered the stage — the open category
+  // is a window, the count is the meal. Only a text search (an arbitrary
+  // subset with no stable place in the full order) counts its own results.
+  const searchOnly = filtered && activeCat === 'all'
+  const overallIdx = !searchOnly && curItem ? orderAll.findIndex((x) => x.id === curItem.id) : -1
+  const progPos = overallIdx >= 0 ? overallIdx + 1 : Math.min(cur + 1, flat.length)
+  const progTotal = overallIdx >= 0 ? orderAll.length : flat.length
 
   return (
     <div
@@ -1410,11 +1477,11 @@ export default function EditorialLayout({ tenant = null, cats, itemsByCat, visib
         : null}
       {/* opaque sticky bar (outer) + its own scroller (inner): dish content can
           never bleed through the chips, and the fade lives outside the scroller */}
-      <div className="edt-catbar">
-        <div className="edt-cats scroll-x">
-          <button type="button" className={`edt-chip ${activeCat === 'all' ? 'on' : ''}`} onClick={() => onPickCat('all')}>{t('all')}</button>
+      <div className="edt-catbar" ref={barRef}>
+        <div className="edt-cats scroll-x" ref={catsRef}>
+          <button type="button" className={`edt-chip ${liveCat === 'all' ? 'on' : ''}`} onClick={() => pickCat('all')}>{t('all')}</button>
           {(cats || []).map((c) => (
-            <button key={c.id} type="button" className={`edt-chip ${activeCat === c.id ? 'on' : ''}`} onClick={() => onPickCat(c.id)}>{pickLang(c, 'name', lang)}</button>
+            <button key={c.id} type="button" className={`edt-chip ${liveCat === c.id ? 'on' : ''}`} onClick={() => pickCat(c.id)}>{pickLang(c, 'name', lang)}</button>
           ))}
         </div>
       </div>
@@ -1432,7 +1499,7 @@ export default function EditorialLayout({ tenant = null, cats, itemsByCat, visib
               />
             ))}
           </div>
-          <div className="edt-progress" aria-hidden="true">{cur + 1} / {flat.length}</div>
+          <div className="edt-progress" aria-hidden="true">{progPos} / {progTotal}</div>
         </>
       )}
     </div>

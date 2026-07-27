@@ -6,7 +6,51 @@
 import { isPlatformHost } from './domains.js'
 
 let originalManifestHref = null // captured once, to restore on leaving a venue
+let originalIconHref = null     // platform favicon, restored on leaving a venue
 let currentBlobUrl = null
+
+// Browser-tab identity: the venue's own logo as favicon (letter-icon endpoint
+// as the no-logo fallback in production). Used by menu surfaces AND the venue
+// admin dashboard, so every venue tab wears the venue's logo.
+// The logo is drawn through a circular canvas mask so the TAB icon has no
+// square background plate (tab only — the logo renders untouched elsewhere).
+let faviconJob = 0
+function setCircularFavicon(url) {
+  const job = ++faviconJob
+  const img = new Image()
+  img.crossOrigin = 'anonymous'
+  img.onload = () => {
+    if (job !== faviconJob) return
+    try {
+      const S = 64
+      const c = document.createElement('canvas')
+      c.width = S; c.height = S
+      const g = c.getContext('2d')
+      g.beginPath(); g.arc(S / 2, S / 2, S / 2, 0, Math.PI * 2); g.clip()
+      const r = Math.max(S / img.naturalWidth, S / img.naturalHeight) // cover fit
+      const w = img.naturalWidth * r, h = img.naturalHeight * r
+      g.drawImage(img, (S - w) / 2, (S - h) / 2, w, h)
+      setLink('icon', c.toDataURL('image/png'))
+    } catch (_) { setLink('icon', url) } // tainted canvas (no CORS) → raw logo
+  }
+  img.onerror = () => { if (job === faviconJob) setLink('icon', url) }
+  img.src = url
+}
+export function applyVenueFavicon(tenant, slug) {
+  if (typeof document === 'undefined' || !tenant) return
+  try {
+    const icon = document.querySelector('link[rel="icon"]')
+    if (originalIconHref === null && icon) originalIconHref = icon.getAttribute('href')
+    if (tenant.logoUrl) setCircularFavicon(tenant.logoUrl)
+    else if (import.meta.env.PROD && slug) setLink('icon', `/m/${encodeURIComponent(slug)}/icon.svg`)
+  } catch (_) { /* keep the platform favicon on any failure */ }
+}
+export function restorePlatformFavicon() {
+  try {
+    const icon = document.querySelector('link[rel="icon"]')
+    if (icon && originalIconHref !== null) icon.setAttribute('href', originalIconHref)
+  } catch (_) { /* ignore */ }
+}
 
 function readVar(name) {
   try { return (getComputedStyle(document.documentElement).getPropertyValue(name) || '').trim() } catch (_) { return '' }
@@ -34,6 +78,20 @@ export function applyVenueManifest(tenant, slug) {
   try {
     let link = document.querySelector('link[rel="manifest"]')
     if (originalManifestHref === null && link) originalManifestHref = link.getAttribute('href')
+
+    // Production: the server endpoint (functions/venueMeta.js, rewritten at
+    // /m/:slug/manifest.webmanifest) is the robust install identity — a real
+    // URL survives page reloads and is what crawlers/installers see in the
+    // server-rendered shell too. The blob below stays as the dev fallback
+    // (vite serves no functions rewrite).
+    if (import.meta.env.PROD) {
+      if (!link) { link = document.createElement('link'); link.setAttribute('rel', 'manifest'); document.head.appendChild(link) }
+      link.setAttribute('href', `/m/${encodeURIComponent(slug)}/manifest.webmanifest`)
+      setMeta('apple-mobile-web-app-title', tenant.name || 'Menu')
+      setLink('apple-touch-icon', tenant.logoUrl || '/favicon.svg')
+      applyVenueFavicon(tenant, slug)
+      return
+    }
 
     const onPlatform = isPlatformHost()
     // Custom domain serves the menu at root; shared host at /m/slug.
@@ -75,6 +133,7 @@ export function applyVenueManifest(tenant, slug) {
 
     setMeta('apple-mobile-web-app-title', name)
     setLink('apple-touch-icon', tenant.logoUrl || '/favicon.svg')
+    applyVenueFavicon(tenant, slug)
   } catch (_) { /* keep the static platform manifest on any failure */ }
 }
 
@@ -85,5 +144,6 @@ export function restorePlatformManifest() {
     if (currentBlobUrl) { URL.revokeObjectURL(currentBlobUrl); currentBlobUrl = null }
     const link = document.querySelector('link[rel="manifest"]')
     if (link && originalManifestHref !== null) link.setAttribute('href', originalManifestHref)
+    restorePlatformFavicon()
   } catch (_) { /* ignore */ }
 }

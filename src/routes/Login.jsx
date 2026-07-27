@@ -54,7 +54,7 @@ export default function Login() {
   return (
     <AuthShell
       title={t('welcomeBack')}
-      subtitle={ar ? 'سجّل الدخول لإدارة مقهاك' : 'Sign in to manage your venue'}
+      subtitle={ar ? 'سجّل الدخول لإدارة منشأتك' : 'Sign in to manage your venue'}
       err={err}
       foot={<>{t('noAccount')} <Link to="/signup">{t('signup')}</Link></>}
     >

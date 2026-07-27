@@ -13,13 +13,13 @@ import { doc, getDoc, onSnapshot } from 'firebase/firestore'
 
 export const LANDING_DEFAULTS = {
   announcement: {
-    enabled: true,
+    enabled: false, // owner asked to remove the ribbon (2026-07-27) — re-enable from LandingStudio when needed
     text: 'كل المزايا مفتوحة مجاناً خلال فترة الإطلاق — أنشئ حسابك اليوم',
     href: '/signup',
   },
 
   hero: {
-    title: 'شغّل مقهاك كله',
+    title: 'شغّل منشأتك كلها',
     titleAccent: 'من نظام واحد',
     subtitle: 'من المنيو والطلب بالباركود، إلى الكاشير والمطبخ اللحظي، إلى المخزون والحملات والمساعد الذكي — تشغيل منشأتك كاملاً في نظام عربي واحد، وبدون أي عمولة على طلباتك.',
     ctaText: 'إنشاء حساب مجاناً',
@@ -236,7 +236,7 @@ export const LANDING_DEFAULTS = {
   // Visibility AND order of the page flow. The announcement ribbon always
   // renders above the sticky nav (its row here only controls visibility).
   sections: [
-    { key: 'announcement', enabled: true },
+    { key: 'announcement', enabled: false },
     { key: 'hero', enabled: true },
     { key: 'logos', enabled: true },
     { key: 'features', enabled: true },

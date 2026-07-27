@@ -5,14 +5,75 @@ import { BrandMark } from './ui.jsx'
 import Icon from './Icon.jsx'
 import '../landing.css'
 
-// Clean split auth: a LIGHT, airy showcase panel (logo, a framed product
-// screenshot, a short value line) beside the form. Collapses to a single centered
+// The full ecosystem drawn in CSS: a touch POS terminal with live categories
+// and a ticket, a kitchen tablet, and the guest's phone — the three screens a
+// venue actually runs on. Decorative (aria-hidden), theme-aware via the shared
+// rlauth tokens, RTL-correct via logical properties, Latin digits only.
+function EcosystemMock({ L }) {
+  const tiles = [
+    [L('لاتيه', 'Latte'), 15], [L('موهيتو', 'Mojito'), 18], [L('كروسان', 'Croissant'), 12],
+    [L('تشيز كيك', 'Cheesecake'), 22], [L('أمريكانو', 'Americano'), 11], [L('فلات وايت', 'Flat white'), 14],
+  ]
+  return (
+    <div className="eco" aria-hidden="true">
+      <div className="eco-pos">
+        <span className="eco-tag">{L('كاشير باللمس', 'Touch POS')}</span>
+        <div className="eco-screen">
+          <div className="eco-head">
+            <i className="eco-dot" />{L('نقطة البيع', 'Point of sale')}
+            <span className="eco-head-tabs"><b>{L('الكل', 'All')}</b><span>{L('قهوة', 'Coffee')}</span><span>{L('حلى', 'Desserts')}</span></span>
+          </div>
+          <div className="eco-body">
+            <div className="eco-grid">
+              {tiles.map(([n, p]) => (
+                <div key={n} className="eco-tile"><i /><b>{n}</b><span className="num">{p}</span></div>
+              ))}
+            </div>
+            <div className="eco-ticket">
+              <div className="eco-trow"><span>{L('لاتيه ×2', 'Latte ×2')}</span><span className="num">30</span></div>
+              <div className="eco-trow"><span>{L('تشيز كيك', 'Cheesecake')}</span><span className="num">22</span></div>
+              <div className="eco-trow eco-total"><span>{L('الإجمالي', 'Total')}</span><span className="num">52</span></div>
+              <div className="eco-pay">{L('دفع', 'Pay')}</div>
+            </div>
+          </div>
+        </div>
+        <div className="eco-neck" />
+        <div className="eco-base" />
+      </div>
+      <div className="eco-tab">
+        <span className="eco-tag">{L('شاشة المطبخ', 'Kitchen display')}</span>
+        <div className="eco-kds">
+          <div className="eco-korder">
+            <div className="eco-krow"><b className="num">#124</b><span className="eco-kchip is-new">{L('جديد', 'New')}</span></div>
+            <p>{L('لاتيه ×2 · كروسان', 'Latte ×2 · Croissant')}</p>
+          </div>
+          <div className="eco-korder">
+            <div className="eco-krow"><b className="num">#123</b><span className="eco-kchip is-done">{L('جاهز', 'Ready')}</span></div>
+            <p>{L('موهيتو · تشيز كيك', 'Mojito · Cheesecake')}</p>
+          </div>
+        </div>
+      </div>
+      <div className="eco-phone">
+        <span className="eco-tag">{L('منيو العميل', 'Guest menu')}</span>
+        <div className="eco-pscreen">
+          <div className="eco-pill" />
+          <div className="eco-prow"><i /><span>{L('لاتيه', 'Latte')}</span><b>+</b></div>
+          <div className="eco-prow"><i /><span>{L('موهيتو', 'Mojito')}</span><b>+</b></div>
+          <div className="eco-prow"><i /><span>{L('كروسان', 'Croissant')}</span><b>+</b></div>
+          <div className="eco-cta">{L('اطلب الآن', 'Order now')}</div>
+        </div>
+      </div>
+    </div>
+  )
+}
+
+// Clean split auth: a LIGHT, airy showcase panel (logo, the drawn ecosystem,
+// a short value line) beside the form. Collapses to a single centered
 // column on mobile. Shared by Login + Signup so both stay consistent.
 export default function AuthShell({ title, subtitle, err, foot, children }) {
   const { lang, toggleLang, theme, toggleTheme } = useI18n()
   const ar = lang === 'ar'
   const L = (a, e) => (ar ? a : e)
-  const [shotOk, setShotOk] = useState(true)
 
   const props = [
     L('بدون أي عمولة على طلباتك', 'Zero commission on your orders'),
@@ -25,13 +86,9 @@ export default function AuthShell({ title, subtitle, err, foot, children }) {
       <aside className="rlauth-show">
         <div className="rlauth-show-brand"><BrandMark /></div>
         <div className="rlauth-show-mid">
-          {shotOk && (
-            <div className="rlauth-device">
-              <img src="/marketing/menu.jpg" alt={L('منيو حقيقي من النظام', 'A live menu from the system')} onError={() => setShotOk(false)} />
-            </div>
-          )}
+          <EcosystemMock L={L} />
           <div className="rlauth-show-copy">
-            <h2 className="rlauth-h">{L('شغّل مقهاك كله من مكان واحد', 'Run your whole café from one place')}</h2>
+            <h2 className="rlauth-h">{L('منظومة واحدة تدير كل شيء — من شاشة الكاشير إلى جوال عميلك', "One system running it all — from the cashier's screen to your customer's phone")}</h2>
             <ul className="rlauth-props">
               {props.map((p) => (<li key={p}><Icon name="check" size={15} className="ic" />{p}</li>))}
             </ul>

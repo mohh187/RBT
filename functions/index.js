@@ -970,3 +970,7 @@ exports.onStaffInviteEmail = messaging.onStaffInviteEmail
 // ---- invoicing (numbered receipts / tax invoices for every paid order) ----
 exports.onOrderPaid = require('./invoicing').onOrderPaid
 
+// ---- per-venue share + install identity (crawler og tags + dynamic manifest) ----
+// Serves /m/** and /join/** (see firebase.json rewrites) with the VENUE's meta.
+exports.venueShell = require('./venueMeta').venueShell
+

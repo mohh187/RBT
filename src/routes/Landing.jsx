@@ -2,13 +2,13 @@
 // src/lib/landingContent.js defaults). Section order & visibility, every text,
 // bullet, tier and FAQ come from the merged content object; prices come from
 // src/lib/plans.js unless a tier sets priceOverride (server stays the truth at
-// checkout). Design: the existing glass/premium landing language (landing.css)
-// + the lx-* additions appended to index.css (landing-cms v1 block).
+// checkout). Design: the RBT 360 identity (landing.css) — navy canvas, the
+// blue→violet→magenta gradient as the energy, BrandMark.jsx as the mark.
 import { useEffect, useState, Fragment } from 'react'
 import { Link } from 'react-router-dom'
 import { useAuth } from '../lib/auth.jsx'
 import { useI18n } from '../lib/i18n.jsx'
-import { BrandMark } from '../components/ui.jsx'
+import BrandMark, { RbtMark, RbtTagline } from '../components/BrandMark.jsx'
 import Icon from '../components/Icon.jsx'
 import { Price } from '../components/Riyal.jsx'
 import { db } from '../lib/firebase.js'
@@ -143,7 +143,7 @@ function HeroSec({ c }) {
       <div className="rl-hero-bg" aria-hidden="true" />
       <div className="rl-wrap lx-hero">
         <div className="lx-hero-txt">
-          <span className="rl-kicker">نظام تشغيل مقهاك ومطعمك</span>
+          <span className="rl-kicker">نظام تشغيل منشأتك</span>
           <h1>{h.title} {h.titleAccent && <span className="em">{h.titleAccent}</span>}</h1>
           <p className="rl-lead">{h.subtitle}</p>
           <div className="rl-cta lx-start">
@@ -155,8 +155,10 @@ function HeroSec({ c }) {
               {h.badges.map((b) => <span key={b} className="lx-badge"><Icon name="check" size={13} className="ic" />{b}</span>)}
             </div>
           )}
+          <div className="lx-tagline"><RbtTagline size={10} /></div>
         </div>
         <div className="lx-hero-media reveal">
+          <span className="lx-hero-chip" aria-hidden="true"><RbtMark size={52} /></span>
           <div className="rl-frame"><CashierMock lang="ar" /></div>
         </div>
       </div>
@@ -337,9 +339,11 @@ function CtaSec({ c }) {
     <section className="rl-sec">
       <div className="rl-wrap">
         <div className="rl-ctaband reveal">
+          <span className="lx-cta-mark" aria-hidden="true"><RbtMark size={380} mono /></span>
           <h2>{c.cta.title}</h2>
           <p>{c.cta.subtitle}</p>
           <Link to="/signup" className="rl-btn lg">{c.cta.buttonText}</Link>
+          <span className="lx-tagline"><RbtTagline size={10} mono /></span>
         </div>
       </div>
     </section>
@@ -373,8 +377,8 @@ function FooterSec({ c }) {
       <div className="rl-wrap">
         <div className="rl-foot-grid">
           <div>
-            <BrandMark />
-            {f.about && <p style={{ color: 'var(--ink-2)', maxWidth: 320, marginTop: 10, fontSize: '0.9rem', lineHeight: 1.7 }}>{f.about}</p>}
+            <BrandMark size={34} tagline />
+            {f.about && <p style={{ color: 'var(--ink-2)', maxWidth: 320, marginTop: 12, fontSize: '0.9rem', lineHeight: 1.7 }}>{f.about}</p>}
             {socialLinks.length > 0 && (
               <div className="lx-social">
                 {socialLinks.map((s) => (
@@ -407,7 +411,7 @@ function FooterSec({ c }) {
             {['مدى', 'Visa', 'Mastercard', 'Apple Pay'].map((p) => <span key={p} className="chip">{p}</span>)}
           </div>
         )}
-        <p className="rl-foot-copy">© 2026 rbt360. جميع الحقوق محفوظة.</p>
+        <p className="rl-foot-copy">© 2026 RBT 360. جميع الحقوق محفوظة.</p>
       </div>
     </footer>
   )
