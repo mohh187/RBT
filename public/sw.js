@@ -3,8 +3,8 @@
    offline fallback. */
 
 // Bump on deploy to drop stale/bad cached assets (activate purges old caches).
-const CACHE = 'rbt360-v4'
-const APP_SHELL = ['/', '/index.html', '/favicon.svg', '/manifest.webmanifest']
+const CACHE = 'rbt360-v5'
+const APP_SHELL = ['/', '/index.html', '/brand/favicon.png', '/manifest.webmanifest']
 
 self.addEventListener('install', (event) => {
   self.skipWaiting()
@@ -66,8 +66,8 @@ self.addEventListener('message', (event) => {
     self.registration.showNotification(data.title || 'RBT360', {
       body: data.body || '',
       tag: data.tag,
-      icon: data.icon || '/favicon.svg',
-      badge: '/favicon.svg',
+      icon: data.icon || '/brand/favicon.png',
+      badge: '/brand/favicon.png',
       renotify: true,
       requireInteraction: !!data.requireInteraction,
       vibrate: [200, 100, 200],
@@ -106,8 +106,8 @@ try {
     const data = payload.data || {}
     self.registration.showNotification(n.title || 'RBT360', {
       body: n.body || '',
-      icon: '/favicon.svg',
-      badge: '/favicon.svg',
+      icon: '/brand/favicon.png',
+      badge: '/brand/favicon.png',
       tag: data.tag || 'push',
       renotify: true,
       requireInteraction: true,

@@ -75,14 +75,14 @@ export async function showNotification(title, { body = '', tag, url = '/', requi
       const reg = await navigator.serviceWorker.getRegistration()
       if (reg) {
         await reg.showNotification(title, {
-          body, tag, icon: '/favicon.svg', badge: '/favicon.svg',
+          body, tag, icon: '/brand/favicon.png', badge: '/brand/favicon.png',
           renotify: true, requireInteraction, vibrate: [200, 100, 200],
           data: { url },
         })
         return
       }
     }
-    new Notification(title, { body, tag, icon: '/favicon.svg' })
+    new Notification(title, { body, tag, icon: '/brand/favicon.png' })
   } catch (_) { /* ignore */ }
 }
 

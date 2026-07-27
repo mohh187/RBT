@@ -88,7 +88,7 @@ export function applyVenueManifest(tenant, slug) {
       if (!link) { link = document.createElement('link'); link.setAttribute('rel', 'manifest'); document.head.appendChild(link) }
       link.setAttribute('href', `/m/${encodeURIComponent(slug)}/manifest.webmanifest`)
       setMeta('apple-mobile-web-app-title', tenant.name || 'Menu')
-      setLink('apple-touch-icon', tenant.logoUrl || '/favicon.svg')
+      setLink('apple-touch-icon', tenant.logoUrl || '/brand/favicon.png')
       applyVenueFavicon(tenant, slug)
       return
     }
@@ -104,7 +104,7 @@ export function applyVenueManifest(tenant, slug) {
     const name = tenant.name || 'Menu'
     const brand = safeColor(tenant.themeColor, safeColor(readVar('--brand'), '#8B5E3C'))
     const bg = safeColor(readVar('--bg'), '#ffffff')
-    const icon = tenant.logoUrl || '/favicon.svg'
+    const icon = tenant.logoUrl || '/brand/favicon.png'
     const ar = (document.documentElement.getAttribute('dir') || 'rtl') === 'rtl'
 
     const manifest = {
@@ -132,7 +132,7 @@ export function applyVenueManifest(tenant, slug) {
     link.setAttribute('href', currentBlobUrl)
 
     setMeta('apple-mobile-web-app-title', name)
-    setLink('apple-touch-icon', tenant.logoUrl || '/favicon.svg')
+    setLink('apple-touch-icon', tenant.logoUrl || '/brand/favicon.png')
     applyVenueFavicon(tenant, slug)
   } catch (_) { /* keep the static platform manifest on any failure */ }
 }

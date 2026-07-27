@@ -4,7 +4,9 @@
 // footers and required to be public for Moyasar merchant onboarding.
 import { useEffect, useMemo, useState } from 'react'
 import { Link, useParams, useLocation } from 'react-router-dom'
-import { LEGAL_DEFAULTS, LEGAL_ORDER, mergeLegal, loadPublishedLegal, COMPANY } from '../lib/legal.js'
+import { LEGAL_DEFAULTS, LEGAL_ORDER, mergeLegal, loadPublishedLegal, COMPANY, isFilled, joinParts } from '../lib/legal.js'
+import BrandMark from '../components/BrandMark.jsx'
+import '../styles/platform-brand.css'
 
 export default function Legal() {
   const { doc: docParam } = useParams()
@@ -23,10 +25,12 @@ export default function Legal() {
   const docData = mergeLegal(published, id)
 
   return (
-    <div dir="rtl" style={{ minHeight: '100dvh', background: 'var(--bg, #fafafa)', color: 'var(--text, #0a0a0b)' }}>
+    // platform-scope: this public page is part of the RBT 360 identity — without
+    // it the page fell back to the legacy maroon --brand and a plain text logo.
+    <div className="platform-scope" dir="rtl" style={{ minHeight: '100dvh', background: 'var(--bg, #fafafa)', color: 'var(--text, #0a0a0b)' }}>
       <header style={{ borderBottom: '1px solid var(--border, #e7e7ea)', padding: '14px 16px', position: 'sticky', top: 0, background: 'var(--surface, #fff)', zIndex: 5 }}>
         <div style={{ maxWidth: 780, margin: '0 auto', display: 'flex', alignItems: 'center', gap: 10 }}>
-          <Link to="/" style={{ fontWeight: 800, fontSize: 18, textDecoration: 'none', color: 'inherit' }}>{COMPANY.brand}</Link>
+          <Link to="/" style={{ display: 'inline-flex', textDecoration: 'none', color: 'inherit' }} aria-label={COMPANY.brand}><BrandMark size={26} /></Link>
           <span style={{ color: 'var(--text-faint, #9a9aa5)', fontSize: 13 }}>· المستندات القانونية</span>
         </div>
       </header>
@@ -71,8 +75,18 @@ export default function Legal() {
             {LEGAL_ORDER.map((d) => <Link key={d} to={`/legal/${d}`} style={{ color: 'inherit' }}>{LEGAL_DEFAULTS[d].title}</Link>)}
             <Link to="/status" style={{ color: 'inherit' }}>حالة المنصة</Link>
           </div>
-          <p>{COMPANY.legalName} · {COMPANY.email} · {COMPANY.phone}</p>
-          <p style={{ marginTop: 4 }}>سجل تجاري: {COMPANY.cr} · الرقم الضريبي: {COMPANY.vat}</p>
+          {/* Only real values print. Unfilled fields are still «[…]» template
+              tokens — showing those on a binding public document would look
+              broken to a customer, a regulator or a payment processor. */}
+          <p>{joinParts([COMPANY.legalName, COMPANY.email, COMPANY.phone], ' · ')}</p>
+          {(isFilled(COMPANY.cr) || isFilled(COMPANY.vat)) && (
+            <p style={{ marginTop: 4 }}>
+              {joinParts([
+                isFilled(COMPANY.cr) ? `سجل تجاري: ${COMPANY.cr}` : '',
+                isFilled(COMPANY.vat) ? `الرقم الضريبي: ${COMPANY.vat}` : '',
+              ], ' · ')}
+            </p>
+          )}
         </footer>
       </div>
     </div>

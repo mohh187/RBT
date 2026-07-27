@@ -1,16 +1,20 @@
 {
-  "name": "RBT360",
-  "short_name": "RBT360",
-  "description": "منيو رقمي وطلب عبر QR ونظام إدارة متكامل للمقاهي والمطاعم",
+  "id": "/",
+  "name": "RBT 360",
+  "short_name": "RBT 360",
+  "description": "نظام تشغيل متكامل للمنشآت: منيو رقمي وطلب بالباركود، كاشير ومطبخ لحظي، مخزون وولاء وفوترة متوافقة مع زاتكا — بدون أي عمولة.",
   "start_url": "/",
   "display": "standalone",
-  "background_color": "#F7F2EC",
-  "theme_color": "#8B5E3C",
+  "background_color": "#0D1533",
+  "theme_color": "#0D1533",
   "orientation": "any",
   "dir": "rtl",
   "lang": "ar",
   "icons": [
-    { "src": "/favicon.svg", "sizes": "any", "type": "image/svg+xml", "purpose": "any maskable" }
+    { "src": "/brand/icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "any" },
+    { "src": "/brand/maskable-512.png", "sizes": "512x512", "type": "image/png", "purpose": "maskable" },
+    { "src": "/brand/apple-touch-icon.png", "sizes": "180x180", "type": "image/png", "purpose": "any" },
+    { "src": "/brand/favicon.png", "sizes": "64x64", "type": "image/png", "purpose": "any" }
   ],
   "categories": ["food", "business", "shopping"]
 }

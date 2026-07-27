@@ -35,9 +35,9 @@ const LINKS = [
   [1, 2, 8], [0, 3, 7], [4, 6, 9], [6, 7, 8.5], [5, 8, 6.5],
 ]
 
-// THE OFFICIAL ASSETS. The owner supplied the real logo as SVG files
-// («RBT360 - Brand/» → public/brand/logo-mark.svg, logo-full.svg, wordmark*.svg
-// — the archival originals). Those exports embed TRACED RASTER, so each weighs
+// THE OFFICIAL ASSETS. The owner supplied the real logo as SVG files, kept as
+// the archival originals in the repo's `brand-source/` folder (NOT in public/ —
+// they must never be deployed). Those exports embed TRACED RASTER, so each weighs
 // 340-415KB and a single lockup pulled ~757KB over the wire. What ships is the
 // same artwork re-encoded as tight transparent PNGs at 3x the largest size any
 // surface paints (43KB for a full lockup, 94% lighter, pixel-identical at every
@@ -48,7 +48,6 @@ const LINKS = [
 // NOTE: **/*.png|svg carry a 1-year immutable cache header — any future
 // artwork change must land under a NEW filename, never by overwriting these.
 export const BRAND_MARK_URL = '/brand/mark-256.png'
-export const BRAND_FULL_URL = '/brand/logo-full.svg'
 // Official logotype (owner-supplied «logo font» files), viewBox-cropped to the
 // lettering: wordmark alone (ratio 6.4:1) and wordmark + tagline (4.285:1).
 export const BRAND_WORD_URL = '/brand/word-448.png'
@@ -186,28 +185,23 @@ export default function BrandMark({ variant = 'lockup', size = 30, mono = false,
   if (variant === 'mark') return <RbtMark size={size} mono={mono} className={className} style={style} />
 
   if (variant === 'full') {
-    // The official full lockup already carries the wordmark + tagline baked
-    // into the artwork — render it whole. Mono surfaces keep the drawn stack.
-    if (!mono) {
-      return (
-        <img
-          src={BRAND_FULL_URL}
-          alt="RBT 360 — CONNECT · BUILD · SCALE"
-          width={Math.round(size * 2.2)}
-          draggable={false}
-          className={className}
-          style={{ display: 'inline-block', objectFit: 'contain', userSelect: 'none', ...style }}
-        />
-      )
-    }
+    // Stacked hero lockup, composed from the SAME official art the row lockup
+    // uses (mark image + logotype image) — no separate heavyweight asset.
+    const wordSize = Math.max(13, Math.round(size * 0.34))
     return (
       <span
         className={className}
         style={{ display: 'inline-flex', flexDirection: 'column', alignItems: 'center', gap: Math.round(size * 0.14), ...style }}
       >
         <RbtMark size={size} mono={mono} />
-        <RbtWordmark size={Math.max(13, Math.round(size * 0.34))} mono={mono} />
-        {tagline && <RbtTagline size={Math.max(8, Math.round(size * 0.105))} mono={mono} />}
+        {mono ? (
+          <>
+            <RbtWordmark size={wordSize} mono />
+            {tagline && <RbtTagline size={Math.max(8, Math.round(size * 0.105))} mono />}
+          </>
+        ) : (
+          <RbtWordmark size={wordSize} withTagline={tagline} />
+        )}
       </span>
     )
   }

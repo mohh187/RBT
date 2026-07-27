@@ -9,11 +9,17 @@
     ],
     "headers": [
       {
-        "source": "**/*.@(js|css|woff2|png|jpg|jpeg|svg|webp)",
+        "//": "Hosting matches header globs against the REQUEST path, and every SPA URL (/, /login, /platform...) is rewritten to index.html — a '/index.html' rule never fires for them. Start from no-cache for EVERYTHING so no route can serve a stale shell that points at deleted chunk hashes (the white-screen/preloadError failure), then opt the hashed assets back in below. Later matching rules win per header key.",
+        "source": "**",
+        "headers": [{ "key": "Cache-Control", "value": "no-cache" }]
+      },
+      {
+        "source": "**/*.@(js|css|woff2|png|jpg|jpeg|svg|webp|avif|ico)",
         "headers": [{ "key": "Cache-Control", "value": "public, max-age=31536000, immutable" }]
       },
       {
-        "source": "/index.html",
+        "//": "Not content-hashed: the service worker and the manifests must always revalidate, or a bad SW/identity could pin itself for a year.",
+        "source": "/@(sw.js|manifest.webmanifest)",
         "headers": [{ "key": "Cache-Control", "value": "no-cache" }]
       }
     ]

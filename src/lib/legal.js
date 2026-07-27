@@ -7,11 +7,17 @@
 import { db } from './firebase.js'
 import { doc, getDoc, setDoc, onSnapshot, addDoc, collection, serverTimestamp } from 'firebase/firestore'
 
-// Fill these with the real legal entity details (shown in every policy + receipts).
+// The real legal entity details (shown in every policy + receipts).
+// ANY value left as a «[...]» placeholder is treated as NOT YET FILLED and is
+// omitted from the rendered documents rather than printed literally — a public
+// contract must never show template brackets to a customer, a regulator or a
+// payment processor. Fill CR/VAT/legal name/phone from the platform console
+// (Legal editor) the moment they are issued; until then the documents read
+// cleanly without them. `isFilled` below is the single gate.
 export const COMPANY = {
-  brand: 'RBT360',
+  brand: 'RBT 360',
   legalName: '[الاسم القانوني للمنشأة]',
-  email: 'support@rbt360.app',
+  email: 'support@rbt360sa.com',
   phone: '[رقم التواصل]',
   address: '[العنوان الوطني / المدينة، المملكة العربية السعودية]',
   cr: '[رقم السجل التجاري]',
@@ -19,7 +25,23 @@ export const COMPANY = {
   jurisdiction: 'المملكة العربية السعودية',
 }
 
+// A field is "filled" only if it holds a real value — not an empty string and
+// not a bracketed template token.
+export const isFilled = (v) => {
+  const s = String(v == null ? '' : v).trim()
+  return s !== '' && !/^\[.*\]$/.test(s)
+}
+// Value if filled, else a safe fallback ('' by default, so it disappears).
+const f = (v, fallback = '') => (isFilled(v) ? String(v).trim() : fallback)
+// Join only the parts that exist, so a contact line never shows a dangling «—».
+export const joinParts = (parts, sep = ' — ') => parts.filter(isFilled).map((p) => String(p).trim()).join(sep)
+
 const c = COMPANY
+// The party name used inside sentences: the legal entity once it exists, the
+// brand until then (never a bracketed token).
+const PROVIDER = f(c.legalName, c.brand)
+const CONTACT = joinParts([c.email, c.phone])
+const CONTACT_FULL = joinParts([c.email, c.phone, c.address])
 
 // Each doc: { id, title, version, updated (ISO date string), intro, sections:[{h, body}] }.
 export const LEGAL_DEFAULTS = {
@@ -30,7 +52,7 @@ export const LEGAL_DEFAULTS = {
     updated: '2026-07-04',
     intro: `تحكم هذه الشروط والأحكام استخدامك لمنصة ${c.brand} وخدماتها. باستخدامك المنصة — سواء كمنشأة مشتركة أو كزائر يتصفّح المنيو أو يطلب — فإنك توافق على الالتزام بهذه الشروط. إن لم توافق عليها فيرجى عدم استخدام الخدمة.`,
     sections: [
-      { h: '1. تعريفات', body: `«المنصة» تعني نظام ${c.brand} الإلكتروني وتطبيقاته. «المنشأة» هي المقهى/المطعم المشترك الذي ينشئ حساباً ويعرض منيوه ويستقبل الطلبات. «الزائر/العميل» هو من يتصفّح المنيو أو يقدّم طلباً. «نحن» تشير إلى ${c.legalName}، مزوّد المنصة.` },
+      { h: '1. تعريفات', body: `«المنصة» تعني نظام ${c.brand} الإلكتروني وتطبيقاته. «المنشأة» هي المقهى/المطعم المشترك الذي ينشئ حساباً ويعرض منيوه ويستقبل الطلبات. «الزائر/العميل» هو من يتصفّح المنيو أو يقدّم طلباً. «نحن» تشير إلى ${PROVIDER}، مزوّد المنصة.` },
       { h: '2. وصف الخدمة', body: 'توفّر المنصة أدوات لإنشاء منيو رقمي عبر رمز QR، واستقبال الطلبات وإدارتها، ونقطة بيع، وإدارة الموظفين والمخزون والعملاء، وأدوات تسويقية وتحليلية. تُقدَّم بعض المزايا ضمن باقات اشتراك مدفوعة. قد نضيف أو نعدّل المزايا من وقت لآخر.' },
       { h: '3. الحسابات والتسجيل', body: 'يلتزم صاحب المنشأة بتقديم بيانات صحيحة ومحدّثة، والحفاظ على سرية بيانات الدخول، وهو مسؤول عن كل النشاط الذي يتم عبر حسابه وحسابات موظفيه. يحق لنا تعليق أو إنهاء أي حساب يخالف هذه الشروط.' },
       { h: '4. الاشتراكات والفوترة', body: 'تُتاح المزايا حسب الباقة المختارة (منيو / منيو + تشغيل / احترافي / متكامل). تُدفع رسوم الاشتراك مقدّماً بشكل دوري عبر بوابة الدفع المعتمدة (ميسر). يتجدّد الاشتراك تلقائياً ما لم يُلغَ قبل نهاية الدورة. عند انتهاء الاشتراك أو التأخر في السداد قد تُقيَّد بعض المزايا وفق سياستنا. الأسعار قابلة للتغيير بإشعار مسبق.' },
@@ -40,7 +62,7 @@ export const LEGAL_DEFAULTS = {
       { h: '8. إخلاء المسؤولية وحدودها', body: 'تُقدَّم الخدمة «كما هي» دون ضمانات صريحة أو ضمنية بشأن استمراريتها أو خلوّها من الأخطاء. لا نتحمّل — إلى الحد الذي يجيزه النظام — أي أضرار غير مباشرة أو تبعية. لا تتجاوز مسؤوليتنا الإجمالية قيمة ما دفعته المنشأة خلال الأشهر الثلاثة السابقة للمطالبة.' },
       { h: '9. الإيقاف والإنهاء', body: 'يحق لنا تعليق أو إنهاء الوصول عند مخالفة الشروط أو عدم السداد أو بأمر نظامي. يمكن للمنشأة إنهاء اشتراكها في أي وقت، وتخضع المبالغ المدفوعة لسياسة الاسترجاع. عند الإنهاء قد تُحذف البيانات وفق سياسة الاحتفاظ.' },
       { h: '10. القانون الواجب التطبيق', body: `تخضع هذه الشروط لأنظمة ${c.jurisdiction} وتُحال أي نزاعات إلى الجهات القضائية المختصة فيها.` },
-      { h: '11. التعديلات والتواصل', body: `قد نحدّث هذه الشروط، وسنُشعر بالتغييرات الجوهرية. استمرارك في الاستخدام بعد التحديث يعني قبولك. للتواصل: ${c.email} — ${c.phone}.` },
+      { h: '11. التعديلات والتواصل', body: `قد نحدّث هذه الشروط، وسنُشعر بالتغييرات الجوهرية. استمرارك في الاستخدام بعد التحديث يعني قبولك. للتواصل: ${CONTACT}.` },
     ],
   },
   privacy: {
@@ -60,7 +82,7 @@ export const LEGAL_DEFAULTS = {
       { h: '8. الأمان', body: 'نطبّق ضوابط تقنية وتنظيمية معقولة (تحكّم بالصلاحيات، تشفير النقل، عزل بيانات كل منشأة، مراقبة). ورغم ذلك لا يمكن ضمان أمان مطلق، وسنُشعر بالجهات المختصة والمتأثرين عند وقوع خرق يستوجب ذلك.' },
       { h: '9. ملفات الارتباط والتخزين المحلي', body: 'نستخدم التخزين المحلي وملفات ارتباط ضرورية لتشغيل الخدمة (تسجيل الدخول، التفضيلات، سلة الطلب). يمكنك التحكّم بها من متصفحك، وقد يؤثّر تعطيلها على بعض المزايا.' },
       { h: '10. خصوصية الأطفال', body: 'الخدمة غير موجّهة لمن هم دون السن النظامية، ولا نجمع بياناتهم عن قصد.' },
-      { h: '11. التواصل ومسؤول حماية البيانات', body: `لأي استفسار أو طلب بخصوص خصوصيتك: ${c.email} — ${c.phone} — ${c.address}.` },
+      { h: '11. التواصل ومسؤول حماية البيانات', body: `لأي استفسار أو طلب بخصوص خصوصيتك: ${CONTACT_FULL}.` },
     ],
   },
   refund: {
@@ -75,7 +97,7 @@ export const LEGAL_DEFAULTS = {
       { h: '3. مدة معالجة الاسترجاع', body: 'عند اعتماد الاسترجاع يُعاد المبلغ إلى وسيلة الدفع نفسها عبر ميسر، وقد يستغرق ظهوره من 5 إلى 14 يوم عمل حسب البنك ومزوّد البطاقة.' },
       { h: '4. طلبات عملاء المنشآت', body: 'المنشأة هي البائع والمسؤول عن أصنافها. أي طلب استرجاع أو إلغاء أو شكوى تتعلق بطلب طعام/شراب يُوجَّه إلى المنشأة مباشرةً وتُطبَّق سياسة تلك المنشأة. تعمل المنصة كوسيط تقني فقط.' },
       { h: '5. عدم الأحقية في الاسترجاع', body: 'لا يُسترد المبلغ في حالات إساءة الاستخدام أو مخالفة الشروط، أو عند استهلاك الخدمة/الميزة فعلياً، أو انقضاء مدة تقديم الطلب.' },
-      { h: '6. التواصل', body: `لطلبات الاسترجاع أو الاستفسار: ${c.email} — ${c.phone}. يُرجى إرفاق رقم العملية وتاريخها.` },
+      { h: '6. التواصل', body: `لطلبات الاسترجاع أو الاستفسار: ${CONTACT}. يُرجى إرفاق رقم العملية وتاريخها.` },
     ],
   },
   aup: {

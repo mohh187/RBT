@@ -36,7 +36,7 @@ async function pushToStaff(db, tid, notification, data) {
   if (!snap.docs.length) return
   await multicastChunked(snap.docs, {
     notification, data: data || {},
-    webpush: { fcmOptions: { link: (data && data.url) || '/admin' }, notification: { icon: '/favicon.svg' } },
+    webpush: { fcmOptions: { link: (data && data.url) || '/admin' }, notification: { icon: '/brand/favicon.png' } },
   })
 }
 
@@ -290,7 +290,7 @@ exports.onNewOrder = onDocumentCreated('tenants/{tid}/orders/{oid}', async (even
     data: { url: '/cashier', tag: 'order' },
     webpush: {
       fcmOptions: { link: '/cashier' },
-      notification: { icon: '/favicon.svg', requireInteraction: true },
+      notification: { icon: '/brand/favicon.png', requireInteraction: true },
     },
   })
 
@@ -553,7 +553,7 @@ async function pushToPlatform(db, notification, data) {
   if (!snap.docs.length) return
   await multicastChunked(snap.docs, {
     notification, data: data || {},
-    webpush: { fcmOptions: { link: (data && data.url) || '/platform' }, notification: { icon: '/favicon.svg', requireInteraction: true } },
+    webpush: { fcmOptions: { link: (data && data.url) || '/platform' }, notification: { icon: '/brand/favicon.png', requireInteraction: true } },
   })
 }
 
