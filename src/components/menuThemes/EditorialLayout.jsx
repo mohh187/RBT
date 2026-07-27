@@ -1748,7 +1748,19 @@ function EdtSection({ it, idx, catLabel, currency, offers, lang, t, onOpen, allI
 // allItems + onQuickAdd are OPTIONAL: with them the venue's curated «يُطلب معه»
 // pairings become tappable; without them the stage still renders everything
 // else, so an un-patched caller degrades instead of crashing.
-export function EditorialItemStage({ item, tenant = null, currency, onClose, onAdd, originRect = null, allItems = [], offers = null, onQuickAdd = null }) {
+export function EditorialItemStage({ item, tenant = null, currency, onClose, onAdd, originRect: originRectProp = null, allItems = [], offers = null, onQuickAdd = null }) {
+  // NO FLIP ON A PHONE. The open animation places the dish photo at the CARD's
+  // on-screen rect and then flies it into place over 300ms, while the panel and
+  // the painted table below do not move with it. On a desktop that reads as the
+  // stage growing out of the card. On a phone it is exactly the long-standing
+  // complaint: «the plate shows up in the middle, then the table moves and the
+  // details are cut, and it sorts itself out after a scroll» — the plate starts
+  // wherever the card happened to be (mid-screen), the table is already home so
+  // the two look out of sync, and a viewport-sized transform over a wall with
+  // shadows drops frames until a scroll forces WebKit to recomposite (the same
+  // stale-composite behaviour the room backdrop is already kicked for).
+  // The stage still animates in — it just does not fly.
+  const originRect = isNarrow() ? null : originRectProp
   const { t, lang, theme } = useI18n()
   const ar = lang === 'ar'
   const portalRoot = usePortalRoot()
