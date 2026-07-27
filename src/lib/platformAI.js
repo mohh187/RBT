@@ -139,7 +139,7 @@ const withTimeout = (p, ms, label) => Promise.race([
 // One request: geminiProxy first (prod), then a direct call if a local key exists
 // (same key/env access pattern as aiBridge.js — nothing hardcoded).
 async function sendExecGemini(model, body) {
-  const localKey = import.meta.env.VITE_GEMINI_API_KEY
+  const localKey = (import.meta.env.DEV ? import.meta.env.VITE_GEMINI_API_KEY : '')
   if (functions) {
     try {
       const res = await withTimeout(httpsCallable(functions, 'geminiProxy')({ model, body }), 55000, 'proxy')
@@ -201,7 +201,7 @@ async function execRequestWithRetry(model, body, onEvent) {
 // onEvent({ type:'text'|'thought'|'action'|'action-result', ... }) streams turns to the UI
 // user: the auth user ({ uid, email }) — stamped on chat messages + the audit trail
 export async function askExecutive({ history = [], prompt, context = '', onEvent, user = null, actor = '' } = {}) {
-  if (!firebaseReady && !import.meta.env.VITE_GEMINI_API_KEY) throw new Error('المساعد غير مهيأ (إعدادات Firebase ناقصة).')
+  if (!firebaseReady && !(import.meta.env.DEV ? import.meta.env.VITE_GEMINI_API_KEY : '')) throw new Error('المساعد غير مهيأ (إعدادات Firebase ناقصة).')
   const q = String(prompt || '').trim()
   if (!q) throw new Error('اكتب طلباً أولاً.')
 

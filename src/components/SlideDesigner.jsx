@@ -148,7 +148,7 @@ async function generateFreeImage(desc, venueName) {
   try {
     json = (await httpsCallable(functions, 'geminiProxy')({ model: IMAGE_MODEL, body })).data
   } catch (e) {
-    const key = import.meta.env.VITE_GEMINI_API_KEY
+    const key = (import.meta.env.DEV ? import.meta.env.VITE_GEMINI_API_KEY : '')
     if (!key) throw new Error(freeImgError(e?.message || e, e?.code))
     const r = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${IMAGE_MODEL}:generateContent?key=${key}`, {
       method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body),

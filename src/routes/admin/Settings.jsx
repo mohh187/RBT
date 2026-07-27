@@ -7,7 +7,7 @@ import { VENUE_TYPES, venueType, lex, LEX_KEYS, LEX_LABELS } from '../../lib/ven
 const MapRangePicker = lazy(() => import('../../components/MapRangePicker.jsx'))
 import { useI18n, pickLang } from '../../lib/i18n.jsx'
 import { useToast } from '../../components/Toast.jsx'
-import { updateTenant as updTenantRaw, watchCategories, watchStaff, watchItems, saveItem } from '../../lib/db.js'
+import { updateTenant as updTenantRaw, watchCategories, watchStaff, watchItems, saveItem, getPrivateDoc, setPrivateDoc } from '../../lib/db.js'
 import { setStaffPinSecure, staffHasPin } from '../../lib/pin.js'
 import { uploadImage, uploadFile, shrinkImage } from '../../lib/storage.js'
 import VipCard from '../../components/VipCard.jsx'
@@ -1609,10 +1609,11 @@ export default function Settings() {
 
   // Integration States
   const [payGateway, setPayGateway] = useState(tenant?.payGateway || 'none')
-  const [payApiKey, setPayApiKey] = useState(tenant?.payApiKey || '')
+  // Loaded from tenants/{tid}/private/integrations (NOT the public tenant doc).
+  const [payApiKey, setPayApiKey] = useState('')
   const [accountingSystem, setAccountingSystem] = useState(tenant?.accountingSystem || 'none')
   const [smsGateway, setSmsGateway] = useState(tenant?.smsGateway || 'none')
-  const [smsApiKey, setSmsApiKey] = useState(tenant?.smsApiKey || '')
+  const [smsApiKey, setSmsApiKey] = useState('')
   const [smsTemplate, setSmsTemplate] = useState(tenant?.smsTemplate || '')
   const [notifyWa, setNotifyWa] = useState(tenant?.customerNotify?.whatsapp !== false)
   const [notifyEmail, setNotifyEmail] = useState(tenant?.customerNotify?.email !== false)
@@ -1620,7 +1621,7 @@ export default function Settings() {
   // Custom webhook integration states
   const [customWebhookEnabled, setCustomWebhookEnabled] = useState(tenant?.customWebhookEnabled === true)
   const [customWebhookUrl, setCustomWebhookUrl] = useState(tenant?.customWebhookUrl || '')
-  const [customWebhookToken, setCustomWebhookToken] = useState(tenant?.customWebhookToken || '')
+  const [customWebhookToken, setCustomWebhookToken] = useState('')
 
   // (A second full-snapshot undo system used to live here. It ALSO intercepted
   // Ctrl+Z — without the text-field guard — so two histories fought each other
@@ -1689,7 +1690,14 @@ export default function Settings() {
       if (kind === 'decor') { if (meta?.decorId) patchDecor(meta.decorId, { url }); return }
       if (kind === 'logo') setLogoUrl(url); else setCoverUrl(url)
       const patch = kind === 'logo' ? { logoUrl: url } : { coverUrl: url }
-      await saveNow(patch); updateTenantLocal(patch); toast.success(t('saved'))
+      await saveNow(patch); updateTenantLocal(patch)
+      // Secrets go to the private, staff-only doc — never the public tenant doc.
+      await setPrivateDoc(tenantId, 'integrations', {
+        payApiKey: payApiKey.trim(),
+        smsApiKey: smsApiKey.trim(),
+        customWebhookToken: customWebhookToken.trim(),
+      }).catch(() => {})
+      toast.success(t('saved'))
     } catch (_) { toast.error(ar ? 'تعذّر رفع الصورة (فعّل Storage)' : 'Upload failed (enable Storage)') } finally { setUploading('') }
   }
   const onBgFile = async (e, kind) => {
@@ -1704,7 +1712,14 @@ export default function Settings() {
       else if (kind === 'banner') setBannerUrl(url)
       else if (kind === 'immersive') setImmersiveBgUrl(url)
       else { setBgImageUrl(url); setBgVideoUrl(''); setBgVideoTrim(null); patch.bgVideoUrl = ''; patch.bgVideoTrim = null }
-      await saveNow(patch); updateTenantLocal(patch); toast.success(t('saved'))
+      await saveNow(patch); updateTenantLocal(patch)
+      // Secrets go to the private, staff-only doc — never the public tenant doc.
+      await setPrivateDoc(tenantId, 'integrations', {
+        payApiKey: payApiKey.trim(),
+        smsApiKey: smsApiKey.trim(),
+        customWebhookToken: customWebhookToken.trim(),
+      }).catch(() => {})
+      toast.success(t('saved'))
     } catch (_) { toast.error(ar ? 'تعذّر رفع الصورة (فعّل Storage)' : 'Upload failed (enable Storage)') } finally { setUploading('') }
   }
   // Art backdrop (oceanart theme): AI generation in the theme's visual
@@ -1835,6 +1850,22 @@ export default function Settings() {
   }
   const removeCustomTheme = (id) => persistThemes(customThemes.filter((c) => c.id !== id))
 
+  // Hydrate the three secrets from the private doc (they are NOT on the public
+  // tenant doc any more, so nothing seeds them from props).
+  useEffect(() => {
+    let alive = true
+    if (!tenantId) return undefined
+    getPrivateDoc(tenantId, 'integrations')
+      .then((d) => {
+        if (!alive || !d) return
+        if (d.payApiKey) setPayApiKey(d.payApiKey)
+        if (d.smsApiKey) setSmsApiKey(d.smsApiKey)
+        if (d.customWebhookToken) setCustomWebhookToken(d.customWebhookToken)
+      })
+      .catch(() => {})
+    return () => { alive = false }
+  }, [tenantId])
+
   const save = async () => {
     setBusy(true)
     try {
@@ -1861,15 +1892,17 @@ export default function Settings() {
         receiptFontSize,
         receiptExtraNote: receiptExtraNote.trim(),
         payGateway,
-        payApiKey: payApiKey.trim(),
+        // payApiKey / smsApiKey / customWebhookToken are SECRETS and must never
+        // touch this document: the tenant root doc is WORLD-READABLE (the public
+        // menu reads it), so a pasted gateway key was published to anyone who
+        // opened the menu. They are written to tenants/{tid}/private/integrations
+        // instead (manage_integrations only) — see savePrivateIntegrations below.
         accountingSystem,
         smsGateway,
-        smsApiKey: smsApiKey.trim(),
         smsTemplate: smsTemplate.trim(),
         customerNotify: { whatsapp: notifyWa, email: notifyEmail },
         customWebhookEnabled,
         customWebhookUrl: customWebhookUrl.trim(),
-        customWebhookToken: customWebhookToken.trim(),
         membershipPolicy: {
           enabled: memEnabled,
           minOrders: Number(memMinOrders) || 0,
@@ -1892,7 +1925,14 @@ export default function Settings() {
         },
         geo: geo || null, geofenceRadius: Number(geofenceRadius) || 200,
       }
-      await saveNow(patch); updateTenantLocal(patch); toast.success(t('saved'))
+      await saveNow(patch); updateTenantLocal(patch)
+      // Secrets go to the private, staff-only doc — never the public tenant doc.
+      await setPrivateDoc(tenantId, 'integrations', {
+        payApiKey: payApiKey.trim(),
+        smsApiKey: smsApiKey.trim(),
+        customWebhookToken: customWebhookToken.trim(),
+      }).catch(() => {})
+      toast.success(t('saved'))
       savedSnapRef.current = designSnap() // drafts now match the live menu
     } catch (_) { toast.error(t('error')) } finally { setBusy(false) }
   }

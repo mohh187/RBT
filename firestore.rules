@@ -198,10 +198,16 @@ service cloud.firestore {
       allow update: if isPlatformSuper()
         || (isManager(tid)
             && !request.resource.data.diff(resource.data).affectedKeys()
-                 .hasAny(['plan', 'planStatus', 'planExpiresAt', 'active', 'suspendReason', 'platformNote', 'ownerUid', 'features']))
+                 // msgsSent/msgCapMonthly were listed ONLY on the hasCap branch below,
+                 // so an owner/manager could raise their own WhatsApp quota — i.e.
+                 // spend the PLATFORM's money without limit. Same for the AI meters.
+                 .hasAny(['plan', 'planStatus', 'planExpiresAt', 'active', 'suspendReason', 'platformNote', 'ownerUid', 'features',
+                          'msgsSent', 'msgCapMonthly', 'aiLimits', 'aiExtra', 'ar3dMonthly', 'ar3dUnlimited', 'dinerAiMonthly',
+                          'smsApiKey']))
         || ((hasCap(tid, 'manage_settings') || hasCap(tid, 'manage_appearance') || hasCap(tid, 'manage_loyalty') || hasCap(tid, 'manage_campaigns') || hasCap(tid, 'manage_integrations'))
             && !request.resource.data.diff(resource.data).affectedKeys()
-                 .hasAny(['plan', 'planStatus', 'planExpiresAt', 'active', 'suspendReason', 'platformNote', 'ownerUid', 'features', 'roleCaps', 'msgsSent', 'msgCapMonthly']));
+                 .hasAny(['plan', 'planStatus', 'planExpiresAt', 'active', 'suspendReason', 'platformNote', 'ownerUid', 'features', 'roleCaps', 'msgsSent', 'msgCapMonthly',
+                          'aiLimits', 'aiExtra', 'ar3dMonthly', 'ar3dUnlimited', 'dinerAiMonthly', 'smsApiKey']));
       allow delete: if roleIn(tid, ['owner']) || isPlatformSuper();
 
       // Platform admins READ every tenant subcollection (support & oversight from

@@ -67,7 +67,7 @@ const COPY = {
 
 // Dev-only direct Gemini call (VITE_GEMINI_API_KEY, never set in prod builds).
 async function devVision(body) {
-  const key = import.meta.env.VITE_GEMINI_API_KEY
+  const key = (import.meta.env.DEV ? import.meta.env.VITE_GEMINI_API_KEY : '')
   const r = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${VISION_MODEL}:generateContent?key=${key}`, {
     method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body),
   })
@@ -199,7 +199,7 @@ export default function PhotoOrder({ open, onClose, items = [], allItems = null,
     setBusy(true); setErr(''); setResults(null)
     try {
       const inline = await blobToInline(f)
-      const devKey = import.meta.env.VITE_GEMINI_API_KEY
+      const devKey = (import.meta.env.DEV ? import.meta.env.VITE_GEMINI_API_KEY : '')
       if (cloudOk) {
         try {
           // PRIMARY: the guest callable — server-built catalog, id answers

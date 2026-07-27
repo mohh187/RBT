@@ -389,8 +389,17 @@ exports.geminiProxy = onCall(async (request) => {
 
   const { model, body } = request.data
   // Never forward an arbitrary client-chosen model to the platform-wide key.
-  const ALLOWED_MODELS = ['gemini-2.5-flash', 'gemini-2.5-pro', 'gemini-2.0-flash', 'gemini-1.5-flash', 'gemini-1.5-pro']
+  // The IMAGE model belongs here too: it was missing, so every image generation
+  // failed the proxy and fell back to a DIRECT browser call — which is the only
+  // reason a Gemini key was ever shipped inside the bundle. Serving images from
+  // the proxy is what lets that key leave the client entirely.
+  const ALLOWED_MODELS = [
+    'gemini-2.5-flash', 'gemini-2.5-pro', 'gemini-2.0-flash', 'gemini-1.5-flash', 'gemini-1.5-pro',
+    'gemini-pro-latest',
+    'gemini-2.5-flash-image',
+  ]
   const safeModel = ALLOWED_MODELS.includes(model) ? model : 'gemini-2.5-flash'
+  const isImageModel = /-image$/.test(safeModel)
   // Per-tenant burst limit (one reused counter doc/minute) — a runaway client or
   // abusive tenant can't rack up unbounded cost on the shared Gemini key.
   const tid = userData.tenantId
@@ -425,7 +434,8 @@ exports.geminiProxy = onCall(async (request) => {
   // rather than failing the user's request.
   const outBody = { ...(body || {}) }
   const callerSetThinking = !!(outBody.generationConfig && outBody.generationConfig.thinkingConfig)
-  if (!callerSetThinking) {
+  // The image model takes no thinkingConfig — forcing one makes it 400.
+  if (!callerSetThinking && !isImageModel) {
     outBody.generationConfig = { ...(outBody.generationConfig || {}), thinkingConfig: { thinkingBudget: 0 } }
   }
 

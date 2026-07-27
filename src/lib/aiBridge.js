@@ -45,7 +45,7 @@ export async function aiQuick(prompt, { model = 'gemini-2.5-flash', withSearch =
     const res = await httpsCallable(functions, 'geminiProxy')({ model, body })
     return ok(res.data?.candidates?.[0]?.content?.parts?.map((p) => p.text).filter(Boolean).join('').trim() || '')
   } catch (e) {
-    const key = import.meta.env.VITE_GEMINI_API_KEY
+    const key = (import.meta.env.DEV ? import.meta.env.VITE_GEMINI_API_KEY : '')
     if (!key) { gen?.fail(String(e?.message || e)); throw new Error('AI error: ' + (e?.message || e)) }
     try {
       const r = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${key}`, {
@@ -329,7 +329,7 @@ export async function runAssistant({ tid, tenant, actor = '', history = [], atta
       const res = await withTimeout(proxy({ model: useModel, body }), 55000, 'proxy')
       return res.data
     } catch (e) {
-      const localKey = import.meta.env.VITE_GEMINI_API_KEY
+      const localKey = (import.meta.env.DEV ? import.meta.env.VITE_GEMINI_API_KEY : '')
       if (!localKey) {
         const err = new Error(`AI error: ${e?.message || e}. (للتشغيل يرجى نشر الدوال السحابية عبر الأمر: firebase deploy --only functions أو أضف VITE_GEMINI_API_KEY في ملف .env.local للتجربة المحلية)`)
         err.transient = e?.transient || isTransient(e?.message) || isTransient(e?.code)

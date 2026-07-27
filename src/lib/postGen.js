@@ -116,7 +116,7 @@ async function sendGemini(model, body) {
     const res = await httpsCallable(functions, 'geminiProxy')({ model, body })
     return res.data
   } catch (e) {
-    const key = import.meta.env.VITE_GEMINI_API_KEY
+    const key = (import.meta.env.DEV ? import.meta.env.VITE_GEMINI_API_KEY : '')
     if (!key) throw new Error(arabicError(e?.message || e, e?.code))
     const r = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${key}`, {
       method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body),
