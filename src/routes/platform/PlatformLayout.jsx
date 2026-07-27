@@ -9,6 +9,7 @@ import Icon from '../../components/Icon.jsx'
 import { watchChatThreads, watchActivity, registerPlatformPush } from '../../lib/platform.js'
 import { alertParty, requestNotifyPermission, notifyState } from '../../lib/notify.js'
 import PlatformSearch from '../../components/PlatformSearch.jsx'
+import { BRAND_MARK_URL } from '../../components/BrandMark.jsx'
 import '../../styles/platform-brand.css'
 
 // Grouped navigation (24 screens). Sidebar shows all with faint section headers;
@@ -77,7 +78,7 @@ function RbtMark({ size = 32 }) {
   return (
     <img
       className="rbt-mark"
-      src="/brand/logo-mark.svg"
+      src={BRAND_MARK_URL}
       alt=""
       aria-hidden="true"
       width={size}

@@ -4648,50 +4648,59 @@ body[data-theme='dark'] .pos-fullscreen[data-systheme='glass'] { background: var
   }
 }
 
-/* ===== Mobile-specific adjustments for layouts so they look different on phone screens ===== */
-[data-item-detail='modern-card'] .dish-circle {
-  width: 100% !important;
-  max-width: 100% !important;
-  height: 190px !important;
-  border-radius: var(--r-md) !important;
-  object-fit: cover !important;
-  margin: 0 0 10px 0 !important;
-  border: 3px solid var(--surface) !important;
-  box-shadow: var(--sh-2) !important;
-}
-[data-item-detail='modern-card'] .dish-stack {
-  width: 100% !important;
-  margin: 0 !important;
-}
-[data-item-detail='modern-card'] .dish-carousel,
-[data-item-detail='modern-card'] .dish-slide img {
-  width: 100% !important;
-  height: 190px !important;
-  border-radius: var(--r-md) !important;
-  object-fit: cover !important;
+/* ===== Mobile-specific adjustments for layouts so they look different on phone screens =====
+   MUST stay inside a max-width query. Unscoped, these sat LATER in the file at
+   the same specificity (and equally !important) as the desktop rules above, so
+   they overrode them at every width — the two-column templates rendered their
+   image as a squat mobile banner even on desktop. Each block's breakpoint is the
+   mirror of its desktop one (600px / 768px). */
+@media (max-width: 599.98px) {
+  [data-item-detail='modern-card'] .dish-circle {
+    width: 100% !important;
+    max-width: 100% !important;
+    height: 190px !important;
+    border-radius: var(--r-md) !important;
+    object-fit: cover !important;
+    margin: 0 0 10px 0 !important;
+    border: 3px solid var(--surface) !important;
+    box-shadow: var(--sh-2) !important;
+  }
+  [data-item-detail='modern-card'] .dish-stack {
+    width: 100% !important;
+    margin: 0 !important;
+  }
+  [data-item-detail='modern-card'] .dish-carousel,
+  [data-item-detail='modern-card'] .dish-slide img {
+    width: 100% !important;
+    height: 190px !important;
+    border-radius: var(--r-md) !important;
+    object-fit: cover !important;
+  }
 }
 
 /* split-page mobile layout: Full-bleed banner at the top of the modal */
-[data-item-detail='split-page'] .dish-circle {
-  width: calc(100% + var(--sp-4) * 2) !important;
-  max-width: calc(100% + var(--sp-4) * 2) !important;
-  height: 220px !important;
-  border-radius: 0 !important;
-  object-fit: cover !important;
-  margin: calc(var(--sp-4) * -1) calc(var(--sp-4) * -1) 12px !important;
-  border: none !important;
-  box-shadow: none !important;
-}
-[data-item-detail='split-page'] .dish-stack {
-  width: calc(100% + var(--sp-4) * 2) !important;
-  margin: calc(var(--sp-4) * -1) calc(var(--sp-4) * -1) 12px !important;
-}
-[data-item-detail='split-page'] .dish-carousel,
-[data-item-detail='split-page'] .dish-slide img {
-  width: 100% !important;
-  height: 220px !important;
-  border-radius: 0 !important;
-  object-fit: cover !important;
+@media (max-width: 767.98px) {
+  [data-item-detail='split-page'] .dish-circle {
+    width: calc(100% + var(--sp-4) * 2) !important;
+    max-width: calc(100% + var(--sp-4) * 2) !important;
+    height: 220px !important;
+    border-radius: 0 !important;
+    object-fit: cover !important;
+    margin: calc(var(--sp-4) * -1) calc(var(--sp-4) * -1) 12px !important;
+    border: none !important;
+    box-shadow: none !important;
+  }
+  [data-item-detail='split-page'] .dish-stack {
+    width: calc(100% + var(--sp-4) * 2) !important;
+    margin: calc(var(--sp-4) * -1) calc(var(--sp-4) * -1) 12px !important;
+  }
+  [data-item-detail='split-page'] .dish-carousel,
+  [data-item-detail='split-page'] .dish-slide img {
+    width: 100% !important;
+    height: 220px !important;
+    border-radius: 0 !important;
+    object-fit: cover !important;
+  }
 }
 
 /* ===== Elegant Dark luxury layout (elegant-dark) ===== */
@@ -6423,8 +6432,13 @@ body:has(.sd2-root) .toast-wrap { z-index: 840; }
 /* ==== SIDEBAR THEMES (2026-07-18) ==== */
 /* Independent sidebar identity (tenant.sidebarTheme) — layered OVER any system
    theme, so a venue can run e.g. the glass system with a gold-pills sidebar.
-   Brand row stays pinned top; .admin-side-foot (logout) stays pinned bottom. */
-.admin-sidebar { display: flex; flex-direction: column; }
+   Brand row stays pinned top; .admin-side-foot (logout) stays pinned bottom.
+   NEVER re-declare `display` here: the shell hides the sidebar on phones
+   (`.admin-sidebar { display: none }`, line ~1025) and only shows it at
+   >= 980px. This block sits LATER in the file at the SAME specificity, so a
+   bare `display: flex` here won the cascade and painted the whole desktop rail
+   full-screen on every phone (venue owners saw the nav swallow the dashboard).
+   The desktop rule already sets display + flex-direction. */
 .admin-sidebar .admin-side-foot { margin-top: auto; }
 
 /* pills: floating rounded pills with generous gaps */

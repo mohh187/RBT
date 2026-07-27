@@ -36,18 +36,23 @@ const LINKS = [
 ]
 
 // THE OFFICIAL ASSETS. The owner supplied the real logo as SVG files
-// («RBT360 - Brand/» → copied to public/brand/): logo-mark.svg is the mark
-// alone, logo-full.svg is the complete lockup with wordmark + tagline baked
-// in. They embed traced raster art, so they render as <img> (they cannot be
-// recolored). The colored brand therefore ALWAYS shows the official art;
-// only `mono` (single-ink on gradient/photo surfaces, where an image cannot
-// follow currentColor) falls back to the drawn node composition below.
-export const BRAND_MARK_URL = '/brand/logo-mark.svg'
+// («RBT360 - Brand/» → public/brand/logo-mark.svg, logo-full.svg, wordmark*.svg
+// — the archival originals). Those exports embed TRACED RASTER, so each weighs
+// 340-415KB and a single lockup pulled ~757KB over the wire. What ships is the
+// same artwork re-encoded as tight transparent PNGs at 3x the largest size any
+// surface paints (43KB for a full lockup, 94% lighter, pixel-identical at every
+// render size we use). Being images they cannot be recolored, so the colored
+// brand ALWAYS shows the official art; only `mono` (single-ink on gradient or
+// photo surfaces, where an image cannot follow currentColor) falls back to the
+// drawn node composition below.
+// NOTE: **/*.png|svg carry a 1-year immutable cache header — any future
+// artwork change must land under a NEW filename, never by overwriting these.
+export const BRAND_MARK_URL = '/brand/mark-256.png'
 export const BRAND_FULL_URL = '/brand/logo-full.svg'
 // Official logotype (owner-supplied «logo font» files), viewBox-cropped to the
 // lettering: wordmark alone (ratio 6.4:1) and wordmark + tagline (4.285:1).
-export const BRAND_WORD_URL = '/brand/wordmark.svg'
-export const BRAND_WORD_TAG_URL = '/brand/wordmark-tagline.svg'
+export const BRAND_WORD_URL = '/brand/word-448.png'
+export const BRAND_WORD_TAG_URL = '/brand/word-tag-448.png'
 const WORD_RATIO = 6.4
 const WORD_TAG_RATIO = 4.285
 
