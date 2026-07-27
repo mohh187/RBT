@@ -71,6 +71,14 @@
    above it exactly as they do above a menu or an image slide. */
 .tvg-root.tvg-inslide { position: absolute; z-index: 1; }
 
+/* FILL MODE — the live board takeover. The board is the star, so the chrome is
+   pared to a slim brand bar and the stage is handed everything else. Tighter
+   padding + gap than the tournament/join slides, which are all-text. */
+.tvg-root[data-fill="1"] {
+  padding: 1.3vmin 1.8vmin;
+  gap: 1vmin;
+}
+
 /* NO VISIBLE SCROLLBAR, ANYWHERE. Nothing on this layer is meant to scroll —
    content shrinks or is capped in the JSX instead — but a panel narrower than
    we planned must still never paint a bar on a wall TV. */
@@ -131,6 +139,21 @@
   text-overflow: ellipsis;
   max-width: 40vw;
 }
+/* the game name chip — distinct gold accent so it reads as "what game" next to
+   the (tournament) context chip, which reads as "which competition". */
+.tvg-game-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.9vmin;
+  padding: 0.6vmin 1.6vmin;
+  border-radius: 999px;
+  background: linear-gradient(180deg, rgba(231, 196, 106, 0.2) 0%, rgba(185, 141, 60, 0.1) 100%);
+  border: 0.15vmin solid color-mix(in srgb, var(--tvg-gold) 45%, transparent);
+  color: var(--tvg-gold);
+  font-size: clamp(0.72rem, 1.8vmin, 1.6rem);
+  font-weight: 900;
+  white-space: nowrap;
+}
 .tvg-spacer { flex: 1 1 auto; }
 .tvg-live {
   display: inline-flex;
@@ -156,22 +179,29 @@
 }
 
 /* ---------------------------------------------------------------------------
-   scoreboard — two table sides, or up to four seats of a room
+   ARENA — the board takes the whole remaining height, the score cards flank it
    --------------------------------------------------------------------------- */
-.tvg-score {
-  flex: 0 0 auto;
-  display: grid;
-  grid-template-columns: 1fr auto 1fr;
+.tvg-arena {
+  flex: 1 1 auto;
+  min-height: 0;
+  min-width: 0;
+  display: flex;
   align-items: stretch;
   gap: 1.4vmin;
 }
-/* The default 1fr/auto/1fr above is the MATCH layout (table ضد table, with the
-   game's name between them). A plain room has no «ضد» column, so it declares
-   its seat count and gets equal columns instead — without this a two-seat room
-   put both cards in the first two columns and left a third of the wall empty. */
-.tvg-score[data-seats="2"] { grid-template-columns: repeat(2, 1fr); }
-.tvg-score[data-seats="3"] { grid-template-columns: repeat(3, 1fr); }
-.tvg-score[data-seats="4"] { grid-template-columns: repeat(4, 1fr); }
+/* the flanking columns. Deliberately narrow so the board owns the middle; the
+   cards stack vertically and centre, filling what would otherwise be a dead
+   gutter of felt beside a square board. In Arabic RTL the first flank falls on
+   the right, so the challenger (side A) sits where a Saudi room reads it first,
+   exactly as the old «ضد» layout put it. */
+.tvg-flank {
+  flex: 0 0 clamp(132px, 15.5vw, 340px);
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  gap: 1.4vmin;
+}
 
 .tvg-seat {
   position: relative;
@@ -238,14 +268,14 @@
   line-height: 1;
   color: var(--tvg-ink);
 }
-/* Three or four seats share the same row, so each card gives up a little more
-   again — the board keeps the difference. */
-.tvg-score[data-seats="3"] .tvg-seat-name,
-.tvg-score[data-seats="4"] .tvg-seat-name { font-size: clamp(1rem, 2.9vmin, 3rem); }
-.tvg-score[data-seats="3"] .tvg-seat-num,
-.tvg-score[data-seats="4"] .tvg-seat-num { font-size: clamp(1.3rem, 4.2vmin, 4.4rem); }
-.tvg-score[data-seats="3"] .tvg-seat-scorewrap,
-.tvg-score[data-seats="4"] .tvg-seat-scorewrap { min-height: 4.6vmin; }
+/* Three or four seats mean two cards stacked in a flank, so each card gives up
+   a little — the board keeps the difference. */
+.tvg-arena[data-seats="3"] .tvg-seat-name,
+.tvg-arena[data-seats="4"] .tvg-seat-name { font-size: clamp(1rem, 2.7vmin, 2.8rem); }
+.tvg-arena[data-seats="3"] .tvg-seat-num,
+.tvg-arena[data-seats="4"] .tvg-seat-num { font-size: clamp(1.3rem, 4vmin, 4.2rem); }
+.tvg-arena[data-seats="3"] .tvg-seat-scorewrap,
+.tvg-arena[data-seats="4"] .tvg-seat-scorewrap { min-height: 4.4vmin; }
 .tvg-seat.is-win .tvg-seat-num { color: var(--tvg-gold); }
 .tvg-seat-metric {
   margin-top: 0.3vmin;
@@ -261,63 +291,11 @@
 }
 .tvg-seat.is-off .tvg-seat-state { color: var(--tvg-faint); }
 
-.tvg-vs {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  justify-content: center;
-  gap: 0.5vmin;
-  padding-inline: 0.9vmin;
-}
-.tvg-vs-word {
-  font-size: clamp(0.95rem, 3vmin, 3rem);
-  font-weight: 900;
-  color: var(--tvg-faint);
-}
-.tvg-vs-game {
-  font-size: clamp(0.7rem, 1.7vmin, 1.6rem);
-  font-weight: 800;
-  color: var(--tvg-gold);
-  white-space: nowrap;
-}
-
-/* ---------------------------------------------------------------------------
-   «من يلعب الآن» — the one line that tells the room what it is looking at
-   --------------------------------------------------------------------------- */
-.tvg-now {
-  flex: 0 0 auto;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  gap: 1.4vmin;
-  padding: 0.55vmin 1.9vmin;
-  border-radius: 999px;
-  background: linear-gradient(180deg, rgba(231, 196, 106, 0.12) 0%, rgba(231, 196, 106, 0.05) 100%);
-  border: 0.15vmin solid var(--tvg-line);
-  align-self: center;
-  max-width: 92%;
-}
-.tvg-now-label {
-  font-size: clamp(0.7rem, 1.7vmin, 1.5rem);
-  font-weight: 700;
-  color: var(--tvg-dim);
-  white-space: nowrap;
-}
-.tvg-now-name {
-  font-size: clamp(1rem, 2.9vmin, 2.8rem);
-  font-weight: 900;
-  color: var(--tvg-gold);
-  letter-spacing: -0.01em;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-.tvg-now-game {
-  font-size: clamp(0.7rem, 1.7vmin, 1.5rem);
-  font-weight: 700;
-  color: var(--tvg-dim);
-  white-space: nowrap;
-}
+/* The «من يلعب الآن» pill and the «ضد» column were both removed with the flank
+   layout: whose turn it is now shows as the breathing gold ring on that seat's
+   flank card (.tvg-seat.is-turn), and the game's name sits in the top bar. That
+   reclaimed the ~170px score band + ~50px turn pill that used to push the board
+   a third of the way down the wall. */
 
 /* ---------------------------------------------------------------------------
    the board slot
@@ -364,6 +342,146 @@
   text-align: center;
 }
 .tvg-banner[data-draw="1"] { border-color: var(--tvg-line); color: var(--tvg-ink); }
+
+/* ---------------------------------------------------------------------------
+   CELEBRATION — a brief burst + an Arabic line, fired on a win / round / trick.
+   Transform + opacity only, decorative (aria-hidden burst), never interactive,
+   auto-removed by the component. The whole layer fades out over its own life
+   (--tvg-celeb-dur) so the exit is graceful rather than a hard cut.
+   --------------------------------------------------------------------------- */
+.tvg-celebrate {
+  position: absolute;
+  inset: 0;
+  z-index: 7;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 1.6vmin;
+  pointer-events: none;
+  animation: tvg-celeb-life var(--tvg-celeb-dur, 3200ms) linear both;
+}
+/* the mid-game toast rides high so live play stays visible below it */
+.tvg-celebrate[data-big="0"] { justify-content: flex-start; padding-top: 6vmin; }
+
+.tvg-celebrate-fx {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  width: 64vmin;
+  height: 64vmin;
+  transform: translate(-50%, -50%);
+}
+.tvg-celebrate[data-big="0"] .tvg-celebrate-fx { width: 38vmin; height: 38vmin; top: 15%; }
+
+.tvg-burst {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  overflow: visible;
+  color: var(--tvg-gold);
+}
+.tvg-burst-rays {
+  transform-box: view-box;
+  transform-origin: 50% 50%;
+  animation: tvg-burst-pop 900ms var(--tvg-ease) both;
+}
+.tvg-burst-ray { fill: var(--tvg-gold); }
+.tvg-burst-ring {
+  stroke: var(--tvg-gold);
+  stroke-width: 1.4;
+  transform-box: view-box;
+  transform-origin: 50% 50%;
+  animation: tvg-ring-out 1000ms var(--tvg-ease) both;
+}
+
+.tvg-confetti {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  width: 1.5vmin;
+  height: 2.3vmin;
+  min-width: 8px;
+  min-height: 12px;
+  border-radius: 0.4vmin;
+  background: var(--tvg-gold);
+  transform: translate(-50%, -50%) scale(0);
+  animation: tvg-confetti-fly 1500ms var(--tvg-ease) both;
+}
+.tvg-confetti[data-hue="1"] { background: color-mix(in srgb, var(--tvg-brand) 80%, white); }
+.tvg-confetti[data-hue="2"] { background: var(--tvg-ink); }
+.tvg-confetti[data-hue="3"] { background: var(--tvg-live); }
+
+.tvg-celebrate-card {
+  position: relative;
+  z-index: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.6vmin;
+  padding: 2.2vmin 4.4vmin;
+  border-radius: 2vmin;
+  background: rgba(8, 32, 28, 0.74);
+  backdrop-filter: blur(12px);
+  border: 0.15vmin solid color-mix(in srgb, var(--tvg-gold) 55%, transparent);
+  box-shadow: 0 2vmin 6vmin rgba(0, 0, 0, 0.55);
+  text-align: center;
+  max-width: 84vw;
+  animation: tvg-celeb-in 480ms var(--tvg-ease) both;
+}
+.tvg-celebrate[data-big="0"] .tvg-celebrate-card {
+  padding: 1.2vmin 2.8vmin;
+  background: rgba(8, 32, 28, 0.62);
+}
+.tvg-celebrate-ico {
+  width: clamp(1.6rem, 5vmin, 5rem);
+  height: clamp(1.6rem, 5vmin, 5rem);
+  color: var(--tvg-gold);
+}
+.tvg-celebrate[data-big="0"] .tvg-celebrate-ico { width: clamp(1.1rem, 3vmin, 3rem); height: clamp(1.1rem, 3vmin, 3rem); }
+.tvg-celebrate-line {
+  font-size: clamp(1.1rem, 3.4vmin, 3.6rem);
+  font-weight: 900;
+  color: var(--tvg-gold);
+  letter-spacing: -0.01em;
+}
+.tvg-celebrate[data-big="0"] .tvg-celebrate-line { font-size: clamp(0.95rem, 2.4vmin, 2.4rem); }
+.tvg-celebrate-name {
+  font-size: clamp(1.4rem, 4.6vmin, 5rem);
+  font-weight: 900;
+  color: var(--tvg-ink);
+  letter-spacing: -0.02em;
+  max-width: 80vw;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.tvg-celebrate[data-big="0"] .tvg-celebrate-name { font-size: clamp(1.1rem, 3vmin, 3rem); }
+
+@keyframes tvg-celeb-life {
+  0%, 86% { opacity: 1; }
+  100% { opacity: 0; }
+}
+@keyframes tvg-celeb-in {
+  from { opacity: 0; transform: translateY(2vmin) scale(0.94); }
+  to { opacity: 1; transform: translateY(0) scale(1); }
+}
+@keyframes tvg-burst-pop {
+  0% { opacity: 0; transform: scale(0.2); }
+  35% { opacity: 1; transform: scale(1.08); }
+  70% { opacity: 0.9; transform: scale(1); }
+  100% { opacity: 0; transform: scale(1.04); }
+}
+@keyframes tvg-ring-out {
+  0% { opacity: 0.85; transform: scale(0.3); }
+  100% { opacity: 0; transform: scale(1.7); }
+}
+@keyframes tvg-confetti-fly {
+  0% { opacity: 0; transform: translate(-50%, -50%) rotate(0deg) scale(0); }
+  20% { opacity: 1; transform: translate(calc(-50% + var(--tx) * 0.5vmin), calc(-50% + var(--ty) * 0.5vmin)) rotate(calc(var(--rot) * 0.4)) scale(1); }
+  100% { opacity: 0; transform: translate(calc(-50% + var(--tx) * 1vmin), calc(-50% + var(--ty) * 1vmin)) rotate(var(--rot)) scale(0.5); }
+}
 
 /* ---------------------------------------------------------------------------
    honest waiting / refusal notice
@@ -708,18 +826,30 @@
   .tvg-join-copy { align-items: center; text-align: center; }
   .tvg-steps { align-items: flex-start; }
   .tvg-qr img { width: 46vmin; height: 46vmin; }
-  .tvg-score { grid-template-columns: 1fr; }
-  .tvg-score[data-seats="3"],
-  .tvg-score[data-seats="4"] { grid-template-columns: repeat(2, 1fr); }
-  .tvg-vs { flex-direction: row; gap: 1.4vmin; }
+  /* Portrait has height to spare and little width, so the arena stacks: a row of
+     cards, the board, a row of cards. The board still gets the tall middle. */
+  .tvg-arena { flex-direction: column; }
+  .tvg-flank {
+    flex: 0 0 auto;
+    flex-direction: row;
+    justify-content: center;
+    flex-wrap: wrap;
+  }
 }
 
 @media (prefers-reduced-motion: reduce) {
   .tvg-live-dot,
   .tvg-seat.is-turn,
   .tvg-banner,
-  .tvg-spin {
+  .tvg-spin,
+  .tvg-burst-rays,
+  .tvg-burst-ring,
+  .tvg-confetti,
+  .tvg-celebrate-card {
     animation-duration: 0.001ms !important;
     animation-iteration-count: 1 !important;
   }
+  /* the celebration still fades OUT gracefully (opacity only), it just does not
+     move — the burst and confetti collapse to their invisible end state and only
+     the winner card remains. */
 }

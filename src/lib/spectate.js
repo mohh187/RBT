@@ -88,6 +88,7 @@
 import { collection, onSnapshot, query, orderBy, where, limit } from 'firebase/firestore'
 import { db, firebaseReady } from './firebase.js'
 import { normalizeMatch } from './socialPlay.js'
+import { decodeState, decodeRoom } from './gameRoom.js'
 
 // ---------------------------------------------------------------------------
 // The game registry. `safe` is the allowlist; `why` is the sentence the screen
@@ -247,15 +248,23 @@ const REDACTORS = {
 // ones that do.
 export function redactRoomForSpectator(room) {
   if (!room) return room
-  const fn = REDACTORS[String(room.gameId || '')]
-  if (!fn) return room
-  const state = room.state
-  if (!state || typeof state !== 'object') return room
+  // Always DECODE first — gameRoom.js persists room.state as a JSON string, and
+  // a board handed a raw string fails its shape check and freezes on its
+  // starting position (this was the live-relay bug). Decoding here is a backstop
+  // that makes the board mount safe no matter which read path wired the room in,
+  // and it also covers chess/ludo, which have no redactor and returned early
+  // before ever seeing an object state. decodeRoom is a no-op on an already
+  // decoded (object) state, so the match path pays nothing.
+  const decoded = decodeRoom(room)
+  const fn = REDACTORS[String(decoded.gameId || '')]
+  if (!fn) return decoded
+  const state = decoded.state
+  if (!state || typeof state !== 'object') return decoded
   try {
-    return { ...room, state: fn(state) }
+    return { ...decoded, state: fn(state) }
   } catch (_) {
     // A redactor that cannot do its job must not let the raw hand through.
-    return { ...room, state: {} }
+    return { ...decoded, state: {} }
   }
 }
 
@@ -333,7 +342,14 @@ function watchRoomsByStatus(tid, status, cb) {
   }
   return onSnapshot(
     query(collection(db, 'tenants', tid, 'rooms'), where('status', '==', status), limit(SPECTATE_ROOM_SCAN)),
-    (snap) => cb?.({ rooms: snap.docs.map((d) => ({ id: d.id, ...d.data() })), error: null }),
+    // DECODE at the source. gameRoom.js persists room.state as a JSON STRING
+    // (encodeState) and only gameRoom.watchRoom decoded it on the way out; this
+    // list read did not, so every board fed from here (liveRooms → cupRoom) and
+    // every score (liveSideScore) saw a raw string, failed its shape check, and
+    // fell back to a frozen starting position. decodeRoom turns the string back
+    // into the object the boards and scorers expect. A legacy object state
+    // decodes unchanged, and a lobby room with no state is passed through.
+    (snap) => cb?.({ rooms: snap.docs.map((d) => decodeRoom({ id: d.id, ...d.data() })), error: null }),
     (err) => cb?.({ rooms: [], error: errText(err) }),
   )
 }

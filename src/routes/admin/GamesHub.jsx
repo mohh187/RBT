@@ -29,6 +29,7 @@ import TournamentsPanel from '../../components/gamesadmin/TournamentsPanel.jsx'
 import PlayersPanel from '../../components/gamesadmin/PlayersPanel.jsx'
 import LiveRoomsPanel from '../../components/gamesadmin/LiveRoomsPanel.jsx'
 import RewardsPanel from '../../components/gamesadmin/RewardsPanel.jsx'
+import ScreenAppearance from '../../components/gamesadmin/ScreenAppearance.jsx'
 import {
   PERIODS, periodRange, fetchPlays, fetchProfiles, fetchScores, fetchClaims,
   fmtInt, dayStamp,
@@ -42,6 +43,7 @@ const TABS = [
   { key: 'players', icon: 'customers', ar: 'اللاعبون', en: 'Players', period: true },
   { key: 'rooms', icon: 'shapes', ar: 'الغرف المباشرة', en: 'Live rooms', period: false },
   { key: 'rewards', icon: 'offers', ar: 'الجوائز', en: 'Rewards', period: true },
+  { key: 'screen', icon: 'palette', ar: 'مظهر شاشة العرض', en: 'Screen look', period: false },
 ]
 
 export default function GamesHub() {
@@ -118,6 +120,21 @@ export default function GamesHub() {
       updateTenantLocal({ gameRewards })
       toast.success(ar ? 'حُفظت الجوائز' : 'Saved')
     } finally { setBusy(false) }
+  }, [canEdit, tenantId, updateTenantLocal, toast, ar])
+
+  // «مظهر شاشة العرض» — writes tenant.screenFx (see ScreenAppearance.jsx for the
+  // shape). The screen-render layer reads the same field. Mirror locally so the
+  // editor's «محفوظ» state and any re-open reflect the save immediately.
+  const saveScreenFx = useCallback(async (screenFx) => {
+    if (!canEdit) throw new Error(ar ? 'لا تملك صلاحية التعديل' : 'No permission')
+    try {
+      await updateTenant(tenantId, { screenFx })
+      updateTenantLocal({ screenFx })
+      toast.success(ar ? 'حُفظ مظهر الشاشة' : 'Screen look saved')
+    } catch (e) {
+      toast.error(ar ? 'تعذّر الحفظ' : 'Could not save')
+      throw e
+    }
   }, [canEdit, tenantId, updateTenantLocal, toast, ar])
 
   if (!canView) {
@@ -278,6 +295,13 @@ export default function GamesHub() {
           ar={ar} tenant={tenant} canEdit={canEdit} saving={busy}
           claims={data ? data.claims : []} claimsOk={data ? data.claimsOk : false}
           fromMs={fromMs} toMs={toMs} onSave={saveRewards}
+        />
+      )}
+
+      {tab === 'screen' && (
+        <ScreenAppearance
+          ar={ar} tenantId={tenantId} tenant={tenant}
+          canEdit={canEdit} onSave={saveScreenFx}
         />
       )}
 

@@ -213,13 +213,13 @@ function assertStateSize(state) {
 function encodeState(state) {
   try { return JSON.stringify(stripUndefined(state) ?? {}) } catch (_) { return '{}' }
 }
-function decodeState(state) {
+export function decodeState(state) {
   if (typeof state === 'string') {
     try { return JSON.parse(state) } catch (_) { return {} }
   }
   return state || {}
 }
-function decodeRoom(room) {
+export function decodeRoom(room) {
   if (!room || !('state' in room)) return room
   return { ...room, state: decodeState(room.state) }
 }
