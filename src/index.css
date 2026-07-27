@@ -1029,7 +1029,17 @@ ul {
 /* ===== Per-venue ambient background (image / video / watermark) ===== */
 .venue-bg {
   position: fixed;
-  inset: 0;
+  /* BLED PAST THE VIEWPORT so the mobile URL bar cannot drag it around.
+     A fixed backdrop pinned exactly to the viewport edges is repositioned and
+     resized by Safari every time the URL bar collapses on the way down and
+     returns at the top — which reads as the venue wall sliding and resettling
+     on every scroll. Overhanging it by 80px on top and bottom means the bar
+     animation (and rubber-band overscroll at the very top) can never expose an
+     edge, so there is nothing to see moving. The layer is still viewport-fixed
+     and still one compositor surface; it is just bigger than the hole it fills.
+     Bleed, not lvh: 100lvh is correct on iOS but silently equals the window on
+     every other engine, so it could not be verified anywhere but a real phone. */
+  inset: -80px 0;
   z-index: 0;
   pointer-events: none;
   overflow: hidden;
@@ -7248,7 +7258,17 @@ body:has(.sd2-root) .toast-wrap { z-index: 840; }
    every rule below is inert until .edt-roombg / data-roombg exist. */
 .edt-roombg {
   position: fixed;
-  inset: 0;
+  /* BLED PAST THE VIEWPORT so the mobile URL bar cannot drag it around.
+     A fixed backdrop pinned exactly to the viewport edges is repositioned and
+     resized by Safari every time the URL bar collapses on the way down and
+     returns at the top — which reads as the venue wall sliding and resettling
+     on every scroll. Overhanging it by 80px on top and bottom means the bar
+     animation (and rubber-band overscroll at the very top) can never expose an
+     edge, so there is nothing to see moving. The layer is still viewport-fixed
+     and still one compositor surface; it is just bigger than the hole it fills.
+     Bleed, not lvh: 100lvh is correct on iOS but silently equals the window on
+     every other engine, so it could not be verified anywhere but a real phone. */
+  inset: -80px 0;
   z-index: -1;
   pointer-events: none;
   background-color: var(--edt-bg, #100c0a);
