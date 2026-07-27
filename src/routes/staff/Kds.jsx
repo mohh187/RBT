@@ -10,6 +10,7 @@ import StaffBell from '../../components/StaffBell.jsx'
 import Icon from '../../components/Icon.jsx'
 import { useCompactUI } from '../../lib/useCompactUI.js'
 import { sectionTemplate, templateOptions } from '../../lib/systemTemplates.js'
+import { useSectionTemplate } from '../../lib/useSectionTemplate.js'
 import { systemThemeAttr, useSystemThemeBody } from '../../lib/systemThemes.js'
 import PinLock from '../../components/PinLock.jsx'
 import AppBackground from '../../components/AppBackground.jsx'
@@ -42,7 +43,8 @@ export default function Kds() {
   const [items, setItems] = useState([]) // menu items → allergy warnings + station fallback
   // KDS layout template (rail | kanban | grid | display) — tenant's saved choice
   // is plan-gated (Pro+); kitchen staff can switch on the fly for this device.
-  const [tpl, setTpl] = useState('rail')
+  // Persisted: the chosen view survives navigation, reload and logout.
+  const [tpl, setTpl] = useSectionTemplate(tenant, tenantId, 'kds', templateOptions('kds'))
   const [events, setEvents] = useState([]) // live activity feed (client-side, this screen)
   const prevCount = useRef(0)
   const seeded = useRef(false)
@@ -59,8 +61,8 @@ export default function Kds() {
 
   // resync ONLY when the saved template value changes — any other tenant write
   // (a studio tweak, counters) must not snap back a manually chosen board
-  const savedTpl = sectionTemplate(tenant, 'kds')
-  useEffect(() => { setTpl(savedTpl) }, [savedTpl])
+  // (no re-seed here: useSectionTemplate already seeds from the tenant and lets
+  //  a local choice win — re-applying the saved value would snap the board back)
   useEffect(() => { if (!tenantId) return; return watchActiveOrders(tenantId, setOrders) }, [tenantId])
   useEffect(() => { if (!tenantId) return; return watchOrdersSince(tenantId, startOfToday(), setToday) }, [tenantId, dayKey])
   useEffect(() => { if (!tenantId) return; return watchCategories(tenantId, setCats) }, [tenantId])

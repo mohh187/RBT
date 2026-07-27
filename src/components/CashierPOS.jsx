@@ -10,6 +10,7 @@ import {
 } from '../lib/db.js'
 import { tierDiscountAmount, TIER_META, resolveMembershipPolicy } from '../lib/membership.js'
 import { sectionTemplate, templateOptions } from '../lib/systemTemplates.js'
+import { useSectionTemplate } from '../lib/useSectionTemplate.js'
 import { systemThemeAttr } from '../lib/systemThemes.js'
 import { basePrice, variantHasOwnPrice } from '../lib/pricing.js'
 
@@ -152,7 +153,8 @@ export default function CashierPOS({ open, onClose, tenantId, tenant, lang = 'ar
   const [activeCat, setActiveCat] = useState('all')
   // Cashier layout template (grid | compact | touch | lite) — the tenant's saved
   // choice is plan-gated (Pro+); staff can switch on the fly here.
-  const [tpl, setTpl] = useState('grid')
+  // Persisted: the chosen view survives navigation, reload and logout.
+  const [tpl, setTpl] = useSectionTemplate(tenant, tenantId, 'cashier', templateOptions('cashier'))
   const [cart, setCart] = useState([])
   const [phone, setPhone] = useState('')
   const [name, setName] = useState('')
@@ -192,8 +194,10 @@ export default function CashierPOS({ open, onClose, tenantId, tenant, lang = 'ar
   // tweak from the studio mid-order must never wipe the cashier's active cart)
   useEffect(() => { if (open) { setCart([]); setPhone(''); setName(''); setCustomer(null); setActiveCat('all'); setOrderType(initialTable ? 'dine_in' : 'takeaway'); setTableId(initialTable?.id || ''); setCar({ model: '', color: '', plate: '' }); setQ(''); setPartySize(''); setDiscType('amount'); setDiscVal(''); setPayMethod('cash'); setOrderNote(''); setRush(false); setHeldState(getHeld(tenantId)) } }, [open, tenantId, initialTable]) // eslint-disable-line react-hooks/exhaustive-deps
   // template follows the SAVED choice — resync only when that value itself changes
-  const savedTpl = sectionTemplate(tenant, 'cashier')
-  useEffect(() => { if (open) setTpl(window.matchMedia('(max-width: 640px)').matches ? 'compact' : savedTpl) }, [open, savedTpl])
+  // On a phone the compact board is forced regardless of the saved template —
+  // the wide grid is unusable there. On anything larger useSectionTemplate owns
+  // the choice (and it persists), so nothing re-seeds it here.
+  useEffect(() => { if (open && window.matchMedia('(max-width: 640px)').matches) setTpl('compact') }, [open])
 
   useEffect(() => {
     const digits = phone.replace(/[^0-9]/g, '')

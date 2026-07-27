@@ -31,6 +31,7 @@ import VideoTrimRange from '../../components/VideoTrimRange.jsx'
 import { useVideoTrim } from '../../lib/useVideoTrim.js'
 import { lex, venueType } from '../../lib/venueTypes.js'
 import { sectionTemplate, templateOptions } from '../../lib/systemTemplates.js'
+import { useSectionTemplate } from '../../lib/useSectionTemplate.js'
 // Surface + garnish: the catalogue is data-only (no React, no CSS); the result
 // is judged in the live menu preview pane, which renders through the real
 // theme pipeline rather than an inline approximation.
@@ -413,7 +414,8 @@ export default function Items() {
   const [previewItem, setPreviewItem] = useState(null)
   // Menu-management layout template (table | cards | catalog) — plan-gated saved
   // default, switchable on the fly. Drag-reorder stays a table-view affordance.
-  const [tpl, setTpl] = useState('table')
+  // Persisted: the chosen view survives navigation, reload and logout.
+  const [tpl, setTpl] = useSectionTemplate(tenant, tenantId, 'menu', templateOptions('menu'))
   // Bulk selection mode — checkboxes on rows/cards + a sticky action bar.
   const [selectMode, setSelectMode] = useState(false)
   const [selected, setSelected] = useState(() => new Set())
@@ -426,7 +428,6 @@ export default function Items() {
   // urls into its form while both sheets are up (see the studio's onChange).
   const editorPatchRef = useRef(null)
 
-  useEffect(() => { setTpl(sectionTemplate(tenant, 'menu')) }, [tenant])
 
   const sensors = useSensors(
     useSensor(PointerSensor, { activationConstraint: { distance: 6 } }),
@@ -526,6 +527,18 @@ export default function Items() {
   }
 
   const toggleSelectMode = () => { setSelectMode((v) => !v); setSelected(new Set()) }
+  // Select-all always means "everything currently SHOWN" — the filtered,
+  // searched subset in front of the user, never a hidden surprise. Pressing
+  // it again clears exactly that subset.
+  const shownIds = () => (shown || []).map((x) => x.id)
+  const allShownSelected = () => { const ids = shownIds(); return ids.length > 0 && ids.every((id) => selected.has(id)) }
+  const selectAllShown = () => setSelected((prev) => {
+    const ids = shownIds()
+    const n = new Set(prev)
+    if (ids.length && ids.every((id) => prev.has(id))) ids.forEach((id) => n.delete(id))
+    else ids.forEach((id) => n.add(id))
+    return n
+  })
   const toggleSelect = (id) => setSelected((s) => {
     const n = new Set(s)
     if (n.has(id)) n.delete(id); else n.add(id)
@@ -738,6 +751,9 @@ export default function Items() {
       {selectMode && (
         /* sticky bulk-action bar — stays pinned above the list while scrolling; wraps at 360px */
         <div className="card card-pad" style={{ position: 'sticky', bottom: 0, zIndex: 30, display: 'flex', flexWrap: 'wrap', gap: 8, alignItems: 'center', boxShadow: 'var(--sh-2)' }}>
+          <button className="btn btn-sm btn-outline" style={{ flex: 'none' }} disabled={bulkBusy} onClick={selectAllShown}>
+            <Icon name="check" size={14} /> {allShownSelected() ? (lang === 'ar' ? 'إلغاء تحديد الكل' : 'Clear all') : (lang === 'ar' ? 'تحديد الكل' : 'Select all')}
+          </button>
           <strong className="small num" style={{ flex: 'none' }}>
             {bulkBusy ? (lang === 'ar' ? 'جارٍ التطبيق' : 'Applying') : `${selected.size} ${lang === 'ar' ? 'محدد' : 'selected'}`}
           </strong>

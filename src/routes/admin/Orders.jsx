@@ -9,6 +9,7 @@ import { watchOrdersSince } from '../../lib/db.js'
 import { Price } from '../../components/Riyal.jsx'
 import { orderNumber, timeAgo } from '../../lib/format.js'
 import { sectionTemplate, templateOptions } from '../../lib/systemTemplates.js'
+import { useSectionTemplate } from '../../lib/useSectionTemplate.js'
 
 const startOfToday = () => {
   const d = new Date()
@@ -39,9 +40,9 @@ export default function Orders() {
   const [activeOrderId, setActiveOrderId] = useState(null)
   // Orders layout template (kanban | grid | timeline) — plan-gated saved default,
   // switchable on the fly for this device.
-  const [tpl, setTpl] = useState('kanban')
+  // Persisted: the chosen view survives navigation, reload and logout.
+  const [tpl, setTpl] = useSectionTemplate(tenant, tenantId, 'orders', templateOptions('orders'))
 
-  useEffect(() => { setTpl(sectionTemplate(tenant, 'orders')) }, [tenant])
 
   useEffect(() => {
     if (!tenantId) return

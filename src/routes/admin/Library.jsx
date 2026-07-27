@@ -181,6 +181,16 @@ export default function Library() {
   // selection: multi-select mode (bulk bar) vs single detail strip
   const [selMode, setSelMode] = useState(false)
   const [selected, setSelected] = useState(() => new Set())
+  // Same rule as the menu: "all" is the filtered set on screen.
+  const shownIds = () => (live || []).map((x) => x.id)
+  const allShownSelected = () => { const ids = shownIds(); return ids.length > 0 && ids.every((id) => selected.has(id)) }
+  const selectAllShown = () => setSelected((prev) => {
+    const ids = shownIds()
+    const n = new Set(prev)
+    if (ids.length && ids.every((id) => prev.has(id))) ids.forEach((id) => n.delete(id))
+    else ids.forEach((id) => n.add(id))
+    return n
+  })
   const [detailId, setDetailId] = useState(null)
 
   // studio (in-library AI designer)
@@ -769,6 +779,9 @@ export default function Library() {
       {/* bulk actions bar (multi-select mode) */}
       {selMode && (
         <div className="card card-pad row" style={{ gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
+          <button className="btn btn-sm btn-outline" onClick={selectAllShown}>
+            <Icon name="check" size={14} /> {allShownSelected() ? (ar ? 'إلغاء تحديد الكل' : 'Clear all') : (ar ? 'تحديد الكل' : 'Select all')}
+          </button>
           <span className="small bold num">{selected.size} {ar ? 'محدد' : 'selected'}</span>
           <button className="btn btn-sm btn-outline" onClick={() => setSelected(new Set(shown.map((m) => m.id)))}>{ar ? 'تحديد المعروض' : 'Select shown'}</button>
           <select className="ml-move" style={{ maxWidth: 170, height: 30 }} value="__ph" disabled={!isManager || !selected.size}

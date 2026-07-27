@@ -8,6 +8,7 @@ import { Spinner } from '../../components/ui.jsx'
 import Icon from '../../components/Icon.jsx'
 import LowStockAlert from '../../components/LowStockAlert.jsx'
 import { sectionTemplate, templateOptions } from '../../lib/systemTemplates.js'
+import { useSectionTemplate } from '../../lib/useSectionTemplate.js'
 
 function Stars({ value = 0, size = 13 }) {
   return (
@@ -124,11 +125,11 @@ export default function Dashboard() {
   const [categories, setCategories] = useState(null)
   // Dashboard layout template (exec | ops | min) — plan-gated saved default,
   // switchable on the fly for this device.
-  const [tpl, setTpl] = useState('exec')
+  // Persisted: the chosen view survives navigation, reload and logout.
+  const [tpl, setTpl] = useSectionTemplate(tenant, tenantId, 'dashboard', templateOptions('dashboard'))
   const currency = tenant?.currency || 'SAR'
   const ar = lang === 'ar'
 
-  useEffect(() => { setTpl(sectionTemplate(tenant, 'dashboard')) }, [tenant])
 
   useEffect(() => {
     if (!tenantId) return
