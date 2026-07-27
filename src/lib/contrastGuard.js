@@ -170,16 +170,35 @@ export function guardContrast() {
 // theme, skin, venue custom theme, or an inline brand write from applyTheme().
 export function initContrastGuard() {
   if (typeof document === 'undefined') return () => {}
+
+  // NEVER observe `style`. The guard's own corrections are inline custom
+  // properties on <body>, so watching `style` made it re-trigger itself: a
+  // write woke the observer, which ran the guard, which wrote again. Measured
+  // on the live menu — 1208 style mutations on <body> in five IDLE seconds,
+  // each one re-reading ~20 tokens through getComputedStyle and forcing a style
+  // recalculation. That is a phone getting hot while nothing is happening.
+  // Only the attributes that genuinely REPRESENT a palette change are watched.
+  const attrs = ['data-theme', 'data-systheme', 'data-sysvariant', 'data-custheme', 'data-skin', 'data-menuglass']
+
+  // No "did the palette change?" short-circuit here, deliberately. The obvious
+  // one — compare the computed tokens against the last run — is WRONG, because
+  // the guard's own corrections are what those computed values report: after a
+  // correction the palette reads as already-fixed, so a real theme switch looks
+  // identical and gets skipped. Verified: flipping to dark produced no re-run.
+  // The observer now only fires on genuine palette attributes, so a full pass is
+  // rare and cheap; correctness beats the micro-optimisation.
   const run = () => guardContrast()
+
+  // Trailing debounce: several attributes often flip together (theme + skin +
+  // systheme), and that is ONE palette change, not three passes.
+  let timer = 0
+  const schedule = () => {
+    clearTimeout(timer)
+    timer = setTimeout(run, 120)
+  }
+
   run()
-  const attrs = ['data-theme', 'data-systheme', 'data-sysvariant', 'data-custheme', 'data-skin', 'data-menuglass', 'style', 'class']
-  const obs = new MutationObserver(() => {
-    // The guard writes to <html> style itself — skip the self-triggered pass.
-    if (guardBusy) return
-    guardBusy = true
-    requestAnimationFrame(() => { guardBusy = false; run() })
-  })
-  let guardBusy = false
+  const obs = new MutationObserver(schedule)
   try {
     obs.observe(document.documentElement, { attributes: true, attributeFilter: attrs })
     if (document.body) obs.observe(document.body, { attributes: true, attributeFilter: attrs })
@@ -187,5 +206,5 @@ export function initContrastGuard() {
   // Fonts/skins can land after first paint and repaint surfaces.
   setTimeout(run, 400)
   setTimeout(run, 1600)
-  return () => { try { obs.disconnect() } catch (_) { /* ignore */ } }
+  return () => { clearTimeout(timer); try { obs.disconnect() } catch (_) { /* ignore */ } }
 }
