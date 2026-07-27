@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { collection, doc, addDoc, updateDoc, serverTimestamp } from 'firebase/firestore'
 import { ref as storageRef, uploadBytesResumable, getDownloadURL } from 'firebase/storage'
 import { useAuth } from '../../lib/auth.jsx'
@@ -246,6 +246,17 @@ export default function Library() {
       && (!needle || (m.name || '').toLowerCase().includes(needle)))
   }, [live, tab, folderSel, q, favOnly])
   const detail = useMemo(() => live.find((m) => m.id === detailId) || null, [live, detailId])
+  // The detail panel is rendered ABOVE the grids, so tapping any asset below the
+  // first screenful opened it OFF-SCREEN — nothing appeared to happen and every
+  // per-asset action was unreachable from a phone. Bring it to the user.
+  const detailRef = useRef(null)
+  useEffect(() => {
+    if (!detailId || !detailRef.current) return
+    const id = requestAnimationFrame(() => {
+      try { detailRef.current?.scrollIntoView({ block: 'center', behavior: 'smooth' }) } catch (_) { detailRef.current?.scrollIntoView() }
+    })
+    return () => cancelAnimationFrame(id)
+  }, [detailId])
   const totalMB = counts.all.mb.toFixed(1)
   const favCount = useMemo(() => live.filter((m) => m.fav === true).length, [live])
   // duplicate groups resolved against live docs, so trashing one updates the panel
@@ -766,7 +777,7 @@ export default function Library() {
 
       {/* single-item detail strip + per-image AI actions */}
       {detail && !selMode && !refPick && (
-        <div className="card card-pad lib-detail">
+        <div className="card card-pad lib-detail" ref={detailRef}>
           <div className={`lib-detail-thumb ${busyId === detail.id ? 'ai-scanning' : ''}`}>
             {detail.kind === 'image' ? <img src={detail.url} alt="" />
               : detail.kind === 'video' ? <video src={detail.url} preload="metadata" muted playsInline />

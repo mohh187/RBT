@@ -111,6 +111,15 @@
 }
 .settings-page .set-nav::-webkit-scrollbar { display: none; }
 
+/* PHONES: the index was a 1188px strip inside a 374px window with no scrollbar,
+   no arrows and no edge fade — six of the nine sections looked like they did not
+   exist. Wrapping shows every section at once (~3 rows) with zero swiping, and
+   raises each pill to a real tap target. set-nav wraps on phones. */
+@media (max-width: 699.98px) {
+  .settings-page .set-nav { flex-wrap: wrap; overflow-x: visible; }
+  .settings-page .set-nav-item { padding: 9px 12px; min-height: 40px; }
+}
+
 .settings-page .set-nav-item {
   position: relative;
   display: inline-flex;

@@ -6799,9 +6799,19 @@ body:has(.sd2-root) .toast-wrap { z-index: 840; }
   width: 22px; height: 22px; border-radius: 50%; padding: 0;
   display: grid; place-items: center; cursor: pointer;
   background: var(--surface); border: 1px solid var(--border-strong); color: var(--text-muted);
-  opacity: 0; transition: opacity var(--dur-fast) ease, color var(--dur-fast) ease, border-color var(--dur-fast) ease;
+  transition: opacity var(--dur-fast) ease, color var(--dur-fast) ease, border-color var(--dur-fast) ease;
 }
-.lib-card:hover .lib-star, .lib-card:focus-visible .lib-star, .lib-star.on { opacity: 1; }
+/* Hide-until-hover is gated on HAVING a hover pointer. It used to apply
+   everywhere, so on touch the favourite star was permanently invisible and the
+   «المفضلة» filter could never be populated from a phone at all. */
+@media (hover: hover) {
+  .lib-star { opacity: 0; }
+  .lib-card:hover .lib-star, .lib-card:focus-visible .lib-star, .lib-star.on { opacity: 1; }
+}
+@media (hover: none) {
+  .lib-star { opacity: 1; }
+  .lib-star::before { content: ''; position: absolute; inset: -9px; border-radius: 50%; }
+}
 .lib-star.on { color: #d99a06; border-color: #d99a06; }
 .lib-starbtn.on { color: #d99a06; }
 /* trash view: dimmed, non-clickable cards */
@@ -11897,3 +11907,24 @@ body[data-mch-sheet] .backdrop {
   .vtrim-track input[type='range']::-webkit-slider-thumb { transition: none; }
 }
 /* ==== /video trim ==== */
+
+
+/* Roles & permissions: the save button follows the user instead of living at
+   the bottom of a page that used to be ~8.8 screens tall. Sits above the fixed
+   bottom nav on phones. The draft is local state, so losing it to a mis-tap on
+   the back gesture was a real risk. */
+.roles-save {
+  position: sticky;
+  bottom: calc(var(--bottomnav-h) + var(--safe-b) + 8px);
+  z-index: 5;
+  padding-block: var(--sp-2);
+  background: linear-gradient(to top, var(--bg) 62%, transparent);
+}
+@media (min-width: 980px) {
+  .roles-save { bottom: 8px; }
+}
+/* the roles accordion header keeps a normal caret-free look in both engines */
+.page details > summary::-webkit-details-marker { display: none; }
+.page details > summary::marker { content: ''; }
+.page details[open] > summary .ic-chevronDown,
+.page details[open] > summary svg { transform: rotate(180deg); transition: transform var(--dur-fast) var(--ease); }

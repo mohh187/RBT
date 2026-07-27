@@ -3041,8 +3041,8 @@ export default function Settings() {
                           onClick={() => { setSkinId(s.id); setColor(s.tokens.brand); setAccent(s.tokens.accent); setOvFont(s.tokens.font); setOvShape(s.tokens.shape); setOvLayout(s.layout.menuLayout); setOvHeader(''); setOvBottomNav(''); setOvMotion(''); setOvMotionSpeed('normal'); setOvMotionRepeat('always'); setOvTap('press'); setOvDetailLayout(''); setOvItemImageStyle(''); setOvSpotSize('md'); setPreset('custom'); applyTheme({ brand: s.tokens.brand, accent: s.tokens.accent }) }}
                           className="stack" 
                           style={{
-                            width: 'calc(25% - 8px)',
-                            minWidth: 72,
+                            width: 'calc(50% - 8px)',
+                            minWidth: 132,
                             gap: 4,
                             padding: 6,
                             borderRadius: 10,
@@ -3061,7 +3061,7 @@ export default function Settings() {
                             </span>
                           </div>
                           <span className="xs bold" style={{ display: 'block', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', fontSize: 11 }}>{s.name[lang] || s.name.ar}</span>
-                          <span className="faint" style={{ fontSize: 8 }}>{fontLabel(s.tokens.font)}</span>
+                          <span className="faint xs">{fontLabel(s.tokens.font)}</span>
                         </button>
                       )
                     })}

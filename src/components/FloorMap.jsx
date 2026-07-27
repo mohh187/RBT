@@ -79,7 +79,7 @@ export default function FloorMap({ tables = [], statusOf, metaOf, edit, onMove, 
 
   const positioned = tables.map((tb, i) => ({
     ...tb,
-    _x: tb.x != null ? tb.x : 16 + (i % 4) * 104,
+    _x: tb.x != null ? tb.x : 16 + (i % 4) * 132,
     _y: tb.y != null ? tb.y : 16 + Math.floor(i / 4) * 118,
   }))
 
@@ -93,7 +93,10 @@ export default function FloorMap({ tables = [], statusOf, metaOf, edit, onMove, 
   }
   const needW = dims.current.w
   const needH = dims.current.h
-  const scale = cw > 0 && cw < needW ? cw / needW : 1
+  // Floor the fit-to-width scale: below this the fixed 12px/10px labels shrank
+  // to ~6.8 effective px (unreadable, and far under the 11px floor). The canvas
+  // scrolls horizontally instead of shrinking the type into nothing.
+  const scale = cw > 0 && cw < needW ? Math.max(0.85, cw / needW) : 1
 
   const toLocal = (e) => {
     const rect = outer.current.getBoundingClientRect()
@@ -116,7 +119,7 @@ export default function FloorMap({ tables = [], statusOf, metaOf, edit, onMove, 
 
   return (
     <div ref={outer} onPointerMove={onPointerMove} onPointerUp={onPointerUp} onPointerLeave={onPointerUp}
-      style={{ position: 'relative', width: '100%', height: Math.max(needH * scale, 300), background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: 16, overflow: 'hidden' }}>
+      style={{ position: 'relative', width: '100%', height: Math.max(needH * scale, 300), background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: 16, overflowX: 'auto', overflowY: 'hidden', scrollbarWidth: 'none' }}>
       <div style={{ position: 'absolute', top: 0, left: 0, width: needW, height: needH, transform: `scale(${scale})`, transformOrigin: 'top left', backgroundImage: 'radial-gradient(var(--border) 1px, transparent 1px)', backgroundSize: '24px 24px' }}>
         {positioned.map((tb) => (
           <div key={tb.id} onPointerDown={(e) => onPointerDown(e, tb)} onClick={() => !edit && onTap?.(tb)}

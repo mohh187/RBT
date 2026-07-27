@@ -139,10 +139,13 @@ export default function Tables() {
 
       {/* status legend + counts */}
       <div className="row" style={{ gap: 8, flexWrap: 'wrap' }}>
-        <span className="badge" style={{ borderColor: '#16a34a', color: '#16a34a', background: 'transparent' }}>● {ar ? 'متاحة' : 'Free'} {counts.free}</span>
-        <span className="badge" style={{ borderColor: '#dc2626', color: '#dc2626', background: 'transparent' }}>● {ar ? 'مشغولة' : 'Occupied'} {counts.occ}</span>
-        <span className="badge" style={{ borderColor: '#2563eb', color: '#2563eb', background: 'transparent' }}>● {ar ? 'مفوترة' : 'Billed'} {counts.billed}</span>
-        <span className="badge" style={{ borderColor: '#e0a82e', color: '#e0a82e', background: 'transparent' }}>● {ar ? 'محجوزة' : 'Reserved'} {counts.res}</span>
+        {/* Theme-token badges, not fixed hex on a transparent fill: over the
+            page gradient those 11px labels failed AA, and colour is the only
+            signal for a table's state during service. */}
+        <span className="badge badge-success">● {ar ? 'متاحة' : 'Free'} {counts.free}</span>
+        <span className="badge badge-danger">● {ar ? 'مشغولة' : 'Occupied'} {counts.occ}</span>
+        <span className="badge badge-info">● {ar ? 'مفوترة' : 'Billed'} {counts.billed}</span>
+        <span className="badge badge-warning">● {ar ? 'محجوزة' : 'Reserved'} {counts.res}</span>
       </div>
 
       {/* zone tabs (only when zones exist) */}
