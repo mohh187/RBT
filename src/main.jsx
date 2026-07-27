@@ -10,6 +10,7 @@ import { registerSW } from './lib/notify.js'
 import { unlockAudio } from './lib/sounds.js'
 import { initMonitor } from './lib/monitor.js'
 import { initThemeColorSync } from './lib/themeColor.js'
+import { initContrastGuard } from './lib/contrastGuard.js'
 import ErrorBoundary, { reloadOnceForStaleChunk } from './components/ErrorBoundary.jsx'
 
 // Register the service worker (enables notifications on mobile).
@@ -19,6 +20,9 @@ if ('serviceWorker' in navigator) {
 
 // Match the browser chrome (iOS status bar / bottom bar) to the app background.
 initThemeColorSync()
+
+// Guarantee readable ink on every theme/mode/brand combination (see the file).
+initContrastGuard()
 
 // Global error capture → platform console (code monitoring across all venues).
 initMonitor()

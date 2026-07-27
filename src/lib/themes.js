@@ -1,4 +1,5 @@
 import { contrastRatio } from './contrast.js'
+import { guardContrast } from './contrastGuard.js'
 
 // Professional theme presets. Each sets the brand + accent colors that cascade
 // through the whole UI (menu, admin, cashier). Base light/dark is neutral
@@ -46,6 +47,10 @@ export function applyTheme({ brand, accent } = {}) {
     r.setProperty('--accent-base', accent)
     r.setProperty('--on-accent', onColor(accent))
   }
+  // Derived tokens are only half the story: the mode also re-mixes --brand and
+  // every theme ships its own ink constants. The guard measures what is ACTUALLY
+  // painted and repairs anything unreadable.
+  guardContrast()
 }
 
 // Resolve the effective theme for a tenant (preset + optional custom override).
