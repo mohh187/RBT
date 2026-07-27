@@ -18,6 +18,15 @@
         "headers": [{ "key": "Cache-Control", "value": "public, max-age=31536000, immutable" }]
       },
       {
+        "//": "Venue surfaces are rendered by the venueShell function (per-venue title/og/manifest). Re-assert their CDN caching so the catch-all above does not force every menu open through a function invocation. The function itself re-fetches the live shell every 5 min, so it cannot go stale the way a browser-cached shell can.",
+        "source": "/m/**",
+        "headers": [{ "key": "Cache-Control", "value": "public, max-age=0, s-maxage=300, stale-while-revalidate=86400" }]
+      },
+      {
+        "source": "/join/**",
+        "headers": [{ "key": "Cache-Control", "value": "public, max-age=0, s-maxage=300, stale-while-revalidate=86400" }]
+      },
+      {
         "//": "Not content-hashed: the service worker and the manifests must always revalidate, or a bad SW/identity could pin itself for a year.",
         "source": "/@(sw.js|manifest.webmanifest)",
         "headers": [{ "key": "Cache-Control", "value": "no-cache" }]

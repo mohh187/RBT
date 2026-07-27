@@ -34,6 +34,7 @@ import {
   MAX_SEATS,
 } from '../lib/gameRoom.js'
 import { gameById } from '../lib/games.js'
+import { applyVenueFavicon, applyVenueManifest, restorePlatformManifest } from '../lib/pwa.js'
 import '../styles/room.css'
 
 const MAX_NAME = 24
@@ -112,6 +113,31 @@ export default function JoinRoom() {
       .catch(() => { /* the room still works without venue branding */ })
     return () => { alive = false }
   }, [tid])
+
+  // ---- the venue's identity on the most-shared surface ----
+  // An invite link is the page a guest is most likely to install or bookmark.
+  // It used to keep the PLATFORM identity (RBT 360 favicon/manifest/title) even
+  // though the same venue's /m/:slug swaps all of it, and its dark majlis
+  // palette sat under a near-white theme-color, so the phone's browser chrome
+  // showed a white band over a black page.
+  useEffect(() => {
+    if (!tenant) return undefined
+    const prevTitle = document.title
+    document.title = tenant.name || prevTitle
+    applyVenueFavicon(tenant, slug)
+    if (slug) applyVenueManifest(tenant, slug)
+    return () => { document.title = prevTitle; restorePlatformManifest() }
+  }, [tenant, slug])
+
+  // The room's dark palette is painted on an inner fixed layer, so <body> stayed
+  // near-white and themeColor.js mirrored THAT — a white browser-chrome band and
+  // a white overscroll flash above a black page. Tinting body while this page is
+  // mounted fixes both; the class change is what themeColor.js watches, so the
+  // meta re-syncs on its own.
+  useEffect(() => {
+    document.body.classList.add('rm-body')
+    return () => document.body.classList.remove('rm-body')
+  }, [])
 
   // ---- the live room ----
   useEffect(() => {

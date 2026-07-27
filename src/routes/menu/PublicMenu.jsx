@@ -27,7 +27,31 @@ export default function PublicMenu({ slug: slugProp }) {
     }
     return <FullSpinner />
   }
-  if (notFound) return <div className="auth-shell"><Empty icon="search" title={lang === 'ar' ? 'المنشأة غير موجودة' : 'Venue not found'} /></div>
+  // No dead ends: a mistyped slug or a retired QR code left the guest on a bare
+  // icon with nothing clickable. Always offer a way forward.
+  if (notFound) {
+    return (
+      <div className="auth-shell">
+        <Empty
+          icon="search"
+          title={lang === 'ar' ? 'المنشأة غير موجودة' : 'Venue not found'}
+          hint={lang === 'ar'
+            ? 'تأكّد من الرابط أو أعد مسح رمز QR على الطاولة.'
+            : 'Check the link, or scan the QR code on your table again.'}
+          action={(
+            <div className="row" style={{ gap: 'var(--sp-2)', justifyContent: 'center', flexWrap: 'wrap' }}>
+              <button className="btn" onClick={() => window.location.reload()}>
+                {lang === 'ar' ? 'إعادة المحاولة' : 'Try again'}
+              </button>
+              <a className="btn btn-primary" href="/">
+                {lang === 'ar' ? 'الصفحة الرئيسية' : 'Go home'}
+              </a>
+            </div>
+          )}
+        />
+      </div>
+    )
+  }
 
   return (
     <div className="venue-above" style={{ minHeight: '100dvh' }}>

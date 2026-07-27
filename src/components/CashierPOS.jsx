@@ -11,6 +11,7 @@ import {
 import { tierDiscountAmount, TIER_META, resolveMembershipPolicy } from '../lib/membership.js'
 import { sectionTemplate, templateOptions } from '../lib/systemTemplates.js'
 import { systemThemeAttr } from '../lib/systemThemes.js'
+import { basePrice, variantHasOwnPrice } from '../lib/pricing.js'
 
 const lineKey = (item, variant, mods, note) => `${item.id}|${variant?.key || ''}|${(mods || []).map((m) => m.nameAr).join(',')}|${note || ''}`
 
@@ -40,7 +41,7 @@ function PosOptionCard({ it, currency, lang, ar, onAdd, onOpenFull, tid }) {
   const variant = variants.find((v) => v.key === vKey) || null
   const mods = groups.flatMap((g, gi) => (sel[gi] || []).map((oi) => g.options?.[oi]).filter(Boolean)
     .map((o) => ({ nameAr: o.nameAr, nameEn: o.nameEn || '', price: Number(o.price) || 0 })))
-  const unit = (variant ? Number(variant.price) || 0 : Number(it.price) || 0) + mods.reduce((s, m) => s + m.price, 0)
+  const unit = basePrice(it, variant) + mods.reduce((s, m) => s + m.price, 0)
   const toggleOpt = (gi, oi, g) => {
     setSel((s) => {
       const cur = s[gi] || []
@@ -221,7 +222,7 @@ export default function CashierPOS({ open, onClose, tenantId, tenant, lang = 'ar
   }
 
   const addLine = (item, variant, mods, qty, note) => {
-    const unitPrice = (variant ? Number(variant.price) || 0 : Number(item.price) || 0) + (mods || []).reduce((s, m) => s + (Number(m.price) || 0), 0)
+    const unitPrice = basePrice(item, variant) + (mods || []).reduce((s, m) => s + (Number(m.price) || 0), 0)
     const key = lineKey(item, variant, mods, note)
     setCart((c) => {
       const idx = c.findIndex((l) => l.key === key)
@@ -582,7 +583,7 @@ function POSItemSheet({ item, currency, lang, t, onClose, onAdd }) {
           <div className="stack" style={{ gap: 4 }}>
             <label className="xs faint">{t('variants') || (ar ? 'الحجم' : 'Size')}</label>
             <div className="row" style={{ gap: 6, flexWrap: 'wrap' }}>
-              {variants.map((v) => <button key={v.key} className={`chip ${variant?.key === v.key ? 'active' : ''}`} onClick={() => setVariant(v)}>{pickLang(v, 'name', lang)} · <Price value={v.price} currency={currency} lang={lang} /></button>)}
+              {variants.map((v) => <button key={v.key} className={`chip ${variant?.key === v.key ? 'active' : ''}`} onClick={() => setVariant(v)}>{pickLang(v, 'name', lang)}{variantHasOwnPrice(v) ? <> · <Price value={v.price} currency={currency} lang={lang} /></> : null}</button>)}
             </div>
           </div>
         )}

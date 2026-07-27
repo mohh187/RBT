@@ -1625,7 +1625,7 @@ export default function GamesCenter({
           {feats.length ? (
             <span className="gh-feat-strip">
               {feats.map((f) => (
-                <span key={f.k} className="gh-feat" dir={f.ltr ? 'ltr' : undefined}>
+                <span key={f.k} className="gh-feat-chip" dir={f.ltr ? 'ltr' : undefined}>
                   <Icon name={f.icon} size={12} />{f.label}
                 </span>
               ))}

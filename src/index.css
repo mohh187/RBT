@@ -3101,6 +3101,25 @@ body[data-theme='dark'] .pos-fullscreen[data-systheme='glass'] { background: var
 .brand-mark svg { border-radius: 9px; box-shadow: 0 3px 10px -3px color-mix(in srgb, var(--brand) 55%, transparent); flex: none; }
 /* official artwork lockup — transparent logo images: no chip radius/shadow */
 .brand-mark-official img { border-radius: 0; box-shadow: none; flex: none; }
+
+/* ===== Official «RBT 360» logotype (src/components/BrandMark.jsx) =====
+   Painted as a background so the theme can swap the artwork AND the browser
+   only ever downloads the variant it paints. In the owner's art «RBT» and the
+   tagline are deep navy — 1.21:1 on the dark navy surface, i.e. invisible — so
+   dark theme gets a recolored copy with light ink and the same gradient «360».
+   Order matters: the dark rules must follow the light ones. */
+.bm-word {
+  display: inline-block;
+  flex: none;
+  background: no-repeat center / contain url('/brand/word-448.png');
+}
+.bm-word.is-tag { background-image: url('/brand/word-tag-448.png'); }
+[data-theme='dark'] .bm-word { background-image: url('/brand/word-dark-448.png'); }
+[data-theme='dark'] .bm-word.is-tag { background-image: url('/brand/word-tag-dark-448.png'); }
+/* Surfaces that are dark in BOTH themes (dark hero panels, navy bands) opt in
+   explicitly by adding .on-dark to any ancestor. */
+.on-dark .bm-word { background-image: url('/brand/word-dark-448.png'); }
+.on-dark .bm-word.is-tag { background-image: url('/brand/word-tag-dark-448.png'); }
 .brand-word { line-height: 1; }
 .brand-word-accent { color: var(--brand); }
 .brand-mark .dot {
@@ -8056,6 +8075,25 @@ button.edt-pair:active { transform: scale(.98); }
     inset 0 -1px 0 var(--edt-mortar-dark, rgba(46, 18, 8, .34));
 }
 .edt-stg-err { color: var(--edt-alert, #ff8d70); font-size: 13px; font-weight: 700; margin: 6px 0 0; }
+/* The required option group the user skipped: scrolled into view by the
+   add-to-cart handler and flagged here, so «أضف للسلة» is never a silent
+   no-op. Ring + label tint only (no layout shift); the pulse is
+   transform/opacity and is dropped under reduced motion. */
+.edt-needs {
+  border-radius: 14px;
+  outline: 2px solid var(--edt-alert, #ff8d70);
+  outline-offset: 6px;
+}
+.edt-needs .edt-stg-lbl { color: var(--edt-alert, #ff8d70); }
+.edt-needs .edt-opts { animation: edt-needs-pulse 460ms var(--ease, cubic-bezier(0.23, 1, 0.32, 1)) 2; }
+@keyframes edt-needs-pulse {
+  0%, 100% { transform: translateX(0); }
+  30% { transform: translateX(-4px); }
+  70% { transform: translateX(4px); }
+}
+@media (prefers-reduced-motion: reduce) {
+  .edt-needs .edt-opts { animation: none; }
+}
 /* ---- the table (the owner's idea): the details panel painted as the surface
    the dish stands on. Art (shared material selectors live in dishprops.css) →
    tint → melt into canvas where the text lives → lit edge → contact pool. The

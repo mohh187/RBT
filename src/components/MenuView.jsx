@@ -49,6 +49,7 @@ import ARViewer from './ARViewer.jsx'
 import EditorialLayout, { EditorialItemStage, buttonSkinVars, EditorialRoomBg } from './menuThemes/EditorialLayout.jsx'
 import OceanArtLayout from './menuThemes/OceanArtLayout.jsx'
 import ChromeSkin from './ChromeSkin.jsx'
+import { basePrice, variantHasOwnPrice } from '../lib/pricing.js'
 
 const resolveItemStyles = (it) => {
   const nameStyle = {}
@@ -648,7 +649,7 @@ export default function MenuView({ tenant, tenantId, items, categories, offers =
     // browse mode: adding still works — the cart is the guest's "show the waiter"
     // list; only SUBMITTING an order is disabled (in CartSheet).
     const modSum = mods.reduce((s, m) => s + (m.price || 0), 0)
-    const unitPrice = (variant ? variant.price : item.price || 0) + modSum
+    const unitPrice = basePrice(item, variant) + modSum
     const modSig = mods.map((m) => m.nameAr).sort().join(',')
     const key = `${item.id}|${variant?.key || ''}|${modSig}`
     setCart((c) => {
@@ -1481,7 +1482,7 @@ function SpotSlide({ it, slideId, currency, offers, catName, suggestions = [], o
 
   const out = it.available === false || (it.trackStock && (it.stock || 0) <= 0)
   const offer = offerForItem(it, offers)
-  const base = (variant ? variant.price : it.price) || 0
+  const base = basePrice(it, variant)
   const unit = offer ? discountedPrice(base, offer) : base
   const desc = pickLang(it, 'desc', lang)
   const name = pickLang(it, 'name', lang)
@@ -1821,7 +1822,7 @@ export function ItemSheet({ item, tenant, currency, tenantId, onClose, onAdd, de
 
   const flatMods = groups.flatMap((g, gi) => (selected[gi] || []).map((o) => ({ nameAr: o.nameAr, nameEn: o.nameEn, price: Number(o.price) || 0, recipe: o.recipe || [] })))
   const modSum = flatMods.reduce((s, m) => s + m.price, 0)
-  const price = ((variant ? variant.price : item.price || 0) + modSum) * qty
+  const price = (basePrice(item, variant) + modSum) * qty
   const missing = groups.find((g, gi) => {
     const need = Math.max(Number(g.min) || 0, g.required ? 1 : 0)
     return need > 0 && (selected[gi] || []).length < need
@@ -1921,7 +1922,7 @@ export function ItemSheet({ item, tenant, currency, tenantId, onClose, onAdd, de
                 <div className="field">
                   <label>{t('variants')}</label>
                   <div className="row wrap" style={{ gap: 8 }}>
-                    {variants.map((v) => (<button key={v.key} className={`chip ${variant?.key === v.key ? 'active' : ''}`} onClick={() => setVariant(v)}>{pickLang(v, 'name', lang)} · <Price value={v.price} currency={currency} lang={lang} /></button>))}
+                    {variants.map((v) => (<button key={v.key} className={`chip ${variant?.key === v.key ? 'active' : ''}`} onClick={() => setVariant(v)}>{pickLang(v, 'name', lang)}{variantHasOwnPrice(v) ? <> · <Price value={v.price} currency={currency} lang={lang} /></> : null}</button>))}
                   </div>
                 </div>
               )}

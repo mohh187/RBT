@@ -880,7 +880,10 @@ const TXT = {
     rewards: 'جوائز حقيقية من المكان',
     rewardsHow: 'عند تحقيق الشرط يظهر لك رمز — أظهره للكاشير قبل الدفع.',
     cta: 'تصفّح الألعاب',
-    count: (c) => `${n(c)} ألعاب متاحة الآن`,
+    // Arabic tamyeez: 3-10 take the plural («ألعاب»), 11 and above take the
+    // SINGULAR accusative («لعبة»). The venue has 23 games, so the old
+    // hard-coded plural was wrong for every guest who saw it.
+    count: (c) => `${n(c)} ${c >= 3 && c <= 10 ? 'ألعاب' : 'لعبة'} متاحة الآن`,
     countOne: 'لعبة واحدة متاحة الآن',
     countTwo: 'لعبتان متاحتان الآن',
   },

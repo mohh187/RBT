@@ -3,6 +3,7 @@
 // read rule). Shows the current overall status + recent incidents.
 import { useEffect, useMemo, useState } from 'react'
 import { watchStatus, overallStatus, STATUS_LEVELS } from '../lib/platformGrowth.js'
+import BrandMark from '../components/BrandMark.jsx'
 
 function fmt(ts) {
   const d = ts?.toDate ? ts.toDate() : ts ? new Date(ts) : null
@@ -38,11 +39,14 @@ export default function StatusPage() {
     }}>
       <div style={{ maxWidth: 640, margin: '0 auto' }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 24 }}>
-          <div style={{ width: 34, height: 34, borderRadius: 9, background: '#1a1f2b', display: 'grid', placeItems: 'center', fontSize: 18 }}>●</div>
-          <div>
-            <div style={{ fontWeight: 700, fontSize: 16 }}>RBT360</div>
-            <div style={{ fontSize: 12, color: '#8b93a7' }}>حالة النظام</div>
-          </div>
+          {/* The official lockup, and it doubles as the way home — this page
+              used to contain ZERO links, so a visitor arriving from the footer
+              was stranded. The panel is dark in both themes, so force the
+              light-ink artwork with .on-dark. */}
+          <a href="/" className="on-dark" style={{ display: 'inline-flex', textDecoration: 'none', color: 'inherit' }} aria-label="RBT 360">
+            <BrandMark size={30} />
+          </a>
+          <div style={{ fontSize: 12, color: '#8b93a7', marginInlineStart: 2 }}>حالة النظام</div>
         </div>
 
         {/* Overall banner */}
@@ -101,7 +105,7 @@ export default function StatusPage() {
         )}
 
         <div style={{ textAlign: 'center', marginTop: 32, fontSize: 12, color: '#5a6273' }}>
-          RBT360 — منصّة إدارة المقاهي والمطاعم
+          <a href="/" style={{ color: '#8b93a7' }}>RBT 360</a> — منصّة تشغيل المنشآت · <a href="/legal" style={{ color: '#8b93a7' }}>المستندات القانونية</a>
         </div>
       </div>
     </div>

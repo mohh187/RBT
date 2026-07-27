@@ -1244,7 +1244,7 @@
 }
 
 .gh-feat-strip { display: flex; flex-wrap: wrap; gap: 5px; margin-top: 1px; }
-.gh-feat {
+.gh-feat-chip {
   display: inline-flex;
   align-items: center;
   gap: 4px;
@@ -1259,7 +1259,7 @@
   white-space: nowrap;
   color: #eaf1f6;
 }
-.gh-feat svg { flex: 0 0 auto; opacity: 0.85; }
+.gh-feat-chip svg { flex: 0 0 auto; opacity: 0.85; }
 
 /* ---- the featured hero card (leading party shelf) ---- */
 .gh-cover-hero {
@@ -1271,7 +1271,7 @@
 }
 .gh-cover-hero .gh-cover-info { max-width: 62%; padding: 15px 17px 17px; gap: 8px; }
 .gh-cover-hero .gh-cover-name { font-size: 24px; -webkit-line-clamp: 1; line-clamp: 1; }
-.gh-cover-hero .gh-feat { font-size: 11.5px; padding: 4px 9px; }
+.gh-cover-hero .gh-feat-chip { font-size: 11.5px; padding: 4px 9px; }
 .gh-cover-cta {
   position: absolute;
   inset-block-end: 17px;
@@ -1315,7 +1315,7 @@
 @media (min-width: 1200px) {
   .gh-cover { flex-basis: 224px; width: 224px; }
   .gh-cover-name { font-size: 18.5px; }
-  .gh-feat { font-size: 11.5px; padding: 3px 8px; }
+  .gh-feat-chip { font-size: 11.5px; padding: 3px 8px; }
 }
 
 /* ---- motion off ---- */

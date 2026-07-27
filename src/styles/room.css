@@ -834,3 +834,8 @@
   }
   .rm-press:active { transform: none; }
 }
+
+/* While a room/invite page is mounted, tint <body> to the page palette so the
+   mobile browser chrome (theme-color mirrors the body background) and the
+   overscroll gutter match the dark room instead of flashing white. */
+body.rm-body { background: #0a1410; }

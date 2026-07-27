@@ -578,11 +578,18 @@ service cloud.firestore {
         allow read: if isStaff(tid);
         allow create, update: if request.resource.data.deviceId == deviceId
           && deviceId.size() <= 64
+          // Keep this list in sync with mergeIntoProfile() in src/lib/gameMemory.js.
+          // It drifted once — 'insight', 'completedPlays' and 'tags' were being
+          // written but were not allowed, so every guest rollup was denied.
           && request.resource.data.keys().hasOnly(
             ['deviceId', 'customerName', 'customerPhone', 'totalPlays', 'totalScore',
-             'totalDurationMs', 'byGame', 'knowledge', 'archetype', 'traits',
+             'totalDurationMs', 'completedPlays', 'byGame', 'knowledge', 'insight',
+             'tags', 'archetype', 'traits',
              'firstAt', 'lastAt', 'lastGameId', 'lastGameAr', 'lastScore', 'updatedAt'])
-          && request.resource.data.byGame.size() <= 60
+          // Counters arrive as server-side increments, which are not part of
+          // request.resource.data — so bound byGame only when it IS present.
+          && (!('byGame' in request.resource.data) || request.resource.data.byGame.size() <= 60)
+          && (!('tags' in request.resource.data) || request.resource.data.tags.size() <= 12)
           && (!('customerName' in request.resource.data)
               || request.resource.data.customerName == null
               || request.resource.data.customerName.size() <= 24);

@@ -54,6 +54,7 @@ import TablePaint from './TablePaint.jsx'
 // muted/autoplay/loop attributes untouched so iOS autoplay survives.
 import { useVideoTrim } from '../../lib/useVideoTrim.js'
 import ARViewer from '../ARViewer.jsx'
+import { basePrice, variantHasOwnPrice } from '../../lib/pricing.js'
 import '../../styles/menuwall.css'
 
 // Built by a parallel agent — lazy + catch so a missing module never crashes
@@ -1713,6 +1714,14 @@ export function EditorialItemStage({ item, tenant = null, currency, onClose, onA
   const [qty, setQty] = useState(1)
   const [imgIdx, setImgIdx] = useState(0)
   const [selected, setSelected] = useState(() => groups.map(() => []))
+  // Which required group is currently being flagged, + refs to scroll to it.
+  const [shakeIdx, setShakeIdx] = useState(-1)
+  const optRefs = useRef([])
+  useEffect(() => {
+    if (shakeIdx < 0) return undefined
+    const id = setTimeout(() => setShakeIdx(-1), 1200)
+    return () => clearTimeout(id)
+  }, [shakeIdx])
   const name = pickLang(item, 'name', lang)
   const desc = pickLang(item, 'desc', lang)
   const ings = item.ingredients || []
@@ -1896,19 +1905,33 @@ export function EditorialItemStage({ item, tenant = null, currency, onClose, onA
   }
   const flatMods = groups.flatMap((g, gi) => (selected[gi] || []).map((o) => ({ nameAr: o.nameAr, nameEn: o.nameEn, price: Number(o.price) || 0, recipe: o.recipe || [] })))
   const modSum = flatMods.reduce((s, m) => s + m.price, 0)
-  const base = (variant ? variant.price : item.price) || 0
+  const base = basePrice(item, variant)
   // Offer pricing is shown the same way the item cards and the spotlight view
   // show it; the cart applies the matching discount at checkout.
   const unit = (offer ? discountedPrice(base, offer) : base) + modSum
   const total = unit * qty
   const wasTotal = (base + modSum) * qty
-  const missing = groups.find((g, gi) => {
+  const missingIdx = groups.findIndex((g, gi) => {
     const need = Math.max(Number(g.min) || 0, g.required ? 1 : 0)
     return need > 0 && (selected[gi] || []).length < need
   })
+  const missing = missingIdx >= 0 ? groups[missingIdx] : null
   const add = () => {
     if (out) return
-    if (missing) { setErr(`${ar ? 'اختر من' : 'Choose from'}: ${pickLang(missing, 'name', lang)}`); return }
+    if (missing) {
+      // Tapping «أضف للسلة» with a required group unpicked used to be a SILENT
+      // no-op: the only feedback was this line, rendered at the very bottom of
+      // the stage ~500px below the fold, so the button read as broken and the
+      // order was abandoned. Now the offending group is scrolled into view and
+      // flashed, so the user sees exactly what is missing.
+      setErr(`${ar ? 'اختر من' : 'Choose from'}: ${pickLang(missing, 'name', lang)}`)
+      setShakeIdx(missingIdx)
+      const el = optRefs.current[missingIdx]
+      if (el) {
+        try { el.scrollIntoView({ block: 'center', behavior: reduced ? 'auto' : 'smooth' }) } catch (_) { el.scrollIntoView() }
+      }
+      return
+    }
     onAdd(variant, flatMods, qty)
   }
   const quickAdd = (p) => {
@@ -1984,7 +2007,7 @@ export function EditorialItemStage({ item, tenant = null, currency, onClose, onA
         <div className="edt-opts">
           {variants.map((v) => (
             <button key={v.key} type="button" className={`edt-opt ${variant?.key === v.key ? 'on' : ''}`} onClick={() => { setVariant(v); setErr('') }}>
-              {pickLang(v, 'name', lang)} · <Price value={v.price} currency={currency} lang={lang} />
+              {pickLang(v, 'name', lang)}{variantHasOwnPrice(v) ? <> · <Price value={v.price} currency={currency} lang={lang} /></> : null}
             </button>
           ))}
         </div>
@@ -1993,7 +2016,12 @@ export function EditorialItemStage({ item, tenant = null, currency, onClose, onA
     options: groups.length > 0 ? (
       <Fragment key="options">
         {groups.map((g, gi) => (
-          <div key={gi} className="edt-stg-field" {...blk('options')}>
+          <div
+            key={gi}
+            ref={(el) => { optRefs.current[gi] = el }}
+            className={`edt-stg-field ${shakeIdx === gi ? 'edt-needs' : ''}`}
+            {...blk('options')}
+          >
             <span className="edt-stg-lbl">
               {pickLang(g, 'name', lang)}
               {(g.required || Number(g.min) > 0) ? <b className="edt-req"> *</b> : <span className="edt-opt-note"> ({t('optional')})</span>}

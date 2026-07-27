@@ -1374,7 +1374,7 @@ export default function Wist({
                   )}
                   {st.phase === 'play' || st.phase === 'handEnd' ? (
                     <span key={'tr' + st.tricksWon[team(sx)]} className="wst-seat-tricks">
-                      {fmt(st.tricksWon[team(sx)], ar)} {t.tricks}
+                      {tricksLabel(st.tricksWon[team(sx)], ar, t)}
                     </span>
                   ) : null}
                   {st.dealer === sx && st.phase === 'bid' ? <span className="wst-seat-deal">{t.dealer}</span> : null}
@@ -1762,6 +1762,16 @@ export default function Wist({
 function fmt(n, ar) {
   const v = Number(n) || 0
   return ar ? v.toLocaleString('ar-SA-u-nu-latn') : v.toLocaleString('en-US')
+}
+// Arabic counted-noun agreement for tricks: 1 and 2 have their own forms, 3-10
+// take the plural «أكلات», 11+ take the singular accusative «أكلة». Printing a
+// bare «N أكلات» read as «1 أكلات» on a side that had taken exactly one trick.
+function tricksLabel(n, ar, t) {
+  const v = Number(n) || 0
+  if (!ar) return `${fmt(v, ar)} ${t.tricks}`
+  if (v === 1) return 'أكلة واحدة'
+  if (v === 2) return 'أكلتان'
+  return `${fmt(v, ar)} ${v >= 3 && v <= 10 ? 'أكلات' : 'أكلة'}`
 }
 function signed(n, ar) {
   const v = Number(n) || 0

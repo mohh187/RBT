@@ -18,7 +18,7 @@
 //   tenants/{tid}/gamePlays/{playId}         playId = `${deviceId}_${gameId}_${startedAtMs}`
 //   tenants/{tid}/playerProfiles/{deviceId}  rollup, recomputed on finish
 import {
-  collection, doc, getDocs, query, where, orderBy, limit, setDoc, runTransaction,
+  collection, doc, getDocs, query, where, orderBy, limit, setDoc, increment,
 } from 'firebase/firestore'
 import { db, firebaseReady } from './firebase.js'
 import { normalizePhone } from './format.js'
@@ -348,20 +348,43 @@ async function fetchDevicePlays(tid, deviceId, max) {
 // transaction never re-reads the whole play history.
 // --------------------------------------------------------------------------
 export async function updatePlayerProfile(tid, deviceId, play) {
+  const hadLocal = !!readLS(lsProfile(tid, deviceId), null)
   const merged = mergeIntoProfile(readLS(lsProfile(tid, deviceId), null), deviceId, play)
   writeLS(lsProfile(tid, deviceId), merged) // offline mirror, written first
   if (!firebaseReady || !tid || !deviceId) return merged
   try {
+    // NO transaction, and no read. This used to be a read-modify-write inside
+    // runTransaction, whose very first act was tx.get(profileRef) — and the
+    // rules only allow STAFF to read playerProfiles (a guest device cannot be
+    // proven to be the device it claims, and the row holds a name/phone, so
+    // opening reads would be a PII leak). Every guest transaction therefore
+    // aborted: a permission-denied storm on every game exit, and the rollup was
+    // never written at all, so staff saw no guest play history.
+    //
+    // The counters are now server-side atomic increments, which need no read
+    // and cannot lose a play when two tabs finish at once — the exact thing the
+    // transaction was protecting. Per-device derived fields (best/stage/tags/
+    // knowledge/insight) come from the local mirror, which IS this device's
+    // full history. `firstAt` is only written when this device has no local
+    // profile yet, so an existing (earlier) server value is never pushed later.
     const ref = profileRef(tid, deviceId)
-    let out = merged
-    await runTransaction(db, async (tx) => {
-      const snap = await tx.get(ref)
-      const prev = snap.exists() ? snap.data() : null
-      out = mergeIntoProfile(prev, deviceId, play)
-      tx.set(ref, out, { merge: true })
-    })
-    writeLS(lsProfile(tid, deviceId), out)
-    return out
+    const patch = {
+      deviceId: merged.deviceId,
+      customerPhone: merged.customerPhone,
+      customerName: merged.customerName,
+      lastAt: merged.lastAt,
+      byGame: merged.byGame,
+      insight: merged.insight,
+      knowledge: merged.knowledge,
+      tags: merged.tags,
+      totalPlays: increment(1),
+      totalScore: increment(num(play.score)),
+      totalDurationMs: increment(num(play.durationMs)),
+      completedPlays: increment(play.completed === true ? 1 : 0),
+    }
+    if (!hadLocal) patch.firstAt = merged.firstAt
+    await setDoc(ref, patch, { merge: true })
+    return merged
   } catch (_) { return merged }
 }
 

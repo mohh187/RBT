@@ -724,6 +724,13 @@
   .lud-stage { flex: 0 0 auto; height: min(100vw - 16px, 56dvh); }
   .lud-players.is-top,
   .lud-players.is-bottom { flex: 1 1 0; min-height: 44px; align-items: center; }
+  /* With 2 players BOTH chips land in the top strip, `:empty` removes the
+     bottom one, and `flex: 1 1 0` then hands 100% of the leftover height to the
+     top strip alone — measured ~330px (39% of a 390x844 phone) of dead space
+     above a board shoved against the bottom edge. Cap what one lone strip may
+     absorb so the board stays optically centred; the two-strip case (3-4
+     players) is untouched because both strips still share the slack. */
+  .lud-players.is-bottom:empty { display: block; flex: 1 1 0; min-height: 44px; }
   .lud-p { max-height: 74px; }
 }
 

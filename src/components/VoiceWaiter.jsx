@@ -9,6 +9,7 @@ import { Price } from './Riyal.jsx'
 import { firebaseReady } from '../lib/firebase.js'
 import { callDinerAi, blobToInline } from '../lib/dinerAi.js'
 import { AI_ORDER_RANGE } from '../lib/dishComposition.js'
+import { basePrice } from '../lib/pricing.js'
 import {
   speechSupported, speechAvailable, listenOnce, stopListening, speak, stopSpeaking,
   speechErrorText, matchItems, parseQty, parseIntent, pickVariant, needsChoices, priceSpeech,
@@ -234,7 +235,7 @@ export default function VoiceWaiter({ open, onClose, items = [], allItems = null
     const variant = presetVariant !== undefined ? presetVariant : pickVariant(sourceText, item)
     setPick({ item, variant, qty })
     setPhase('confirm')
-    const unit = (variant ? variant.price : item.price) || 0
+    const unit = basePrice(item, variant)
     announce(lang === 'en'
       ? `${name}${variant ? `, ${pickLang(variant, 'name', lang)}` : ''}, quantity ${qty}, ${priceSpeech(unit * qty, currency, lang)}. Add it?`
       : `${name}${variant ? `، ${pickLang(variant, 'name', lang)}` : ''}، الكمية ${qty}، ${priceSpeech(unit * qty, currency, lang)}. أضيفه؟`)

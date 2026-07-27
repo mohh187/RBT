@@ -50,6 +50,8 @@ const LINKS = [
 export const BRAND_MARK_URL = '/brand/mark-256.png'
 // Official logotype (owner-supplied «logo font» files), viewBox-cropped to the
 // lettering: wordmark alone (ratio 6.4:1) and wordmark + tagline (4.285:1).
+// Light-theme art; the dark-surface recolors live beside them and are selected
+// by the `.bm-word` rules in index.css (see RbtWordmark).
 export const BRAND_WORD_URL = '/brand/word-448.png'
 export const BRAND_WORD_TAG_URL = '/brand/word-tag-448.png'
 const WORD_RATIO = 6.4
@@ -108,14 +110,17 @@ export function RbtWordmark({ size = 18, mono = false, withTagline = false, styl
   if (!mono) {
     // tagline variant: word keeps the same cap-height; total grows 139/93.
     const h = Math.round(size * 0.72 * (withTagline ? 1.4946 : 1))
+    // Rendered as a CSS background, NOT an <img>, so the stylesheet can serve
+    // the dark-surface variant of the artwork — in the official art «RBT» and
+    // the tagline are deep navy, which measured 1.21:1 on the app's dark navy
+    // (the brand read as a floating «360»). A background also means the browser
+    // fetches ONLY the variant the current theme actually paints.
     return (
-      <img
-        src={withTagline ? BRAND_WORD_TAG_URL : BRAND_WORD_URL}
-        alt="RBT 360"
-        height={h}
-        width={Math.round(h * (withTagline ? WORD_TAG_RATIO : WORD_RATIO))}
-        draggable={false}
-        style={{ display: 'inline-block', objectFit: 'contain', userSelect: 'none', ...style }}
+      <span
+        role="img"
+        aria-label="RBT 360"
+        className={`bm-word${withTagline ? ' is-tag' : ''}`}
+        style={{ width: Math.round(h * (withTagline ? WORD_TAG_RATIO : WORD_RATIO)), height: h, ...style }}
       />
     )
   }
