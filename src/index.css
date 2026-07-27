@@ -7837,9 +7837,9 @@ body:has(.edt-roombg) .venue-bg { display: none; }
   margin-inline: calc(-1 * var(--edt-pad));
   width: calc(100% + var(--edt-pad) * 2);
 }
-.edt-photo[data-fit='wide'] img { max-height: min(27dvh, 250px); }
+.edt-photo[data-fit='wide'] img { max-height: min(27svh, 250px); }
 /* tall cutout: cap the height and let the canvas take the side margins */
-.edt-photo[data-fit='tall'] img { max-height: min(44dvh, 400px); }
+.edt-photo[data-fit='tall'] img { max-height: min(44svh, 400px); }
 /* in-flow (not absolute): the photo box now hugs its content, so an absolutely
    positioned placeholder would collapse the box to zero height */
 .edt-noimg {
@@ -8049,7 +8049,7 @@ video.edt-backdrop { width: 100%; height: 100%; display: block; }
     max-width: 680px;
     margin-inline: auto;
   }
-  .edt-sec[data-table] .edt-photo img { max-height: min(42dvh, 420px); object-position: bottom center; }
+  .edt-sec[data-table] .edt-photo img { max-height: min(42svh, 420px); object-position: bottom center; }
   .edt-sec[data-table] .edt-main {
     align-self: start;
     width: 100%;
@@ -8117,7 +8117,14 @@ video.edt-backdrop { width: 100%; height: 100%; display: block; }
      it) means nothing below can move no matter WHEN, or WHETHER, the pixels
      arrive — no data, no cache and no network timing involved. The cap rides
      one var so the three fits stay reservation and content in lockstep. */
-  --edt-hero-cap: var(--edt-stg-heromax, min(42dvh, 420px));
+  /* svh, NOT dvh. dvh is the DYNAMIC viewport height and it changes while the
+     mobile URL bar collapses and returns — so a box reserved in dvh grows and
+     shrinks under the panel, shoving the table and the details every time the
+     bar moves, and "settling" only when scrolling stops. That is the real
+     cause of the long-standing «الطاولة تتحرك», not the photo decode (which
+     the reservation below already fixed). svh is the SMALL viewport height:
+     a constant, so the reservation cannot move. Never put dvh back here. */
+  --edt-hero-cap: var(--edt-stg-heromax, min(42svh, 420px));
   min-height: calc(var(--edt-stg-padtop, clamp(56px, 14vw, 76px)) + var(--edt-hero-cap));
   display: flex; align-items: center; justify-content: center;
   padding: var(--edt-stg-padtop, clamp(56px, 14vw, 76px)) clamp(18px, 6vw, 40px) 0;
@@ -8140,7 +8147,7 @@ video.edt-backdrop { width: 100%; height: 100%; display: block; }
    so switching fit resizes the box in one step instead of letting the photo
    push it around after the fact. */
 .edt-stg-hero[data-fit='wide'] { padding-inline: 0; }
-.edt-stg-hero[data-fit='tall'] { --edt-hero-cap: var(--edt-stg-heromax, min(50dvh, 500px)); }
+.edt-stg-hero[data-fit='tall'] { --edt-hero-cap: var(--edt-stg-heromax, min(50svh, 500px)); }
 .edt-stg-hero .edt-glow {
   inset: 6% 4% 8%;
   height: auto;
@@ -8489,7 +8496,7 @@ button.edt-pair:active { transform: scale(.98); }
   background: rgba(8, 5, 4, .94);
 }
 .edt-ar-x { position: absolute; top: calc(10px + env(safe-area-inset-top, 0px)); inset-inline-start: 12px; }
-.edt-ar-viewer { width: min(92vw, 640px); height: min(64dvh, 560px); background: transparent; }
+.edt-ar-viewer { width: min(92vw, 640px); height: min(64svh, 560px); background: transparent; }
 .edt-ar-wait { color: rgba(255, 255, 255, .75); font-size: 14px; }
 .edt-ar-hint { margin: 0; max-width: 46ch; text-align: center; font-size: 12.5px; line-height: 1.7; color: rgba(255, 255, 255, .55); }
 
@@ -8564,10 +8571,10 @@ button.edt-pair:active { transform: scale(.98); }
   .edt-stg-media { position: sticky; top: 0; }
   /* padding-top keeps the dish clear of the floating close button — heroPad's
      floor of 20px in TABLE_RANGE exists for the same reason */
-  .edt-stg-hero { padding-top: var(--edt-stg-padtop, clamp(56px, 5vw, 76px)); min-height: min(44dvh, 440px); }
-  .edt-stg-hero[data-fit='wide'] { min-height: min(34dvh, 320px); padding-inline: 0; }
+  .edt-stg-hero { padding-top: var(--edt-stg-padtop, clamp(56px, 5vw, 76px)); min-height: min(44svh, 440px); }
+  .edt-stg-hero[data-fit='wide'] { min-height: min(34svh, 320px); padding-inline: 0; }
   .edt-stg-hero img,
-  .edt-stg-hero[data-fit='tall'] img { max-height: var(--edt-stg-heromax, min(56dvh, 560px)); }
+  .edt-stg-hero[data-fit='tall'] img { max-height: var(--edt-stg-heromax, min(56svh, 560px)); }
   .edt-stg-body { padding: 0 0 32px; max-width: 620px; margin-inline: 0; }
   .edt-stg-bar { width: 100%; max-width: 1280px; margin-inline: auto; padding-inline: clamp(24px, 4vw, 64px); }
   .edt-stg-x { inset-inline-start: 20px; top: 20px; }
@@ -8581,7 +8588,7 @@ button.edt-pair:active { transform: scale(.98); }
     padding-inline: clamp(24px, 4vw, 48px);
   }
   .edt-stg[data-table] .edt-stg-media { position: static; }
-  .edt-stg[data-table] .edt-stg-hero { min-height: var(--edt-stg-heromin, min(38dvh, 380px)); }
+  .edt-stg[data-table] .edt-stg-hero { min-height: var(--edt-stg-heromin, min(38svh, 380px)); }
   .edt-stg[data-table] .edt-stg-body { max-width: 720px; margin-inline: auto; padding: 18px 22px 32px; }
 
   /* extend-to-bottom must beat the display:block above — double attribute,

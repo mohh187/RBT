@@ -1769,6 +1769,47 @@ export function EditorialItemStage({ item, tenant = null, currency, onClose, onA
   const [selected, setSelected] = useState(() => groups.map(() => []))
   // Which required group is currently being flagged, + refs to scroll to it.
   const [shakeIdx, setShakeIdx] = useState(-1)
+  // Freeze the reserved hero height in PIXELS on open (see the note in
+  // index.css at --edt-hero-cap). Recomputed only on a WIDTH change, so the
+  // mobile URL bar — which changes only the height — can never resize the box
+  // and shove the table and the details down mid-scroll.
+  const stageRootRef = useRef(null)
+  useEffect(() => {
+    const el = stageRootRef.current
+    if (!el) return undefined
+    let lastW = 0
+    const lock = () => {
+      const w = window.innerWidth
+      if (w === lastW) return
+      lastW = w
+      try {
+        el.style.removeProperty('--edt-hero-cap')
+        const hero = el.querySelector('.edt-stg-hero')
+        const img = hero && hero.querySelector('img')
+        if (!hero || !img) return
+        // Read the IMAGE's max-height, not the custom property: a custom
+        // property is not computed to a length (getPropertyValue hands back the
+        // raw `min(42svh, 420px)` token), while max-height on a real element is
+        // resolved to px by the engine. That px value IS the cap.
+        const px = parseFloat(getComputedStyle(img).maxHeight)
+        if (Number.isFinite(px) && px > 0) el.style.setProperty('--edt-hero-cap', `${Math.round(px)}px`)
+        // The cap is not the only viewport-sized constraint: a media query also
+        // puts `min-height: min(44svh, 440px)` on the hero itself, and THAT was
+        // what still tracked the viewport after the cap was frozen (measured
+        // 374 -> 403 -> 339 as the height changed). Freeze the resolved value.
+        hero.style.removeProperty('min-height')
+        const minPx = parseFloat(getComputedStyle(hero).minHeight)
+        if (Number.isFinite(minPx) && minPx > 0) hero.style.minHeight = `${Math.round(minPx)}px`
+      } catch (_) { /* keep the stylesheet value */ }
+    }
+    lock()
+    window.addEventListener("resize", lock)
+    window.addEventListener("orientationchange", lock)
+    return () => {
+      window.removeEventListener("resize", lock)
+      window.removeEventListener("orientationchange", lock)
+    }
+  }, [])
   const optRefs = useRef([])
   useEffect(() => {
     if (shakeIdx < 0) return undefined
@@ -2127,6 +2168,7 @@ export function EditorialItemStage({ item, tenant = null, currency, onClose, onA
   if (!portalRoot) return null
   return createPortal(
     <div
+      ref={stageRootRef}
       className={`edt-stg ${closing ? 'closing' : ''}`} data-wall={wallAttr} data-btnskin={btn ? btn.skin : undefined}
       data-btnscope={btn && btn.scope === 'all' ? 'all' : undefined}
       data-btnshape={btn && btn.shape ? btn.shape : undefined}

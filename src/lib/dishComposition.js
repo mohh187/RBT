@@ -792,7 +792,10 @@ export function tableStageVars(tb) {
   if (!tb) return null
   const v = {}
   if (tb.textPad) v['--tbl-textpad'] = `${tb.textPad}px`
-  if (tb.minBody) v['--edt-stg-bodymin'] = `${tb.minBody}dvh`
+  // svh, not dvh: this is a LAYOUT FLOOR under the details panel, and dvh
+    // changes while the mobile URL bar animates — the same unit that made the
+    // table shift on every scroll (see --edt-hero-cap in index.css).
+    if (tb.minBody) v['--edt-stg-bodymin'] = `${tb.minBody}svh`
   if (tb.heroPad !== TABLE_RANGE.heroPad.dflt) v['--edt-stg-padtop'] = `min(${tb.heroPad}px, 14vw)`
   if (tb.heroMax !== TABLE_RANGE.heroMax.dflt) {
     v['--edt-stg-heromax'] = `min(${tb.heroMax}dvh, ${tb.heroMax * 10}px)`
