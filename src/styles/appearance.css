@@ -1512,6 +1512,14 @@
   .ilp-drawer[data-collapsed='1'] {
     transform: translateY(calc(100% - 44px - var(--safe-b, 0px)));
   }
+  /* The collapsed handle is FIXED to the bottom at a z-index above the sheet,
+     so it sat exactly on top of the item editor's «حفظ» button: a real tap on
+     the button's centre landed on the drawer instead, and a venue owner could
+     not save a menu-item edit from a phone at all. Reserve the handle's strip
+     so the two can never occupy the same band. */
+  .ie-sheet .sheet-foot {
+    margin-bottom: calc(44px + var(--safe-b, 0px));
+  }
   .ilp-drawer .ilp-body {
     flex: 1;
     min-height: 0;

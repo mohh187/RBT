@@ -77,7 +77,13 @@ export function usePublicVenue(slug) {
     const startWatching = (tid) => {
       // watchItems now always fires (success OR error → []), so it is the single
       // authority that clears `loading`.
-      unsubs.push(watchItems(tid, (items) => {
+      // An ARCHIVED item must not exist for a diner. Nothing filtered it here,
+      // so "hiding" an item only ever set available:false and it kept sitting on
+      // the menu greyed out as «نفذ» — the venue could not actually take an item
+      // off the menu. Every other surface (print menu, print studio, the AI
+      // action that promises «اختفى من المنيو») already treats archived as gone.
+      unsubs.push(watchItems(tid, (all) => {
+        const items = (all || []).filter((it) => !it.archived)
         if (cancelled) return
         setState((s) => ({ ...s, items, loading: false }))
         safeSet(`venue_items_${tid}`, JSON.stringify(items))

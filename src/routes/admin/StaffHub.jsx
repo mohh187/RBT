@@ -48,7 +48,7 @@ export default function StaffHub() {
     <>
       {tabs.length > 1 && (
         <div className="page" style={{ paddingBottom: 0 }}>
-          <div className="row" style={{ gap: 8, overflowX: 'auto', paddingBottom: 'var(--sp-2)' }}>
+          <div className="row scroll-x" style={{ gap: 8, paddingBottom: 'var(--sp-2)' }}>
             {tabs.map((tb) => (
               <button key={tb.id} className={`chip ${active === tb.id ? 'active' : ''}`} style={{ flex: 'none' }} onClick={() => setTab(tb.id)}>
                 <Icon name={tb.icon} size={15} /> {tb.label}

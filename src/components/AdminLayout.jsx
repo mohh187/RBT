@@ -185,6 +185,9 @@ export default function AdminLayout() {
   // can still reach the platform to resolve the suspension).
   const suspended = tenant?.active === false
   const onSupport = loc.pathname.endsWith('/support')
+  // True on every destination that is NOT one of the primary bottom-nav tabs —
+  // i.e. anything reached through the «المزيد» sheet.
+  const onMore = !visibleNav.some((n) => (n.exact ? loc.pathname === n.to : loc.pathname.startsWith(n.to)))
 
   useEffect(() => {
     if (!tenantId) return
@@ -377,7 +380,7 @@ export default function AdminLayout() {
           <strong style={{ fontSize: 'var(--fs-md)' }}>{tenant?.name || t('appName')}</strong>
         </Link>
         <div className="grow" />
-        <button className="icon-btn" onClick={() => setSearchOpen(true)} title={lang === 'ar' ? 'البحث الشامل (Ctrl+K)' : 'Global search (Ctrl+K)'} aria-label="global search">
+        <button className="icon-btn" onClick={() => setSearchOpen(true)} title={lang === 'ar' ? 'البحث الشامل (Ctrl+K)' : 'Global search (Ctrl+K)'} aria-label={lang === 'ar' ? 'البحث الشامل' : 'Global search'}>
           <Icon name="search" size={18} />
         </button>
         <PageGuide />
@@ -388,7 +391,7 @@ export default function AdminLayout() {
         )}
         {tenant?.slug && (
           <a
-            className="icon-btn"
+            className="icon-btn ab-wide"
             href={menuUrl(tenant.slug)}
             target="_blank"
             rel="noreferrer"
@@ -399,10 +402,10 @@ export default function AdminLayout() {
           </a>
         )}
         <StaffBell tenantId={tenantId} />
-        <button className="icon-btn" onClick={toggleLang} aria-label="language" style={{ fontWeight: 800, fontSize: 13 }}>
+        <button className="icon-btn ab-wide" onClick={toggleLang} aria-label={lang === 'ar' ? 'تغيير اللغة' : 'Change language'} style={{ fontWeight: 800, fontSize: 13 }}>
           {lang === 'ar' ? 'EN' : 'ع'}
         </button>
-        <button className="icon-btn" onClick={toggleTheme} aria-label="theme">
+        <button className="icon-btn ab-wide" onClick={toggleTheme} aria-label={lang === 'ar' ? 'تبديل الوضع الليلي' : 'Toggle dark mode'}>
           <Icon name={theme === 'dark' ? 'sun' : 'moon'} />
         </button>
       </header>
@@ -454,9 +457,13 @@ export default function AdminLayout() {
             <span>{lang === 'ar' ? n.label.ar : n.label.en}</span>
           </NavLink>
         ))}
+        {/* «المزيد» reads as ACTIVE on every secondary screen. Without this the
+            33 destinations behind this sheet all showed an entirely unlit nav —
+            the phone user's only navigation gave zero "where am I" feedback. */}
         <button
+          className={onMore ? 'active' : ''}
           onClick={() => setMoreOpen(true)}
-          style={{ flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 2, fontSize: 10, color: 'var(--text-faint)' }}
+          style={{ flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 2 }}
         >
           <Icon name="more" size={22} />
           <span>{t('more')}</span>
@@ -467,6 +474,28 @@ export default function AdminLayout() {
       <Sheet open={moreOpen} onClose={() => setMoreOpen(false)} title={t('more')}>
         <div className="stack" style={{ gap: 'var(--sp-3)' }}>
           <InstallButton />
+          {/* The app bar cannot hold six 46px controls next to the venue name on
+              a phone, so these three live here instead — nothing is lost. */}
+          <div className="stack" style={{ gap: 'var(--sp-2)' }}>
+            {tenant?.slug && (
+              <a className="list-row" href={menuUrl(tenant.slug)} target="_blank" rel="noreferrer" onClick={() => setMoreOpen(false)}>
+                <Icon name="eye" size={22} />
+                <span className="bold">{lang === 'ar' ? 'معاينة كعميل' : 'Preview as customer'}</span>
+                <span className="grow" />
+                <Icon name="next" size={18} className="faint" />
+              </a>
+            )}
+            <button className="list-row" onClick={toggleTheme}>
+              <Icon name={theme === 'dark' ? 'sun' : 'moon'} size={22} />
+              <span className="bold">{lang === 'ar' ? (theme === 'dark' ? 'الوضع النهاري' : 'الوضع الليلي') : (theme === 'dark' ? 'Light mode' : 'Dark mode')}</span>
+              <span className="grow" />
+            </button>
+            <button className="list-row" onClick={toggleLang}>
+              <Icon name="globe" size={22} />
+              <span className="bold">{lang === 'ar' ? 'English' : 'العربية'}</span>
+              <span className="grow" />
+            </button>
+          </div>
           {moreGroups.map((g) => {
             const items = g.items.filter(allowed)
             if (!items.length) return null

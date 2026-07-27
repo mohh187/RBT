@@ -512,6 +512,19 @@ export default function Items() {
       .catch(() => toast.error(t('error')))
   }
 
+  // Take an item OFF the menu entirely. This is a different thing from «نفذ»:
+  // sold-out keeps the item on the menu greyed out (it is coming back tonight),
+  // hiding removes it from the diner's menu completely while keeping all of its
+  // data and its reports. It used to be reachable only from a danger-zone row
+  // deep inside the editor, so venues used sold-out for both and ended up with
+  // permanent grey items on their menu.
+  const hideFromMenu = (it, e) => {
+    e?.stopPropagation()
+    saveItem(tenantId, it.id, { archived: true, available: false })
+      .then(() => toast.success(lang === 'ar' ? 'أُخفي الصنف من المنيو — بياناته وتقاريره محفوظة' : 'Hidden from the menu — data and reports kept'))
+      .catch(() => toast.error(t('error')))
+  }
+
   const toggleSelectMode = () => { setSelectMode((v) => !v); setSelected(new Set()) }
   const toggleSelect = (id) => setSelected((s) => {
     const n = new Set(s)
@@ -565,6 +578,8 @@ export default function Items() {
               </button>
               <button className="btn btn-sm btn-outline" onClick={(e) => toggleStar(it, e)} title={lang === 'ar' ? 'صنف مميّز' : 'Featured'} style={{ color: it.featured ? 'var(--gold)' : 'var(--text-muted)' }}><Icon name="star" size={14} /></button>
               <button className="btn btn-sm btn-outline" disabled={dupBusy === it.id} onClick={(e) => dup(it, e)} title={lang === 'ar' ? 'تكرار الصنف' : 'Duplicate'}><Icon name="copy" size={14} /></button>
+            <button className="btn btn-sm btn-outline" onClick={(e) => hideFromMenu(it, e)} title={lang === 'ar' ? 'إخفاء من المنيو نهائياً (تبقى البيانات والتقارير)' : 'Hide from the menu (keeps data and reports)'} aria-label={lang === 'ar' ? 'إخفاء من المنيو' : 'Hide from menu'}><Icon name="eyeOff" size={14} /></button>
+              <button className="btn btn-sm btn-outline" onClick={(e) => hideFromMenu(it, e)} title={lang === 'ar' ? 'إخفاء من المنيو نهائياً (تبقى البيانات والتقارير)' : 'Hide from the menu (keeps data and reports)'} aria-label={lang === 'ar' ? 'إخفاء من المنيو' : 'Hide from menu'}><Icon name="eyeOff" size={14} /></button>
               {(it.model3dUrl || it.arStandeeUrl) && (
                 <button className="btn btn-sm btn-outline" onClick={(e) => { e.stopPropagation(); setStudioItem(it) }} title={lang === 'ar' ? 'استوديو المجسم' : '3D studio'} style={{ color: 'var(--brand)' }}><Icon name="layers" size={14} /></button>
               )}
@@ -609,6 +624,7 @@ export default function Items() {
             <button className="btn btn-sm btn-outline grow" onClick={(e) => { e.stopPropagation(); openEdit(it) }}>{t('edit')}</button>
             <button className="btn btn-sm btn-outline" onClick={(e) => toggleStar(it, e)} title={lang === 'ar' ? 'صنف مميّز' : 'Featured'} style={{ color: it.featured ? 'var(--gold)' : 'var(--text-muted)' }}><Icon name="star" size={14} /></button>
             <button className="btn btn-sm btn-outline" disabled={dupBusy === it.id} onClick={(e) => dup(it, e)} title={lang === 'ar' ? 'تكرار الصنف' : 'Duplicate'}><Icon name="copy" size={14} /></button>
+            <button className="btn btn-sm btn-outline" onClick={(e) => hideFromMenu(it, e)} title={lang === 'ar' ? 'إخفاء من المنيو نهائياً (تبقى البيانات والتقارير)' : 'Hide from the menu (keeps data and reports)'} aria-label={lang === 'ar' ? 'إخفاء من المنيو' : 'Hide from menu'}><Icon name="eyeOff" size={14} /></button>
             {(it.model3dUrl || it.arStandeeUrl) && (
               <button className="btn btn-sm btn-outline" onClick={(e) => { e.stopPropagation(); setStudioItem(it) }} title={lang === 'ar' ? 'استوديو المجسم' : '3D studio'} style={{ color: 'var(--brand)' }}><Icon name="layers" size={14} /></button>
             )}
@@ -620,9 +636,12 @@ export default function Items() {
 
   return (
     <div className="page stack">
-      <div className="row-between">
+      {/* The toolbar had no wrap, and .page clips overflow-x — so the PRIMARY
+          action «إضافة صنف» was pushed past the edge and clipped away with no
+          scroll rail: on a phone the owner could not add an item from here. */}
+      <div className="row-between wrap" style={{ rowGap: 8 }}>
         <h2 className="page-title">{t('items')}</h2>
-        <div className="row" style={{ gap: 8, alignItems: 'center' }}>
+        <div className="row wrap" style={{ gap: 8, rowGap: 8, alignItems: 'center', justifyContent: 'flex-end', minWidth: 0 }}>
           <button className={`btn btn-sm ${selectMode ? 'btn-primary' : 'btn-outline'}`} onClick={toggleSelectMode}>
             <Icon name="check" size={14} /> {lang === 'ar' ? 'تحديد' : 'Select'}
           </button>

@@ -220,12 +220,18 @@ export default function Kds() {
     <div className="kds-shell" data-theme={tpl === 'display' ? 'dark' : undefined} data-systheme={systemThemeAttr(tenant, 'kds')}>
       <AppBackground tenant={tenant} />
       <PinLock tenant={tenant} tenantId={tenantId} />
+      {/* Every control here is `flex: none` (see .kds-shell > .app-bar in
+          index.css): this row used to squeeze until the BACK button hit 0px
+          wide — a cook on a phone could not leave the kitchen screen at all —
+          while the bell and the theme toggle fell off the edge entirely. The
+          title, the live badge and the clock now hide on narrow screens; the
+          controls never shrink. */}
       <header className="app-bar">
-        <Link to="/cashier" className="icon-btn"><Icon name="back" /></Link>
-        <strong style={{ fontSize: 'var(--fs-md)', display: 'inline-flex', alignItems: 'center', gap: 6 }}><Icon name="kitchen" size={18} /> {t('kitchen')}</strong>
-        <span className="badge badge-success" style={{ fontSize: 10 }}>● {ar ? 'مباشر' : 'Live'}</span>
+        <Link to="/cashier" className="icon-btn" aria-label={ar ? 'رجوع إلى الكاشير' : 'Back to cashier'}><Icon name="back" /></Link>
+        <strong className="kds-title" style={{ fontSize: 'var(--fs-md)', display: 'inline-flex', alignItems: 'center', gap: 6 }}><Icon name="kitchen" size={18} /> {t('kitchen')}</strong>
+        <span className="badge badge-success kds-live" style={{ fontSize: 10 }}>● {ar ? 'مباشر' : 'Live'}</span>
         <div className="grow" />
-        <Clock />
+        <span className="kds-clock-wrap"><Clock /></span>
         <div className="pos-tpl-switch row" style={{ gap: 2, flex: 'none' }}>
           {templateOptions('kds').map((o) => (
             <button key={o.id} type="button" className={`icon-btn ${tpl === o.id ? 'active' : ''}`} title={lang === 'ar' ? `${o.ar}${o.hint ? ' — ' + o.hint : ''}` : o.en} onClick={() => setTpl(o.id)}>

@@ -1,3 +1,5 @@
+import { contrastRatio } from './contrast.js'
+
 // Professional theme presets. Each sets the brand + accent colors that cascade
 // through the whole UI (menu, admin, cashier). Base light/dark is neutral
 // white/black; presets tint the accents. Tenants can also pick a custom color.
@@ -18,11 +20,32 @@ export function getTheme(id) {
   return THEMES.find((t) => t.id === id) || THEMES[0]
 }
 
+// Ink that stays readable ON a filled brand/accent surface. Every theme block in
+// index.css hard-codes `--on-brand: #ffffff`, which is only right for a DARK
+// brand: a venue on a light brand (sand, cream, gold, mint) got white text on a
+// light fill — buttons, badges and pills that read as blank. Both candidates are
+// scored against the real colour and the better one wins, so a venue can pick
+// any brand and its primary buttons stay legible.
+const INK_DARK = '#101114'
+const INK_LIGHT = '#ffffff'
+export function onColor(bg) {
+  const cLight = contrastRatio(INK_LIGHT, bg)
+  const cDark = contrastRatio(INK_DARK, bg)
+  if (cLight == null || cDark == null) return INK_LIGHT
+  return cDark > cLight ? INK_DARK : INK_LIGHT
+}
+
 // Apply brand/accent CSS variables at runtime (base values; CSS derives per mode).
 export function applyTheme({ brand, accent } = {}) {
   const r = document.documentElement.style
-  if (brand) r.setProperty('--brand-base', brand)
-  if (accent) r.setProperty('--accent-base', accent)
+  if (brand) {
+    r.setProperty('--brand-base', brand)
+    r.setProperty('--on-brand', onColor(brand))
+  }
+  if (accent) {
+    r.setProperty('--accent-base', accent)
+    r.setProperty('--on-accent', onColor(accent))
+  }
 }
 
 // Resolve the effective theme for a tenant (preset + optional custom override).

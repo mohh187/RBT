@@ -265,7 +265,7 @@ export default function Campaigns() {
 
       {/* analytics header */}
       <div className="stat-grid" style={{ gridTemplateColumns: 'repeat(3,1fr)' }}>
-        <div className="stat"><div className="label">{ar ? 'رسائل هذا الشهر' : 'Sent this month'}</div><div className="value num">{monthSent} / {cap}</div></div>
+        <div className="stat"><div className="label">{ar ? 'رسائل هذا الشهر' : 'Sent this month'}</div><div className="value num" dir="ltr">{monthSent} / {cap}</div></div>
         <div className="stat"><div className="label">{ar ? 'حملات مُرسلة' : 'Campaigns sent'}</div><div className="value num">{rest.filter((c) => c.status === 'sent').length}</div></div>
         <div className="stat"><div className="label">{ar ? 'وقت الذروة (للإرسال الذكي)' : 'Peak hour (smart send)'}</div><div className="value num">{peakHour}:00</div></div>
       </div>
