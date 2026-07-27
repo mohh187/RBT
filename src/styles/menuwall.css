@@ -207,7 +207,17 @@
    portal root because .edt-wrap is an isolated stacking context — a piece
    rendered inside the menu could never sit in front of an app bar at z-index
    100, whatever z-index it was given. */
-.edt-dec-zone[data-anchor^='header-'] { position: fixed; top: 0; }
+/* Header pieces hang from BELOW the app bar, never across it. Measured on the
+   owner's own venue: with the zone at top:0 the lantern's box ran from -30 to
+   124 and covered the venue name on the phone, and BOTH pieces covered it on
+   desktop. They never stole a tap (pointer-events are off at every level), but
+   a decoration must not sit on the venue's own logo. --edt-dec-clear is the
+   clearance: the chrome height plus a margin for a piece that hangs upward from
+   its own anchor. */
+.edt-dec-zone[data-anchor^='header-'] {
+  position: fixed;
+  top: calc(var(--appbar-h) + var(--safe-t) + var(--edt-dec-clear, 34px));
+}
 .edt-dec-zone[data-anchor^='header-'][data-depth='top'] { z-index: 102; }
 .edt-dec-zone[data-anchor^='header-'][data-depth='front'] { z-index: 101; }
 .edt-dec-zone[data-anchor^='header-'][data-depth='back'] { z-index: 99; }
