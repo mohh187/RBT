@@ -12034,3 +12034,19 @@ body[data-mch-sheet] .backdrop {
 .card .row > .btn-sm.grow { flex: 1 1 auto; min-width: 0; }
 /* the row wraps rather than crushing its children on a narrow card */
 .card .row:has(> .btn-sm) { flex-wrap: wrap; row-gap: 6px; }
+/* Sticky offset for the diner category bars. Below the desktop breakpoint the
+   WINDOW scrolls and the app bar shares that flow, so the bar must clear it. At
+   >= 980px the menu layout element is the scroller and the app bar sits OUTSIDE
+   its scrollport — adding the app-bar height there stacks two offsets and leaves
+   the bar hovering 56px down the page instead of pinned to the top of the
+   scroll area. Zero is correct there. */
+.venue-above {
+  --menu-sticky-top: calc(var(--appbar-h) + var(--safe-t));
+  --menu-sticky-top-nohdr: var(--safe-t);
+}
+@media (min-width: 980px) {
+  .venue-above {
+    --menu-sticky-top: 0px;
+    --menu-sticky-top-nohdr: 0px;
+  }
+}

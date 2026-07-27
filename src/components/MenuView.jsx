@@ -95,7 +95,14 @@ export default function MenuView({ tenant, tenantId, items, categories, offers =
   // Sticky bars sit under the app bar — unless the skin drops it (header 'none'),
   // in which case --appbar-h (56px global) would leave a gap content scrolls through.
   const skinHeader = resolveSkin(tenant, 'menu')?.layout?.header || 'classic'
-  const stickyTop = skinHeader === 'none' ? 'var(--safe-t)' : 'calc(var(--appbar-h) + var(--safe-t))'
+  // The sticky offset of every category bar. It CANNOT be a fixed expression:
+  // below 980px the window scrolls and the app bar sits inside the same flow, so
+  // the bar must clear it; at >= 980px the scroller is the layout element and the
+  // app bar is OUTSIDE that scrollport, so the same offset double-counts it and
+  // parks the bar 56px too low — floating in mid-page with content sliding
+  // underneath, which is exactly what the owner saw. The value is therefore a CSS
+  // variable that the breakpoint zeroes (see .venue-above in index.css).
+  const stickyTop = skinHeader === 'none' ? 'var(--menu-sticky-top-nohdr)' : 'var(--menu-sticky-top)'
   const rootRef = useRef(null)
   const menuPortalRoot = usePortalRoot()
   // Menu-glass level ('chrome' = bars only, 'full' = cards/buttons/icons/sheets).
