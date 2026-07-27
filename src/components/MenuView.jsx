@@ -50,6 +50,7 @@ import EditorialLayout, { EditorialItemStage, buttonSkinVars, EditorialRoomBg } 
 import OceanArtLayout from './menuThemes/OceanArtLayout.jsx'
 import ChromeSkin from './ChromeSkin.jsx'
 import { basePrice, variantHasOwnPrice } from '../lib/pricing.js'
+import { scrollSectionIntoView, scrollSectionToTop, stuckOffset } from '../lib/scrollToSection.js'
 
 const resolveItemStyles = (it) => {
   const nameStyle = {}
@@ -243,6 +244,26 @@ export default function MenuView({ tenant, tenantId, items, categories, offers =
 
   const navigate = useNavigate()
   const [activeCat, setActiveCat] = useState('all')
+  // Picking a category SCROLLS to it instead of cutting the list (see the
+  // visibleItems note): the diner lands on that section's first dish and can
+  // keep scrolling straight into the next one, exactly like a paper menu.
+  const pickCat = (id) => {
+    setActiveCat(id)
+    requestAnimationFrame(() => {
+      try {
+        const bar = document.querySelector('.cat-bar')
+        const barBottom = bar ? bar.getBoundingClientRect().bottom : 0
+        if (!id || id === 'all') { scrollSectionToTop(bar || document.body); return }
+        const first = allActive.find((i) => i.categoryId === id)
+        if (!first) return
+        const el = document.querySelector(`[data-item-id="${CSS.escape(String(first.id))}"]`)
+        if (!el) return
+        // NOT window.scrollTo: at >= 980px the menu layout element is the
+        // scroller, not the window, so the manual maths moved nothing at all.
+        scrollSectionIntoView(el, bar)
+      } catch (_) { /* a browser without scrollIntoView options still lights the chip */ }
+    })
+  }
   const [search, setSearch] = useState('')
   const [viewMode, setViewMode] = useState(SHOWCASE_LAYOUTS.includes(menuLayout) ? 'gallery' : 'list')
   // Follow the skin's layout (so switching themes in the live preview re-renders).
@@ -409,13 +430,25 @@ export default function MenuView({ tenant, tenantId, items, categories, offers =
   const allActive = useMemo(() => (items || []).filter((i) => i.active !== false && inTimeWindow(i)), [items, clockTick]) // eslint-disable-line react-hooks/exhaustive-deps
   const matchSearch = (i, q) => `${i.nameAr} ${i.nameEn}`.toLowerCase().includes(q)
 
+  // TWO RULES, and they used to fight each other because both lived here:
+  //
+  // 1. A CATEGORY IS A DESTINATION, NOT A CAGE. Picking one used to hard-filter
+  //    the list to that category, so the diner was locked inside it and could
+  //    not keep scrolling into the next section the way a paper menu works. The
+  //    list now always holds the whole menu; picking a category SCROLLS to it
+  //    (each layout does the scrolling, see the chip handlers) and the chip
+  //    stays lit through the scroll-spy.
+  //
+  // 2. SEARCH IS ALWAYS GLOBAL. The query used to be applied AFTER the category
+  //    filter, so searching while a category was open could only ever match
+  //    inside that category — the item you were looking for simply did not
+  //    exist as far as the search was concerned. A query now ignores the open
+  //    category entirely and looks at the whole menu.
   const visibleItems = useMemo(() => {
     const q = search.trim().toLowerCase()
-    let list = allActive
-    if (activeCat !== 'all') list = list.filter((i) => i.categoryId === activeCat)
-    if (q) list = list.filter((i) => matchSearch(i, q))
+    const list = q ? allActive.filter((i) => matchSearch(i, q)) : allActive
     return [...list].sort((a, b) => (a.sortOrder || 0) - (b.sortOrder || 0))
-  }, [allActive, activeCat, search])
+  }, [allActive, search])
 
   const itemsByCat = useMemo(() => {
     const map = {}
@@ -679,7 +712,7 @@ export default function MenuView({ tenant, tenantId, items, categories, offers =
     const isAlternating = menuLayout === 'alternating'
     const { nameStyle, priceStyle } = resolveItemStyles(it)
     return (
-      <button key={it.id} className={`food-card ${out ? 'unavailable' : ''}`} onClick={() => !out && setViewItem(it)} disabled={out} data-item-layout={it.namePriceLayout || ''}>
+      <button key={it.id} className={`food-card ${out ? 'unavailable' : ''}`} data-item-id={it.id} onClick={() => !out && setViewItem(it)} disabled={out} data-item-layout={it.namePriceLayout || ''}>
         {it.imageUrl ? <img className="food-img" src={it.imageUrl} alt="" loading="lazy" decoding="async" /> : <div className="food-img center muted"><Icon name="coffee" size={26} /></div>}
         <div className="body">
           <div className="name" style={nameStyle}>{pickLang(it, 'name', lang)}</div>
@@ -725,7 +758,7 @@ export default function MenuView({ tenant, tenantId, items, categories, offers =
     const priceVal = offer ? discountedPrice(it.price, offer) : it.price
     const { nameStyle, priceStyle } = resolveItemStyles(it)
     return (
-      <button key={it.id} className={`showcase-card ${out ? 'unavailable' : ''}`} onClick={() => !out && setViewItem(it)} disabled={out} data-item-layout={it.namePriceLayout || ''}>
+      <button key={it.id} className={`showcase-card ${out ? 'unavailable' : ''}`} data-item-id={it.id} onClick={() => !out && setViewItem(it)} disabled={out} data-item-layout={it.namePriceLayout || ''}>
         {it.imageUrl ? <img className="showcase-img" data-imgstyle={it.imageStyle || ''} src={it.imageUrl} alt="" loading="lazy" decoding="async" /> : <div className="showcase-img center muted"><Icon name="coffee" size={34} /></div>}
         <div className="showcase-name" style={nameStyle}>{pickLang(it, 'name', lang)}</div>
         {menuLayout === 'coffeepan' && pickLang(it, 'desc', lang) && (
@@ -755,7 +788,7 @@ export default function MenuView({ tenant, tenantId, items, categories, offers =
     const offer = offerForItem(it, offers)
     const { nameStyle, priceStyle } = resolveItemStyles(it)
     return (
-      <button key={it.id} className={`cl-row ${out ? 'unavailable' : ''}`} onClick={() => !out && setViewItem(it)} disabled={out} data-item-layout={it.namePriceLayout || ''}>
+      <button key={it.id} className={`cl-row ${out ? 'unavailable' : ''}`} data-item-id={it.id} onClick={() => !out && setViewItem(it)} disabled={out} data-item-layout={it.namePriceLayout || ''}>
         <span className="cl-media" data-imgstyle={it.imageStyle || ''}>{it.imageUrl ? <img src={it.imageUrl} alt="" loading="lazy" decoding="async" /> : <Icon name="coffee" size={22} />}</span>
         <div className="cl-body">
           <div className="cl-name" style={nameStyle}>{pickLang(it, 'name', lang)}</div>
@@ -780,7 +813,7 @@ export default function MenuView({ tenant, tenantId, items, categories, offers =
     const out = it.available === false || (it.trackStock && (it.stock || 0) <= 0)
     const { nameStyle, priceStyle } = resolveItemStyles(it)
     return (
-      <button key={it.id} className={`store-card ${out ? 'unavailable' : ''}`} onClick={() => !out && setViewItem(it)} disabled={out} data-item-layout={it.namePriceLayout || ''}>
+      <button key={it.id} className={`store-card ${out ? 'unavailable' : ''}`} data-item-id={it.id} onClick={() => !out && setViewItem(it)} disabled={out} data-item-layout={it.namePriceLayout || ''}>
         <span className="store-card-media" data-imgstyle={it.imageStyle || ''}>{it.imageUrl ? <img src={it.imageUrl} alt="" loading="lazy" decoding="async" /> : <Icon name="coffee" size={40} />}</span>
         <div className="store-card-name" style={nameStyle}>{pickLang(it, 'name', lang)}</div>
         <div className="store-card-price" style={priceStyle}><Price value={offer ? discountedPrice(it.price, offer) : it.price} currency={currency} lang={lang} />{offer && <span className="price-was"><Price value={it.price} currency={currency} lang={lang} /></span>}</div>
@@ -1065,14 +1098,16 @@ export default function MenuView({ tenant, tenantId, items, categories, offers =
         /* spotlight — immersive one-product-per-view: big image, scroll-snap, direct add-to-cart */
         <div className="spot-wrap" data-spot-size={resolveSkin(tenant, 'menu')?.spotImageSize || 'md'}>
           <div className="spot-cats scroll-x" style={{ top: stickyTop }}>
-            <button className={`spot-cat ${activeCat === 'all' ? 'on' : ''}`} onClick={() => setActiveCat('all')}>{t('all')}</button>
-            {sortedCats.map((c) => (<button key={c.id} className={`spot-cat ${activeCat === c.id ? 'on' : ''}`} onClick={() => setActiveCat(c.id)}>{pickLang(c, 'name', lang)}</button>))}
+            <button className={`spot-cat ${activeCat === 'all' ? 'on' : ''}`} onClick={() => pickCat('all')}>{t('all')}</button>
+            {sortedCats.map((c) => (<button key={c.id} className={`spot-cat ${activeCat === c.id ? 'on' : ''}`} onClick={() => pickCat(c.id)}>{pickLang(c, 'name', lang)}</button>))}
           </div>
           {!hasAnyItems || visibleItems.length === 0 ? (
             <div className="spot-empty"><Empty icon={search.trim() ? 'search' : 'menu'} title={lang === 'ar' ? (search.trim() ? 'لا نتائج' : 'لا توجد أصناف') : (search.trim() ? 'No results' : 'No items')} /></div>
           ) : (
             <SpotlightStage
-              groups={(search.trim() || activeCat !== 'all')
+              // Same rule as the classic branch: the category covers/groups survive
+              // a chip tap — only a SEARCH collapses the deck into one flat result set.
+              groups={search.trim()
                 ? [{ cat: null, items: visibleItems }]
                 : [...sortedCats.map((c) => ({ cat: c, items: itemsByCat[c.id] || [] })).filter((g) => g.items.length), ...((itemsByCat._uncat || []).length ? [{ cat: null, items: itemsByCat._uncat }] : [])]}
               allItems={allActive} currency={currency} offers={offers}
@@ -1088,8 +1123,9 @@ export default function MenuView({ tenant, tenantId, items, categories, offers =
         <EditorialLayout
           tenant={tenant}
           cats={sortedCats} itemsByCat={itemsByCat} visibleItems={visibleItems}
-          filtered={!!search.trim() || activeCat !== 'all'}
-          activeCat={activeCat} onPickCat={setActiveCat}
+          filtered={!!search.trim()}
+          // pickCat, not setActiveCat — these chips used to only light up.
+          activeCat={activeCat} onPickCat={pickCat}
           currency={currency} offers={offers} stickyTop={stickyTop}
           allItems={allActive} showPairings={!isHidden('pairings')}
           onQuickAdd={(s) => addLine(s, (s.variants && s.variants[0]) || null, [], 1)}
@@ -1099,8 +1135,8 @@ export default function MenuView({ tenant, tenantId, items, categories, offers =
         /* oceanart («اللوحة الفنية») — painted deep-tone canvas, rotated plates, scalloped price seals */
         <OceanArtLayout
           tenant={tenant} cats={sortedCats} itemsByCat={itemsByCat} visibleItems={visibleItems}
-          filtered={!!search.trim() || activeCat !== 'all'}
-          activeCat={activeCat} onPickCat={setActiveCat}
+          filtered={!!search.trim()}
+          activeCat={activeCat} onPickCat={pickCat}
           currency={currency} offers={offers} stickyTop={stickyTop}
           onOpen={setViewItem}
         />
@@ -1152,8 +1188,8 @@ export default function MenuView({ tenant, tenantId, items, categories, offers =
         <div className="container">
           <div className="menu-side">
             <aside className="menu-side-rail">
-              <button className={`side-cat ${activeCat === 'all' ? 'active' : ''}`} onClick={() => setActiveCat('all')}>{t('all')}</button>
-              {sortedCats.map((c) => (<button key={c.id} className={`side-cat ${activeCat === c.id ? 'active' : ''}`} onClick={() => setActiveCat(c.id)}>{pickLang(c, 'name', lang)}</button>))}
+              <button className={`side-cat ${activeCat === 'all' ? 'active' : ''}`} onClick={() => pickCat('all')}>{t('all')}</button>
+              {sortedCats.map((c) => (<button key={c.id} className={`side-cat ${activeCat === c.id ? 'active' : ''}`} onClick={() => pickCat(c.id)}>{pickLang(c, 'name', lang)}</button>))}
             </aside>
             <div className="menu-side-main grow">
               {!hasAnyItems ? (
@@ -1171,14 +1207,14 @@ export default function MenuView({ tenant, tenantId, items, categories, offers =
           {/* category nav — circular image chips (delivery style) or text chips */}
           {catNav === 'circles' ? (
             <div className="scroll-x container cat-circles" style={{ position: 'sticky', top: stickyTop, zIndex: 50, paddingBlock: 'var(--sp-3)', marginTop: 'var(--sp-1)', background: 'var(--bg)' }}>
-              <button className={`cat-circle ${activeCat === 'all' ? 'on' : ''}`} onClick={() => setActiveCat('all')}>
+              <button className={`cat-circle ${activeCat === 'all' ? 'on' : ''}`} onClick={() => pickCat('all')}>
                 <span className="cat-circle-img"><Icon name="grid" size={20} /></span>
                 <span className="cat-circle-lbl">{t('all')}</span>
               </button>
               {sortedCats.map((c) => {
                 const img = (itemsByCat[c.id] || [])[0]?.imageUrl
                 return (
-                  <button key={c.id} className={`cat-circle ${activeCat === c.id ? 'on' : ''}`} onClick={() => setActiveCat(c.id)}>
+                  <button key={c.id} className={`cat-circle ${activeCat === c.id ? 'on' : ''}`} onClick={() => pickCat(c.id)}>
                     <span className="cat-circle-img">{img ? <img src={img} alt="" loading="lazy" decoding="async" /> : <Icon name="coffee" size={20} />}</span>
                     <span className="cat-circle-lbl">{pickLang(c, 'name', lang)}</span>
                   </button>
@@ -1188,8 +1224,8 @@ export default function MenuView({ tenant, tenantId, items, categories, offers =
           ) : (
             // translucent + blur (not opaque --bg) so custom venue backgrounds show through the sticky bar
             <div className="scroll-x container cat-bar" data-cat-nav={catNav} style={{ position: 'sticky', top: stickyTop, zIndex: 50, paddingBlock: 'var(--sp-3)', marginTop: 'var(--sp-1)', background: 'color-mix(in srgb, var(--bg) 72%, transparent)', backdropFilter: 'blur(10px)', WebkitBackdropFilter: 'blur(10px)' }}>
-              <button className={`chip ${activeCat === 'all' ? 'active' : ''}`} onClick={() => setActiveCat('all')}>{t('all')}</button>
-              {sortedCats.map((c) => (<button key={c.id} className={`chip ${activeCat === c.id ? 'active' : ''}`} onClick={() => setActiveCat(c.id)}>{pickLang(c, 'name', lang)}</button>))}
+              <button className={`chip ${activeCat === 'all' ? 'active' : ''}`} onClick={() => pickCat('all')}>{t('all')}</button>
+              {sortedCats.map((c) => (<button key={c.id} className={`chip ${activeCat === c.id ? 'active' : ''}`} onClick={() => pickCat(c.id)}>{pickLang(c, 'name', lang)}</button>))}
             </div>
           )}
 
@@ -1198,7 +1234,14 @@ export default function MenuView({ tenant, tenantId, items, categories, offers =
               <Empty icon="menu" title={lang === 'ar' ? 'لا توجد أصناف' : 'No items'} />
             ) : search.trim() ? (
               visibleItems.length === 0 ? <Empty icon="search" title={lang === 'ar' ? 'لا نتائج' : 'No results'} /> : renderItems(visibleItems)
-            ) : activeCat === 'all' ? (
+            ) : (
+              // Grouped by category whenever there is NO search — headings and all.
+              // This used to be gated on `activeCat === 'all'`, which was fine while
+              // a category filtered the list. Once a category became a destination
+              // instead, that gate flattened the whole menu into one unlabelled,
+              // category-interleaved list the moment a chip was tapped: no
+              // headings, no way to tell one section from the next. The grouping
+              // is also what the category jump scrolls to.
               <>
                 {sortedCats.map((c) => {
                   const list = itemsByCat[c.id] || []
@@ -1207,10 +1250,6 @@ export default function MenuView({ tenant, tenantId, items, categories, offers =
                 })}
                 {(itemsByCat._uncat || []).length > 0 && (<section><h3 className="cat-heading">{lang === 'ar' ? 'أخرى' : 'Other'}</h3>{renderItems(itemsByCat._uncat)}</section>)}
               </>
-            ) : visibleItems.length === 0 ? (
-              <Empty icon="menu" title={lang === 'ar' ? 'لا توجد أصناف' : 'No items'} />
-            ) : (
-              renderItems(visibleItems)
             )}
           </div>
         </>
@@ -1322,7 +1361,7 @@ export default function MenuView({ tenant, tenantId, items, categories, offers =
               // and handled the url case itself, so this only routes in-app.
               if (!target) return
               if (target.link === 'item' && target.item) setViewItem(target.item)
-              else if (target.link === 'category' && target.categoryId) setActiveCat(target.categoryId)
+              else if (target.link === 'category' && target.categoryId) pickCat(target.categoryId)
               else if (target.link === 'games') setFxOpen('games')
               else if (target.link === 'story') setFxOpen('')
             }}

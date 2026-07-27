@@ -55,6 +55,7 @@ import TablePaint from './TablePaint.jsx'
 import { useVideoTrim } from '../../lib/useVideoTrim.js'
 import ARViewer from '../ARViewer.jsx'
 import { basePrice, variantHasOwnPrice } from '../../lib/pricing.js'
+import { scrollSectionIntoView, scrollSectionToTop, stuckOffset } from '../../lib/scrollToSection.js'
 import '../../styles/menuwall.css'
 
 // Built by a parallel agent — lazy + catch so a missing module never crashes
@@ -1414,7 +1415,9 @@ export default function EditorialLayout({ tenant = null, cats, itemsByCat, visib
   const spyCat = !filtered && curItem && (cats || []).some((c) => c.id === curItem.categoryId)
     ? curItem.categoryId
     : null
-  const liveCat = filtered ? activeCat : (spyCat || 'all')
+  // While searching, the results span the whole menu, so no chip may claim them
+  // — lighting the last-tapped category there was simply untrue.
+  const liveCat = filtered ? 'all' : (spyCat || 'all')
   const catsRef = useRef(null)
   useEffect(() => {
     const sc = catsRef.current
@@ -1439,14 +1442,26 @@ export default function EditorialLayout({ tenant = null, cats, itemsByCat, visib
   const pickCat = (id) => {
     onPickCat(id)
     requestAnimationFrame(() => {
+      const bar = barRef.current
+      // the helper resolves the stuck offset AND the scrollport origin
+      // A category is a DESTINATION, not a filter: the list still holds the whole
+      // menu, so jump to that category's FIRST dish and let the diner keep
+      // scrolling straight on into the next section. «الكل» goes back to the top.
+      // The jump goes through scrollSectionIntoView because at >= 980px the
+      // window is NOT the scroller (body is overflow:hidden) and manual
+      // window.scrollTo maths silently did nothing there.
+      if (id && id !== 'all') {
+        const first = (orderAll || []).find((x) => x.categoryId === id)
+        const el = first && document.querySelector(`.edt-sec[data-item-id="${CSS.escape(String(first.id))}"]`)
+        if (el) { scrollSectionIntoView(el, bar); return }
+      }
+      // «الكل» (and the fallback): back to the top of whatever is scrolling, but
+      // only once the stage has actually left the screen — a tap at the top of
+      // the menu must never move anything.
       const st = stageRef.current
       if (!st) return
-      const r = st.getBoundingClientRect()
-      if (r.top >= 0) return
-      const bar = barRef.current
-      const barBottom = bar ? bar.getBoundingClientRect().bottom : 0
-      const y = Math.max(0, window.scrollY + r.top - barBottom)
-      try { window.scrollTo({ top: y, behavior: prefersReduced() ? 'auto' : 'smooth' }) } catch (_) { window.scrollTo(0, y) }
+      if (st.getBoundingClientRect().top >= 0) return
+      scrollSectionToTop(st)
     })
   }
 
@@ -1454,7 +1469,10 @@ export default function EditorialLayout({ tenant = null, cats, itemsByCat, visib
   // menu even when a category chip has filtered the stage — the open category
   // is a window, the count is the meal. Only a text search (an arbitrary
   // subset with no stable place in the full order) counts its own results.
-  const searchOnly = filtered && activeCat === 'all'
+  // A search is always an arbitrary subset now (the open category no longer
+  // windows the list), so the read-out counts its own results whenever a query
+  // is running — it used to flip meaning depending on whether a chip was lit.
+  const searchOnly = filtered
   const overallIdx = !searchOnly && curItem ? orderAll.findIndex((x) => x.id === curItem.id) : -1
   const progPos = overallIdx >= 0 ? overallIdx + 1 : Math.min(cur + 1, flat.length)
   const progTotal = overallIdx >= 0 ? orderAll.length : flat.length

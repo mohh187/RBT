@@ -107,7 +107,7 @@ function OaCard({ it, flip, currency, offers, lang, t, onOpen }) {
   const desc = pickLang(it, 'desc', lang)
   const open = () => { if (!out) onOpen(it) }
   return (
-    <div className={`oa-card ${out ? 'is-out' : ''}`} data-flip={flip ? '1' : '0'}>
+    <div className={`oa-card ${out ? 'is-out' : ''}`} data-flip={flip ? '1' : '0'} data-item-id={it.id}>
       <div className="oa-plate">
         {it.imageUrl ? <img src={it.imageUrl} alt="" /> : <span className="oa-noimg"><Icon name="coffee" size={54} /></span>}
         <button type="button" className="oa-plate-open" onClick={open} aria-label={name} disabled={out} />
