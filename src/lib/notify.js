@@ -57,11 +57,26 @@ export async function requestNotifyPermission() {
   }
 }
 
+// The service worker file is NOT content-hashed, so any CDN in front of Hosting
+// can pin an old copy of it — observed in production: Cloudflare served /sw.js
+// from its own cache carrying a year-long `immutable` header left by an earlier
+// config, so a fixed worker would never have reached anyone. Registering a
+// VERSIONED url makes every worker release a distinct resource that no cache
+// can confuse with the previous one. A query string does not change the SW's
+// scope, so this is transparent to everything else.
+// BUMP THIS whenever public/sw.js's CACHE constant changes.
+export const SW_VERSION = 'v5'
+export const SW_URL = `/sw.js?v=${SW_VERSION}`
+
 export async function registerSW() {
   try {
-    if ('serviceWorker' in navigator) {
-      return await navigator.serviceWorker.register('/sw.js')
-    }
+    if (!('serviceWorker' in navigator)) return null
+    // An existing registration pointing at an older script URL must be replaced,
+    // not reused — reg.update() would re-request the SAME (cached) url.
+    const existing = await navigator.serviceWorker.getRegistration()
+    const activeUrl = existing && (existing.active || existing.waiting || existing.installing)?.scriptURL
+    if (existing && activeUrl && activeUrl.includes(`v=${SW_VERSION}`)) return existing
+    return await navigator.serviceWorker.register(SW_URL)
   } catch (_) { /* ignore */ }
   return null
 }

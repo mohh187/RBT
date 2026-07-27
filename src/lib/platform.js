@@ -22,6 +22,7 @@ import {
   getCountFromServer,
 } from 'firebase/firestore'
 import { db, app, auth, functions } from './firebase.js'
+import { registerSW } from './notify.js'
 
 const list = (s) => s.docs.map((d) => ({ id: d.id, ...d.data() }))
 
@@ -276,7 +277,7 @@ export async function registerPlatformPush(uid) {
     if (!('Notification' in window) || Notification.permission !== 'granted') return false
     const { getMessaging, getToken, isSupported } = await import('firebase/messaging')
     if (!(await isSupported())) return false
-    const reg = (await navigator.serviceWorker.getRegistration()) || (await navigator.serviceWorker.register('/sw.js'))
+    const reg = await registerSW()
     const token = await getToken(getMessaging(app), { vapidKey: VAPID, serviceWorkerRegistration: reg })
     if (!token) return false
     // Key by a hash of the full token so a rotated token overwrites its own doc

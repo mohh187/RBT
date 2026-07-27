@@ -27,8 +27,12 @@
         "headers": [{ "key": "Cache-Control", "value": "public, max-age=0, s-maxage=300, stale-while-revalidate=86400" }]
       },
       {
-        "//": "Not content-hashed: the service worker and the manifests must always revalidate, or a bad SW/identity could pin itself for a year.",
-        "source": "/@(sw.js|manifest.webmanifest)",
+        "//": "Not content-hashed: the service worker must always revalidate, or a bad SW could pin itself for a year. LITERAL source on purpose — an extglob group ('/@(sw.js|...)') did NOT match /sw.js in Hosting and the asset rule above kept winning.",
+        "source": "/sw.js",
+        "headers": [{ "key": "Cache-Control", "value": "no-cache" }]
+      },
+      {
+        "source": "/manifest.webmanifest",
         "headers": [{ "key": "Cache-Control", "value": "no-cache" }]
       }
     ]

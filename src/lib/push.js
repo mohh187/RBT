@@ -5,6 +5,7 @@ import { getMessaging, getToken, onMessage, isSupported } from 'firebase/messagi
 import { app } from './firebase.js'
 import { savePushToken } from './db.js'
 import { showNotification } from './notify.js'
+import { registerSW } from './notify.js'
 
 const VAPID = import.meta.env.VITE_FIREBASE_VAPID_KEY
 let started = false
@@ -31,7 +32,7 @@ export async function initPush(tenantId, uid) {
     if (!('Notification' in window) || Notification.permission !== 'granted') return
     if (!(await isSupported())) return
 
-    const reg = (await navigator.serviceWorker.getRegistration()) || (await navigator.serviceWorker.register('/sw.js'))
+    const reg = await registerSW()
     const messaging = getMessaging(app)
     const token = await getToken(messaging, { vapidKey: VAPID, serviceWorkerRegistration: reg })
     if (token) await savePushToken(tenantId, token, uid)
