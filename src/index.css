@@ -3747,7 +3747,10 @@ body[data-theme='dark'] .pos-fullscreen[data-systheme='glass'] { background: var
 
 .special-head { display: inline-flex; align-items: center; gap: 6px; margin-bottom: 10px; color: var(--brand); }
 .special-head strong { color: var(--text); letter-spacing: -0.01em; }
-.special-row { display: flex; gap: var(--sp-3); overflow-x: auto; scrollbar-width: none; padding: 4px 2px var(--sp-2); }
+.special-row {
+  display: flex; gap: var(--sp-3); overflow-x: auto; scrollbar-width: none;
+  padding: 4px 2px var(--sp-2);
+}
 .special-row::-webkit-scrollbar { display: none; }
 /* Frameless by default: no card box/border/background — the product photo floats
    on the page with a soft shadow, matching the theme instead of fighting it. */
@@ -3755,8 +3758,27 @@ body[data-theme='dark'] .pos-fullscreen[data-systheme='glass'] { background: var
    multiplier over the tile width and its photo — var absent = 1 = today. */
 .special-card { position: relative; flex: 0 0 calc(118px * var(--feat-scale, 1)); background: transparent; border: 0; border-radius: 0; padding: 6px 2px 4px; text-align: center; box-shadow: none; transition: transform var(--dur-fast); }
 .special-card:active { transform: scale(.96); }
-.special-card img { width: calc(96px * var(--feat-scale, 1)); height: calc(96px * var(--feat-scale, 1)); border-radius: 20px; object-fit: cover; margin: 0 auto 9px; display: block; box-shadow: 0 10px 22px rgba(0, 0, 0, .16); }
-.special-ph { width: calc(96px * var(--feat-scale, 1)); height: calc(96px * var(--feat-scale, 1)); border-radius: 20px; margin: 0 auto 9px; background: var(--surface-2); display: grid; place-items: center; color: var(--text-muted); box-shadow: 0 10px 22px rgba(0, 0, 0, .10); }
+/* FEATURED DISHES — never cropped. These were object-fit: cover inside a square,
+   so any dish photo that is not square lost its edges: a wide plate came out
+   sliced down both sides.  shows the WHOLE dish, and because the frame
+   and the box shadow only made sense around a filled rectangle they give way to
+   a drop-shadow that follows the dish silhouette — so a cut-out plate reads as
+   set down on the wall rather than pasted into a tile. Venues that deliberately
+   chose the circle style keep their crop (that is what a circle IS).
+   The box is slightly taller than wide because plates are wider than they are
+   tall: contain then fills the width instead of leaving air on both sides. */
+.special-card img {
+  width: calc(112px * var(--feat-scale, 1));
+  height: calc(96px * var(--feat-scale, 1));
+  object-fit: contain;
+  margin: 0 auto 9px;
+  display: block;
+  border-radius: 0;
+  background: transparent;
+  box-shadow: none;
+  filter: drop-shadow(0 8px 10px rgba(0, 0, 0, .34)) drop-shadow(0 2px 3px rgba(0, 0, 0, .22));
+}
+.special-ph { width: calc(112px * var(--feat-scale, 1)); height: calc(96px * var(--feat-scale, 1)); border-radius: 20px; margin: 0 auto 9px; background: var(--surface-2); display: grid; place-items: center; color: var(--text-muted); box-shadow: 0 10px 22px rgba(0, 0, 0, .10); }
 /* corner badge: gold star (manual pick) or a rank number (auto best-sellers) */
 .special-badge { position: absolute; top: 8px; inset-inline-start: 8px; min-width: 20px; height: 20px; padding: 0 5px; border-radius: var(--r-pill); display: inline-flex; align-items: center; justify-content: center; font-size: 11px; font-weight: 800; box-shadow: var(--sh-1); z-index: 1; }
 .special-rank { background: var(--brand); color: var(--on-brand); }

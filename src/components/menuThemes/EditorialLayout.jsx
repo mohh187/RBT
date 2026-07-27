@@ -1350,11 +1350,17 @@ export default function EditorialLayout({ tenant = null, cats, itemsByCat, visib
   // menuwall.css). Everything over budget still renders its light pool, so the
   // composition reads the same. navigator.deviceMemory does not exist on iOS,
   // so the cap is 1 there rather than heavyLayerBudget()'s optimistic 3.
-  const narrow3dBudget = useMemo(() => {
-    if (!isNarrow()) return Infinity
-    if (!hasWebGL() || preferLightweight()) return 0
-    return Math.min(1, heavyLayerBudget())
-  }, [])
+  // ZERO on a phone. The budget-of-one was tested green in headless WebKit —
+  // heap flat over 12 full-menu scrolls, no crash — but the owner still saw the
+  // tab hang on a REAL iPhone, and a real device is the only authority that
+  // matters here. Headless WebKit on a desktop GPU is not an iPhone: different
+  // memory ceiling, different WKWebView jetsam behaviour. Even one live context
+  // costs the ~450KB model-viewer runtime plus a GPU surface on top of the
+  // 56-section list and a background video.
+  // The pieces are NOT given up on: the fix is to show a still POSTER of the
+  // model on phones (no WebGL at all), generated once where there is a real GPU.
+  // Until that poster exists, a phone gets the light pool and nothing heavier.
+  const narrow3dBudget = useMemo(() => (isNarrow() ? 0 : Infinity), [])
   // Which pieces may be live 3D: the first N models in render order.
   const allow3d = useMemo(() => {
     if (narrow3dBudget === Infinity) return null // desktop: every model renders
