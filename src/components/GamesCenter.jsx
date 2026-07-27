@@ -26,8 +26,8 @@ import { submitScore, watchTopScores, currentMonth, myRank } from '../lib/leader
 import { deviceKey } from '../lib/device.js'
 // startGame is aliased: this file already has a local startGame (the solo
 // launcher), and the room restart below must not shadow or collide with it.
-import { watchRoom, applyMove, startGame as startRoomGame, heartbeat, leaveRoom, HEARTBEAT_MS } from '../lib/gameRoom.js'
-import { clearSoloIntent } from '../lib/gameBots.js'
+import { watchRoom, applyMove, startGame as startRoomGame, heartbeat, leaveRoom, botTurnSeat, HEARTBEAT_MS } from '../lib/gameRoom.js'
+import { clearSoloIntent, botMoveFor, BOT_DELAY_MS } from '../lib/gameBots.js'
 import { isMuted, setMuted, play as playSound } from '../lib/gameSounds.js'
 import {
   watchLiveTournament, recordTournamentPlay, recordHappyHourPlay, rememberRoom,
@@ -57,6 +57,9 @@ const TXT = {
     gateTitle: 'اسمك ورقمك، ثم نبدأ',
     gateWhy: 'نحفظ نتائجك ومراحلك على هذا الجهاز، ونسجّلك لدى المكان.',
     gateFor: 'ستفتح لك',
+    gateTour: 'بطولة جارية الآن',
+    gateTourIn: 'سجّل وتُحسب جولاتك فيها',
+    gateTourPrize: 'الجائزة',
     name: 'الاسم',
     phone: 'رقم الجوال',
     namePh: 'اسمك',
@@ -113,6 +116,9 @@ const TXT = {
     gateTitle: 'Your name and number, then we start',
     gateWhy: 'We keep your scores and stages on this device, and register you with the venue.',
     gateFor: 'Opening',
+    gateTour: 'A tournament is live right now',
+    gateTourIn: 'register and your rounds count in it',
+    gateTourPrize: 'Prize',
     name: 'Name',
     phone: 'Mobile number',
     namePh: 'Your name',
@@ -996,6 +1002,44 @@ export default function GamesCenter({
     }).catch(() => { /* rejected move: the snapshot already shows the truth */ })
   }, [tenantId, roomId, mySeat])
 
+  // ---- host-side bot driver for ROOM games --------------------------------
+  // A room seat marked bot:true (gameRoom.fillWithBots) is moved by exactly
+  // one device: the HOST's — botTurnSeat returns -1 on every other phone.
+  // Each snapshot where the turn belongs to a computer seat schedules ONE
+  // move after the visible thinking delay: the same pure bot as solo play
+  // (src/lib/gameBots.js), re-validated by the same reducer inside the room
+  // transaction. `actAsBot` carries the host's claim and applyMove verifies
+  // it server-of-record-side (host id matches, seat really is a bot). A move
+  // computed against a stale snapshot is rejected by the turn gate or the
+  // reducer and writes NOTHING, so a duplicate driver (second host tab) is
+  // harmless. If the host's phone locks, the bots pause until it returns —
+  // the lobby says exactly that. Multi-step turns (Ludo roll→move, Haree
+  // draw→lay→throw) resolve naturally: each applied move produces a new
+  // snapshot, which re-arms this effect while the turn stays on the bot.
+  useEffect(() => {
+    const r = room
+    if (!tenantId || !roomId || !r) return undefined
+    const seat = botTurnSeat(r, deviceKey())
+    if (seat < 0) return undefined
+    const reduce = reduceRef.current
+    const mod = modRef.current
+    if (!reduce || !mod) return undefined
+    // Wist leaves a finished trick face-up until its winner leads again; when
+    // that winner is a machine, hold it long enough for people to read it.
+    const wait = r.gameId === 'wist' && r.state?.doneWinner != null ? 1500 : BOT_DELAY_MS
+    const tmr = setTimeout(() => {
+      const mv = botMoveFor(r.gameId, r.state || {}, seat, {
+        reduce,
+        room: r,
+        helpers: mod.botHelpers || {},
+      })
+      if (!mv) return // a phase the bot leaves to people (round transitions)
+      applyMove({ tid: tenantId, roomId, seat, move: mv, reduce, actAsBot: deviceKey() })
+        .catch(() => { /* stale or rejected: the next snapshot is the truth */ })
+    }, wait)
+    return () => clearTimeout(tmr)
+  }, [tenantId, roomId, room])
+
   // The lobby hands back a started room; load the game module so its reducer is
   // available before the board renders. `gid` lets the invite path pass the
   // game explicitly, since nothing was picked from the shelves in that flow.
@@ -1723,14 +1767,30 @@ export default function GamesCenter({
         />
       ) : view === 'gate' ? (
         <form className="gh-body gh-gate gh-fade" onSubmit={submitGate}>
-          <span className="gh-gate-art">
-            {pendingGame ? <CoverArt game={pendingGame} /> : null}
-          </span>
+          <div className="gh-gate-hero" aria-hidden="true">
+            <span className="gh-gate-glow" style={{ background: brand }} />
+            <span className="gh-gate-art">
+              {pendingGame ? <CoverArt game={pendingGame} /> : null}
+            </span>
+          </div>
           <strong className="gh-gate-title">{t.gateTitle}</strong>
           {pendingGame ? (
             <p className="gh-gate-for">{t.gateFor} «{gameName(pendingGame, lang)}»</p>
           ) : null}
           <p className="gh-gate-why">{t.gateWhy}</p>
+          {tour ? (
+            <p className="gh-gate-tour">
+              <Icon name="award" size={14} />
+              <span>
+                {t.gateTour}
+                {tour.name ? ` «${tour.name}»` : ''}
+                {` — ${t.gateTourIn}`}
+                {String(tour?.prize?.label || '').trim()
+                  ? `. ${t.gateTourPrize}: ${String(tour.prize.label).trim()}`
+                  : ''}
+              </span>
+            </p>
+          ) : null}
           <label className="gh-field">
             <span>{t.name}</span>
             <input

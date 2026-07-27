@@ -391,19 +391,64 @@
    registration gate
    =========================================================================== */
 .gh-gate { align-items: center; justify-content: center; text-align: center; gap: 12px; }
+/* the game's cover leads the gate — floated on a soft brand glow so the two
+   fields beneath read as the short path to it, not as a form for its own sake */
+.gh-gate-hero {
+  position: relative;
+  display: grid;
+  place-items: center;
+  padding: 10px 0 4px;
+}
+.gh-gate-glow {
+  position: absolute;
+  width: 150px;
+  height: 150px;
+  border-radius: 999px;
+  opacity: 0.3;
+  filter: blur(46px);
+  pointer-events: none;
+}
+@keyframes gh-gate-float {
+  0%, 100% { transform: translate3d(0, 0, 0) rotate(-2deg); }
+  50% { transform: translate3d(0, -7px, 0) rotate(2deg); }
+}
 .gh-gate-art {
-  width: 108px;
+  position: relative;
+  width: 122px;
   aspect-ratio: 1 / 1.1;
-  border-radius: 20px;
+  border-radius: 22px;
   overflow: hidden;
-  box-shadow: 0 18px 34px -18px rgba(0, 0, 0, 0.9);
+  border: 1px solid rgba(255, 255, 255, 0.2);
+  box-shadow:
+    0 24px 44px -18px rgba(0, 0, 0, 0.92),
+    inset 0 1px 0 rgba(255, 255, 255, 0.25);
+  animation: gh-gate-float 5.5s ease-in-out infinite;
+  will-change: transform;
 }
 .gh-gate-art:empty { display: none; }
-.gh-gate-title { font-size: 20px; font-weight: 900; letter-spacing: -0.4px; }
+.gh-gate-title { font-size: 21px; font-weight: 900; letter-spacing: -0.4px; }
 .gh-gate-for { margin: -6px 0 0; font-size: 13px; font-weight: 700; color: #fff; }
 .gh-gate-for { color: color-mix(in srgb, var(--gh-brand) 40%, #fff); }
 .gh-gate-why { max-width: 34ch; margin: 0; font-size: 13px; line-height: 1.8; color: var(--gh-dim); }
 .gh-gate-why.faint { color: var(--gh-faint); font-size: 12.5px; }
+/* a live tournament is the reason to register NOW — gold, quiet, honest */
+.gh-gate-tour {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  margin: 0;
+  width: min(360px, 100%);
+  padding: 10px 13px;
+  border-radius: 13px;
+  background: rgba(233, 185, 73, 0.1);
+  box-shadow: inset 0 0 0 1px rgba(233, 185, 73, 0.32);
+  color: #f2d791;
+  font-size: 12.5px;
+  font-weight: 700;
+  line-height: 1.7;
+  text-align: start;
+}
+.gh-gate-tour svg { flex: 0 0 auto; margin-top: 2px; }
 
 .gh-field { display: flex; flex-direction: column; gap: 6px; width: min(360px, 100%); text-align: start; }
 .gh-field span { font-size: 12px; font-weight: 700; color: var(--gh-dim); }

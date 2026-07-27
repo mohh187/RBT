@@ -20,6 +20,7 @@
 // ===========================================================================
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import Icon from '../Icon.jsx'
+import CoverPlate from './CoverPlate.jsx'
 import { deviceKey } from '../../lib/device.js'
 import {
   createRoom,
@@ -33,10 +34,12 @@ import {
   isConnected,
   roomErrorText,
   normalizeRoomCode,
+  fillWithBots,
+  removeBot,
   HEARTBEAT_MS,
   MAX_SEATS,
 } from '../../lib/gameRoom.js'
-import { setSoloIntent, clearSoloIntent, botNote, botLabel } from '../../lib/gameBots.js'
+import { setSoloIntent, clearSoloIntent, botNote, botLabel, isBotPlayer, BOTS } from '../../lib/gameBots.js'
 import '../../styles/room.css'
 import '../../styles/gamebots.css'
 
@@ -54,11 +57,14 @@ const T = {
   copy: { ar: 'نسخ الرابط', en: 'Copy link' },
   copied: { ar: 'تم النسخ', en: 'Copied' },
   share: { ar: 'مشاركة الرابط', en: 'Share link' },
-  seats: { ar: 'المقاعد', en: 'Seats' },
+  inviteH: { ar: 'ادعُ من يلعب معك', en: 'Invite your players' },
+  codeTap: { ar: 'انقر لنسخ الرمز', en: 'Tap to copy the code' },
+  codeCopied: { ar: 'تم نسخ الرمز', en: 'Code copied' },
+  seats: { ar: 'طاولة اللعب', en: 'The table' },
   host: { ar: 'المضيف', en: 'Host' },
   you: { ar: 'أنت', en: 'You' },
   empty: { ar: 'مقعد شاغر', en: 'Empty seat' },
-  away: { ar: 'انقطع مؤقتاً — مقعده محفوظ', en: 'Away — seat kept' },
+  away: { ar: 'انقطع — مقعده محفوظ', en: 'Away — seat kept' },
   live: { ar: 'متصل', en: 'Live' },
   start: { ar: 'ابدأ الجولة', en: 'Start' },
   waitHost: { ar: 'بانتظار المضيف ليبدأ الجولة', en: 'Waiting for the host' },
@@ -90,10 +96,40 @@ const T = {
   soloGo: { ar: 'ابدأ ضد الكمبيوتر', en: 'Start against the computer' },
   soloYou: { ar: 'أنت', en: 'You' },
   soloTable: { ar: 'الطاولة', en: 'At the table' },
+
+  // ---- computer seats in a REAL room («أكمل المقاعد بالكمبيوتر») ----
+  fillAll: { ar: 'أكمل المقاعد الشاغرة بالكمبيوتر', en: 'Fill the empty seats with the computer' },
+  fillNote: {
+    ar: 'الكمبيوتر يلعب من جهاز المضيف — إن انقطع المضيف توقّفت مقاعد الكمبيوتر حتى يعود، وإن انضم صديق قبل البدء أخذ مكان أحدها.',
+    en: 'The computer plays from the host device — if the host drops, computer seats pause until the host is back; a friend joining before the start takes a computer seat.',
+  },
+  filling: { ar: 'نجهّز مقاعد الكمبيوتر…', en: 'Seating the computer…' },
+  sideQ: { ar: 'الكمبيوتر معنا أم ضدنا؟', en: 'Computer with us, or against us?' },
+  sideFoes: { ar: 'ضدنا — نلعب نحن شريكين', en: 'Against us — we partner up' },
+  sidePartners: { ar: 'معنا — لكلٍّ منا شريك كمبيوتر', en: 'With us — a computer partner each' },
+  botTag: { ar: 'آلي', en: 'Bot' },
+  botSeatMeta: { ar: 'من جهاز المضيف', en: 'From the host device' },
+  botRemove: { ar: 'إزالة هذا المقعد الآلي', en: 'Remove this computer seat' },
+  soloRoomWhy: {
+    ar: 'أو العبها كغرفة حقيقية: تظهر للمكان ويمكن بثّها على الشاشة، وإن جاء صديق قبل البدء أخذ مكان الكمبيوتر.',
+    en: 'Or play it as a real room: the venue can see it and put it on the wall screen, and a friend arriving before the start replaces a computer seat.',
+  },
+  soloRoomGo: { ar: 'العب ضد الكمبيوتر على الشاشة', en: 'Play the computer on the big screen' },
 }
 
 // Arabic ordinals for the honest waiting line («بانتظار لاعب ثالث…»).
 const ORDINAL_AR = ['', 'أول', 'ثاني', 'ثالث', 'رابع']
+
+// Partnership games pair seats 0+2 against 1+3. Only these two ever raise the
+// «الكمبيوتر معنا أم ضدنا؟» question when two people fill two machine seats.
+const TEAM_GAMES = new Set(['wist', 'jackaroo'])
+
+// The host's crown — a small bespoke glyph (SVG only, hard repo rule).
+const CROWN = (
+  <svg viewBox="0 0 24 24" width="12" height="12" fill="currentColor" aria-hidden="true" focusable="false">
+    <path d="M3 19h18v2H3zM2.6 17 4.4 7.6l4.7 4.2L12 4l2.9 7.8 4.7-4.2L21.4 17z" />
+  </svg>
+)
 
 export default function RoomLobby({
   tid,
@@ -128,12 +164,21 @@ export default function RoomLobby({
   const [busy, setBusy] = useState('')
   const [err, setErr] = useState('')
   const [copied, setCopied] = useState(false)
+  const [codeCopied, setCodeCopied] = useState(false)
   const [codeInput, setCodeInput] = useState('')
   const [rules, setRules] = useState('')
   const [showRules, setShowRules] = useState(false)
 
   const startedRef = useRef(false)
   const modRef = useRef(null)
+
+  // Entering (or leaving) a room swaps the whole body under a reused scroll
+  // container, which would otherwise keep the OLD scroll offset and open the
+  // room view with the code chip pushed out of sight. Presentation only.
+  const scrollerRef = useRef(null)
+  useEffect(() => {
+    if (scrollerRef.current) scrollerRef.current.scrollTop = 0
+  }, [roomId])
 
   const maxPlayers = Math.max(2, Math.min(MAX_SEATS, Number(game?.maxPlayers) || 2))
   const minPlayers = Math.max(2, Math.min(maxPlayers, Number(game?.minPlayers) || 2))
@@ -301,6 +346,67 @@ export default function RoomLobby({
     setRoomId(''); setRoom(null); setMySeat(-1); startedRef.current = false
   }, [tid, roomId, me.id])
 
+  // ---- computer seats in the room («أكمل المقاعد بالكمبيوتر») ----
+  // Host-only. `arrange` decides who partners whom in Wist/Jackaroo when two
+  // people fill two machine seats: 'foes' keeps the people together (0+2) with
+  // both bots opposite; 'partners' gives each person a bot partner. Everything
+  // else fills the lowest free seats. The bots are MOVED by the host's device
+  // once the round starts (gameRoom.botTurnSeat drives that in the hub).
+  const doFill = useCallback(async (arrange) => {
+    if (busy || !roomId) return
+    setBusy('fill'); setErr('')
+    try {
+      await fillWithBots({ tid, roomId, playerId: me.id, arrange, lang })
+    } catch (e) {
+      setErr(roomErrorText(e))
+    } finally {
+      setBusy('')
+    }
+  }, [busy, tid, roomId, me.id, lang])
+
+  const doRemoveBot = useCallback(async (seat) => {
+    if (busy || !roomId) return
+    setBusy('unbot'); setErr('')
+    try {
+      await removeBot({ tid, roomId, playerId: me.id, seat, lang })
+    } catch (e) {
+      setErr(roomErrorText(e))
+    } finally {
+      setBusy('')
+    }
+  }, [busy, tid, roomId, me.id, lang])
+
+  // «العب ضد الكمبيوتر على الشاشة»: the same fight as doSolo but in a REAL
+  // room — one person, machine seats — so the venue wall can broadcast it and
+  // a friend arriving before the start simply takes over a computer seat
+  // (joinRoom displaces the highest-seated bot). Starting stays the host's
+  // tap, exactly like any other room, so the code and link are readable first.
+  const doSoloRoom = useCallback(async () => {
+    if (busy || !game?.id) return
+    clearSoloIntent()
+    setBusy('soloroom'); setErr('')
+    try {
+      const n = Math.max(minBots, Math.min(maxBots, Number(botCount) || minBots))
+      const id = await createRoom({
+        tid,
+        gameId: game.id,
+        table,
+        player: me,
+        maxPlayers,
+        minPlayers,
+        initialState: {},
+        turnMs: Number(game?.turnMs) || 0,
+      })
+      await fillWithBots({ tid, roomId: id, playerId: me.id, count: n, lang })
+      setMySeat(0)
+      setRoomId(id)
+    } catch (e) {
+      setErr(roomErrorText(e))
+    } finally {
+      setBusy('')
+    }
+  }, [busy, game, tid, table, me, maxPlayers, minPlayers, botCount, minBots, maxBots, lang])
+
   // Carry the host's table into the invite so a friend who joins the game at
   // table 5 can also order to table 5.
   const link = roomId ? inviteUrl(tid, roomId, tenant?.slug, table?.qrToken) : ''
@@ -325,6 +431,26 @@ export default function RoomLobby({
     setTimeout(() => setCopied(false), 1800)
   }, [link])
 
+  // Tapping the big code chip copies the CODE itself (the thing you read out
+  // loud); the link row below owns copying the full URL. Presentation only.
+  const doCopyCode = useCallback(async () => {
+    if (!roomId) return
+    try {
+      await navigator.clipboard.writeText(roomId)
+    } catch (_) {
+      const ta = document.createElement('textarea')
+      ta.value = roomId
+      ta.style.position = 'fixed'
+      ta.style.opacity = '0'
+      document.body.appendChild(ta)
+      ta.select()
+      try { document.execCommand('copy') } catch (_) { /* nothing more we can do */ }
+      document.body.removeChild(ta)
+    }
+    setCodeCopied(true)
+    setTimeout(() => setCodeCopied(false), 1800)
+  }, [roomId])
+
   const doShare = useCallback(async () => {
     if (!link) return
     const title = gameName ? `${gameName} — ${tenant?.name || ''}`.trim() : (tenant?.name || 'RBT360')
@@ -344,6 +470,16 @@ export default function RoomLobby({
   const iAmHost = room?.hostId === me.id
   const now = Date.now()
 
+  // ---- computer-seat facts (drive the fill affordance and the seat rows) ----
+  const botsInRoom = players.filter(isBotPlayer)
+  const humansInRoom = seated - botsInRoom.length
+  const freeSeats = maxPlayers - seated
+  const gameHasBot = !!BOTS[game?.id]
+  // Exactly two people, exactly two machine seats, in a partnership game:
+  // the only shape where WHO partners WHOM is genuinely ambiguous.
+  const askSides = TEAM_GAMES.has(game?.id)
+    && maxPlayers === 4 && humansInRoom === 2 && freeSeats === 2 && botsInRoom.length === 0
+
   const waitingLine = useMemo(() => {
     if (!room || room.status !== 'lobby') return ''
     if (seated >= minPlayers) {
@@ -355,65 +491,146 @@ export default function RoomLobby({
   }, [room, seated, minPlayers, iAmHost, ar, t])
 
   // ===================== render =====================
+  // The game's own cover accent electrifies the house palette (room.css reads
+  // these two variables everywhere: chips, rings, glows). Palette shape is the
+  // cover spec from games.js: [deep, mid, hi, extra?].
+  const covPal = Array.isArray(game?.cover?.palette) ? game.cover.palette : []
+  const rootStyle = {
+    '--rm-acc': covPal[1] || undefined,
+    '--rm-acc-hi': covPal[2] || undefined,
+  }
+
   const header = (
-    <div className="rm-head">
-      <div className="rm-head-txt">
-        <h2 className="rm-title">{gameName || t('lobby')}</h2>
-        <p className="rm-sub">
-          {table?.label || table?.name
-            ? `${ar ? 'طاولة' : 'Table'} ${table.label || table.name}`
-            : (tenant?.name || '')}
-        </p>
-      </div>
+    <div className="rm-hero rm-fade">
+      <CoverPlate game={game} className="rm-hero-art" />
+      <span className="rm-hero-scrim" aria-hidden="true" />
       <button type="button" className="rm-x rm-press" onClick={onExit} aria-label={t('back')}>
         <Icon name="close" size={18} />
       </button>
+      <div className="rm-hero-body">
+        <h2 className="rm-title">{gameName || t('lobby')}</h2>
+        <div className="rm-hero-chips">
+          {game?.cover?.players ? (
+            <span className="rm-chip rm-chip-acc">
+              <Icon name="customers" size={12} />
+              <span className="rm-chip-num">{game.cover.players}</span>
+            </span>
+          ) : null}
+          {table?.label || table?.name ? (
+            <span className="rm-chip">
+              <Icon name="tables" size={12} />
+              {`${ar ? 'طاولة' : 'Table'} ${table.label || table.name}`}
+            </span>
+          ) : tenant?.name ? (
+            <span className="rm-chip">
+              <Icon name="store" size={12} />
+              {tenant.name}
+            </span>
+          ) : null}
+          {roomId ? (
+            <span className="rm-chip rm-chip-gold">
+              <span className={`rm-dot${room?.status === 'lobby' ? ' rm-dot-live' : ''}`} aria-hidden="true" />
+              <span className="rm-chip-num">{`${seated}/${maxPlayers}`}</span>
+            </span>
+          ) : null}
+        </div>
+      </div>
     </div>
   )
 
   // ---------- inside a room ----------
   if (roomId) {
     return (
-      <div className="rm-root">
+      <div className="rm-root" style={rootStyle}>
         {header}
-        <div className="rm-scroll">
+        <div className="rm-scroll" ref={scrollerRef}>
           <div className="rm-wrap">
             <div className="rm-card rm-fade">
-              <div className="rm-code-box">
+              <div className="rm-card-h">
+                <span className="rm-card-ico"><Icon name="share" size={15} /></span>
+                {t('inviteH')}
+              </div>
+              <button
+                type="button"
+                className={`rm-code-box rm-press${codeCopied ? ' rm-code-ok' : ''}`}
+                onClick={doCopyCode}
+                aria-label={codeCopied ? t('codeCopied') : t('codeTap')}
+              >
                 <span className="rm-code-label">{t('code')}</span>
                 <span className="rm-code">{roomId}</span>
-              </div>
-              <p className="rm-note">{t('codeHint')}</p>
-              <div className="rm-link-row">
-                <div className="rm-link" title={link}>{link}</div>
+                <span className="rm-code-hint">
+                  <Icon name={codeCopied ? 'check' : 'copy'} size={12} />
+                  {codeCopied ? t('codeCopied') : t('codeTap')}
+                </span>
+              </button>
+              <div className="rm-actions">
+                <button type="button" className="rm-btn rm-btn-primary rm-press" onClick={doShare}>
+                  <Icon name="share" size={17} />
+                  {t('share')}
+                </button>
                 <button
                   type="button"
-                  className={`rm-copy rm-press${copied ? ' rm-copy-ok' : ''}`}
+                  className={`rm-btn rm-press${copied ? ' rm-btn-ok' : ''}`}
                   onClick={doCopy}
                   aria-label={copied ? t('copied') : t('copy')}
                 >
-                  <Icon name={copied ? 'check' : 'copy'} size={18} />
+                  <Icon name={copied ? 'check' : 'copy'} size={17} />
+                  {copied ? t('copied') : t('copy')}
                 </button>
               </div>
-              <button type="button" className="rm-btn rm-btn-primary rm-press" onClick={doShare}>
-                <Icon name="share" size={17} />
-                {t('share')}
-              </button>
+              <div className="rm-link" title={link}>{link}</div>
+              <p className="rm-note">{t('codeHint')}</p>
             </div>
 
             <div className="rm-card rm-fade">
               <div className="rm-card-h">
-                <Icon name="customers" size={16} />
+                <span className="rm-card-ico"><Icon name="customers" size={15} /></span>
                 {t('seats')}
+                <span className="rm-count">{`${seated}/${maxPlayers}`}</span>
               </div>
-              <ul className="rm-seats">
+              <ul className={`rm-seats${maxPlayers === 2 ? ' rm-seats-2' : ''}`}>
                 {Array.from({ length: maxPlayers }).map((_, seat) => {
                   const p = players.find((x) => x.seat === seat)
                   if (!p) {
                     return (
                       <li className="rm-seat rm-seat-empty" key={`e${seat}`}>
-                        <span className="rm-avatar"><Icon name="user" size={15} /></span>
+                        <span className="rm-avatar"><Icon name="user" size={16} /></span>
                         <span className="rm-seat-body"><span className="rm-seat-name">{t('empty')}</span></span>
+                      </li>
+                    )
+                  }
+                  // A machine seat: labelled «الكمبيوتر», marked «آلي», never
+                  // dressed as a person. It has no presence of its own — the
+                  // meta line says where its moves actually come from. The
+                  // host can hand the chair back to people while still in the
+                  // lobby; once playing, seats are frozen like everyone's.
+                  if (isBotPlayer(p)) {
+                    return (
+                      <li className="rm-seat rm-seat-bot" key={p.id}>
+                        <span className="rm-avatar"><Icon name="grid" size={15} /></span>
+                        <span className="rm-seat-body">
+                          <span className="rm-seat-name">
+                            {p.name}
+                            <span className="rm-pill" style={{ marginInlineStart: 6 }}>{t('botTag')}</span>
+                          </span>
+                          <span className="rm-seat-meta">
+                            <span className="rm-dot rm-dot-live" aria-hidden="true" />
+                            {t('botSeatMeta')}
+                          </span>
+                        </span>
+                        {iAmHost && room?.status === 'lobby' ? (
+                          <button
+                            type="button"
+                            className="rm-press"
+                            onClick={() => doRemoveBot(p.seat)}
+                            disabled={busy !== ''}
+                            aria-label={t('botRemove')}
+                            title={t('botRemove')}
+                            style={{ background: 'none', border: 0, color: 'inherit', opacity: 0.72, cursor: 'pointer', padding: 4 }}
+                          >
+                            <Icon name="close" size={14} />
+                          </button>
+                        ) : null}
                       </li>
                     )
                   }
@@ -421,19 +638,74 @@ export default function RoomLobby({
                   const isMe = p.id === me.id
                   return (
                     <li className={`rm-seat${isMe ? ' rm-seat-me' : ''}`} key={p.id}>
+                      {room?.hostId === p.id ? (
+                        <span className="rm-crown" role="img" aria-label={t('host')} title={t('host')}>{CROWN}</span>
+                      ) : null}
                       <span className="rm-avatar">{(p.name || '?').trim().charAt(0) || '?'}</span>
                       <span className="rm-seat-body">
                         <span className="rm-seat-name">
                           {p.name}{isMe ? ` (${t('you')})` : ''}
                         </span>
-                        <span className="rm-seat-meta">{live ? t('live') : t('away')}</span>
+                        <span className="rm-seat-meta">
+                          <span className={`rm-dot${live ? ' rm-dot-live' : ' rm-dot-off'}`} aria-hidden="true" />
+                          {live ? t('live') : t('away')}
+                        </span>
                       </span>
-                      {room?.hostId === p.id ? <span className="rm-badge">{t('host')}</span> : null}
-                      <span className={`rm-dot${live ? ' rm-dot-live' : ' rm-dot-off'}`} aria-hidden="true" />
                     </li>
                   )
                 })}
               </ul>
+              {/* ---- «أكمل المقاعد بالكمبيوتر» --------------------------------
+                  Host-only while the room is still a lobby. Wist/Jackaroo with
+                  exactly two people and two empty chairs ask the one question
+                  that matters — who partners whom — and every other shape is
+                  one tap. The note is the honest limitation, stated up front:
+                  the machines play from the host's device. */}
+              <div className="rm-botfill-slot">
+                {iAmHost && room?.status === 'lobby' && gameHasBot && freeSeats > 0 ? (
+                  askSides ? (
+                    <>
+                      <p className="rm-note">{t('sideQ')}</p>
+                      <div className="rm-actions">
+                        <button
+                          type="button"
+                          className="rm-btn rm-btn-primary rm-press"
+                          onClick={() => doFill('foes')}
+                          disabled={busy !== ''}
+                        >
+                          <Icon name="grid" size={16} />
+                          {busy === 'fill' ? t('filling') : t('sideFoes')}
+                        </button>
+                        <button
+                          type="button"
+                          className="rm-btn rm-press"
+                          onClick={() => doFill('partners')}
+                          disabled={busy !== ''}
+                        >
+                          <Icon name="customers" size={16} />
+                          {busy === 'fill' ? t('filling') : t('sidePartners')}
+                        </button>
+                      </div>
+                      <p className="rm-note">{t('fillNote')}</p>
+                    </>
+                  ) : (
+                    <>
+                      <button
+                        type="button"
+                        className="rm-btn rm-press"
+                        onClick={() => doFill('auto')}
+                        disabled={busy !== ''}
+                      >
+                        <Icon name="grid" size={16} />
+                        {busy === 'fill' ? t('filling') : t('fillAll')}
+                      </button>
+                      <p className="rm-note">{t('fillNote')}</p>
+                    </>
+                  )
+                ) : botsInRoom.length > 0 ? (
+                  <p className="rm-note">{t('fillNote')}</p>
+                ) : null}
+              </div>
             </div>
 
             {rules ? (
@@ -484,16 +756,16 @@ export default function RoomLobby({
 
   // ---------- choosing how to play ----------
   return (
-    <div className="rm-root">
+    <div className="rm-root" style={rootStyle}>
       {header}
-      <div className="rm-scroll">
+      <div className="rm-scroll" ref={scrollerRef}>
         <div className="rm-wrap">
           {/* First on the screen on purpose: a guest sitting alone should not
               have to read past two "invite someone" options to find the one
               answer that works for them. */}
           <div className="rm-card rm-fade gbot-card">
             <div className="rm-card-h">
-              <Icon name="zap" size={16} />
+              <span className="rm-card-ico"><Icon name="zap" size={15} /></span>
               {t('soloH')}
             </div>
             <p className="gbot-note">{t('soloWhy')}</p>
@@ -552,11 +824,24 @@ export default function RoomLobby({
               <Icon name="play" size={17} />
               {t('soloGo')}
             </button>
+
+            {/* The same fight in a REAL room: broadcastable on the venue wall,
+                and a friend arriving before the start takes a computer seat. */}
+            <p className="gbot-note">{t('soloRoomWhy')}</p>
+            <button
+              type="button"
+              className="rm-btn rm-press"
+              onClick={doSoloRoom}
+              disabled={busy !== ''}
+            >
+              <Icon name="sparkles" size={16} />
+              {busy === 'soloroom' ? t('creating') : t('soloRoomGo')}
+            </button>
           </div>
 
           <div className="rm-card rm-fade">
             <div className="rm-card-h">
-              <Icon name="tables" size={16} />
+              <span className="rm-card-ico"><Icon name="tables" size={15} /></span>
               {t('openRooms')}
             </div>
             {!table?.id ? (
@@ -609,7 +894,7 @@ export default function RoomLobby({
 
           <div className="rm-card rm-fade">
             <div className="rm-card-h">
-              <Icon name="share" size={16} />
+              <span className="rm-card-ico"><Icon name="share" size={15} /></span>
               {t('invite')}
             </div>
             <p className="rm-note">
@@ -630,7 +915,7 @@ export default function RoomLobby({
 
           <div className="rm-card rm-fade">
             <div className="rm-card-h">
-              <Icon name="key" size={16} />
+              <span className="rm-card-ico"><Icon name="key" size={15} /></span>
               {t('byCode')}
             </div>
             <div className="rm-link-row">

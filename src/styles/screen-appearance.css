@@ -377,3 +377,116 @@ html[dir="ltr"] .sfx-screen { direction: ltr; }
   }
   .sfx-mk-confetti { opacity: 1; }
 }
+
+/* ===========================================================================
+   «البث المباشر» — BroadcastControl.jsx (admin) + the wall's rotation swap.
+   Appended after the sfx- editor block; nothing above is modified.
+   =========================================================================== */
+
+/* -- the «يُعرض الآن» status bar ------------------------------------------ */
+.bc-now { display: flex; align-items: center; gap: 14px; }
+.bc-now-dot { flex: none; width: 12px; height: 12px; border-radius: 50%; background: #9aa3ad; }
+.bc-now-dot.is-live { background: #e5484d; animation: bc-pulse 1.4s ease-in-out infinite; }
+.bc-now-dot.is-idle { background: var(--warning, #b98a2f); }
+.bc-now-txt { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+.bc-now-l { font-size: 11.5px; font-weight: 700; opacity: 0.6; letter-spacing: 0.02em; }
+.bc-now strong { font-size: 14.5px; line-height: 1.55; }
+.bc-now.is-live { border-inline-start: 3px solid #e5484d; }
+@keyframes bc-pulse { 0%, 100% { opacity: 0.45; transform: scale(0.88); } 50% { opacity: 1; transform: scale(1); } }
+
+/* -- mode cards ------------------------------------------------------------ */
+.bc-modes { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 10px; margin-top: 10px; }
+.bc-mode {
+  position: relative; display: flex; flex-direction: column; align-items: flex-start; gap: 6px;
+  text-align: start; padding: 14px 14px 12px; border-radius: 14px; cursor: pointer;
+  background: var(--surface-2, rgba(127, 127, 127, 0.06));
+  border: 1.5px solid var(--border, rgba(127, 127, 127, 0.25));
+  color: inherit; font: inherit;
+  transition: transform 160ms ease, border-color 160ms ease, opacity 160ms ease;
+}
+.bc-mode:hover:not(:disabled) { transform: translateY(-2px); }
+.bc-mode:disabled { cursor: default; opacity: 0.6; }
+.bc-mode strong { font-size: 14.5px; }
+.bc-mode-d { font-size: 12px; line-height: 1.6; opacity: 0.72; }
+.bc-mode-ic {
+  display: inline-flex; align-items: center; justify-content: center;
+  width: 38px; height: 38px; border-radius: 11px; color: #fff;
+  background: var(--bc-tone, #9aa3ad);
+}
+.bc-mode.is-off    { --bc-tone: #6b7280; }
+.bc-mode.is-gold   { --bc-tone: #b98a2f; }
+.bc-mode.is-live   { --bc-tone: #0e7490; }
+.bc-mode.is-pin    { --bc-tone: #7c3aed; }
+.bc-mode.active { border-color: var(--bc-tone); box-shadow: 0 0 0 1px var(--bc-tone) inset, 0 8px 22px -14px var(--bc-tone); }
+.bc-mode-on {
+  display: inline-flex; align-items: center; gap: 5px;
+  font-size: 11px; font-weight: 800; color: #fff; background: var(--bc-tone);
+  border-radius: 999px; padding: 3px 10px;
+}
+
+/* -- pinned-room picker ------------------------------------------------------ */
+.bc-rooms { display: flex; flex-direction: column; gap: 8px; margin-top: 8px; }
+.bc-room {
+  display: grid; grid-template-columns: auto auto 1fr auto; align-items: center; gap: 10px;
+  width: 100%; text-align: start; padding: 11px 14px; border-radius: 12px; cursor: pointer;
+  background: var(--surface-2, rgba(127, 127, 127, 0.06));
+  border: 1.5px solid var(--border, rgba(127, 127, 127, 0.25));
+  color: inherit; font: inherit;
+  transition: transform 160ms ease, border-color 160ms ease;
+}
+.bc-room:hover:not(:disabled) { transform: translateY(-1px); }
+.bc-room:disabled { cursor: default; opacity: 0.6; }
+.bc-room.active { border-color: #7c3aed; box-shadow: 0 0 0 1px #7c3aed inset; }
+.bc-room-live { width: 9px; height: 9px; border-radius: 50%; background: #e5484d; animation: bc-pulse 1.4s ease-in-out infinite; }
+.bc-room-g { font-weight: 800; font-size: 13.5px; white-space: nowrap; }
+.bc-room-p { font-size: 13px; opacity: 0.85; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.bc-room-meta { grid-column: 2 / span 2; font-size: 11.5px; opacity: 0.55; }
+.bc-room-pick {
+  grid-row: 1 / span 2; justify-self: end; align-self: center;
+  font-size: 11.5px; font-weight: 800; border-radius: 999px; padding: 5px 12px;
+  border: 1.5px solid var(--border, rgba(127, 127, 127, 0.3));
+}
+.bc-room.active .bc-room-pick { background: #7c3aed; border-color: #7c3aed; color: #fff; }
+
+/* -- screens picker ---------------------------------------------------------- */
+.bc-allscreens, .bc-screen {
+  display: flex; align-items: center; gap: 10px; padding: 10px 12px; border-radius: 11px;
+  cursor: pointer; border: 1.5px solid transparent;
+}
+.bc-allscreens { margin-top: 6px; font-size: 13.5px; }
+.bc-allscreens.is-off, .bc-screen.is-locked { cursor: default; }
+.bc-allscreens input, .bc-screen input { position: absolute; opacity: 0; pointer-events: none; }
+.bc-check {
+  flex: none; display: inline-flex; align-items: center; justify-content: center;
+  width: 20px; height: 20px; border-radius: 7px; color: transparent;
+  border: 1.5px solid var(--border, rgba(127, 127, 127, 0.4));
+  transition: background 140ms ease, border-color 140ms ease, color 140ms ease;
+}
+.bc-allscreens input:checked + .bc-check,
+.bc-screen input:checked + .bc-check { background: #0e7490; border-color: #0e7490; color: #fff; }
+.bc-screens { display: flex; flex-direction: column; gap: 4px; margin-top: 4px; }
+.bc-screen { background: var(--surface-2, rgba(127, 127, 127, 0.05)); }
+.bc-screen.active { border-color: rgba(14, 116, 144, 0.45); }
+.bc-screen.is-locked { opacity: 0.75; }
+.bc-screen-n { font-weight: 700; font-size: 13.5px; }
+.bc-screen-c { font-size: 11.5px; opacity: 0.55; }
+.bc-screen-s { margin-inline-start: auto; font-size: 11.5px; font-weight: 700; opacity: 0.55; }
+.bc-screen-s.is-on { color: var(--success, #2e7d52); opacity: 1; }
+
+/* -- the wall's smooth swap when the ~45s rotation switches tables -----------
+   OPACITY ONLY, deliberately: .tvg-root inside is position:fixed, and any
+   transform (even an interpolated identity matrix, which `animation` keeps
+   computed for as long as it applies) would turn this wrapper into the fixed
+   child's containing block and collapse the board to a 0-height strip. The
+   wrapper is itself fixed full-viewport so the fade covers the whole wall. */
+.scrb-swap { position: fixed; inset: 0; z-index: 40; animation: scrb-swap-in 700ms ease both; }
+@keyframes scrb-swap-in {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .bc-now-dot.is-live, .bc-room-live { animation: none; opacity: 1; }
+  .bc-mode, .bc-room { transition: none; }
+  .scrb-swap { animation: none; }
+}

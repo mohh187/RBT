@@ -30,6 +30,7 @@ import PlayersPanel from '../../components/gamesadmin/PlayersPanel.jsx'
 import LiveRoomsPanel from '../../components/gamesadmin/LiveRoomsPanel.jsx'
 import RewardsPanel from '../../components/gamesadmin/RewardsPanel.jsx'
 import ScreenAppearance from '../../components/gamesadmin/ScreenAppearance.jsx'
+import BroadcastControl from '../../components/gamesadmin/BroadcastControl.jsx'
 import {
   PERIODS, periodRange, fetchPlays, fetchProfiles, fetchScores, fetchClaims,
   fmtInt, dayStamp,
@@ -42,6 +43,7 @@ const TABS = [
   { key: 'cups', icon: 'award', ar: 'البطولات', en: 'Tournaments', period: false },
   { key: 'players', icon: 'customers', ar: 'اللاعبون', en: 'Players', period: true },
   { key: 'rooms', icon: 'shapes', ar: 'الغرف المباشرة', en: 'Live rooms', period: false },
+  { key: 'broadcast', icon: 'wifi', ar: 'البث المباشر', en: 'Live broadcast', period: false },
   { key: 'rewards', icon: 'offers', ar: 'الجوائز', en: 'Rewards', period: true },
   { key: 'screen', icon: 'palette', ar: 'مظهر شاشة العرض', en: 'Screen look', period: false },
 ]
@@ -120,6 +122,20 @@ export default function GamesHub() {
       updateTenantLocal({ gameRewards })
       toast.success(ar ? 'حُفظت الجوائز' : 'Saved')
     } finally { setBusy(false) }
+  }, [canEdit, tenantId, updateTenantLocal, toast, ar])
+
+  // «البث المباشر» — writes tenant.screenBroadcast (shape documented in
+  // lib/spectate.js, normalizeScreenBroadcast). The signage player reads the
+  // same field live, so a save flips the wall within a snapshot.
+  const saveScreenBroadcast = useCallback(async (screenBroadcast) => {
+    if (!canEdit) throw new Error(ar ? 'لا تملك صلاحية التعديل' : 'No permission')
+    try {
+      await updateTenant(tenantId, { screenBroadcast })
+      updateTenantLocal({ screenBroadcast })
+    } catch (e) {
+      toast.error(ar ? 'تعذّر الحفظ' : 'Could not save')
+      throw e
+    }
   }, [canEdit, tenantId, updateTenantLocal, toast, ar])
 
   // «مظهر شاشة العرض» — writes tenant.screenFx (see ScreenAppearance.jsx for the
@@ -288,6 +304,13 @@ export default function GamesHub() {
 
       {tab === 'rooms' && (
         <LiveRoomsPanel ar={ar} tenantId={tenantId} canEdit={canFloor} />
+      )}
+
+      {tab === 'broadcast' && (
+        <BroadcastControl
+          ar={ar} tenantId={tenantId} tenant={tenant}
+          canEdit={canEdit} onSave={saveScreenBroadcast}
+        />
       )}
 
       {tab === 'rewards' && (data || err) && (

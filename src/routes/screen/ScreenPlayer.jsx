@@ -9,7 +9,9 @@ import { watchRoom } from '../../lib/gameRoom.js'
 import {
   watchSpectatableMatch, spectatePhase, SPECTATE_RESULT_HOLD_MS,
   watchLiveGameRooms, watchOpenGameRooms, pickSpectateRoom, openRoomInvites, roomPhase,
+  normalizeScreenBroadcast, broadcastAllowsScreen, pickBroadcastRoom, watchTenantForScreen,
 } from '../../lib/spectate.js'
+import '../../styles/screen-appearance.css'
 import {
   watchLiveTournament, watchTournamentEntries, tournamentWinners, tournamentPrize,
 } from '../../lib/socialPlay.js'
@@ -100,13 +102,22 @@ export default function ScreenPlayer() {
   const tid = screen?.tid
   useEffect(() => {
     if (!tid) return
-    getTenant(tid).then(setVenue).catch(() => {})
+    // one-shot first paint (fast), then the live watcher below keeps it fresh
+    getTenant(tid).then((t) => { if (t) setVenue((v) => v || t) }).catch(() => {})
     const u1 = watchItems(tid, setItems)
     const u2 = watchCategories(tid, setCats)
     const u3 = watchReadyBoard(tid, setReadyMap)
     const u4 = watchOffers(tid, setOffers)
     return () => { u1(); u2(); u3(); u4() }
   }, [tid])
+
+  // LIVE tenant watcher: the wall must obey a broadcast-mode flip (and a
+  // screen-appearance change) the moment the manager saves it — a one-shot
+  // getTenant froze tenant.screenBroadcast/screenFx until the TV reloaded.
+  useEffect(() => {
+    if (!tid) return undefined
+    return watchTenantForScreen(tid, (t) => { if (t) setVenue(t) })
+  }, [tid, subN])
 
   const [readyMap, setReadyMap] = useState({})
   const [offers, setOffers] = useState([])
@@ -296,6 +307,18 @@ export default function ScreenPlayer() {
   // touching the venue profile (venue stays the fallback).
   const venueEff = useMemo(() => (screen?.brand && venue ? { ...venue, brandColor: screen.brand, themeColor: screen.brand } : venue), [venue, screen?.brand])
 
+  // ---- BROADCAST CONTROL (tenant.screenBroadcast) -------------------------
+  // The manager decides WHAT takes a wall over (nothing / tournaments only /
+  // any live table / one pinned room) and WHICH paired screens it may take.
+  // Absent field → mode 'tournaments' + all screens, i.e. exactly the behavior
+  // this player had before the switch existed. See lib/spectate.js.
+  const sb = useMemo(() => normalizeScreenBroadcast(venue?.screenBroadcast), [venue])
+  // May THIS screen (its pairing code is the doc id) ever be taken over?
+  const bcastHere = sb.mode !== 'off' && broadcastAllowsScreen(sb, code)
+  // Matches (public table-versus-table challenges) take the wall in the two
+  // open modes; 'pinned' shows exactly the chosen room and nothing else.
+  const bcastMatches = bcastHere && (sb.mode === 'tournaments' || sb.mode === 'all')
+
   // ---- LIVE VENUE SPECTATOR SCREEN --------------------------------------
   // The signage runs the normal menu/offers playlist all day and AUTOMATICALLY
   // cuts to a table-versus-table board the instant two tables start a live
@@ -304,9 +327,9 @@ export default function ScreenPlayer() {
   // lib/spectate.js. `subN` re-subscribes on reconnect, like watchScreen above.
   const [specMatch, setSpecMatch] = useState(null)
   useEffect(() => {
-    if (!tid) { setSpecMatch(null); return undefined }
+    if (!tid || !bcastMatches) { setSpecMatch(null); return undefined }
     return watchSpectatableMatch(tid, ({ match }) => setSpecMatch(match || null))
-  }, [tid, subN])
+  }, [tid, subN, bcastMatches])
 
   const [specRoom, setSpecRoom] = useState(null)
   const specRoomId = specMatch?.roomId || ''
@@ -396,47 +419,85 @@ export default function ScreenPlayer() {
     }, cupMode)
   }, [tid, cupId, cupMode, cup?.finalizedAt, subN])
 
-  // ---- LIVE ROOMS (tournament nights only) --------------------------------
+  // ---- LIVE ROOMS ----------------------------------------------------------
   // Most rounds played in a cafe are plain rooms with no match document behind
-  // them, so a screen that watched only `matches` sat on the menu playlist
-  // through an entire tournament. These two listeners are opened ONLY while a
-  // tournament is running — that is the consent gate, and it also means a venue
-  // not running one pays for no extra reads at all.
+  // them. The two list listeners open only when the active broadcast mode can
+  // actually use them: mode 'all' always wants the live list, mode
+  // 'tournaments' only while a tournament is running (the classic consent
+  // gate). Modes 'off' and 'pinned' never pay for the list reads at all —
+  // 'pinned' watches its one chosen room directly below.
+  const roomsWanted = bcastHere && (sb.mode === 'all' || (sb.mode === 'tournaments' && cupRunning))
   const [liveRooms, setLiveRooms] = useState([])
   const [lobbyRooms, setLobbyRooms] = useState([])
   useEffect(() => {
-    if (!tid || !cupRunning) { setLiveRooms([]); setLobbyRooms([]); return undefined }
+    if (!tid || !roomsWanted) { setLiveRooms([]); setLobbyRooms([]); return undefined }
     const u1 = watchLiveGameRooms(tid, ({ rooms }) => setLiveRooms(rooms || []))
     const u2 = watchOpenGameRooms(tid, ({ rooms }) => setLobbyRooms(rooms || []))
     return () => { u1(); u2() }
-  }, [tid, cupRunning, subN])
+  }, [tid, roomsWanted, subN])
 
-  // The one live room to show, and its own end-of-round hold. A room is only
-  // considered while no table-versus-table match is already on screen, because
-  // a public challenge outranks a private table.
-  const cupRoom = useMemo(
-    () => (cupRunning ? pickSpectateRoom(liveRooms, Date.now()) : null),
-    [cupRunning, liveRooms, beat],
-  )
-  const roomSpec = useMemo(() => {
-    if (spec.on || !cupRoom) return { on: false, mode: '' }
-    const phase = roomPhase(cupRoom, Date.now())
+  // The room the wall WANTS right now (before the celebration hold below):
+  //   'pinned'      exactly the manager's chosen room — nothing else, ever
+  //   'all'         rotate across every live table (~45s a table, friendly
+  //                 matches included — no tournament required)
+  //   'tournaments' the most recently touched live table (today's behavior)
+  const targetRoomId = useMemo(() => {
+    if (!bcastHere) return ''
+    if (sb.mode === 'pinned') return sb.pinnedRoomId || ''
+    if (!roomsWanted) return ''
+    const r = sb.mode === 'all' ? pickBroadcastRoom(liveRooms, Date.now()) : pickSpectateRoom(liveRooms, Date.now())
+    return r ? String(r.roomId || r.id || '') : ''
+  }, [bcastHere, roomsWanted, sb.mode, sb.pinnedRoomId, liveRooms, beat])
+
+  // The wall room is WATCHED DIRECTLY (watchRoom), not read off the
+  // status-filtered list: the 'playing' query drops a room the instant it
+  // ends, which is exactly the moment LiveMatchScreen needs the final position
+  // for its win celebration. Direct watching also serves 'pinned', whose room
+  // (a solo human-vs-computer table included) may not be in any list yet.
+  const [wallId, setWallId] = useState('')
+  const [wallRoom, setWallRoom] = useState(null)
+  useEffect(() => {
+    setWallRoom(null)
+    if (!tid || !wallId) return undefined
+    let alive = true
+    const stop = watchRoom(tid, wallId, (r) => { if (alive) setWallRoom(r || null) })
+    return () => { alive = false; stop?.() }
+  }, [tid, wallId, subN])
+
+  // Steering: adopt the wanted room — EXCEPT while a just-finished board is in
+  // its celebration hold, which the rotation must not swallow. A pin change is
+  // the manager's explicit order and cuts straight through the hold.
+  useEffect(() => {
+    if (targetRoomId === wallId) return
+    if (sb.mode !== 'pinned' && wallRoom && wallRoom.status === 'ended') {
+      const at = Number(wallRoom.endedAt) || 0
+      if (at && Date.now() - at < SPECTATE_RESULT_HOLD_MS) return
+    }
+    setWallId(targetRoomId)
+  }, [targetRoomId, wallId, wallRoom, sb.mode, beat]) // eslint-disable-line react-hooks/exhaustive-deps
+
+  // Same takeover vocabulary as the match path: only 'live' and a brief
+  // 'ended' hold may hold the wall; 'waiting'/'stale'/'none' release it.
+  const wallSpec = useMemo(() => {
+    if (!bcastHere || !wallRoom) return { on: false, mode: '' }
+    const phase = roomPhase(wallRoom, Date.now())
     if (phase === 'live') return { on: true, mode: 'live' }
     if (phase === 'ended') {
-      const at = Number(cupRoom.endedAt) || 0
+      const at = Number(wallRoom.endedAt) || 0
       if (at && Date.now() - at < SPECTATE_RESULT_HOLD_MS) return { on: true, mode: 'ended' }
     }
     return { on: false, mode: '' }
-  }, [spec.on, cupRoom, beat])
+  }, [bcastHere, wallRoom, beat])
 
-  // Open rooms whose CODE the wall may print as an invitation. Empty unless a
-  // tournament is running (see above), and already trimmed to a public shape.
+  // Open rooms whose CODE the wall may print as an invitation. Empty unless
+  // the venue consented (a running tournament, or the manager chose mode
+  // 'all'), and already trimmed to a public shape.
   // Recomputed on the 30s `tick`, not the 1s `beat`: this list builds fresh
   // objects, and rebuilding it every second would re-render the join panel 60
   // times a minute on a weak TV box for a code that changes maybe twice an hour.
   const invites = useMemo(
-    () => (cupRunning ? openRoomInvites(lobbyRooms, Date.now(), 3) : []),
-    [cupRunning, lobbyRooms, tick],
+    () => (roomsWanted ? openRoomInvites(lobbyRooms, Date.now(), 3) : []),
+    [roomsWanted, lobbyRooms, tick],
   )
 
   // Does this venue run table games at all? `tenant.games` missing = never
@@ -517,8 +578,10 @@ export default function ScreenPlayer() {
   // ---- LIVE VENUE SPECTATOR SCREEN takeover ----
   // Overrides the playlist while a match is live (or just finished). Placed
   // before the empty-playlist and player returns so it can cut in even when the
-  // venue configured no signage content at all.
-  if (spec.on && specMatch) {
+  // venue configured no signage content at all. specMatch is only ever set
+  // while bcastMatches holds (mode 'tournaments'/'all' + this screen allowed),
+  // and the render gate repeats that so a mode flip cuts the wall immediately.
+  if (bcastMatches && spec.on && specMatch) {
     return (
       <LiveMatchScreen
         match={specMatch}
@@ -530,20 +593,24 @@ export default function ScreenPlayer() {
     )
   }
 
-  // ---- LIVE ROOM takeover (tournament nights) ----
-  // The same frame, for the far more common case of a table that simply started
-  // a game without challenging anybody. Only ever reached while a tournament is
-  // running — see lib/spectate.js, SAFETY LIMIT 3 — and only for the games
-  // certified to render a seatless viewer without showing anyone's hand.
-  if (roomSpec.on && cupRoom) {
+  // ---- LIVE ROOM takeover (friendly tables, tournament nights, pinned) ----
+  // The same frame, for a table that simply started a game without challenging
+  // anybody: any live table in mode 'all', the manager's chosen table in mode
+  // 'pinned', or — mode 'tournaments' — only while a tournament is running.
+  // Only games certified to render a seatless viewer ever reach here (see
+  // lib/spectate.js), and the keyed wrapper gives the ~45s rotation between
+  // several live tables its smooth swap.
+  if (wallSpec.on && wallRoom) {
     return (
-      <LiveMatchScreen
-        match={null}
-        room={cupRoom}
-        venue={venueEff}
-        mode={roomSpec.mode}
-        context={cupBundle.live ? (cupBundle.live.name || 'بطولة جارية') : ''}
-      />
+      <div key={wallId} className="scrb-swap">
+        <LiveMatchScreen
+          match={null}
+          room={wallRoom}
+          venue={venueEff}
+          mode={wallSpec.mode}
+          context={cupBundle.live ? (cupBundle.live.name || 'بطولة جارية') : ''}
+        />
+      </div>
     )
   }
 

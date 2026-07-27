@@ -7,7 +7,9 @@
 //   roomId, gameId, tableId|null, tableLabel,
 //   status: 'lobby' | 'playing' | 'ended',
 //   hostId,                                   // deviceId of the creator
-//   players: [ { id, name, phone, seat, joinedAt, connected, lastSeenAt, score } ],
+//   players: [ { id, name, seat, joinedAt, connected, lastSeenAt, score } ],
+//             // a COMPUTER seat adds bot: true with id 'bot-<seat+1>' — see
+//             // fillWithBots below; the host's device moves it (botTurnSeat)
 //   maxPlayers, minPlayers,
 //   turn: { seat, startedAt, deadlineAt|null },
 //   state: { ... },                           // owned by each game's reducer
@@ -64,6 +66,10 @@ import {
 } from 'firebase/firestore'
 import { db, firebaseReady } from './firebase.js'
 import { publicBaseUrl } from './qr.js'
+// Bot identity + naming only — gameBots imports nothing, so no cycle. A bot
+// seat in a ROOM is an ordinary players[] entry marked bot:true; who MOVES it
+// is the host's device (see fillWithBots / botTurnSeat / applyMove's actAsBot).
+import { BOT_ID_PREFIX, botLabel, isBotPlayer } from './gameBots.js'
 
 // ---------- tunables ----------
 export const MAX_MOVES = 200
@@ -254,6 +260,10 @@ function nextFreeSeat(players, maxPlayers) {
 // ---------- presence helpers (pure — safe to call while rendering) ----------
 export function isConnected(player, now = Date.now()) {
   if (!player) return false
+  // A computer seat has no phone to lock: it is present for as long as the
+  // room lives. Its MOVES pause with the host (they run on the host's device),
+  // but presence is about the seat, and the seat never walks away.
+  if (isBotPlayer(player)) return true
   if (player.connected === false) return false
   const seen = Number(player.lastSeenAt) || 0
   return now - seen < DISCONNECT_MS
@@ -396,8 +406,22 @@ export async function joinRoom({ tid, roomId, player } = {}) {
     // --- new player ---
     if (room.status === 'ended') fail('ended')
     if (room.status === 'playing') fail('started')
-    const seat = nextFreeSeat(players, room.maxPlayers || MAX_SEATS)
-    if (seat < 0 || players.length >= (room.maxPlayers || MAX_SEATS)) fail('full')
+    let seat = nextFreeSeat(players, room.maxPlayers || MAX_SEATS)
+    if (seat < 0 || players.length >= (room.maxPlayers || MAX_SEATS)) {
+      // Every chair is taken — but a chair held by a computer player yields to
+      // a person (only reachable in the lobby: 'playing' failed above). The
+      // HIGHEST-seated bot gives way, so a partnership laid out low-first
+      // (humans 0+2, bots 1+3 — see fillWithBots) keeps its shape as friends
+      // trickle in, and the newcomer takes exactly the freed seat.
+      let bi = -1
+      for (let i = 0; i < players.length; i += 1) {
+        if (!isBotPlayer(players[i])) continue
+        if (bi < 0 || (Number(players[i].seat) || 0) > (Number(players[bi].seat) || 0)) bi = i
+      }
+      if (bi < 0) fail('full')
+      seat = players[bi].seat
+      players.splice(bi, 1)
+    }
 
     players.push(normalizePlayer({ ...player, id: pid, joinedAt: now }, seat))
     tx.update(ref, { players, updatedAt: now })
@@ -475,8 +499,18 @@ export async function startGame({ tid, roomId, playerId, initialState, turnMs, f
 //                                    or pass null to clear it (free-for-all)
 //   scores  { [seat]: number }     — folded into players[].score
 //   status  'ended'                — stamps endedAt for you
+//
+// `actAsBot` — the ONE extension for computer seats. Normally `seat` is the
+// caller's own seat; with actAsBot set to the caller's playerId, the caller is
+// claiming «I am the host, moving the computer seat whose turn it is». The
+// claim is verified INSIDE the transaction, never trusted: the room's hostId
+// must equal actAsBot, and the player entry occupying `seat` must be a bot
+// (bot === true or an id starting 'bot-'). Turn gate, reducer validation and
+// the move log stay exactly as for a human move — the logged entry carries the
+// bot's seat, so the wall relay replays bot moves like anyone else's. Absent
+// or null, behaviour is byte-identical to before this parameter existed.
 // ===========================================================================
-export async function applyMove({ tid, roomId, seat, move, reduce, allowOutOfTurn = false } = {}) {
+export async function applyMove({ tid, roomId, seat, move, reduce, allowOutOfTurn = false, actAsBot = null } = {}) {
   if (!firebaseReady || !tid || !roomId) fail('unavailable')
   if (typeof reduce !== 'function') fail('unavailable')
   const mySeat = Number(seat)
@@ -493,6 +527,12 @@ export async function applyMove({ tid, roomId, seat, move, reduce, allowOutOfTur
     const players = Array.isArray(room.players) ? room.players : []
     const me = players.find((p) => p.seat === mySeat)
     if (!me) fail('not-seated')
+
+    // Computer seat being driven by the host — verify the claim (see header).
+    if (actAsBot !== null && actAsBot !== undefined) {
+      if (String(actAsBot) !== String(room.hostId || '')) fail('not-host')
+      if (!isBotPlayer(me)) fail('not-seated')
+    }
 
     // Turn gate. `turn.seat === null` is a game that opted out of turns
     // (free-for-all); otherwise the seat must match. A move flagged
@@ -700,18 +740,157 @@ export async function leaveRoom({ tid, roomId, playerId } = {}) {
       }
 
       const rest = players.filter((p) => p.id !== playerId)
-      if (rest.length === 0) {
+      // Computer seats neither keep a room alive nor host one: their moves run
+      // on the HOST's device, so a room whose last PERSON walks out ends, and
+      // the host badge only ever passes to another person.
+      const people = rest.filter((p) => !isBotPlayer(p))
+      if (people.length === 0) {
         tx.update(ref, { players: rest, status: 'ended', endedAt: now, updatedAt: now })
         return true
       }
       const patch = { players: rest, updatedAt: now }
-      if (room.hostId === playerId) patch.hostId = rest[0].id
+      if (room.hostId === playerId) patch.hostId = people[0].id
       tx.update(ref, patch)
       return true
     })
   } catch (err) {
     return false
   }
+}
+
+// ===========================================================================
+// COMPUTER SEATS IN A REAL ROOM — «أكمل المقاعد بالكمبيوتر»
+//
+// Two people who want a partnership game and cannot find four, three waiting
+// on a fourth who never comes, or one person who wants the wall screen to
+// carry their match: the HOST fills the empty seats with computer players.
+// A bot seat is an ordinary players[] entry — same shape, same seat
+// arithmetic, same size-4 rules cap — marked `bot: true`, id `bot-<seat+1>`,
+// named by botLabel and NEVER presented as a person.
+//
+// WHO MOVES THEM: the host's device. When room.turn.seat is a bot seat, the
+// host's client computes botMoveFor(...) and submits it through applyMove
+// with `actAsBot` (verified in the transaction: caller is host, seat is a
+// bot). Every bot move passes the same reducer as a human's. If the host
+// disconnects, the bots simply PAUSE until the host returns — an honest
+// limitation the lobby states out loud.
+//
+// PLACEMENT: partnership games (Wist/Jackaroo) pair seats 0+2 against 1+3.
+// With exactly two people and two machine seats the lobby asks who partners
+// whom («الكمبيوتر معنا أم ضدنا؟»):
+//   arrange 'foes'      people on 0+2 (partners), bots on 1+3 (the other side)
+//   arrange 'partners'  people on 0+1 (opponents), each with a bot partner
+// Any other shape fills the LOWEST free seats and moves nobody's chair.
+// startGame's contiguous reseat sorts by seat, so the laid-out ORDER — which
+// is what decides the partnerships — survives the start untouched.
+// ===========================================================================
+export async function fillWithBots({ tid, roomId, playerId, count = null, arrange = 'auto', lang = 'ar' } = {}) {
+  if (!firebaseReady || !tid || !roomId || !playerId) fail('unavailable')
+
+  return withRetry(() => runTransaction(db, async (tx) => {
+    const ref = roomRef(tid, roomId)
+    const snap = await tx.get(ref)
+    if (!snap.exists()) fail('not-found')
+    const room = snap.data()
+    if (room.status === 'ended') fail('ended')
+    if (room.status !== 'lobby') fail('started')
+    if (String(room.hostId || '') !== String(playerId)) fail('not-host')
+
+    const max = Math.max(2, Math.min(MAX_SEATS, Number(room.maxPlayers) || MAX_SEATS))
+    const players = (Array.isArray(room.players) ? room.players : [])
+      .slice()
+      .sort((a, b) => (Number(a.seat) || 0) - (Number(b.seat) || 0))
+    const free = max - players.length
+    if (free <= 0) fail('full')
+    const n = count === null || count === undefined
+      ? free
+      : Math.max(1, Math.min(free, Math.trunc(Number(count)) || 0))
+
+    const now = Date.now()
+    const mkBot = (seat) => ({
+      id: `${BOT_ID_PREFIX}${seat + 1}`, // unique per seat, stable across refills
+      name: '',                          // named below, in seat order
+      bot: true,
+      seat,
+      joinedAt: now,
+      connected: true,
+      lastSeenAt: now,
+      score: 0,
+    })
+
+    const humans = players.filter((p) => !isBotPlayer(p))
+    const haveBots = players.length - humans.length
+    let next
+    if ((arrange === 'foes' || arrange === 'partners')
+      && max === 4 && humans.length === 2 && haveBots === 0 && n === 2) {
+      const plan = arrange === 'foes'
+        ? [humans[0], null, humans[1], null]  // the two people partner on 0+2
+        : [humans[0], humans[1], null, null]  // the two people face each other
+      next = plan.map((p, seat) => (p ? { ...p, seat } : mkBot(seat)))
+    } else {
+      const taken = new Set(players.map((p) => Number(p.seat)))
+      next = players.slice()
+      let added = 0
+      for (let s = 0; s < max && added < n; s += 1) {
+        if (taken.has(s)) continue
+        next.push(mkBot(s))
+        added += 1
+      }
+      next.sort((a, b) => (Number(a.seat) || 0) - (Number(b.seat) || 0))
+    }
+
+    // «الكمبيوتر 1» is always the lowest bot seat, however the fill happened.
+    const total = next.filter(isBotPlayer).length
+    let bi = 0
+    next = next.map((p) => (isBotPlayer(p) ? { ...p, name: botLabel(bi++, total, lang) } : p))
+
+    tx.update(ref, { players: next, updatedAt: now })
+    return { added: next.length - players.length, players: next }
+  }))
+}
+
+// The host changed their mind, or a friend showed up in person: remove one
+// computer seat. Lobby-only and host-only; removing a PERSON is leaveRoom's
+// job and stays theirs.
+export async function removeBot({ tid, roomId, playerId, seat, lang = 'ar' } = {}) {
+  if (!firebaseReady || !tid || !roomId || !playerId) fail('unavailable')
+  const s = Number(seat)
+
+  return withRetry(() => runTransaction(db, async (tx) => {
+    const ref = roomRef(tid, roomId)
+    const snap = await tx.get(ref)
+    if (!snap.exists()) fail('not-found')
+    const room = snap.data()
+    if (room.status === 'ended') fail('ended')
+    if (room.status !== 'lobby') fail('started')
+    if (String(room.hostId || '') !== String(playerId)) fail('not-host')
+
+    const players = Array.isArray(room.players) ? room.players : []
+    const gone = players.find((p) => Number(p.seat) === s && isBotPlayer(p))
+    if (!gone) return { removed: false }
+
+    const rest = players.filter((p) => p !== gone)
+    const total = rest.filter(isBotPlayer).length
+    let bi = 0
+    const next = rest.map((p) => (isBotPlayer(p) ? { ...p, name: botLabel(bi++, total, lang) } : p))
+    const now = Date.now()
+    tx.update(ref, { players: next, updatedAt: now })
+    return { removed: true }
+  }))
+}
+
+// The seat the HOST's device must play for right now, or -1. Pure — safe to
+// call while rendering. This is the single gate the host-side bot driver
+// keys off: the room is playing, the turn seat is occupied by a computer
+// player, and I am the host. Everyone else always gets -1, so only one
+// device in the room ever schedules a bot move.
+export function botTurnSeat(room, playerId) {
+  if (!room || room.status !== 'playing') return -1
+  if (!playerId || String(room.hostId || '') !== String(playerId)) return -1
+  const s = room.turn?.seat
+  if (s === null || s === undefined) return -1
+  const p = (room.players || []).find((x) => x.seat === s)
+  return p && isBotPlayer(p) ? Number(s) : -1
 }
 
 // ===========================================================================

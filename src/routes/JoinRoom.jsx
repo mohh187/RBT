@@ -20,6 +20,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useNavigate, useParams, useSearchParams } from 'react-router-dom'
 import Icon from '../components/Icon.jsx'
+import CoverPlate from '../components/games/CoverPlate.jsx'
 import { getTenant, registerCustomer } from '../lib/db.js'
 import { getLocalCustomer, setLocalCustomer } from '../lib/customer.js'
 import { deviceKey } from '../lib/device.js'
@@ -87,6 +88,20 @@ export default function JoinRoom() {
   const game = room?.gameId ? gameById(room.gameId) : null
   const slug = tenant?.slug || slugHint
   const menuHref = slug ? `/m/${slug}` : '/'
+
+  // The host by name turns a bare link into a personal invitation.
+  const hostName = useMemo(() => {
+    const h = (room?.players || []).find((p) => p.id === room?.hostId)
+    return String(h?.name || '').trim()
+  }, [room])
+
+  // The game's cover accent (games.js cover spec: [deep, mid, hi, extra?])
+  // electrifies the page's majlis palette — room.css reads these variables.
+  const covPal = Array.isArray(game?.cover?.palette) ? game.cover.palette : []
+  const rootStyle = {
+    '--rm-acc': covPal[1] || undefined,
+    '--rm-acc-hi': covPal[2] || undefined,
+  }
 
   // ---- venue ----
   useEffect(() => {
@@ -285,34 +300,73 @@ export default function JoinRoom() {
 
   // ---------- the join form ----------
   const now = Date.now()
+  const maxSeats = room.maxPlayers || MAX_SEATS
   return (
-    <div className="rm-root rm-page">
+    <div className="rm-root rm-page" style={rootStyle}>
       <div className="rm-scroll">
         <div className="rm-wrap">
-          {venueStrip}
-
-          <div className="rm-card rm-fade">
-            <div className="rm-card-h">
-              <Icon name="customers" size={16} />
-              {`في الغرفة الآن (${players.length}/${room.maxPlayers || MAX_SEATS})`}
+          {/* the invitation, framed as one: the game's own cover leads, the
+              host calls you by name, the venue signs it */}
+          <div className="rm-hero rm-hero-join rm-fade">
+            <CoverPlate game={game} className="rm-hero-art" />
+            <span className="rm-hero-scrim" aria-hidden="true" />
+            <div className="rm-hero-body">
+              <p className="rm-invite-line">
+                <Icon name="sparkles" size={13} />
+                {hostName ? `${hostName} يدعوك للعب` : 'دعوة للعب على الطاولة'}
+              </p>
+              <h1 className="rm-title">{game ? game.ar : 'غرفة لعب'}</h1>
+              <div className="rm-hero-chips">
+                {tenant?.name ? (
+                  <span className="rm-chip">
+                    {tenant?.logoUrl
+                      ? <img className="rm-chip-logo" src={tenant.logoUrl} alt="" />
+                      : <Icon name="store" size={12} />}
+                    {tenant.name}
+                  </span>
+                ) : null}
+                {room?.tableLabel ? (
+                  <span className="rm-chip">
+                    <Icon name="tables" size={12} />
+                    {`طاولة ${room.tableLabel}`}
+                  </span>
+                ) : null}
+                <span className="rm-chip rm-chip-gold">
+                  <span className="rm-dot rm-dot-live" aria-hidden="true" />
+                  <span className="rm-chip-num">{`${players.length}/${maxSeats}`}</span>
+                </span>
+              </div>
             </div>
-            <ul className="rm-seats">
-              {players.map((p) => {
-                const live = isConnected(p, now)
-                return (
-                  <li className="rm-seat" key={p.id}>
-                    <span className="rm-avatar">{(p.name || '?').trim().charAt(0) || '?'}</span>
-                    <span className="rm-seat-body">
-                      <span className="rm-seat-name">{p.name}</span>
-                      <span className="rm-seat-meta">{live ? 'متصل' : 'انقطع مؤقتاً — مقعده محفوظ'}</span>
-                    </span>
-                    {room.hostId === p.id ? <span className="rm-badge">المضيف</span> : null}
-                    <span className={`rm-dot${live ? ' rm-dot-live' : ' rm-dot-off'}`} aria-hidden="true" />
-                  </li>
-                )
-              })}
-            </ul>
           </div>
+
+          {players.length ? (
+            <div className="rm-card rm-fade">
+              <div className="rm-card-h">
+                <span className="rm-card-ico"><Icon name="customers" size={15} /></span>
+                في الغرفة الآن
+                <span className="rm-count">{`${players.length}/${maxSeats}`}</span>
+              </div>
+              <ul className="rm-pl-chips">
+                {players.map((p) => {
+                  const live = isConnected(p, now)
+                  return (
+                    <li className="rm-pl-chip" key={p.id}>
+                      <span className="rm-avatar">{(p.name || '?').trim().charAt(0) || '?'}</span>
+                      <span className="rm-pl-name">{p.name}</span>
+                      {room.hostId === p.id ? (
+                        <span className="rm-crown" role="img" aria-label="المضيف" title="المضيف">
+                          <svg viewBox="0 0 24 24" width="10" height="10" fill="currentColor" aria-hidden="true" focusable="false">
+                            <path d="M3 19h18v2H3zM2.6 17 4.4 7.6l4.7 4.2L12 4l2.9 7.8 4.7-4.2L21.4 17z" />
+                          </svg>
+                        </span>
+                      ) : null}
+                      <span className={`rm-dot${live ? ' rm-dot-live' : ' rm-dot-off'}`} aria-hidden="true" />
+                    </li>
+                  )
+                })}
+              </ul>
+            </div>
+          ) : null}
 
           <div className="rm-card rm-fade">
             <div className="rm-field">
@@ -328,7 +382,9 @@ export default function JoinRoom() {
               />
             </div>
             <div className="rm-field">
-              <label className="rm-label" htmlFor="rm-phone">رقم الجوال (اختياري)</label>
+              <label className="rm-label" htmlFor="rm-phone">
+                رقم الجوال <em>(اختياري)</em>
+              </label>
               <input
                 id="rm-phone"
                 className="rm-input rm-input-ltr"
@@ -344,6 +400,16 @@ export default function JoinRoom() {
               </p>
             </div>
             {err ? <p className="rm-form-err">{err}</p> : null}
+          </div>
+
+          <div className="rm-what rm-fade">
+            <span className="rm-what-h">
+              <Icon name="sparkles" size={13} />
+              ماذا سيحدث؟
+            </span>
+            <p className="rm-note">
+              تدخل الغرفة فوراً باسمك ويراك أصحابك في المقاعد، وتبدأ الجولة حين يبدأها المضيف — بلا تطبيق وبلا حساب.
+            </p>
           </div>
         </div>
       </div>

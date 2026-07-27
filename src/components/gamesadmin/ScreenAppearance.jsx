@@ -233,7 +233,7 @@ function ScreenPreview({ fx, venue, ar }) {
         {/* scoreboard: table ضد table */}
         <div className="sfx-mk-score">
           <div className="sfx-mk-seat is-turn">
-            <div className="sfx-mk-seat-name">{ar ? 'طاولة ١' : 'Table 1'}</div>
+            <div className="sfx-mk-seat-name">{ar ? 'طاولة 1' : 'Table 1'}</div>
             <div className="sfx-mk-seat-sub">{ar ? 'سامي' : 'Sami'}</div>
             <div className="sfx-mk-seat-num sfx-num">3</div>
             <div className="sfx-mk-seat-state">{ar ? 'دوره الآن' : 'Their turn'}</div>
@@ -243,7 +243,7 @@ function ScreenPreview({ fx, venue, ar }) {
             <span>{ar ? 'الشطرنج' : 'Chess'}</span>
           </div>
           <div className="sfx-mk-seat">
-            <div className="sfx-mk-seat-name">{ar ? 'طاولة ٢' : 'Table 2'}</div>
+            <div className="sfx-mk-seat-name">{ar ? 'طاولة 2' : 'Table 2'}</div>
             <div className="sfx-mk-seat-sub">{ar ? 'ليان' : 'Layan'}</div>
             <div className="sfx-mk-seat-num sfx-num">2</div>
             <div className="sfx-mk-seat-state" />
@@ -593,7 +593,7 @@ export default function ScreenAppearance({ ar, tenantId, tenant, canEdit, onSave
         <ScreenPreview fx={fx} venue={venue} ar={ar} />
         <p className="sfx-hint">
           {ar
-            ? 'معاينة بمقياس ١٦:٩ مطابقة لتلفزيون ١٩٢٠×١٠٨٠. الطاولات واللوحة نموذجية — المباراة الحقيقية تحل محلها على الجدار.'
+            ? 'معاينة بمقياس 16:9 مطابقة لتلفزيون 1920×1080. الطاولات واللوحة نموذجية — المباراة الحقيقية تحل محلها على الجدار.'
             : 'A 16:9 preview matching a 1920x1080 TV. The tables and board are samples — the real live match replaces them on the wall.'}
         </p>
       </div>

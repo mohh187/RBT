@@ -77,15 +77,23 @@
 // already announced to the venue, so it takes the screen automatically.
 //
 // A plain ROOM is four friends who invited each other. Putting that on the wall
-// unasked is a different thing, and there is no per-room "broadcast me" switch
-// to ask with. The venue-level switch that already exists and already means
-// exactly "we are running a competition in this cafe tonight" is a RUNNING
-// TOURNAMENT. So live rooms — and the open-room codes on the join panel — are
-// offered to the screen ONLY while `statusOf(tournament) === 'running'`.
-// Nothing new to configure, and the owner turns it on and off by running a
-// tournament, which is precisely the moment they want it.
+// unasked is a different thing, so consent is explicit and venue-level:
+//
+//   • The DEFAULT consent switch is a RUNNING TOURNAMENT — it already means
+//     "we are running a competition in this cafe tonight", so live rooms and
+//     the open-room codes are offered to the screen while
+//     `statusOf(tournament) === 'running'`. That is mode 'tournaments' below,
+//     and it is what a venue that never touched the setting gets.
+//
+//   • The MANAGER can widen or narrow that with `tenant.screenBroadcast`
+//     (written from Admin → مركز الألعاب → البث المباشر — BroadcastControl.jsx):
+//     mode 'all' consents to ANY live friendly table taking the wall, mode
+//     'pinned' consents to exactly ONE chosen room, and mode 'off' revokes the
+//     wall takeover entirely (including matches). See normalizeScreenBroadcast
+//     for the full shape. Per-screen scoping (`screens`) decides WHICH paired
+//     TVs may be taken over; the others never leave their playlist.
 // ===========================================================================
-import { collection, onSnapshot, query, orderBy, where, limit } from 'firebase/firestore'
+import { collection, doc, onSnapshot, query, orderBy, where, limit } from 'firebase/firestore'
 import { db, firebaseReady } from './firebase.js'
 import { normalizeMatch } from './socialPlay.js'
 import { decodeState, decodeRoom } from './gameRoom.js'
@@ -607,4 +615,103 @@ export function roomResult(room) {
   const ws = room.winnerSeat
   if (ws === null || ws === undefined) return { over: true, winnerSeat: null, draw: true }
   return { over: true, winnerSeat: Number(ws), draw: false }
+}
+
+// ===========================================================================
+// BROADCAST CONTROL — `tenant.screenBroadcast` (SAFETY LIMIT 3's consent
+// switch, made explicit and manager-owned).
+//
+//   tenant.screenBroadcast = {
+//     version: 1,
+//     mode: 'off' | 'tournaments' | 'all' | 'pinned',
+//       // off          nothing ever takes a wall over — playlist only
+//       // tournaments  today's default: matches always; live rooms only
+//       //              while a tournament is running
+//       // all          ANY live friendly table may take the wall; several
+//       //              live at once rotate every BROADCAST_ROTATE_MS
+//       // pinned       exactly ONE chosen room (pinnedRoomId) — including a
+//       //              solo human-vs-computer table, which is a real room
+//     pinnedRoomId: '',              // used only in mode 'pinned'
+//     screens: 'all' | ['CODE1', …], // which paired TVs may be taken over
+//   }
+//
+// Written ONLY by components/gamesadmin/BroadcastControl.jsx (updateTenant);
+// read by routes/screen/ScreenPlayer.jsx. A missing/garbled field normalizes
+// to mode 'tournaments' + screens 'all', which is exactly the behavior the
+// wall had before this switch existed — no venue changes behavior by upgrade.
+// ===========================================================================
+export const BROADCAST_MODES = ['off', 'tournaments', 'all', 'pinned']
+// How long each live table holds the wall before rotating to the next one
+// when mode 'all' finds several live at once.
+export const BROADCAST_ROTATE_MS = 45 * 1000
+
+export function normalizeScreenBroadcast(raw) {
+  const r = raw && typeof raw === 'object' ? raw : {}
+  const mode = BROADCAST_MODES.includes(r.mode) ? r.mode : 'tournaments'
+  // screens: 'all' or a bounded list of pairing codes (doc ids in `screens`).
+  // An explicitly EMPTY array is kept as-is — it truthfully means "no screen
+  // is allowed", and the admin UI warns about it rather than us silently
+  // rewriting the manager's choice to 'all'.
+  const screens = Array.isArray(r.screens)
+    ? r.screens.map((c) => String(c || '').trim().toUpperCase()).filter(Boolean).slice(0, 50)
+    : 'all'
+  return {
+    version: 1,
+    mode,
+    pinnedRoomId: typeof r.pinnedRoomId === 'string' ? r.pinnedRoomId.trim().slice(0, 40) : '',
+    screens,
+  }
+}
+
+// May THIS paired screen (by its pairing code) be taken over? Purely the
+// screens-subset check — the mode gate is the caller's decision. Normalizing
+// here is idempotent, so callers may pass the raw stored field or the
+// normalized shape interchangeably.
+export function broadcastAllowsScreen(sb, code) {
+  const b = normalizeScreenBroadcast(sb)
+  if (b.screens === 'all') return true
+  return b.screens.includes(String(code || '').trim().toUpperCase())
+}
+
+// PURE. Mode 'all''s pick: the live room the wall should show at `now`.
+// One live table → that table. Several → rotate, one slot per
+// BROADCAST_ROTATE_MS, over a STABLE ordering (created-at, then id): sorting
+// by updatedAt would reshuffle the rotation pointer on every move played.
+export function pickBroadcastRoom(rooms, now = Date.now(), rotateMs = BROADCAST_ROTATE_MS) {
+  const live = (Array.isArray(rooms) ? rooms : [])
+    .filter((r) => r && r.status === 'playing')
+    .filter((r) => isSpectatableGame(r.gameId))
+    .filter((r) => num(r.updatedAt) >= now - SPECTATE_ROOM_STALE_MS)
+  if (!live.length) return null
+  if (live.length === 1) return live[0]
+  live.sort((a, b) => (num(a.createdAt) - num(b.createdAt))
+    || String(a.roomId || a.id || '').localeCompare(String(b.roomId || b.id || '')))
+  const slot = Math.floor(now / Math.max(10000, num(rotateMs, BROADCAST_ROTATE_MS)))
+  return live[slot % live.length]
+}
+
+// How many rooms mode 'all' is currently rotating between — the admin preview
+// prints this so «بالتناوب بين 3 طاولات» is a read fact, not a guess.
+export function countBroadcastRooms(rooms, now = Date.now()) {
+  return (Array.isArray(rooms) ? rooms : [])
+    .filter((r) => r && r.status === 'playing')
+    .filter((r) => isSpectatableGame(r.gameId))
+    .filter((r) => num(r.updatedAt) >= now - SPECTATE_ROOM_STALE_MS)
+    .length
+}
+
+// Live tenant-doc watcher for the SIGNAGE player: the wall must obey a
+// broadcast-mode flip (and a screenFx re-paint) the moment the manager saves
+// it, not on the TV's next reload. The tenant doc is world-readable (rules:
+// tenants get `allow read: if true`), so the anonymous TV needs no auth.
+export function watchTenantForScreen(tid, cb) {
+  if (!firebaseReady || !tid) {
+    setTimeout(() => cb?.(null), 0)
+    return () => {}
+  }
+  return onSnapshot(
+    doc(db, 'tenants', tid),
+    (d) => cb?.(d.exists() ? { id: d.id, ...d.data() } : null),
+    () => cb?.(null),
+  )
 }
