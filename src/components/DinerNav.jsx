@@ -107,30 +107,27 @@ export default function DinerNav({ slug, tenant, variant, active = 'menu', cartC
     </button>
   ) : null
 
-  let children = items
-  if (cartNode) {
-    if (cartSlot === 'start') children = [cartNode, ...items]
-    else if (cartSlot === 'end') children = [...items, cartNode]
-    else {
-      // TRUE centre for ANY number of entries. Splitting by index alone only
-      // centres when the count is even — with an odd count one side is a slot
-      // longer and the raised cart drifted (measured 5-15px off, worse on wide
-      // screens). So the cart is pinned to the bar's centre line in CSS, and
-      // this reserves a matching slot in the flow at the same index so no label
-      // can slide underneath it.
-      const left = Math.ceil(items.length / 2)
-      children = [
-        ...items.slice(0, left),
-        <span key="cart-slot" className="m-bn-spacer" aria-hidden="true" />,
-        ...items.slice(left),
-        cartNode,
-      ]
-    }
-  }
+  // Two equal-width halves with the cart between them. Earlier attempts put the
+  // cart at a computed INDEX (drifts whenever the entry count is odd) and then
+  // pinned it to the centre with a reserved spacer at that same index — but the
+  // spacer's index is not the bar's centre either, so the cart landed on top of
+  // a real button. Two `flex: 1` groups make the geometry exact by construction:
+  // each half always occupies half the bar, whatever it contains, so the cart is
+  // on the centre line and nothing can sit under it.
+  const half = Math.ceil(items.length / 2)
+  const sides = [items.slice(0, half), items.slice(half)]
 
   return (
-    <nav className="m-bottomnav" data-nav={navStyle} data-count={children.length}>
-      {children}
+    <nav className="m-bottomnav" data-nav={navStyle} data-cart={cartNode ? cartSlot : 'none'}>
+      {cartNode && cartSlot === 'start' ? cartNode : null}
+      {cartNode && cartSlot === 'center' ? (
+        <>
+          <span className="m-bn-side">{sides[0]}</span>
+          {cartNode}
+          <span className="m-bn-side">{sides[1]}</span>
+        </>
+      ) : items}
+      {cartNode && cartSlot === 'end' ? cartNode : null}
     </nav>
   )
 }

@@ -3943,23 +3943,12 @@ body[data-theme='dark'] .pos-fullscreen[data-systheme='glass'] { background: var
 .m-bottomnav button.active { color: var(--sel, var(--chrome-active, var(--brand))); }
 /* see the .bottom-nav note above: the raw brand is ~3.3:1 on the dark bar */
 [data-theme='dark'] .m-bottomnav button.active { color: var(--sel, var(--chrome-active, color-mix(in srgb, var(--brand) 60%, #ffffff))); }
-/* The raised cart is pinned to the bar's CENTRE LINE, not to a flex slot.
-   As a flex child its position depended on how many entries the venue shows, so
-   hiding «العروض» or «المناسبات» slid it off-centre (measured 5-15px, worse on
-   wide screens). Absolute centring is exact at any entry count and any width;
-   the inert .m-bn-spacer keeps a matching slot in the flow so no label ever
-   slides underneath it. */
-.m-bottomnav button.center-cart-btn {
-  position: absolute;
-  inset-inline-start: 50%;
-  transform: translateX(50%);
-  inset-block: 0;
-  width: 72px;
-  flex: none;
-  overflow: visible;
-  z-index: 10;
-}
-[dir='ltr'] .m-bottomnav button.center-cart-btn { transform: translateX(-50%); }
+/* The raised cart sits between two equal halves, so it is on the bar's centre
+   line for ANY entry count and nothing can be painted under it. Each half is a
+   flex:1 group that distributes its own entries. */
+.m-bottomnav .m-bn-side { flex: 1; display: flex; min-width: 0; }
+.m-bottomnav .m-bn-side > button { flex: 1; min-width: 0; }
+.m-bottomnav button.center-cart-btn { position: relative; flex: none; width: 72px; overflow: visible; z-index: 10; }
 .m-bottomnav button.center-cart-btn .cart-circle-container { width: 44px; height: 44px; border-radius: 50%; background: linear-gradient(135deg, var(--brand), var(--brand-strong, var(--brand))); color: var(--on-brand, #ffffff); display: flex; align-items: center; justify-content: center; box-shadow: 0 4px 14px rgba(0,0,0,0.18), inset 0 2px 2px rgba(255,255,255,0.15); margin-top: -24px; border: 3px solid var(--chrome-bg, var(--surface)); transition: transform 0.2s cubic-bezier(0.175, 0.885, 0.32, 1.275); }
 .m-bottomnav button.center-cart-btn:active .cart-circle-container { transform: scale(0.92); }
 .m-bottomnav button.center-cart-btn .cart-badge-count { position: absolute; top: -3px; right: -3px; background: var(--chrome-badge); color: var(--chrome-on-badge); font-size: 8px; font-weight: 900; width: 15px; height: 15px; border-radius: 50%; display: grid; place-items: center; border: 1px solid var(--chrome-bg, var(--surface)); box-shadow: 0 1px 3px rgba(0,0,0,0.1); }

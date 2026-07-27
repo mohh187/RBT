@@ -13,7 +13,7 @@
 // THE FIX. After a theme is applied, read the COMPUTED value of each ink and of
 // the surface it actually sits on, measure the real contrast, and if it fails,
 // push the ink toward black or white (whichever direction gains contrast) until
-// it passes — then write it back as an inline custom property on <html>, which
+// it passes — then write it back as an inline custom property on <body>, which
 // beats every stylesheet rule. Because it works on computed values it is immune
 // to how the colour was authored (hex, color-mix, color(srgb …), var chains).
 //
@@ -127,7 +127,14 @@ let applied = []
 
 export function guardContrast() {
   if (typeof document === 'undefined' || !document.body) return null
-  const root = document.documentElement
+  // MUST be <body>, not <html>. A venue's custom theme re-declares --bg,
+  // --surface, --text and --brand on the `body[data-custheme]` selector (and the
+  // system themes do the same on inner shells), so reading <html> returned the
+  // PRE-custom palette — the guard was measuring colours the page never paints —
+  // and a correction written on <html> loses to that body-level rule for
+  // everything inside it. Reading and writing on <body> sees the real palette,
+  // and an inline write there beats every stylesheet rule.
+  const root = document.body
   try {
     for (const name of applied) root.style.removeProperty(name)
     applied = []
