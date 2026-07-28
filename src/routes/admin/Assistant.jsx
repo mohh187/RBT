@@ -97,7 +97,10 @@ export default function Assistant() {
   // The campaign composer already picks up a draft from sessionStorage
   // (?draft=1). Sending the picture's link with it keeps one code path instead
   // of inventing a second one.
-  const useInCampaign = (url) => {
+  // NOT named use* — it is a plain click handler, and the `use` prefix made
+  // eslint's rules-of-hooks treat it as a React hook and hard-error on the
+  // button that calls it inside an onClick.
+  const attachToCampaign = (url) => {
     try {
       sessionStorage.setItem('rbt_campaign_draft', JSON.stringify({ title: '', text: url }))
     } catch (_) { /* storage off — the composer still opens, just empty */ }
@@ -420,7 +423,7 @@ export default function Assistant() {
                             <button className="btn btn-sm btn-outline" onClick={() => navigate(`/admin/posts-studio?image=${encodeURIComponent(it.url)}`)}>
                               <Icon name="camera" size={13} /> {ar ? 'استخدمها في منشور' : 'Use in a post'}
                             </button>
-                            <button className="btn btn-sm btn-outline" onClick={() => useInCampaign(it.url)}>
+                            <button className="btn btn-sm btn-outline" onClick={() => attachToCampaign(it.url)}>
                               <Icon name="bellRing" size={13} /> {ar ? 'أرفقها بحملة' : 'Attach to a campaign'}
                             </button>
                             <a className="btn btn-sm btn-outline" href={it.url} target="_blank" rel="noreferrer" download>

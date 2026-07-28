@@ -356,17 +356,23 @@ async function takeSpend(db, tid, channel, want = 1, opts = {}) {
     // instance therefore has a budget of blind grants; past it the same
     // failure flips to fail-CLOSED, because at that point the outage is the
     // story and a missed notification is cheaper than an unmetered bill.
+    const wasOpen = _errorOpen
     _errorOpen += n
     if (_errorOpen > ERROR_OPEN_BUDGET) {
       // Once, on the way over. An outage produces thousands of these and a log
       // line per refusal buries the one line that matters.
       if (!_errorClosedLogged) {
         _errorClosedLogged = true
-        console.error(`[spend] meter unavailable after ${_errorOpen} blind grants — failing CLOSED until this instance recycles`)
+        console.error(`[spend] meter unavailable after ${wasOpen} blind grants — failing CLOSED until this instance recycles`)
       }
       return { granted: 0, reason: 'error-closed', limits: lim }
     }
-    console.warn(`[spend] meter unavailable for ${tid}/${channel}, granting ${n} blind (${_errorOpen}/${ERROR_OPEN_BUDGET})`)
+    // Log the FIRST blind grant and then every 50th. An outage is a burst, and
+    // a line per grant is 200 lines that say the same thing — which is how a
+    // log stops being read at exactly the moment it matters.
+    if (!wasOpen || Math.floor(wasOpen / 50) !== Math.floor(_errorOpen / 50)) {
+      console.warn(`[spend] meter unavailable (${tid}/${channel}) — granting blind, ${_errorOpen}/${ERROR_OPEN_BUDGET} of this instance's budget used`)
+    }
     return { granted: n, reason: 'error-open', limits: lim }
   }
 

@@ -153,8 +153,11 @@ export default class ErrorBoundary extends Component {
   componentDidUpdate(prev) {
     // Navigating to another route (resetKey changes) clears the error, so one
     // broken screen never strands the whole session on the recovery card.
+    // Guarded by the condition above, which is the sanctioned form of
+    // setState-in-componentDidUpdate. (There used to be a disable comment for
+    // react/no-did-update-set-state here, but eslint-plugin-react is not in
+    // this config, and a disable naming an unknown rule is itself an error.)
     if (this.state.err && prev.resetKey !== this.props.resetKey) {
-      // eslint-disable-next-line react/no-did-update-set-state
       this.setState({ err: null })
     }
   }
