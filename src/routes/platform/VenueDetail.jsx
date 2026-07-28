@@ -125,9 +125,14 @@ function Section({ icon, title, children, danger }) {
 const CAP_FIELD = {
   waMarketing: (v) => ({ msgCapMonthly: v }),
   aiText: (v, t) => ({ aiLimits: { daily: Number(t.aiLimits?.daily) || 60, monthly: v } }),
+  // ar3d and dinerAi keep their own legacy fields for the same reason: the
+  // item editor and the diner-AI settings already read them.
+  ar3d: (v) => ({ ar3dMonthly: v }),
+  dinerAi: (v) => ({ dinerAiMonthly: v }),
   waUtility: (v) => ({ 'spendCaps.waUtility': v }),
   email: (v) => ({ 'spendCaps.email': v }),
   aiImage: (v) => ({ 'spendCaps.aiImage': v }),
+  tableImage: (v) => ({ 'spendCaps.tableImage': v }),
 }
 
 function SpendCaps({ tid, tenant, toast }) {
@@ -165,7 +170,10 @@ function SpendCaps({ tid, tenant, toast }) {
           const blocked = Number(usage?.blocked?.[c.key]) || 0
           const unlimited = lim.month < 0
           const pct = unlimited || !lim.month ? 0 : Math.min(100, (used / lim.month) * 100)
-          const val = edits[c.key] !== undefined ? edits[c.key] : String(lim.month)
+          // The editor sets the PLAN cap. Purchased balance is money the venue
+          // already paid and is not the platform's to edit here — it is shown
+          // beside the cap so the two are never confused.
+          const val = edits[c.key] !== undefined ? edits[c.key] : String(lim.plan)
           return (
             <div key={c.key} className="stack" style={{ gap: 4 }}>
               <div className="row-between small" style={{ gap: 8 }}>
@@ -189,7 +197,7 @@ function SpendCaps({ tid, tenant, toast }) {
                 />
                 <button
                   className="btn btn-outline btn-sm"
-                  disabled={saving === c.key || edits[c.key] === undefined || Number(edits[c.key]) === lim.month}
+                  disabled={saving === c.key || edits[c.key] === undefined || Number(edits[c.key]) === lim.plan}
                   onClick={() => save(c.key)}
                 >
                   {saving === c.key ? 'جارٍ…' : 'حفظ'}
@@ -197,6 +205,7 @@ function SpendCaps({ tid, tenant, toast }) {
               </div>
               <span className="xs faint">
                 {c.hint}
+                {lim.extra > 0 ? ` · رصيد مشترى متبقٍ ${lim.extra.toLocaleString('en-US')}` : ''}
                 {lim.day > 0 ? ` · سقف يومي ${lim.day.toLocaleString('en-US')}` : ''}
                 {lim.minute > 0 ? ` · ${lim.minute.toLocaleString('en-US')} في الدقيقة` : ''}
               </span>

@@ -35,7 +35,10 @@ walk(SRC)
 // browser, so the tables are duplicated — and a meter that DISPLAYS a different
 // limit from the one that REFUSES you is worse than showing nothing at all.
 // This makes the drift a build failure instead of a support ticket.
-const MIRRORED = ['PLAN_QUOTAS', 'BURST_PER_MINUTE', 'UNIT_COST_USD']
+// SPEND_PACKS is in here for a sharper reason than the rest: the client SHOWS
+// a price and the server CHARGES one. If those two ever disagree the customer
+// is billed an amount they did not see.
+const MIRRORED = ['PLAN_QUOTAS', 'BURST_PER_MINUTE', 'UNIT_COST_USD', 'SPEND_PACKS']
 const grab = (src, name) => {
   // the literal that follows `<name> = ` up to its closing brace, comments and
   // whitespace stripped so formatting differences are not reported as drift

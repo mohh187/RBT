@@ -16,24 +16,43 @@ import { db } from './firebase.js'
 import { planExpired } from './plans.js'
 
 export const CHANNELS = [
-  { key: 'waUtility', ar: 'واتساب — رسائل المعاملات', short: 'واتساب معاملات', icon: 'mail', hint: 'حالة الطلب وروابط الفواتير' },
-  { key: 'waMarketing', ar: 'واتساب — التسويق', short: 'واتساب تسويق', icon: 'sound', hint: 'الحملات والعروض ورسائل الولاء' },
-  { key: 'email', ar: 'البريد الإلكتروني', short: 'بريد', icon: 'mail', hint: 'إشعارات الطلبات والفواتير والدعوات' },
-  { key: 'aiText', ar: 'الذكاء الاصطناعي — نصوص', short: 'ذكاء نصي', icon: 'sparkles', hint: 'المساعد وتوليد الأوصاف والتحليلات' },
-  { key: 'aiImage', ar: 'الذكاء الاصطناعي — صور', short: 'ذكاء صور', icon: 'image', hint: 'توليد صور الأصناف والمنشورات' },
+  { key: 'waUtility', ar: 'واتساب — رسائل المعاملات', short: 'واتساب معاملات', icon: 'mail', unit: 'رسالة', hint: 'حالة الطلب وروابط الفواتير' },
+  { key: 'waMarketing', ar: 'واتساب — التسويق', short: 'واتساب تسويق', icon: 'sound', unit: 'رسالة', hint: 'الحملات والعروض ورسائل الولاء' },
+  { key: 'email', ar: 'البريد الإلكتروني', short: 'بريد', icon: 'mail', unit: 'رسالة', hint: 'إشعارات الطلبات والفواتير والدعوات' },
+  { key: 'aiText', ar: 'الذكاء الاصطناعي — نصوص', short: 'ذكاء نصي', icon: 'sparkles', unit: 'طلب', hint: 'المساعد وتوليد الأوصاف والتحليلات' },
+  { key: 'aiImage', ar: 'الذكاء الاصطناعي — صور', short: 'ذكاء صور', icon: 'image', unit: 'صورة', hint: 'توليد صور الأصناف والمنشورات' },
+  { key: 'ar3d', ar: 'المجسمات الواقعية', short: 'مجسمات', icon: 'package', unit: 'مجسم', hint: 'تحويل صورة الصنف إلى مجسم ثلاثي الأبعاد', tier: 'enterprise' },
+  { key: 'tableImage', ar: 'صور الطاولات والجدران', short: 'صور طاولات', icon: 'image', unit: 'صورة', hint: 'توليد خلفيات الطاولة في غرفة المنيو' },
+  { key: 'dinerAi', ar: 'مساعد الطلب للضيف', short: 'مساعد الضيف', icon: 'waiter', unit: 'طلب', hint: 'الطلب بالصورة أو بالصوت من صفحة المنيو' },
 ]
+
+// Purchasable top-up packs. MIRROR of SPEND_PACKS in functions/spend.js — the
+// server prices the payment from ITS table (or the console override), so this
+// copy is display-only. The guard fails the build if the two disagree, because
+// a listed price that differs from the charged one is a complaint, not a bug
+// report.
+export const SPEND_PACKS = {
+  waUtility: [{ qty: 1000, sar: 79 }, { qty: 3000, sar: 199 }, { qty: 10000, sar: 599 }],
+  waMarketing: [{ qty: 500, sar: 149 }, { qty: 2000, sar: 499 }, { qty: 5000, sar: 1099 }],
+  email: [{ qty: 5000, sar: 39 }, { qty: 20000, sar: 119 }, { qty: 50000, sar: 249 }],
+  aiText: [{ qty: 100, sar: 49 }, { qty: 300, sar: 129 }, { qty: 1000, sar: 349 }],
+  aiImage: [{ qty: 25, sar: 39 }, { qty: 100, sar: 129 }, { qty: 300, sar: 329 }],
+  ar3d: [{ qty: 5, sar: 149 }, { qty: 20, sar: 499 }],
+  tableImage: [{ qty: 30, sar: 49 }, { qty: 100, sar: 139 }],
+  dinerAi: [{ qty: 1000, sar: 49 }, { qty: 5000, sar: 199 }],
+}
 export const CHANNEL_KEYS = CHANNELS.map((c) => c.key)
 
 export const PLAN_QUOTAS = {
-  menu: { waUtility: 1000, waMarketing: 150, email: 1500, aiText: 300, aiImage: 10 },
-  ops: { waUtility: 3000, waMarketing: 400, email: 4000, aiText: 800, aiImage: 25 },
-  pro: { waUtility: 6000, waMarketing: 900, email: 10000, aiText: 2000, aiImage: 60 },
-  enterprise: { waUtility: 12000, waMarketing: 1300, email: 25000, aiText: 5000, aiImage: 150 },
+  menu: { waUtility: 1000, waMarketing: 150, email: 1500, aiText: 300, aiImage: 10, ar3d: 0, tableImage: 10, dinerAi: 500 },
+  ops: { waUtility: 3000, waMarketing: 400, email: 4000, aiText: 800, aiImage: 25, ar3d: 0, tableImage: 20, dinerAi: 1500 },
+  pro: { waUtility: 6000, waMarketing: 900, email: 10000, aiText: 2000, aiImage: 60, ar3d: 0, tableImage: 40, dinerAi: 4000 },
+  enterprise: { waUtility: 12000, waMarketing: 1300, email: 25000, aiText: 5000, aiImage: 150, ar3d: 20, tableImage: 80, dinerAi: 10000 },
 }
-export const BURST_PER_MINUTE = { waUtility: 20, waMarketing: 0, email: 80, aiText: 30, aiImage: 4 }
+export const BURST_PER_MINUTE = { waUtility: 20, waMarketing: 0, email: 80, aiText: 30, aiImage: 4, ar3d: 3, tableImage: 4, dinerAi: 20 }
 export const BULK_CHANNELS = ['waMarketing']
 const DAY_FRACTION = 6
-const DAY_FLOOR = { waUtility: 50, waMarketing: 50, email: 50, aiText: 50, aiImage: 4 }
+const DAY_FLOOR = { waUtility: 50, waMarketing: 50, email: 50, aiText: 50, aiImage: 4, ar3d: 3, tableImage: 5, dinerAi: 50 }
 
 export const UNIT_COST_USD = {
   waUtility: 0.0107,
@@ -41,6 +60,9 @@ export const UNIT_COST_USD = {
   email: 0.0004,
   aiText: 0.0018,
   aiImage: 0.039,
+  ar3d: 1.2,
+  tableImage: 0.039,
+  dinerAi: 0.0025,
 }
 export const USD_TO_SAR = 3.75
 
@@ -62,32 +84,52 @@ function planIdOf(tenant) {
   return PLAN_QUOTAS[id] ? id : 'enterprise'
 }
 
+// The remaining PURCHASED balance for a channel. aiText keeps the legacy
+// tenant.aiExtra field so /admin/assistant keeps reading what it already reads.
+export function extraOf(tenant, channel) {
+  const t = tenant || {}
+  if (channel === 'aiText') return Math.max(0, Number(t.aiExtra) || 0)
+  return Math.max(0, Number(t.spendExtra && t.spendExtra[channel]) || 0)
+}
+
 // Mirror of limitsFor() in functions/spend.js — used to show the venue the same
 // ceiling the server will actually enforce. A meter that displays a different
 // number from the one that refuses you is worse than no meter.
+// Returns { plan, extra, month, day, minute }; `month` is plan + remaining
+// purchased balance, and the balance DEPLETES as it is used.
 export function limitsFor(tenant, channel) {
   const t = tenant || {}
   const rail = PLAN_QUOTAS[planIdOf(t)] || PLAN_QUOTAS.enterprise
-  let month = rail[channel]
-  if (channel === 'waMarketing') {
-    const legacy = num(t.msgCapMonthly)
-    if (legacy !== null) month = legacy
-  }
-  if (channel === 'aiText') {
-    const legacy = num(t.aiLimits && t.aiLimits.monthly)
-    if (legacy !== null) month = legacy
-    month += Math.max(0, num(t.aiExtra) || 0)
-  }
+  let plan = rail[channel]
+  // Legacy per-venue caps other screens still display — see functions/spend.js.
+  const legacy = channel === 'waMarketing' ? num(t.msgCapMonthly)
+    : channel === 'aiText' ? num(t.aiLimits && t.aiLimits.monthly)
+      : channel === 'ar3d' ? num(t.ar3dMonthly)
+        : channel === 'dinerAi' ? num(t.dinerAiMonthly)
+          : null
+  if (legacy !== null) plan = legacy
   const ov = num(t.spendCaps && t.spendCaps[channel])
-  if (ov !== null) month = ov
+  if (ov !== null) plan = ov
+  if (plan == null) plan = 0
 
-  if (BULK_CHANNELS.includes(channel)) return { month, day: -1, minute: 0 }
+  const extra = extraOf(t, channel)
+  const month = plan < 0 ? -1 : plan + extra
+
+  if (BULK_CHANNELS.includes(channel)) return { plan, extra, month, day: -1, minute: 0 }
 
   const dayOv = num(t.spendCapsDaily && t.spendCapsDaily[channel])
   const aiDay = channel === 'aiText' ? num(t.aiLimits && t.aiLimits.daily) : null
   const derived = Math.max(Math.ceil(month / DAY_FRACTION), Math.min(month, DAY_FLOOR[channel] || 50))
   const day = month < 0 ? -1 : (dayOv !== null ? dayOv : (aiDay !== null ? aiDay : Math.max(1, derived)))
-  return { month, day, minute: BURST_PER_MINUTE[channel] || 0 }
+  return { plan, extra, month, day, minute: BURST_PER_MINUTE[channel] || 0 }
+}
+
+// Start a top-up checkout. The quantity travels in refId; the PRICE never
+// leaves the server (createPayIntent → packPrice), so a tampered client can
+// only ever ask for a pack that exists, never set what it costs.
+export async function buySpendPack(tenantId, channel, qty) {
+  const { startPayment } = await import('./payments.js')
+  return startPayment('spendPack', tenantId, `${channel}:${qty}`)
 }
 
 export function costOf(usage, rates) {

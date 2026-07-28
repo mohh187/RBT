@@ -36,13 +36,19 @@ const { FieldValue } = require('firebase-admin/firestore')
 //   email       — every Resend send
 //   aiText      — geminiProxy text generations
 //   aiImage     — geminiProxy image generations (an order of magnitude dearer)
-const CHANNELS = ['waUtility', 'waMarketing', 'email', 'aiText', 'aiImage']
+//   ar3d        — realistic image-to-3D conversions (platform Meshy credits)
+//   tableImage  — generated table/wall images
+//   dinerAi     — the guest-facing photo/voice ordering assistant
+const CHANNELS = ['waUtility', 'waMarketing', 'email', 'aiText', 'aiImage', 'ar3d', 'tableImage', 'dinerAi']
 const CHANNEL_AR = {
   waUtility: 'واتساب المعاملات',
   waMarketing: 'واتساب التسويق',
   email: 'البريد',
   aiText: 'الذكاء — نصوص',
   aiImage: 'الذكاء — صور',
+  ar3d: 'المجسمات الواقعية',
+  tableImage: 'صور الطاولات',
+  dinerAi: 'مساعد الطلب للضيف',
 }
 
 // Per-plan MONTHLY ceilings.
@@ -65,18 +71,24 @@ const CHANNEL_AR = {
 // backstops for it are the daily and per-minute walls below, and the platform
 // budget breaker. Tightening these into strict commercial tiers is a PRICING
 // decision for the owner, not something to impose silently on live venues.
+// ar3d stays an enterprise-tier perk (it burns real Meshy credits and the app
+// already gates the feature at that tier), so the lower plans carry 0 — which
+// the meter reads as "disabled", matching the existing feature gate rather
+// than contradicting it.
 const PLAN_QUOTAS = {
-  menu: { waUtility: 1000, waMarketing: 150, email: 1500, aiText: 300, aiImage: 10 },
-  ops: { waUtility: 3000, waMarketing: 400, email: 4000, aiText: 800, aiImage: 25 },
-  pro: { waUtility: 6000, waMarketing: 900, email: 10000, aiText: 2000, aiImage: 60 },
-  enterprise: { waUtility: 12000, waMarketing: 1300, email: 25000, aiText: 5000, aiImage: 150 },
+  menu: { waUtility: 1000, waMarketing: 150, email: 1500, aiText: 300, aiImage: 10, ar3d: 0, tableImage: 10, dinerAi: 500 },
+  ops: { waUtility: 3000, waMarketing: 400, email: 4000, aiText: 800, aiImage: 25, ar3d: 0, tableImage: 20, dinerAi: 1500 },
+  pro: { waUtility: 6000, waMarketing: 900, email: 10000, aiText: 2000, aiImage: 60, ar3d: 0, tableImage: 40, dinerAi: 4000 },
+  enterprise: { waUtility: 12000, waMarketing: 1300, email: 25000, aiText: 5000, aiImage: 150, ar3d: 20, tableImage: 80, dinerAi: 10000 },
 }
 
 // The loop-breaker. Fixed per channel, NOT per plan — no plan has a legitimate
 // reason to emit more than this in sixty seconds, and a bug always will.
 // waUtility sits at 20: even the busiest venue's real peak is a few orders a
 // minute, so anything above this is a trigger firing on itself.
-const BURST_PER_MINUTE = { waUtility: 20, waMarketing: 0, email: 80, aiText: 30, aiImage: 4 }
+// dinerAi keeps its historic 20/min burst: it is GUEST-facing, so a busy
+// dinner rush is many different people, not one loop.
+const BURST_PER_MINUTE = { waUtility: 20, waMarketing: 0, email: 80, aiText: 30, aiImage: 4, ar3d: 3, tableImage: 4, dinerAi: 20 }
 
 // A day may carry this fraction of the month. 1/6 lets a genuine peak day (Eid,
 // a launch) run at six times the average without tripping, while still capping
@@ -92,7 +104,7 @@ const DAY_FRACTION = 6
 // counted in DOZENS a month, so a floor of 50 let a whole month's images burn
 // in one afternoon — the exact runaway the daily wall exists to stop, on the
 // single most expensive unit the platform buys.
-const DAY_FLOOR = { waUtility: 50, waMarketing: 50, email: 50, aiText: 50, aiImage: 4 }
+const DAY_FLOOR = { waUtility: 50, waMarketing: 50, email: 50, aiText: 50, aiImage: 4, ar3d: 3, tableImage: 5, dinerAi: 50 }
 
 // Channels whose budget is claimed in BULK, up front: a campaign asks for its
 // entire audience in ONE takeSpend() call before it fans out. A daily or
@@ -119,8 +131,49 @@ const UNIT_COST_USD = {
   email: 0.0004, // Resend Pro: 20 USD / 50,000 emails
   aiText: 0.0018, // gemini-2.5-flash at ~2.5k in / 400 out per turn
   aiImage: 0.039, // gemini-2.5-flash-image, per generated 1024px image
+  ar3d: 1.2, // Meshy image-to-3D task — the dearest unit on the platform
+  tableImage: 0.039, // same gemini-2.5-flash-image call as aiImage
+  dinerAi: 0.0025, // gemini-2.5-flash with an image or audio part attached
 }
 const USD_TO_SAR = 3.75
+
+// ------------------------------------------------------- purchasable top-ups
+// A venue that outgrows its plan should be able to BUY headroom instead of
+// waiting for the platform to raise a number by hand.
+//
+// The price is server-side and only server-side: `createPayIntent` derives the
+// amount from this table (or its console override at
+// platformConfig/spendPacks), never from anything the client sends.
+//
+// Quantities and SAR prices. Margins are set against UNIT_COST_USD above, most
+// generous on the cheap channels and thinnest on ar3d, where a single unit is
+// a real 1.20 USD out of the platform's Meshy wallet.
+const SPEND_PACKS = {
+  waUtility: [{ qty: 1000, sar: 79 }, { qty: 3000, sar: 199 }, { qty: 10000, sar: 599 }],
+  waMarketing: [{ qty: 500, sar: 149 }, { qty: 2000, sar: 499 }, { qty: 5000, sar: 1099 }],
+  email: [{ qty: 5000, sar: 39 }, { qty: 20000, sar: 119 }, { qty: 50000, sar: 249 }],
+  // aiText MUST keep the historic /admin/assistant pack prices — the same
+  // product is already sold at {100:49, 300:129, 1000:349} and two different
+  // prices for one thing is the kind of detail a customer notices.
+  aiText: [{ qty: 100, sar: 49 }, { qty: 300, sar: 129 }, { qty: 1000, sar: 349 }],
+  aiImage: [{ qty: 25, sar: 39 }, { qty: 100, sar: 129 }, { qty: 300, sar: 329 }],
+  ar3d: [{ qty: 5, sar: 149 }, { qty: 20, sar: 499 }],
+  tableImage: [{ qty: 30, sar: 49 }, { qty: 100, sar: 139 }],
+  dinerAi: [{ qty: 1000, sar: 49 }, { qty: 5000, sar: 199 }],
+}
+
+// The tenant field holding a channel's remaining purchased balance.
+// aiText keeps the LEGACY `aiExtra` number so /admin/assistant and
+// /admin/billing keep reading the field they already read; everything else
+// lives under `spendExtra.<channel>`.
+function extraOf(tenant, channel) {
+  const t = tenant || {}
+  if (channel === 'aiText') return Math.max(0, Number(t.aiExtra) || 0)
+  return Math.max(0, Number(t.spendExtra && t.spendExtra[channel]) || 0)
+}
+function extraField(channel) {
+  return channel === 'aiText' ? 'aiExtra' : `spendExtra.${channel}`
+}
 
 // ------------------------------------------------------------------ periods
 // Riyadh, not UTC. The venue's month is the month it bills and reports in, and
@@ -159,44 +212,61 @@ function num(v) {
   return Number.isFinite(n) ? n : null
 }
 
-// Resolve the three walls for one channel. Precedence, most specific first:
+// Resolve the walls for one channel. Precedence for the PLAN cap, most
+// specific first:
 //   tenant.spendCaps[channel]  — the console's per-venue override
 //   tenant.msgCapMonthly       — the LEGACY marketing cap; still authoritative
 //                                for waMarketing so every venue the console has
 //                                already configured keeps exactly its old limit
 //   tenant.aiLimits.monthly    — the assistant's existing per-venue AI limit
 //   PLAN_QUOTAS[plan][channel] — the plan rail
-// A negative month cap means UNLIMITED (counted, never refused).
+// A negative cap means UNLIMITED (counted, never refused).
+//
+// PURCHASED CREDIT IS HEADROOM ON TOP, AND IT DEPLETES. The old aiExtra
+// behaviour added the purchased quantity to the ceiling every single month
+// forever — buy 1,000 requests once, receive 1,000 EXTRA every month for the
+// life of the account. That is not what a credit pack means, and it was a
+// standing revenue leak. Now the balance is drawn down as it is consumed
+// (see takeSpend), so 1,000 purchased requests are 1,000 requests.
+//
+// Returns { plan, extra, month, day, minute } where `month` is the effective
+// ceiling (plan + remaining balance).
 function limitsFor(tenant, channel) {
   const t = tenant || {}
   const rail = PLAN_QUOTAS[planIdOf(t)] || PLAN_QUOTAS.enterprise
-  let month = rail[channel]
+  let plan = rail[channel]
 
-  if (channel === 'waMarketing') {
-    const legacy = num(t.msgCapMonthly)
-    if (legacy !== null) month = legacy
-  }
-  if (channel === 'aiText') {
-    const legacy = num(t.aiLimits && t.aiLimits.monthly)
-    if (legacy !== null) month = legacy
-    // Purchased credit packs (createPayIntent kind='aiCredits' → tenant.aiExtra)
-    // are real money the venue already paid; they add to the ceiling.
-    month += Math.max(0, num(t.aiExtra) || 0)
-  }
+  // LEGACY per-venue caps the console has been writing for months, and which
+  // other screens still display. They keep winning over the plan rail so no
+  // venue's configured limit silently changes underneath it.
+  const legacy = channel === 'waMarketing' ? num(t.msgCapMonthly)
+    : channel === 'aiText' ? num(t.aiLimits && t.aiLimits.monthly)
+      : channel === 'ar3d' ? num(t.ar3dMonthly)
+        : channel === 'dinerAi' ? num(t.dinerAiMonthly)
+          : null
+  if (legacy !== null) plan = legacy
   const ov = num(t.spendCaps && t.spendCaps[channel])
-  if (ov !== null) month = ov
+  if (ov !== null) plan = ov
+  if (plan == null) plan = 0
 
-  if (BULK_CHANNELS.has(channel)) return { month, day: -1, minute: 0 }
+  const extra = extraOf(t, channel)
+  // Unlimited stays unlimited; there is nothing for a top-up to add to it.
+  const month = plan < 0 ? -1 : plan + extra
+
+  if (BULK_CHANNELS.has(channel)) return { plan, extra, month, day: -1, minute: 0 }
 
   const dayOv = num(t.spendCapsDaily && t.spendCapsDaily[channel])
   const aiDay = channel === 'aiText' ? num(t.aiLimits && t.aiLimits.daily) : null
   const floor = DAY_FLOOR[channel] || 50
+  // Derived from the EFFECTIVE ceiling, not the plan cap: a venue that paid for
+  // headroom before a busy week should be able to use it that week. The
+  // per-minute wall still bounds a runaway either way.
   const derived = Math.max(Math.ceil(month / DAY_FRACTION), Math.min(month, floor))
   const day = month < 0
     ? -1
     : (dayOv !== null ? dayOv : (aiDay !== null ? aiDay : Math.max(1, derived)))
 
-  return { month, day, minute: BURST_PER_MINUTE[channel] || 0 }
+  return { plan, extra, month, day, minute: BURST_PER_MINUTE[channel] || 0 }
 }
 
 // ------------------------------------------------------- platform kill switch
@@ -284,6 +354,7 @@ async function takeSpend(db, tid, channel, want = 1, opts = {}) {
   let reason = 'ok'
   let used = null
   let firstRefusal = false
+  let fromExtra = 0
 
   try {
     await db.runTransaction(async (tx) => {
@@ -307,6 +378,14 @@ async function takeSpend(db, tid, channel, want = 1, opts = {}) {
       granted = allow
       reason = allow >= n ? 'ok' : hit
       used = { month: m, day: dCur, minute: bCur }
+
+      // How much of THIS grant reaches past the plan cap and into paid credit.
+      // Measured as the difference between the two month totals so a grant that
+      // straddles the boundary is split correctly and one that is entirely
+      // inside the plan draws nothing.
+      if (lim.plan >= 0 && lim.extra > 0 && allow > 0) {
+        fromExtra = Math.max(0, (m + allow) - lim.plan) - Math.max(0, m - lim.plan)
+      }
 
       const refused = n - allow
       // Only the first refusal of the month per channel raises a flag, so a
@@ -376,6 +455,21 @@ async function takeSpend(db, tid, channel, want = 1, opts = {}) {
     return { granted: n, reason: 'error-open', limits: lim }
   }
 
+  // Draw the paid balance down by exactly what was consumed beyond the plan.
+  // Deliberately OUTSIDE the transaction and via an atomic increment: pulling
+  // the tenant doc into every metered send would put the platform's busiest
+  // document under write contention for the sake of a field that is only
+  // touched once a venue is past its plan. Two concurrent sends can each see
+  // the same balance and both draw, so the balance can dip a few units below
+  // zero under heavy concurrency — it reads back clamped at 0, and erring
+  // toward a few free units is the right side to be wrong on for something the
+  // venue already paid for.
+  if (fromExtra > 0) {
+    db.doc(`tenants/${tid}`).update({
+      [extraField(channel)]: FieldValue.increment(-fromExtra),
+    }).catch(() => {})
+  }
+
   // Marketing keeps its legacy mirror on the tenant doc: /admin/campaigns,
   // /admin/messages and the console's venue detail all read msgsSent, and this
   // change must not blank their meters. Best-effort and outside the
@@ -416,6 +510,41 @@ async function noteRefusal(db, tid, channel, count, reason, tenant) {
     reason,
     at: FieldValue.serverTimestamp(),
   })
+}
+
+// The live pack catalogue: the code table above, overridden per channel by
+// platformConfig/spendPacks so a price change is a console edit rather than a
+// deploy. An override must be a non-empty array of {qty, sar} with positive
+// numbers — anything else is ignored rather than trusted, because this value
+// decides what a customer is charged.
+let _packs = null
+let _packsAt = 0
+async function resolvePacks(db) {
+  if (_packs && Date.now() - _packsAt < CONTROLS_TTL_MS) return _packs
+  const snap = await db.doc('platformConfig/spendPacks').get().catch(() => null)
+  const ov = snap && snap.exists ? (snap.data() || {}) : {}
+  const out = {}
+  CHANNELS.forEach((c) => {
+    const raw = ov[c]
+    const clean = Array.isArray(raw)
+      ? raw.filter((p) => p && Number(p.qty) > 0 && Number(p.sar) > 0)
+        .map((p) => ({ qty: Math.floor(Number(p.qty)), sar: Math.round(Number(p.sar) * 100) / 100 }))
+      : []
+    out[c] = clean.length ? clean : (SPEND_PACKS[c] || [])
+  })
+  _packs = out
+  _packsAt = Date.now()
+  return out
+}
+
+// The price of one pack, or null when the channel/quantity is not on sale.
+// createPayIntent calls THIS and nothing else — a client-supplied amount never
+// reaches the payment provider.
+async function packPrice(db, channel, qty) {
+  if (!CHANNELS.includes(channel)) return null
+  const packs = await resolvePacks(db).catch(() => SPEND_PACKS)
+  const found = (packs[channel] || []).find((p) => Number(p.qty) === Number(qty))
+  return found ? Number(found.sar) : null
 }
 
 // Read one venue's current-month usage (console + venue meter).
@@ -547,6 +676,7 @@ function makeRollup(onSchedule, getFirestore) {
 
 module.exports = {
   CHANNELS, CHANNEL_AR, PLAN_QUOTAS, BURST_PER_MINUTE, UNIT_COST_USD, USD_TO_SAR,
+  SPEND_PACKS, resolvePacks, packPrice, extraOf, extraField,
   takeSpend, readSpend, costOf, limitsFor, planIdOf,
   getControls, invalidateControls, periodKey, dayKey,
   makeRollup,

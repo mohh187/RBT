@@ -36,6 +36,7 @@ function applyUpdate(doc, patch) {
 function makeDb(seed = {}) {
   const store = { ...seed }
   const collected = []
+  const drawn = []
   const ref = (p) => ({
     path: p,
     async get() {
@@ -46,10 +47,22 @@ function makeDb(seed = {}) {
       if (opts && opts.merge && store[p]) deepMerge(store[p], data)
       else store[p] = JSON.parse(JSON.stringify(data))
     },
+    // The balance drawdown uses update() + FieldValue.increment. The real
+    // admin sentinel is a NumericIncrementTransform carrying `operand`
+    // (verified against the installed firebase-admin, not assumed), and it is
+    // RECORDED rather than applied so a test can assert the exact amount drawn
+    // — which is the whole point of the split-grant arithmetic.
+    async update(data) {
+      for (const [k, v] of Object.entries(data)) {
+        if (v && typeof v === 'object' && typeof v.operand === 'number') drawn.push({ field: k, by: v.operand })
+        else applyUpdate(store[p] || (store[p] = {}), { [k]: v })
+      }
+    },
   })
   return {
     _store: store,
     _collected: collected,
+    _drawn: drawn,
     doc: ref,
     collection: (name) => ({ async add(d) { collected.push({ name, ...d }); return { id: 'x' } } }),
     async runTransaction(fn) {
@@ -227,16 +240,89 @@ async function run() {
     check('a 60-request image loop is stopped at 4', g === 4, g)
   }
   {
-    // Sanity-check the commercial shape: no plan's ceiling may cost more than
-    // its own monthly price at the REALISTIC billing rate (only the messages
-    // outside WhatsApp's free 24h service window are charged; assume 40%).
+    // ---- the commercial shape, as two invariants rather than one ----
+    //
+    // Summing EVERY channel's ceiling and demanding it stay under the plan
+    // price is the wrong test: it assumes a venue maxes all eight channels in
+    // the same month, which no venue does, and the pressure to make that sum
+    // fit would force the rails below what a healthy venue actually needs.
+    //
+    // The two things worth asserting are the two real risks:
+    //
+    //   A. NO SINGLE CHANNEL CAN BANKRUPT THE PLAN. One runaway channel, fully
+    //      consumed, must still cost less than the plan's monthly price.
+    //
+    //   B. THE AUTOMATIC CHANNELS TOGETHER STAY INSIDE THE PLAN. waUtility,
+    //      email and dinerAi fire without anyone pressing a button — a bug
+    //      spends them. The rest (marketing blasts, assistant turns, image and
+    //      3D generation) each need a deliberate human action, so they cannot
+    //      run away unattended.
+    //
+    // waUtility is priced at the realistic 40% billed share: the rest fall
+    // inside WhatsApp's free 24-hour service window.
     const { PLAN_QUOTAS, UNIT_COST_USD, USD_TO_SAR } = require(path.join(__dirname, 'spend.js'))
     const PRICE_SAR = { menu: 99, ops: 199, pro: 349, enterprise: 549 }
-    const BILLED_SHARE = { waUtility: 0.4 } // the rest fall inside the free window
+    const BILLED_SHARE = { waUtility: 0.4 }
+    const AUTOMATIC = ['waUtility', 'email', 'dinerAi']
+    const costSar = (ch, qty) => qty * (BILLED_SHARE[ch] || 1) * UNIT_COST_USD[ch] * USD_TO_SAR
+
     Object.entries(PLAN_QUOTAS).forEach(([plan, q]) => {
-      const sar = Object.entries(q).reduce((s, [ch, n]) =>
-        s + n * (BILLED_SHARE[ch] || 1) * UNIT_COST_USD[ch] * USD_TO_SAR, 0)
-      check(`${plan} ceiling costs under its price (${sar.toFixed(0)} of ${PRICE_SAR[plan]} SAR)`, sar < PRICE_SAR[plan], sar.toFixed(2))
+      const worst = Object.entries(q).map(([ch, qty]) => ({ ch, sar: costSar(ch, qty) }))
+        .sort((a, b) => b.sar - a.sar)[0]
+      check(`${plan}: no single channel can outspend the plan (worst is ${worst.ch} at ${worst.sar.toFixed(0)} of ${PRICE_SAR[plan]} SAR)`,
+        worst.sar < PRICE_SAR[plan], worst)
+
+      const auto = AUTOMATIC.reduce((s, ch) => s + costSar(ch, q[ch] || 0), 0)
+      check(`${plan}: the unattended channels stay inside the plan (${auto.toFixed(0)} of ${PRICE_SAR[plan]} SAR)`,
+        auto < PRICE_SAR[plan], auto.toFixed(2))
+    })
+  }
+
+  // ---------- 8. purchased credit is headroom, and it DEPLETES ----------
+  const { limitsFor: LF, SPEND_PACKS, extraOf } = require(path.join(__dirname, 'spend.js'))
+  {
+    const lim = LF({ plan: 'pro', spendExtra: { waUtility: 2000 } }, 'waUtility')
+    check('a top-up raises the ceiling above the plan', lim.plan === 6000 && lim.extra === 2000 && lim.month === 8000, lim)
+  }
+  {
+    // The old aiExtra behaviour granted the purchased quantity EVERY month
+    // forever. Buying 1,000 must mean 1,000 — so consuming past the plan cap
+    // has to draw the balance down.
+    const db = makeDb({ 'tenants/t1': { spendCaps: { email: 10 }, spendExtra: { email: 5 } } })
+    const a = await takeSpend(db, 't1', 'email', 8)  // entirely inside the plan
+    check('inside the plan, the balance is untouched', a.granted === 8 && db._drawn.length === 0, db._drawn)
+    const b = await takeSpend(db, 't1', 'email', 5)  // 2 inside the plan, 3 from credit
+    check('a grant straddling the boundary is split', b.granted === 5, b)
+    check('exactly the overflow was drawn, from the right field',
+      db._drawn.length === 1 && db._drawn[0].by === -3 && db._drawn[0].field === 'spendExtra.email', db._drawn)
+    const c = await takeSpend(db, 't1', 'email', 5)  // 2 left of the 15 ceiling
+    check('the effective ceiling is plan + balance', c.granted === 2 && c.reason === 'cap', c)
+  }
+  {
+    // aiText keeps the LEGACY aiExtra field so /admin/assistant keeps working.
+    const lim = LF({ plan: 'ops', aiExtra: 300 }, 'aiText')
+    check('aiText reads the legacy aiExtra balance', lim.plan === 800 && lim.extra === 300 && lim.month === 1100, lim)
+    check('extraOf reads the same field', extraOf({ aiExtra: 300 }, 'aiText') === 300)
+  }
+
+  // ---------- 9. the three migrated channels ----------
+  {
+    check('ar3d is off below enterprise', LF({ plan: 'pro' }, 'ar3d').month === 0)
+    check('ar3d is on at enterprise', LF({ plan: 'enterprise' }, 'ar3d').month === 20)
+    check('a purchased pack opens ar3d on any plan', LF({ plan: 'pro', spendExtra: { ar3d: 5 } }, 'ar3d').month === 5)
+    check('the legacy ar3dMonthly still wins', LF({ plan: 'enterprise', ar3dMonthly: 3 }, 'ar3d').plan === 3)
+    check('the legacy dinerAiMonthly still wins', LF({ plan: 'pro', dinerAiMonthly: 250 }, 'dinerAi').plan === 250)
+    check('dinerAi keeps its historic 20/min burst', LF({ plan: 'pro' }, 'dinerAi').minute === 20)
+  }
+
+  // ---------- 10. every channel can be topped up, and never below cost ----------
+  {
+    const { CHANNELS, UNIT_COST_USD, USD_TO_SAR } = require(path.join(__dirname, 'spend.js'))
+    CHANNELS.forEach((ch) => {
+      const packs = SPEND_PACKS[ch] || []
+      check(`${ch} is purchasable`, packs.length > 0)
+      const bad = packs.filter((p) => p.sar <= p.qty * UNIT_COST_USD[ch] * USD_TO_SAR)
+      check(`${ch} packs all price above their own cost`, bad.length === 0, bad)
     })
   }
 

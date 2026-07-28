@@ -207,13 +207,16 @@ service cloud.firestore {
                           // spend meter reads (functions/spend.js). Writable by the
                           // venue they would be a self-service «raise my own bill»
                           // switch — the exact hole msgCapMonthly used to be.
-                          'spendCaps', 'spendCapsDaily',
+                          // spendExtra is the PURCHASED balance: it is credited only
+                          // by the payment webhook and debited only by the meter, so
+                          // a client write would be minting paid credit for free.
+                          'spendCaps', 'spendCapsDaily', 'spendExtra',
                           'smsApiKey']))
         || ((hasCap(tid, 'manage_settings') || hasCap(tid, 'manage_appearance') || hasCap(tid, 'manage_loyalty') || hasCap(tid, 'manage_campaigns') || hasCap(tid, 'manage_integrations'))
             && !request.resource.data.diff(resource.data).affectedKeys()
                  .hasAny(['plan', 'planStatus', 'planExpiresAt', 'active', 'suspendReason', 'platformNote', 'ownerUid', 'features', 'roleCaps', 'msgsSent', 'msgCapMonthly',
                           'aiLimits', 'aiExtra', 'ar3dMonthly', 'ar3dUnlimited', 'dinerAiMonthly',
-                          'spendCaps', 'spendCapsDaily', 'smsApiKey']));
+                          'spendCaps', 'spendCapsDaily', 'spendExtra', 'smsApiKey']));
       allow delete: if roleIn(tid, ['owner']) || isPlatformSuper();
 
       // Platform admins READ every tenant subcollection (support & oversight from

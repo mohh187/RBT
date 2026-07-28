@@ -10,6 +10,30 @@ const { onCall, onRequest, HttpsError } = require('firebase-functions/v2/https')
 const { getFirestore, FieldValue } = require('firebase-admin/firestore')
 const { sendEmail, emailShell, esc } = require('./messaging')
 const { receiptForSimple, notifyReceipt, invoiceLink } = require('./invoicing')
+const { takeSpend, readSpend, packPrice, extraField, CHANNEL_AR, limitsFor: spendLimitsFor } = require('./spend')
+
+// Take one unit off a metered channel or refuse the call outright, with a
+// message the venue can act on. Used by the three AI features whose bespoke
+// counters used to live inside their own functions — each one invisible to the
+// console, each one hardcoded, none of them toppable-up.
+//
+// error-open passes through on purpose: a Firestore blip must not take a paid
+// feature offline (and takeSpend caps how long it will do that).
+async function claimSpend(db, tenantId, channel, want = 1) {
+  const r = await takeSpend(db, tenantId, channel, want)
+  if (r.granted >= want || r.reason === 'error-open') return r
+  const label = CHANNEL_AR[channel] || channel
+  const why = {
+    cap: `اكتمل رصيدك الشهري من «${label}». يمكنك شراء رصيد إضافي من صفحة الفوترة، أو ترقية باقتك.`,
+    daily: `بلغت الحد اليومي من «${label}» — يتجدد غداً.`,
+    burst: 'طلبات كثيرة في وقت قصير — انتظر دقيقة ثم أعد المحاولة.',
+    killed: `«${label}» موقوف مؤقتاً من إدارة المنصة.`,
+    suspended: 'اشتراك المنشأة موقوف.',
+    disabled: `«${label}» غير مفعّل في باقتك — رقِّ اشتراكك أو اشترِ رصيداً.`,
+    'error-closed': 'الخدمة غير متاحة مؤقتاً، أعد المحاولة بعد قليل.',
+  }[r.reason] || 'تم بلوغ حدّ الاستخدام.'
+  throw new HttpsError('resource-exhausted', why)
+}
 
 // Venue owner's email (for subscription invoice/receipt emails).
 async function ownerEmailOf(db, ownerUid) {
@@ -459,6 +483,23 @@ async function deriveIntentAmount(db, { kind, tenantId, refId, request }) {
     if (!isMgr) throw new HttpsError('permission-denied', 'Managers only.')
     amountSar = AI_PACKS[qty]
     description = `AI credits ${qty} — ${tenantId}`
+  } else if (kind === 'spendPack') {
+    // Top-up for ANY metered channel. refId is "<channel>:<qty>" and the price
+    // comes from packPrice() — the server table in functions/spend.js, or its
+    // console override. Nothing the client sends touches the amount, and an
+    // unlisted quantity is refused outright rather than priced by arithmetic
+    // (which is how a client-chosen qty would become a client-chosen price).
+    const [channel, qtyRaw] = String(refId).split(':')
+    const qty = Number(qtyRaw)
+    const uid = request && request.auth && request.auth.uid
+    if (!uid) throw new HttpsError('unauthenticated', 'Sign in to buy credits.')
+    const uSnap = await db.collection('users').doc(uid).get()
+    const isMgr = uSnap.exists && ['owner', 'manager'].includes(uSnap.data().role) && uSnap.data().tenantId === tenantId
+    if (!isMgr) throw new HttpsError('permission-denied', 'Managers only.')
+    const price = await packPrice(db, channel, qty)
+    if (!price) throw new HttpsError('invalid-argument', 'unknown credit pack')
+    amountSar = price
+    description = `${CHANNEL_AR[channel] || channel} +${qty} — ${tenantId}`
   } else if (kind === 'booking') {
     const [rs, ts] = await Promise.all([
       db.doc(`tenants/${tenantId}/reservations/${refId}`).get(),
@@ -657,6 +698,29 @@ async function settleFromPayment(db, payment) {
       period: `${qty} طلب ذكاء`, status: 'paid', provider: 'moyasar', providerRef: payment.id,
       paidAt: FieldValue.serverTimestamp(), createdAt: FieldValue.serverTimestamp(),
     }).catch(() => {})
+  } else if (intent.kind === 'spendPack') {
+    // Same full automation as aiCredits: settled payment → the balance is on
+    // the venue instantly and a PAID invoice lands in the console. The balance
+    // DEPLETES as it is used (functions/spend.js draws it down), so a pack of
+    // 1,000 is 1,000 units — not 1,000 extra every month forever.
+    const [channel, qtyRaw] = String(intent.refId).split(':')
+    const qty = Number(qtyRaw) || 0
+    if (CHANNEL_AR[channel] && qty > 0) {
+      const tRef = db.doc(`tenants/${tid}`)
+      const tSnap = await tRef.get().catch(() => null)
+      const tName = tSnap && tSnap.exists ? (tSnap.data().name || '') : ''
+      // update(), NOT set(merge): only update() reads a dotted key as a FIELD
+      // PATH. set() would have created a literal top-level field named
+      // "spendExtra.waUtility" and the balance would never have been found.
+      await tRef.update({ [extraField(channel)]: FieldValue.increment(qty) }).catch(() => {})
+      await db.collection('platformInvoices').add({
+        tenantId: tid, tenantName: tName, plan: 'spendPack',
+        amount: (Number(intent.amount) || 0) / 100, currency: 'SAR',
+        period: `${CHANNEL_AR[channel]} +${qty}`, status: 'paid', provider: 'moyasar', providerRef: payment.id,
+        paidAt: FieldValue.serverTimestamp(), createdAt: FieldValue.serverTimestamp(),
+      }).catch(() => {})
+      await writeAudit(db, { kind: 'payment', action: 'spendPackCredited', tenantId: tid, refId: intent.refId, providerRef: payment.id })
+    }
   } else if (intent.kind === 'booking') {
     const rRef = db.doc(`tenants/${tid}/reservations/${intent.refId}`)
     const rSnap = await rRef.get().catch(() => null)
@@ -979,19 +1043,23 @@ const imageTo3d = onCall({ timeoutSeconds: 540, memory: '1GiB' }, async (request
     : (ORDER[td.plan || 'enterprise'] || 4) >= 4 && td.features?.ar3d !== false
   if (!allowed) throw new HttpsError('permission-denied', 'المجسمات الواقعية ميزة الباقة المتكاملة — رقِّ اشتراكك لتفعيلها.')
 
-  // Credit protection (server-enforced): every conversion consumes PLATFORM
-  // Meshy credits, so venues get a monthly cap (tenant.ar3dMonthly, default 20,
-  // platform console edits it) + max 2 conversions per item per month.
-  const AR3D_DEFAULT_MONTHLY = 20
-  // TEMPORARY open-generation switch: tenant.ar3dUnlimited === true skips the
-  // venue-monthly AND per-item caps (platform sets/clears it in Firestore —
-  // restoring the caps is a data flip, no deploy). The Meshy provider-balance
-  // guard below stays live either way; that wallet is still the real wall.
+  // Credit protection: every conversion consumes PLATFORM Meshy credits — the
+  // dearest unit on the platform at roughly 1.20 USD each.
+  //
+  // The MONTHLY cap now lives in the shared meter (functions/spend.js, channel
+  // 'ar3d'), which is what makes it plan-aware, toppable-up with a purchase,
+  // and visible in /platform/spend. tenant.ar3dMonthly still wins if the
+  // console set one — limitsFor reads it through spendCaps precedence.
+  //
+  // The PER-ITEM guard stays here, because it is not a spend limit: it stops a
+  // venue re-converting the same bad photo over and over, which the monthly
+  // meter alone would happily allow until the money ran out.
   const uncapped = td.ar3dUnlimited === true
   // cap/monthUsed live OUTSIDE the guard: the success payload at the end of
   // this function reports `remaining`, and block-scoping them here once threw
   // a ReferenceError on every call (the 500 INTERNAL the owner hit).
-  const cap = Math.max(0, Number(td.ar3dMonthly) || AR3D_DEFAULT_MONTHLY)
+  const ar3dLim = spendLimitsFor(td, 'ar3d')
+  const cap = ar3dLim.month < 0 ? Infinity : ar3dLim.month
   let monthUsed = 0
   if (!uncapped) {
     const monthStart = new Date()
@@ -1000,14 +1068,11 @@ const imageTo3d = onCall({ timeoutSeconds: 540, memory: '1GiB' }, async (request
       .where('createdAt', '>=', monthStart).get().catch(() => null)
     const monthJobs = jobsSnap ? jobsSnap.docs.map((d) => d.data()).filter((j) => j.status === 'done' || j.status === 'running') : []
     monthUsed = monthJobs.length
-    if (monthJobs.length >= cap) {
-      throw new HttpsError('resource-exhausted',
-        `اكتمل حد التحويلات الواقعية لهذا الشهر (${cap} تحويلاً). يتجدد الحد مطلع الشهر، أو تواصل مع المنصة لرفعه.`)
-    }
     if (itemId && monthJobs.filter((j) => j.itemId === itemId).length >= 2) {
       throw new HttpsError('resource-exhausted',
         'هذا الصنف حُوِّل مرتين هذا الشهر — الحد تحويلان لكل صنف شهرياً حمايةً للرصيد. عدِّل صورة الصنف جيداً قبل إعادة المحاولة الشهر القادم.')
     }
+    await claimSpend(db, tenantId, 'ar3d')
   }
   // Fail-soft provider-balance guard: warn out loudly before burning a task on
   // an empty Meshy wallet (endpoint shape may change — never block on it).
@@ -1104,7 +1169,15 @@ const imageTo3d = onCall({ timeoutSeconds: 540, memory: '1GiB' }, async (request
   }
   if (itemId) await db.doc(`tenants/${tenantId}/items/${itemId}`).set({ model3dUrl: url, model3dUsdzUrl: usdzStoredUrl }, { merge: true }).catch(() => {})
   await db.collection(`tenants/${tenantId}/ar3dJobs`).doc(String(taskId)).set({ status: 'done', url, usdzUrl: usdzStoredUrl }, { merge: true }).catch(() => {})
-  return { url, usdzUrl: usdzStoredUrl, remaining: uncapped ? cap : Math.max(0, cap - monthUsed - 1), cap }
+  // -1 for unlimited: Infinity is not representable in JSON and arrives at the
+  // client as null, which the usage meter would render as «0 remaining».
+  const ar3dCapOut = Number.isFinite(cap) ? cap : -1
+  return {
+    url,
+    usdzUrl: usdzStoredUrl,
+    remaining: uncapped || !Number.isFinite(cap) ? -1 : Math.max(0, cap - monthUsed - 1),
+    cap: ar3dCapOut,
+  }
 })
 
 // ============ AI tabletop for the menu room (Gemini image) ============
@@ -1133,17 +1206,12 @@ const generateTableImage = onCall({ timeoutSeconds: 120, memory: '512MiB' }, asy
   const uSnap = await db.collection('users').doc(uid).get()
   const u = uSnap.exists ? uSnap.data() : {}
   if (u.tenantId !== tenantId || !['owner', 'manager'].includes(u.role)) throw new HttpsError('permission-denied', 'managers only')
-  // Credit protection, same shape as imageTo3d: image generation burns platform
-  // credit, so a modest monthly cap per venue.
-  const CAP = 30
-  const monthStart = new Date()
-  monthStart.setDate(1); monthStart.setHours(0, 0, 0, 0)
-  const jobs = await db.collection(`tenants/${tenantId}/aiImageJobs`)
-    .where('createdAt', '>=', monthStart).get().catch(() => null)
-  const used = jobs ? jobs.size : 0
-  if (used >= CAP) {
-    throw new HttpsError('resource-exhausted', `اكتمل حد توليد الصور لهذا الشهر (${CAP} صورة). يتجدد مطلع الشهر.`)
-  }
+  // Credit protection — now the SHARED meter (functions/spend.js) instead of a
+  // bespoke count of aiImageJobs. Three things the old version could not do:
+  // the cap follows the plan, the platform can stop it or top it up without a
+  // deploy, and the usage shows up beside every other channel in
+  // /platform/spend instead of being invisible.
+  await claimSpend(db, tenantId, 'tableImage')
 
   const w = wall && typeof wall === 'object' ? wall : {}
   const clean = (s, n) => String(s || '').replace(/[\r\n"]+/g, ' ').trim().slice(0, n)
@@ -1193,7 +1261,15 @@ const generateTableImage = onCall({ timeoutSeconds: 120, memory: '512MiB' }, asy
   await db.collection(`tenants/${tenantId}/aiImageJobs`).add({
     kind: 'table', by: uid, url, hint: clean(hint, 120), createdAt: FieldValue.serverTimestamp(),
   }).catch(() => {})
-  return { url, remaining: Math.max(0, CAP - used - 1), cap: CAP }
+  // The meter is the source of truth for what is left, so this read-out cannot
+  // drift from what the next call will actually allow. -1 means unlimited.
+  const tableUsage = await readSpend(db, tenantId).catch(() => ({}))
+  const tableLim = spendLimitsFor((await db.doc(`tenants/${tenantId}`).get().catch(() => null))?.data() || {}, 'tableImage')
+  return {
+    url,
+    remaining: tableLim.month < 0 ? -1 : Math.max(0, tableLim.month - (Number(tableUsage.tableImage) || 0)),
+    cap: tableLim.month,
+  }
 })
 
 // ============ Diner AI ordering — photo + voice (guest-facing) ============
@@ -1210,36 +1286,35 @@ const generateTableImage = onCall({ timeoutSeconds: 120, memory: '512MiB' }, asy
 // scanner does not cover functions/). Same numbers, same names — change
 // BOTH sides together. photoMaxB64 6.5MB of base64 ≈ 4.5MB raw
 // (= AI_ORDER_RANGE.photoMaxBytes after the client canvas downscale).
+// The monthly and per-minute walls used to live here; they now come from
+// functions/spend.js (PLAN_QUOTAS.dinerAi and BURST_PER_MINUTE.dinerAi, which
+// keeps the historic 20/min). Only the payload and catalogue limits are still
+// this function's own business.
 const DINER_AI = {
   photoMaxB64: 6.5 * 1024 * 1024,
   audioMaxB64: 2.5 * 1024 * 1024,
-  monthlyDflt: 2000, // calls/month, photo + audio combined (tenant.dinerAiMonthly overrides)
-  perMinute: 20,     // fixed burst wall
   catalogMax: 200,   // menu entries offered to the model
 }
 
-// Take one credit off tenants/{tid}/counters/dinerAi-YYYY-MM
-// { count, minute, minuteCount } — Admin-SDK-only doc family (rules
-// default-deny it, like aiImageJobs). Transactional so parallel guests
-// cannot slip past the caps. Explicit tenant.dinerAiMonthly = 0 DISABLES
-// the feature entirely (Number.isFinite guard at the callsite — 0 is falsy,
-// the `|| default` idiom would silently re-enable it).
-async function takeDinerAiCredit(db, tenantId, cap) {
-  const ym = new Date().toISOString().slice(0, 7)
-  const ref = db.doc(`tenants/${tenantId}/counters/dinerAi-${ym}`)
-  await db.runTransaction(async (tx) => {
-    const s = await tx.get(ref)
-    const d = s.exists ? (s.data() || {}) : {}
-    if ((d.count || 0) >= cap) {
-      throw new HttpsError('resource-exhausted', 'quota')
-    }
-    const nowMin = new Date().toISOString().slice(0, 16)
-    const minuteCount = d.minute === nowMin ? (d.minuteCount || 0) + 1 : 1
-    if (minuteCount > DINER_AI.perMinute) {
-      throw new HttpsError('resource-exhausted', 'burst')
-    }
-    tx.set(ref, { count: (d.count || 0) + 1, minute: nowMin, minuteCount }, { merge: true })
-  })
+// The monthly + per-minute quota now comes from the shared meter (channel
+// 'dinerAi'), which enforces the same three walls transactionally and, unlike
+// the bespoke counter this replaces, is plan-aware, toppable-up and visible in
+// the console. tenant.dinerAiMonthly still wins where it is set — limitsFor
+// reads it through the spendCaps precedence, and an explicit 0 still DISABLES
+// the feature outright.
+//
+// The guest is anonymous here, so the refusal must read as something a diner
+// understands rather than a quota code.
+async function takeDinerAiCredit(db, tenantId) {
+  const r = await takeSpend(db, tenantId, 'dinerAi', 1)
+  if (r.granted >= 1 || r.reason === 'error-open') return
+  throw new HttpsError('resource-exhausted', {
+    burst: 'المساعد مشغول الآن — أعد المحاولة بعد لحظات.',
+    daily: 'بلغ المساعد حدّه اليومي في هذا المطعم — جرّب غداً أو اطلب من النادل.',
+    killed: 'المساعد متوقف مؤقتاً.',
+    disabled: 'المساعد غير مفعّل في هذا المطعم.',
+    suspended: 'هذا المطعم غير نشط حالياً.',
+  }[r.reason] || 'اكتمل رصيد المساعد في هذا المطعم لهذا الشهر — يمكنك الطلب يدوياً من المنيو.')
 }
 
 // Request: { tenantId, kind: 'photo'|'audio', inlineData: { mimeType, data },
@@ -1273,8 +1348,7 @@ const dinerOrderAi = onCall({ timeoutSeconds: 60, memory: '512MiB' }, async (req
   // (!== false); audio AI is opt-in default OFF (=== true), per the contract.
   if (kind === 'photo' && td.photoOrderEnabled === false) throw new HttpsError('permission-denied', 'disabled')
   if (kind === 'audio' && td.voiceAiEnabled !== true) throw new HttpsError('permission-denied', 'disabled')
-  const cap = Number.isFinite(td.dinerAiMonthly) ? Math.max(0, td.dinerAiMonthly) : DINER_AI.monthlyDflt
-  await takeDinerAiCredit(db, tenantId, cap)
+  await takeDinerAiCredit(db, tenantId)
 
   // Catalog straight from Firestore — never trusts client-supplied names.
   // Same conventions the menu client itself uses (MenuView allActive +
