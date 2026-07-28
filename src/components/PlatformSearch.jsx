@@ -22,6 +22,7 @@ const PAGES = [
   { to: '/platform/activity', title: 'الأنشطة', kw: 'activity feed events نشاط أنشطة أحداث', icon: 'bellRing' },
   { to: '/platform/subscriptions', title: 'الاشتراكات', kw: 'subscriptions اشتراكات باقات', icon: 'wallet' },
   { to: '/platform/billing', title: 'الفواتير', kw: 'billing invoices payments فوترة فواتير مدفوعات', icon: 'receipt' },
+  { to: '/platform/spend', title: 'الإنفاق والحدود', kw: 'spend cost limits quota kill switch budget whatsapp تكلفة انفاق حدود سقف ميزانية ايقاف واتساب استهلاك', icon: 'zap' },
   { to: '/platform/plans', title: 'محرر الخطط', kw: 'plans pricing editor خطط باقات أسعار محرر', icon: 'layers' },
   { to: '/platform/growth', title: 'النمو', kw: 'growth onboarding نمو تهيئة', icon: 'award' },
   { to: '/platform/chat', title: 'المحادثات', kw: 'chat messages محادثات دردشة رسائل', icon: 'mail' },

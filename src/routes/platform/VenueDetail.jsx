@@ -20,6 +20,7 @@ import {
   impersonateTenantOwner, fetchRecentSub, watchVenueMeta, setVenueMeta,
 } from '../../lib/platform.js'
 import { PLANS, FEATURE_CATALOG } from '../../lib/plans.js'
+import { CHANNELS, limitsFor, watchVenueSpend } from '../../lib/spend.js'
 import { PLATFORM_APEX } from '../../lib/domains.js'
 import { PlanBadge, StatusChip, fmtWhen, toDateInput, ActivityRow, startOfToday, promptSuspendReason } from './shared.jsx'
 
@@ -108,6 +109,102 @@ function Section({ icon, title, children, danger }) {
       <strong><Icon name={icon} size={16} /> {title}</strong>
       {children}
     </div>
+  )
+}
+
+// ---- per-venue spend caps: the real counters, and the ceiling that made them ----
+// The number typed here is the number the server enforces (functions/spend.js
+// limitsFor), so this panel and the meter the venue sees can never disagree.
+//
+// Each channel is saved to ONE field, chosen so no other screen goes stale:
+// marketing keeps writing the legacy msgCapMonthly that /admin/campaigns and
+// /admin/messages already display, the assistant's text budget keeps writing
+// aiLimits.monthly that /admin/assistant displays, and the channels with no
+// legacy home get spendCaps.<key>. Writing spendCaps for ALL of them would have
+// silently shadowed those two screens with a different number.
+const CAP_FIELD = {
+  waMarketing: (v) => ({ msgCapMonthly: v }),
+  aiText: (v, t) => ({ aiLimits: { daily: Number(t.aiLimits?.daily) || 60, monthly: v } }),
+  waUtility: (v) => ({ 'spendCaps.waUtility': v }),
+  email: (v) => ({ 'spendCaps.email': v }),
+  aiImage: (v) => ({ 'spendCaps.aiImage': v }),
+}
+
+function SpendCaps({ tid, tenant, toast }) {
+  const [usage, setUsage] = useState(null)
+  const [edits, setEdits] = useState({})
+  const [saving, setSaving] = useState('')
+
+  useEffect(() => watchVenueSpend(tid, setUsage), [tid])
+
+  const save = async (key) => {
+    const raw = edits[key]
+    if (raw === undefined || raw === '') return
+    const next = Math.max(-1, Math.floor(Number(raw)))
+    if (!Number.isFinite(next)) { toast.error('رقم غير صالح'); return }
+    setSaving(key)
+    try {
+      await platformUpdateTenant(tid, CAP_FIELD[key](next, tenant))
+      setEdits((e) => { const c = { ...e }; delete c[key]; return c })
+      toast.success('حُدّث السقف — يسري فوراً')
+    } catch {
+      toast.error('تعذّر الحفظ')
+    } finally { setSaving('') }
+  }
+
+  return (
+    <Section icon="zap" title="حدود الإنفاق (كل القنوات)">
+      <div className="xs faint">
+        العدّادات تُكتب من الخادم قبل كل إرسال ولا يمكن للمنشأة تعديلها. اكتب −1 لجعل القناة بلا سقف، وصفر لتعطيلها تماماً.
+      </div>
+      {usage?.period ? <div className="xs faint num" dir="ltr">{usage.period}</div> : null}
+      <div className="stack" style={{ gap: 12, marginTop: 4 }}>
+        {CHANNELS.map((c) => {
+          const lim = limitsFor(tenant, c.key)
+          const used = Number(usage?.[c.key]) || 0
+          const blocked = Number(usage?.blocked?.[c.key]) || 0
+          const unlimited = lim.month < 0
+          const pct = unlimited || !lim.month ? 0 : Math.min(100, (used / lim.month) * 100)
+          const val = edits[c.key] !== undefined ? edits[c.key] : String(lim.month)
+          return (
+            <div key={c.key} className="stack" style={{ gap: 4 }}>
+              <div className="row-between small" style={{ gap: 8 }}>
+                <span>{c.ar}</span>
+                <strong className="num" dir="ltr">
+                  {used.toLocaleString('en-US')}{unlimited ? ' / ∞' : ` / ${lim.month.toLocaleString('en-US')}`}
+                </strong>
+              </div>
+              <div className="v360-bar">
+                <div style={{ width: `${pct}%`, background: pct >= 100 ? 'var(--danger)' : pct >= 80 ? 'var(--gold)' : 'var(--brand)' }} />
+              </div>
+              {blocked > 0 && (
+                <div className="xs" style={{ color: 'var(--danger)' }}>
+                  رُفضت {blocked.toLocaleString('en-US')} — {{ cap: 'السقف الشهري', daily: 'السقف اليومي', burst: 'الحد اللحظي', killed: 'إيقاف من المنصة' }[usage?.blockedReason?.[c.key]] || 'بلوغ الحد'}
+                </div>
+              )}
+              <div className="row" style={{ gap: 8, alignItems: 'flex-end' }}>
+                <input
+                  type="number" className="input num grow" style={{ minWidth: 110 }} value={val}
+                  onChange={(e) => setEdits((x) => ({ ...x, [c.key]: e.target.value }))}
+                />
+                <button
+                  className="btn btn-outline btn-sm"
+                  disabled={saving === c.key || edits[c.key] === undefined || Number(edits[c.key]) === lim.month}
+                  onClick={() => save(c.key)}
+                >
+                  {saving === c.key ? 'جارٍ…' : 'حفظ'}
+                </button>
+              </div>
+              <span className="xs faint">
+                {c.hint}
+                {lim.day > 0 ? ` · سقف يومي ${lim.day.toLocaleString('en-US')}` : ''}
+                {lim.minute > 0 ? ` · ${lim.minute.toLocaleString('en-US')} في الدقيقة` : ''}
+              </span>
+            </div>
+          )
+        })}
+      </div>
+    </Section>
   )
 }
 
@@ -664,11 +761,6 @@ function DataTab({ tid, tenant, cache }) {
 
 // ============================== الرسائل والتكاملات ==============================
 function CommsTab({ tid, tenant, cache, toast }) {
-  const monthKey = new Date().toLocaleDateString('en-CA').slice(0, 7)
-  const monthSent = tenant.msgsSent?.period === monthKey ? (Number(tenant.msgsSent?.count) || 0) : 0
-  const cap = Number(tenant.msgCapMonthly) || 2000
-  const [capEdit, setCapEdit] = useState(String(Number(tenant.msgCapMonthly) || 2000))
-  const [savingCap, setSavingCap] = useState(false)
   const tpl = tenant.msgTemplates || {}
   const extraTplKeys = Object.keys(tpl).filter((k) => !(k in MSG_TEMPLATE_AR))
 
@@ -684,38 +776,12 @@ function CommsTab({ tid, tenant, cache, toast }) {
     return s.docs.map((d) => ({ id: d.id, keys: Object.keys(d.data()).filter((k) => k !== 'updatedAt').sort() }))
   })
 
-  const saveCap = async () => {
-    if (savingCap) return
-    const next = Math.max(0, Number(capEdit) || 0)
-    if (next === (Number(tenant.msgCapMonthly) || 2000)) { toast.success('لا توجد تغييرات للحفظ'); return }
-    setSavingCap(true)
-    try {
-      await platformUpdateTenant(tid, { msgCapMonthly: next })
-      toast.success('حُدّث سقف الرسائل')
-    } catch {
-      toast.error('تعذّر الحفظ')
-    } finally {
-      setSavingCap(false)
-    }
-  }
-
   const waDoc = (priv || []).find((d) => d.id === 'wa')
   const otherPriv = (priv || []).filter((d) => d.id !== 'wa')
-  const pct = Math.min(100, cap ? (monthSent / cap) * 100 : 0)
 
   return (
     <>
-      <Section icon="message" title="رسائل واتساب (العدّاد والسقف)">
-        <div className="row-between small"><span>المرسل هذا الشهر ({monthKey})</span><strong className="num">{monthSent.toLocaleString('en-US')} / {cap.toLocaleString('en-US')}</strong></div>
-        <div className="v360-bar"><div style={{ width: `${pct}%`, background: monthSent >= cap ? 'var(--danger)' : 'var(--brand)' }} /></div>
-        <div className="row" style={{ gap: 8, flexWrap: 'wrap', alignItems: 'flex-end' }}>
-          <label className="stack grow" style={{ gap: 4, minWidth: 140 }}>
-            <span className="xs faint bold">السقف الشهري (msgCapMonthly)</span>
-            <input type="number" min="0" className="input num" value={capEdit} onChange={(e) => setCapEdit(e.target.value)} />
-          </label>
-          <button className="btn btn-outline" disabled={savingCap} onClick={saveCap}>{savingCap ? 'جارٍ الحفظ…' : 'حفظ السقف'}</button>
-        </div>
-      </Section>
+      <SpendCaps tid={tid} tenant={tenant} toast={toast} />
 
       <div className="v360-cols">
         <Section icon="file" title="قوالب الرسائل (الأسماء فقط)">

@@ -135,6 +135,9 @@ const generateMonthlyInvoices = onSchedule(
         if (email && amount > 0) {
           const payUrl = (process.env.PUBLIC_BASE_URL || '') + '/admin'
           await sendEmail({
+            // The platform billing the venue — one mail per venue per month,
+            // and it must never be refused by the venue's own usage meter.
+            meter: 'platform',
             to: email,
             subject: `فاتورة اشتراك rbt360 — ${period}`,
             html: emailShell(`فاتورة اشتراك ${esc(d.name || '')}`, `
@@ -333,6 +336,8 @@ async function settleInvoiceFromPayment(db, payment) {
       const email = await ownerEmailOf(db, d.ownerUid)
       if (email) {
         await sendEmail({
+          // Payment receipt for the platform's own subscription — see above.
+          meter: 'platform',
           to: email,
           subject: `تم استلام دفعة اشتراك rbt360 — ${invoice.period || ''}`,
           html: emailShell('تم استلام دفعتك', `

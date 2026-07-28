@@ -127,18 +127,24 @@ async function notifyReceipt(tenant, phone, { code, total, currency, link, email
       .replace(/\{link\}|\{الرابط\}/g, link)
     : `${venueName}\nتم استلام دفعتك للطلب ${code ? '#' + code : ''} بمبلغ ${amount} ${currency}.\nفاتورتك: ${link}`
 
+  // The receipt link is transactional WhatsApp — metered as waUtility, like the
+  // order-status notice. It was uncapped until the meter existed.
+  const db = getFirestore()
+  const waMeter = tid ? { db, tid, channel: 'waUtility', tenant } : undefined
+  const mailMeter = tid ? { db, tid, channel: 'email', tenant } : undefined
+
   if (phone && ch.whatsapp !== false) {
-    const creds = tid ? await waCredsFor(getFirestore(), tid) : null
+    const creds = tid ? await waCredsFor(db, tid) : null
     const tmpl = (creds && creds.templates && creds.templates.templateReceipt) || process.env.WA_TEMPLATE_RECEIPT
     if (tmpl) {
-      await sendWhatsAppTemplate(phone, tmpl, tenant.locale || 'ar', [venueName, '#' + (code || ''), amount, link], creds).catch(() => {})
+      await sendWhatsAppTemplate(phone, tmpl, tenant.locale || 'ar', [venueName, '#' + (code || ''), amount, link], creds, waMeter).catch(() => {})
     } else {
-      await sendWhatsAppText(phone, text, creds).catch(() => {})
+      await sendWhatsAppText(phone, text, creds, waMeter).catch(() => {})
     }
   }
   if (email && ch.email !== false) {
     await sendEmail({
-      to: email, fromName: venueName, replyTo: tenant.contactEmail || undefined,
+      to: email, fromName: venueName, replyTo: tenant.contactEmail || undefined, meter: mailMeter,
       subject: `${venueName} — فاتورتك ${code ? '#' + code : ''}`.replace(/[\r\n]+/g, ' '),
       html: emailShell(esc(venueName), `
         <p>تم استلام دفعتك${code ? ' للطلب <strong>#' + esc(code) + '</strong>' : ''} بمبلغ <strong>${esc(amount)} ${esc(currency)}</strong>.</p>

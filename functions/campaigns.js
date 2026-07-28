@@ -11,6 +11,7 @@ const { onSchedule } = require('firebase-functions/v2/scheduler')
 const { onDocumentCreated, onDocumentUpdated } = require('firebase-functions/v2/firestore')
 const { getFirestore, FieldValue } = require('firebase-admin/firestore')
 const { sendWhatsAppText, waCredsFor } = require('./messaging')
+const { takeSpend } = require('./spend')
 
 // Personalize a template: {name}/{الاسم} → customer name, {venue}/{المنشأة} → venue.
 function fill(text, { name, venue }) {
@@ -22,20 +23,17 @@ function fill(text, { name, venue }) {
 const digits = (p) => String(p || '').replace(/[^0-9]/g, '')
 
 // ---- monthly send cap (defends the venue's WhatsApp quota/bill) ----
-const PERIOD = () => new Date().toLocaleDateString('en-CA', { timeZone: 'Asia/Riyadh' }).slice(0, 7)
+// Now a thin adapter over the shared meter in spend.js. The behaviour a caller
+// sees is unchanged — ask for `want`, get back how many you may send — but the
+// budget is claimed on the same counter, against the same walls (month, day,
+// minute) as every other channel, and tenant.msgsSent is still mirrored for the
+// screens that read it.
+//
+// The old implementation lived here and covered marketing ONLY, which is how
+// transactional WhatsApp and every email came to be uncapped.
 async function takeQuota(db, tid, want) {
-  const ref = db.doc(`tenants/${tid}`)
-  let granted = 0
-  await db.runTransaction(async (tx) => {
-    const s = await tx.get(ref)
-    if (!s.exists) return
-    const t = s.data() || {}
-    const cap = Number(t.msgCapMonthly) || 2000
-    const cur = t.msgsSent && t.msgsSent.period === PERIOD() ? (Number(t.msgsSent.count) || 0) : 0
-    granted = Math.max(0, Math.min(want, cap - cur))
-    tx.set(ref, { msgsSent: { period: PERIOD(), count: cur + granted } }, { merge: true })
-  }).catch(() => {})
-  return granted
+  const r = await takeSpend(db, tid, 'waMarketing', want)
+  return r.granted
 }
 
 // Resolve one customer against an audience spec.
@@ -70,7 +68,10 @@ async function fanOut(customers, textFor, creds) {
       const to = digits(c.phone)
       if (!to) return
       try {
-        const res = await sendWhatsAppText(to, textFor(c, i + j), creds)
+        // 'claimed': the caller already took the whole audience's budget in one
+        // takeQuota() grant before fanning out — metering again per message
+        // would charge every send twice.
+        const res = await sendWhatsAppText(to, textFor(c, i + j), creds, 'claimed')
         if (res && res.ok) sent += 1
         else if (res && res.skipped) skipped += 1
         else failed += 1
@@ -296,7 +297,7 @@ const onCustomerMembershipChange = onDocumentUpdated('tenants/{tid}/customers/{p
     const text = tpls.welcome
       ? fillLc(tpls.welcome, { '\\{link\\}|\\{الرابط\\}': link })
       : `أهلاً ${after.name || ''} — أصبحت عضواً في ${venue}.\nبطاقتك الرقمية جاهزة${link ? `:\n${link}` : '.'}`
-    if (granted) await sendWhatsAppText(to, text, creds).catch(() => {})
+    if (granted) await sendWhatsAppText(to, text, creds, 'claimed').catch(() => {})
     return
   }
   // upgrade: tier moved up
@@ -308,7 +309,7 @@ const onCustomerMembershipChange = onDocumentUpdated('tenants/{tid}/customers/{p
     const text = tpls.upgrade
       ? fillLc(tpls.upgrade, { '\\{tier\\}|\\{العضوية\\}': tierAr })
       : `مبروك ${after.name || ''}!\nترقّيت إلى العضوية ${tierAr} في ${venue} — مزايا أكثر بانتظارك.`
-    if (granted) await sendWhatsAppText(to, text, creds).catch(() => {})
+    if (granted) await sendWhatsAppText(to, text, creds, 'claimed').catch(() => {})
   }
 })
 
@@ -434,7 +435,7 @@ const followupMessages = onSchedule(
       const creds = await waCredsFor(db, t.id)
       for (const tr of targets.slice(0, quota)) {
         const msg = fill(base, { name: tr.name, venue: td.name || '' }) + (review ? `\n\nقيّمنا على خرائط جوجل — يعني لنا الكثير:\n${review}` : '')
-        try { await sendWhatsAppText(tr.phone, msg, creds) } catch (_) { /* per-guest best effort */ }
+        try { await sendWhatsAppText(tr.phone, msg, creds, 'claimed') } catch (_) { /* per-guest best effort */ }
         await tr.ref.set({ followupSent: true }, { merge: true }).catch(() => {})
       }
       // anything past quota stays unmarked → picked up next run when quota allows
@@ -554,7 +555,7 @@ const ownerDailyReport = onSchedule(
         const q = await takeQuota(db, t.id, 1)
         if (!q) continue
         const creds = await waCredsFor(db, t.id)
-        await sendWhatsAppText(phone, lines.join('\n'), creds).catch(() => {})
+        await sendWhatsAppText(phone, lines.join('\n'), creds, 'claimed').catch(() => {})
       } catch (_) { /* one tenant's failure never stops the loop */ }
     }
   }

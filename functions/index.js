@@ -415,6 +415,27 @@ exports.geminiProxy = onCall(async (request) => {
       return false
     }).catch(() => false)
     if (over) throw new HttpsError('resource-exhausted', 'AI rate limit reached — try again in a minute.')
+
+    // The burst wall above only stops a fast client; it does not stop a steady
+    // one from spending all month. The assistant's daily/monthly limit was
+    // enforced CLIENT-side against a staff-writable counter — i.e. not enforced
+    // at all. This is the server-side meter for the same budget, and it prices
+    // text and image generations separately because an image costs roughly
+    // thirty times a text turn.
+    const { takeSpend } = require('./spend')
+    const channel = isImageModel ? 'aiImage' : 'aiText'
+    const spend = await takeSpend(db, tid, channel, 1)
+    if (spend.granted < 1 && spend.reason !== 'error-open') {
+      const why = {
+        cap: 'انتهى رصيدك الشهري من الذكاء الاصطناعي. يمكنك شراء رصيد إضافي أو ترقية باقتك.',
+        daily: 'بلغت حدّك اليومي من طلبات الذكاء الاصطناعي — يتجدّد غداً.',
+        burst: 'طلبات كثيرة في وقت قصير — انتظر دقيقة.',
+        killed: 'الذكاء الاصطناعي موقوف مؤقتاً من المنصة.',
+        suspended: 'الاشتراك موقوف.',
+        disabled: 'الذكاء الاصطناعي غير مفعّل لهذه المنشأة.',
+      }[spend.reason] || 'تم بلوغ حدّ الاستخدام.'
+      throw new HttpsError('resource-exhausted', why)
+    }
   }
   // Load Gemini API Key from server environment variables
   const apiKey = process.env.GEMINI_API_KEY || process.env.VITE_GEMINI_API_KEY
@@ -983,4 +1004,10 @@ exports.onOrderPaid = require('./invoicing').onOrderPaid
 // ---- per-venue share + install identity (crawler og tags + dynamic manifest) ----
 // Serves /m/** and /join/** (see firebase.json rewrites) with the VENUE's meta.
 exports.venueShell = require('./venueMeta').venueShell
+
+// ---- spend meters: cross-venue rollup + the monthly budget circuit breaker ----
+// The per-send metering itself is inline at each call site (see functions/spend.js);
+// this is the aggregate the console reads and the breaker that can stop the
+// platform spending without a deploy.
+exports.spendRollup = require('./spend').makeRollup(onSchedule, getFirestore)
 

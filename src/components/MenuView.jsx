@@ -50,7 +50,7 @@ import EditorialLayout, { EditorialItemStage, buttonSkinVars, EditorialRoomBg } 
 import OceanArtLayout from './menuThemes/OceanArtLayout.jsx'
 import ChromeSkin from './ChromeSkin.jsx'
 import { basePrice, variantHasOwnPrice } from '../lib/pricing.js'
-import { scrollSectionIntoView, scrollSectionToTop, stuckOffset } from '../lib/scrollToSection.js'
+import { scrollSectionIntoView, scrollSectionToTop, scrollRailIntoView, chromeOffset, stuckOffset } from '../lib/scrollToSection.js'
 
 const resolveItemStyles = (it) => {
   const nameStyle = {}
@@ -258,13 +258,29 @@ export default function MenuView({ tenant, tenantId, items, categories, offers =
     setActiveCat(id)
     requestAnimationFrame(() => {
       try {
-        const bar = document.querySelector('.cat-bar')
-        const barBottom = bar ? bar.getBoundingClientRect().bottom : 0
-        if (!id || id === 'all') { scrollSectionToTop(bar || document.body); return }
+        // Not every layout HAS a sticky chip bar: the sidebar skin navigates
+        // from a vertical rail, storefront and spotlight carry their own. When
+        // there is no bar to measure, the chrome height is measured directly —
+        // otherwise the jump aims at viewport zero and parks the dish behind
+        // the fixed app bar.
+        const bar = document.querySelector('.cat-bar, .cat-circles, .spot-cats') || chromeOffset()
+        // «All» goes home. Start the walk from the menu root, not document.body:
+        // at >= 980px the root IS the scroller and body is not, and the walk
+        // stops AT body — which is how «all» used to move nothing on desktop.
+        if (!id || id === 'all') {
+          scrollSectionToTop(typeof bar === 'number' ? (document.querySelector('[data-menu-layout]') || document.body) : bar)
+          return
+        }
         const first = allActive.find((i) => i.categoryId === id)
         if (!first) return
         const el = document.querySelector(`[data-item-id="${CSS.escape(String(first.id))}"]`)
         if (!el) return
+        // The gallery skin lays each category out as a horizontal rail, so the
+        // dish can be the right section but parked off to the side — a rail
+        // the diner scrolled earlier stays where they left it. Move the rail
+        // first, then correct vertically (the vertical pass re-measures, so it
+        // absorbs whatever the rail move shifted).
+        scrollRailIntoView(el)
         // NOT window.scrollTo: at >= 980px the menu layout element is the
         // scroller, not the window, so the manual maths moved nothing at all.
         scrollSectionIntoView(el, bar)
@@ -451,11 +467,27 @@ export default function MenuView({ tenant, tenantId, items, categories, offers =
   //    inside that category — the item you were looking for simply did not
   //    exist as far as the search was concerned. A query now ignores the open
   //    category entirely and looks at the whole menu.
+  //
+  // 3. THE ORDER IS THE MENU'S OWN ORDER. sortOrder is numbered PER CATEGORY —
+  //    every category has its own item 0, item 1, item 2 — so sorting the flat
+  //    list by sortOrder alone interleaved them: every category's first dish,
+  //    then every category's second. That is what made the immersive sheet's
+  //    prev/next jump between sections instead of walking a section through,
+  //    and it shuffled the flat layouts (storefront / showcase / list) too.
+  //    Sorting by (category position, then sortOrder) reads the menu the way
+  //    the page renders it and the way the eye moves down it.
+  const catRank = useMemo(() => {
+    const m = new Map()
+    sortedCats.forEach((c, i) => m.set(c.id, i))
+    return m
+  }, [sortedCats])
   const visibleItems = useMemo(() => {
     const q = search.trim().toLowerCase()
     const list = q ? allActive.filter((i) => matchSearch(i, q)) : allActive
-    return [...list].sort((a, b) => (a.sortOrder || 0) - (b.sortOrder || 0))
-  }, [allActive, search])
+    // Uncategorised dishes sit after every real category rather than at the top.
+    const rank = (i) => (catRank.has(i.categoryId) ? catRank.get(i.categoryId) : Number.MAX_SAFE_INTEGER)
+    return [...list].sort((a, b) => (rank(a) - rank(b)) || ((a.sortOrder || 0) - (b.sortOrder || 0)))
+  }, [allActive, search, catRank])
 
   const itemsByCat = useMemo(() => {
     const map = {}
@@ -1203,8 +1235,34 @@ export default function MenuView({ tenant, tenantId, items, categories, offers =
                 <Empty icon="menu" title={lang === 'ar' ? 'لا توجد أصناف' : 'No items'} />
               ) : visibleItems.length === 0 ? (
                 <Empty icon="search" title={lang === 'ar' ? 'لا نتائج' : 'No results'} />
-              ) : (
+              ) : search.trim() ? (
+                // A search is one flat result set — headings would claim these
+                // results belong to sections they were pulled out of.
                 <div className="showcase-grid">{visibleItems.map(renderShowcase)}</div>
+              ) : (
+                // The rail is a jump list, not a filter (a category is a
+                // destination, not a cage). Without headings the whole menu
+                // rendered as one unlabelled grid, so tapping a rail entry
+                // scrolled somewhere with nothing to say you had arrived —
+                // and no way to tell one section from the next while scrolling.
+                <>
+                  {sortedCats.map((c) => {
+                    const list = itemsByCat[c.id] || []
+                    if (!list.length) return null
+                    return (
+                      <section key={c.id} className="side-sec">
+                        <h3 className="cat-heading">{pickLang(c, 'name', lang)}</h3>
+                        <div className="showcase-grid">{list.map(renderShowcase)}</div>
+                      </section>
+                    )
+                  })}
+                  {(itemsByCat._uncat || []).length > 0 && (
+                    <section className="side-sec">
+                      <h3 className="cat-heading">{lang === 'ar' ? 'أخرى' : 'Other'}</h3>
+                      <div className="showcase-grid">{itemsByCat._uncat.map(renderShowcase)}</div>
+                    </section>
+                  )}
+                </>
               )}
             </div>
           </div>

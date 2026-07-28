@@ -30,6 +30,7 @@ const NAV_GROUPS = [
   { title: 'الإيرادات', items: [
     { to: '/platform/subscriptions', icon: 'wallet', label: 'الاشتراكات' },
     { to: '/platform/billing', icon: 'receipt', label: 'الفواتير' },
+    { to: '/platform/spend', icon: 'zap', label: 'الإنفاق والحدود' },
     { to: '/platform/plans', icon: 'layers', label: 'محرر الخطط' },
     { to: '/platform/growth', icon: 'award', label: 'النمو' },
   ] },

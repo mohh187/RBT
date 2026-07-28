@@ -127,6 +127,7 @@ const PlatformDesignTools = lazy(() => import('./routes/platform/DesignTools.jsx
 const PlatformGrowth = lazy(() => import('./routes/platform/Growth.jsx'))
 const PlatformSettings = lazy(() => import('./routes/platform/PlatformSettings.jsx'))
 const PlatformCompliance = lazy(() => import('./routes/platform/Compliance.jsx'))
+const PlatformSpend = lazy(() => import('./routes/platform/Spend.jsx'))
 const PlatformAssistant = lazy(() => import('./routes/platform/PlatformAssistant.jsx'))
 const PlatformSegments = lazy(() => import('./routes/platform/Segments.jsx'))
 const StatusPage = lazy(() => import('./routes/StatusPage.jsx'))
@@ -541,6 +542,7 @@ export default function App() {
         <Route path="roles" element={<PlatformRoles />} />
         <Route path="support" element={<PlatformSupportTools />} />
         <Route path="billing" element={<PlatformBilling />} />
+        <Route path="spend" element={<PlatformSpend />} />
         <Route path="plans" element={<PlatformPlanEditor />} />
         <Route path="design-tools" element={<PlatformDesignTools />} />
         <Route path="growth" element={<PlatformGrowth />} />

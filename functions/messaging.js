@@ -7,6 +7,38 @@
 // helpers are required by other function files.
 const { onDocumentUpdated, onDocumentCreated } = require('firebase-functions/v2/firestore')
 const { getFirestore } = require('firebase-admin/firestore')
+const { takeSpend } = require('./spend')
+
+// ------------------------- the meter, in one place -------------------------
+// Every send helper below takes a `meter` argument, and it is the ONLY thing
+// standing between a trigger loop and the platform's Meta/Resend bill. Three
+// shapes are accepted so that the reason a send is allowed is always written
+// down at the call site rather than assumed:
+//
+//   { db, tid, channel, tenant? }  — meter it here, now
+//   'claimed'                      — the caller already claimed the budget
+//                                    upstream (campaigns take their whole
+//                                    audience in one grant before fanning out)
+//   'platform'                     — genuinely not a venue's spend: the venue
+//                                    welcome mail, a staff invite. Rare, and
+//                                    named so it can be audited.
+//
+// Anything else — including forgetting the argument — sends, but says so in
+// the logs. Sending is never blocked by a bookkeeping mistake; an unmetered
+// path just cannot hide.
+async function claim(meter, kind) {
+  if (meter === 'claimed' || meter === 'platform') return true
+  if (meter && meter.db && meter.tid && meter.channel) {
+    const r = await takeSpend(meter.db, meter.tid, meter.channel, 1, { tenant: meter.tenant })
+    if (r.granted < 1) {
+      console.warn(`[spend] refused ${meter.channel} for ${meter.tid}: ${r.reason}`)
+      return false
+    }
+    return true
+  }
+  console.warn(`[spend] UNMETERED ${kind} send — no meter passed`)
+  return true
+}
 
 // ---------------------------- Email (Resend) ----------------------------
 // fromName brands the sender per venue: «مقهى مزاج عبر rbt360 <no-reply@rbt360sa.com>»
@@ -19,9 +51,10 @@ function brandedFrom(fromName) {
   const clean = String(fromName).replace(/[\r\n<>"]/g, '').trim().slice(0, 60)
   return clean ? `${clean} عبر rbt360 <${addr}>` : base
 }
-async function sendEmail({ to, subject, html, replyTo, fromName }) {
+async function sendEmail({ to, subject, html, replyTo, fromName, meter }) {
   const key = process.env.RESEND_API_KEY
   if (!key || !to || !subject) return { ok: false, skipped: true }
+  if (!(await claim(meter, 'email'))) return { ok: false, skipped: true, limited: true }
   try {
     const r = await fetch('https://api.resend.com/emails', {
       method: 'POST',
@@ -115,11 +148,12 @@ async function waCredsFor(db, tid) {
 // Business-initiated messages to a customer (outside a 24h session) MUST use an
 // APPROVED utility template. bodyParams fill the template's {{1}},{{2}},… vars.
 // creds (optional) = { phoneId, token } from waCredsFor → send as the venue itself.
-async function sendWhatsAppTemplate(to, templateName, langCode, bodyParams, creds) {
+async function sendWhatsAppTemplate(to, templateName, langCode, bodyParams, creds, meter) {
   const token = (creds && creds.token) || process.env.WA_ACCESS_TOKEN
   const phoneId = (creds && creds.phoneId) || process.env.WA_PHONE_NUMBER_ID
   const msisdn = normalizeMsisdn(to)
   if (!token || !phoneId || !templateName || !msisdn) return { ok: false, skipped: true }
+  if (!(await claim(meter, 'whatsapp-template'))) return { ok: false, skipped: true, limited: true }
   try {
     const r = await fetch(`https://graph.facebook.com/v21.0/${phoneId}/messages`, {
       method: 'POST',
@@ -142,11 +176,12 @@ async function sendWhatsAppTemplate(to, templateName, langCode, bodyParams, cred
 }
 // Free-form text — only delivered inside the 24h customer-service window (dev/fallback).
 // creds (optional) = { phoneId, token } → send from the venue's own number.
-async function sendWhatsAppText(to, text, creds) {
+async function sendWhatsAppText(to, text, creds, meter) {
   const token = (creds && creds.token) || process.env.WA_ACCESS_TOKEN
   const phoneId = (creds && creds.phoneId) || process.env.WA_PHONE_NUMBER_ID
   const msisdn = normalizeMsisdn(to)
   if (!token || !phoneId || !msisdn) return { ok: false, skipped: true }
+  if (!(await claim(meter, 'whatsapp-text'))) return { ok: false, skipped: true, limited: true }
   try {
     const r = await fetch(`https://graph.facebook.com/v21.0/${phoneId}/messages`, {
       method: 'POST',
@@ -255,6 +290,12 @@ const onOrderCustomerNotify = onDocumentUpdated('tenants/{tid}/orders/{oid}', as
     ? `يسعدنا تقييمك لنا على خرائط جوجل: ${mapsUrl}`
     : 'يسعدنا سماع رأيك في زيارتك القادمة.'
 
+  // Transactional WhatsApp/email for THIS venue. Until the meter existed these
+  // two channels were the platform's uncapped exposure: one order-update loop
+  // meant unbounded Meta charges with nothing to stop it.
+  const waMeter = { db, tid: event.params.tid, channel: 'waUtility', tenant }
+  const mailMeter = { db, tid: event.params.tid, channel: 'email', tenant }
+
   if (phone && ch.whatsapp !== false) {
     // Venue's own approved template name wins; else the platform template.
     const tmpl = (creds && creds.templates && creds.templates.templateOrderUpdate) || process.env.WA_TEMPLATE_ORDER_UPDATE
@@ -267,11 +308,11 @@ const onOrderCustomerNotify = onDocumentUpdated('tenants/{tid}/orders/{oid}', as
       const params = ours
         ? [customerName, waParam(venueName), waParam(code, '-'), waParam(statusText), waParam(totalText)]
         : [waParam(venueName), waParam(code, '-'), waParam(statusText)]
-      await sendWhatsAppTemplate(phone, tmpl, lang, params, creds).catch(() => {})
+      await sendWhatsAppTemplate(phone, tmpl, lang, params, creds, waMeter).catch(() => {})
       // the thank-you words cannot ride inside an approved template's fixed
       // body, so they follow as a free-form line (delivered inside the 24h
       // service window; best effort, never blocks the status template)
-      if (isPaid) await sendWhatsAppText(phone, `${thankText}\n${rateLine}`, creds).catch(() => {})
+      if (isPaid) await sendWhatsAppText(phone, `${thankText}\n${rateLine}`, creds, waMeter).catch(() => {})
     } else {
       // No approved template configured yet → best-effort free-form (24h window only).
       const lines = [
@@ -283,7 +324,7 @@ const onOrderCustomerNotify = onDocumentUpdated('tenants/{tid}/orders/{oid}', as
         `الإجمالي: ${totalText}`,
         ...(isPaid ? ['', thankText, rateLine] : []),
       ].join('\n')
-      await sendWhatsAppText(phone, customText ? fillTpl(customText) : lines, creds).catch(() => {})
+      await sendWhatsAppText(phone, customText ? fillTpl(customText) : lines, creds, waMeter).catch(() => {})
     }
   }
   if (email && ch.email !== false) {
@@ -313,7 +354,7 @@ const onOrderCustomerNotify = onDocumentUpdated('tenants/{tid}/orders/{oid}', as
     : `<p style="margin:0 0 4px;color:#5c6270;font-size:13px;">${esc(rateLine)}</p>`}` : ''
     await sendEmail({
       to: email, subject: `${venueName} — ${statusText} ${code}`.replace(/[\r\n]+/g, ' '),
-      fromName: venueName, replyTo: tenant.contactEmail || undefined,
+      fromName: venueName, replyTo: tenant.contactEmail || undefined, meter: mailMeter,
       html: emailShell(
         `${esc(venueName)} — ${esc(statusText)}`,
         `<p style="margin:0 0 12px;">مرحباً ${esc(customerName)},</p>
@@ -339,6 +380,8 @@ const onVenueWelcomeEmail = onDocumentCreated('tenants/{tid}', async (event) => 
   if (!email) return
   const menuUrl = (process.env.PUBLIC_BASE_URL || '') + '/m/' + encodeURIComponent(t.slug || '')
   await sendEmail({
+    // Platform onboarding, not the venue's spend — one mail per venue, ever.
+    meter: 'platform',
     to: email,
     subject: `مرحباً بك في rbt360 — ${(t.name || '').replace(/[\r\n]+/g, ' ')}`,
     html: emailShell(`أهلاً ${esc(t.name || '')}`, `
@@ -361,6 +404,9 @@ const onStaffInviteEmail = onDocumentCreated('staffInvites/{email}', async (even
   const loginUrl = (process.env.PUBLIC_BASE_URL || '') + '/login'
   const roleAr = { owner: 'مالك', manager: 'مدير', cashier: 'كاشير', waiter: 'نادل', kitchen: 'مطبخ' }[inv.role] || 'موظف'
   await sendEmail({
+    // A staff invite is the venue's own send — a manager triggers it, and a
+    // scripted invite storm is exactly the abuse the meter is here to bound.
+    meter: inv.tenantId ? { db, tid: inv.tenantId, channel: 'email' } : 'platform',
     to: email,
     subject: `دعوة للانضمام إلى ${(venue || '').replace(/[\r\n]+/g, ' ')} على rbt360`,
     html: emailShell(`دعوة للعمل في ${esc(venue)}`, `

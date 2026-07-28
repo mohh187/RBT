@@ -203,11 +203,17 @@ service cloud.firestore {
                  // spend the PLATFORM's money without limit. Same for the AI meters.
                  .hasAny(['plan', 'planStatus', 'planExpiresAt', 'active', 'suspendReason', 'platformNote', 'ownerUid', 'features',
                           'msgsSent', 'msgCapMonthly', 'aiLimits', 'aiExtra', 'ar3dMonthly', 'ar3dUnlimited', 'dinerAiMonthly',
+                          // spendCaps/spendCapsDaily are the per-venue overrides the
+                          // spend meter reads (functions/spend.js). Writable by the
+                          // venue they would be a self-service «raise my own bill»
+                          // switch — the exact hole msgCapMonthly used to be.
+                          'spendCaps', 'spendCapsDaily',
                           'smsApiKey']))
         || ((hasCap(tid, 'manage_settings') || hasCap(tid, 'manage_appearance') || hasCap(tid, 'manage_loyalty') || hasCap(tid, 'manage_campaigns') || hasCap(tid, 'manage_integrations'))
             && !request.resource.data.diff(resource.data).affectedKeys()
                  .hasAny(['plan', 'planStatus', 'planExpiresAt', 'active', 'suspendReason', 'platformNote', 'ownerUid', 'features', 'roleCaps', 'msgsSent', 'msgCapMonthly',
-                          'aiLimits', 'aiExtra', 'ar3dMonthly', 'ar3dUnlimited', 'dinerAiMonthly', 'smsApiKey']));
+                          'aiLimits', 'aiExtra', 'ar3dMonthly', 'ar3dUnlimited', 'dinerAiMonthly',
+                          'spendCaps', 'spendCapsDaily', 'smsApiKey']));
       allow delete: if roleIn(tid, ['owner']) || isPlatformSuper();
 
       // Platform admins READ every tenant subcollection (support & oversight from
@@ -1003,6 +1009,18 @@ service cloud.firestore {
     // Realistic-3D conversion log: managers read it for the usage meter;
     // ONLY Cloud Functions write it (Admin SDK bypasses rules).
     match /tenants/{tid}/ar3dJobs/{id} {
+      allow read: if isSignedIn() && isManager(tid);
+      allow write: if false;
+    }
+
+    // Spend meters (functions/spend.js) — one doc per venue per month holding
+    // how many WhatsApp/email/AI units it has used and how many were refused.
+    // A manager READS it: it is their own usage meter, and a venue that is
+    // being throttled deserves to see why rather than watch messages vanish.
+    // NOBODY writes it from a client. The whole point of moving the ceiling
+    // server-side was that the old counters were client-writable, so a venue
+    // could zero its own usage and keep spending the platform's money.
+    match /tenants/{tid}/counters/{id} {
       allow read: if isSignedIn() && isManager(tid);
       allow write: if false;
     }

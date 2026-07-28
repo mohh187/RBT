@@ -46,6 +46,11 @@ function scrollerOf(el) {
 // (the sticky offset), so the stuck bottom is that plus its own height.
 export function stuckOffset(bar) {
   if (!bar) return 0
+  // A plain number is a caller that has no sticky bar to measure and already
+  // knows its chrome height (see chromeOffset) — the sidebar, storefront and
+  // spotlight skins have no .cat-bar at all, and without this every category
+  // jump on them landed the dish underneath the fixed app bar.
+  if (typeof bar === 'number') return Math.max(0, bar)
   try {
     const cs = getComputedStyle(bar)
     const h = bar.getBoundingClientRect().height
@@ -108,6 +113,68 @@ export function scrollSectionIntoView(el, bar = null) {
     requestAnimationFrame(() => setTimeout(step, SETTLE_MS))
   }
   step()
+}
+
+// How far down the viewport the venue's chrome reaches, in real pixels.
+//
+// The layouts WITHOUT a sticky category bar still sit under a fixed app bar,
+// and the amount is a CSS custom property (--menu-sticky-top) built out of
+// calc(), safe-area insets and a breakpoint override — getPropertyValue hands
+// back the unevaluated `calc(...)` string, not a number. So it is MEASURED:
+// a throwaway fixed probe is positioned at exactly that offset and asked where
+// it landed. One layout read, no parsing, correct on every device and
+// breakpoint including the notch.
+export function chromeOffset(root) {
+  if (typeof document === 'undefined') return 0
+  const host = root || document.querySelector('.venue-above') || document.body
+  try {
+    const probe = document.createElement('div')
+    probe.style.cssText = 'position:fixed;top:var(--menu-sticky-top,0px);left:0;width:0;height:0;pointer-events:none;visibility:hidden'
+    host.appendChild(probe)
+    const top = probe.getBoundingClientRect().top
+    probe.remove()
+    return Number.isFinite(top) ? Math.max(0, Math.round(top)) : 0
+  } catch (_) { return 0 }
+}
+
+// Some layouts lay each category out as a HORIZONTAL rail (the gallery skin
+// makes .showcase-grid a scroll-snapping flex carousel), so a purely vertical
+// jump lands on the right section while the dish itself is still parked off to
+// the side — the diner taps a category and sees the middle of it.
+//
+// Deliberately NOT scrollIntoView({inline:'start'}): that scrolls EVERY
+// scrollable ancestor, including the vertical one the caller is about to
+// correct by measurement, and the two fight. This moves the rail and nothing
+// else.
+//
+// RTL-safe by construction: the delta is measured against the rail's INLINE
+// START edge — its right edge in Arabic, its left in English — and per the
+// modern scrollLeft spec adding that delta moves the content the same way in
+// both directions.
+//
+// The rail may not come to rest exactly on that line, and that is correct: the
+// gallery rail is `scroll-snap-type: x mandatory` with centre-aligned cards, so
+// the snap engine pulls the final position to the nearest card centre.
+// Measured on the built stylesheet at 390px RTL: the target moved from
+// off-rail to fully visible, resting 50px off the start line — snapped, which
+// is the layout's own intent. The property that matters is that the dish is
+// on screen, not which pixel it starts at.
+export function scrollRailIntoView(el) {
+  if (!el || typeof window === 'undefined') return
+  let rail = el.parentElement
+  while (rail && rail !== document.body) {
+    const cs = getComputedStyle(rail)
+    if (/(auto|scroll)/.test(cs.overflowX) && rail.scrollWidth > rail.clientWidth + 4) {
+      try {
+        const r = rail.getBoundingClientRect()
+        const e = el.getBoundingClientRect()
+        const delta = cs.direction === 'rtl' ? (e.right - r.right) : (e.left - r.left)
+        if (Math.abs(delta) > 2) rail.scrollTo({ left: rail.scrollLeft + delta, behavior: reduced() ? 'auto' : 'smooth' })
+      } catch (_) { /* a browser without scrollTo options keeps the vertical jump */ }
+      return
+    }
+    rail = rail.parentElement
+  }
 }
 
 // Back to the very top of whichever element is actually scrolling.

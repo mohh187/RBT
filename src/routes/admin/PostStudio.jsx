@@ -485,6 +485,32 @@ export default function PostStudio() {
     status: 'published', publishedAt: Date.now(),
     publishedTo: [...new Set([...(d.publishedTo || []), channel])],
   })
+  // Post to X — through the PUBLIC intent URL, not the X API, and that is a
+  // decision rather than a shortcut. Posting the same content on behalf of
+  // hundreds of venues through one app costs 0.20 USD per link-bearing post
+  // (measured: ~7,500 SAR/month at 500 venues x 20 posts) for zero extra
+  // revenue, and the X developer agreement restricts pay-per-use to a limited
+  // set of end users — which a multi-tenant SaaS is not. The intent link costs
+  // nothing, needs no OAuth and carries no liability: the venue is signed in as
+  // itself and presses post. RBT360 keeps the part that is actually worth
+  // something (the image and the words) and hands over the last click.
+  //
+  // The image cannot ride an intent URL, so it is copied to the clipboard
+  // path the venue already has (the media is in the Library) and the caption +
+  // menu link travel in the URL.
+  const shareToX = (d) => {
+    const menuUrl = tenant?.slug ? `${window.location.origin}/m/${encodeURIComponent(tenant.slug)}` : ''
+    const text = cleanCaption(d.caption || '') || tenant?.name || ''
+    const url = `https://x.com/intent/tweet?text=${encodeURIComponent(text.slice(0, 240))}${menuUrl ? `&url=${encodeURIComponent(menuUrl)}` : ''}`
+    // noopener: an intent tab must never get a handle back on the admin panel.
+    window.open(url, '_blank', 'noopener,noreferrer')
+    if (d.imageUrl) {
+      toast.success(ar
+        ? 'فُتح إكس بالنص والرابط — أرفق الصورة من مكتبتك'
+        : 'X opened with the text and link — attach the image from your library')
+    }
+  }
+
   const publishStory = async (d) => {
     try {
       // mirrors StoriesAdmin's addStory shape exactly
@@ -601,6 +627,9 @@ export default function PostStudio() {
               {canStories && <button className="btn btn-sm btn-outline" onClick={() => publishStory(d)}><Icon name="camera" size={13} /> {ar ? 'نشر كستوري' : 'As story'}</button>}
               {canStories && <button className="btn btn-sm btn-outline" onClick={() => publishPost(d)}><Icon name="events" size={13} /> {ar ? 'نشر كخبر' : 'As post'}</button>}
               {canWrite && <button className="btn btn-sm btn-outline" onClick={() => { setCampFor(d); setCampAudience('all') }}><Icon name="message" size={13} /> {ar ? 'حملة واتساب' : 'WA campaign'}</button>}
+              <button className="btn btn-sm btn-outline" onClick={() => shareToX(d)}>
+                <Icon name="share" size={13} /> {ar ? 'انشر على إكس' : 'Post on X'}
+              </button>
             </>
           )}
           {canWrite && d.caption && d.status !== 'published' && (
@@ -626,8 +655,8 @@ export default function PostStudio() {
 
       <p className="ps-note">
         {ar
-          ? 'كل تصميم — بالذكاء أو يدوياً — يُحفظ كمسودة في «قائمة الاعتماد» ولا يُنشر أي شيء دون ضغطة اعتماد صريحة. ملاحظة صادقة: النشر التلقائي لمنصات التواصل (انستقرام/إكس) يتطلب ربط حسابات Meta/X عبر خوادمها — غير متاح حالياً؛ المتاح: الاستوري والأخبار داخل منيوك وحملات واتساب.'
-          : 'Every design (AI or manual) is saved as a DRAFT in the approval queue — nothing publishes without an explicit approval click. Honest note: auto-posting to Instagram/X requires linking Meta/X accounts through their servers — not available yet; available now: in-menu stories, profile posts and WhatsApp campaigns.'}
+          ? 'كل تصميم — بالذكاء أو يدوياً — يُحفظ كمسودة في «قائمة الاعتماد» ولا يُنشر أي شيء دون ضغطة اعتماد صريحة. المتاح الآن: الاستوري والأخبار داخل منيوك، وحملات واتساب، وزر «انشر على إكس» الذي يفتح إكس بنصك ورابط منيوك لتنشره بحسابك. النشر التلقائي لانستقرام قيد الإعداد ويتطلب توثيق المنشأة لدى Meta.'
+          : 'Every design (AI or manual) is saved as a DRAFT in the approval queue — nothing publishes without an explicit approval click. Available now: in-menu stories, profile posts, WhatsApp campaigns, and «Post on X», which opens X with your text and menu link so you post from your own account. Automatic Instagram publishing is in progress and needs Meta business verification.'}
       </p>
 
       {!canWrite && !canStories && (

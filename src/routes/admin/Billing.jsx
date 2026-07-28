@@ -9,6 +9,7 @@ import { Price } from '../../components/Riyal.jsx'
 import { PLANS } from '../../lib/plans.js'
 import { startPayment } from '../../lib/payments.js'
 import { useToast } from '../../components/Toast.jsx'
+import SpendMeter from '../../components/SpendMeter.jsx'
 
 // «الفوترة والاشتراك» — the venue's money page: current plan, every subscription
 // invoice (platformInvoices scoped to this tenant), purchased AI credits, and
@@ -75,6 +76,11 @@ export default function Billing() {
           </div>
         )}
       </div>
+
+      {/* what the plan is actually being SPENT on — the same counters the
+          server checks before every message, so the number here is the number
+          that will refuse you. */}
+      <SpendMeter tenantId={tenantId} tenant={tenant} ar={ar} />
 
       {/* payment methods — honest state */}
       <div className="card card-pad row" style={{ gap: 10, alignItems: 'flex-start' }}>
