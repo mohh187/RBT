@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
+import { Price } from '../../components/Riyal.jsx'
 import { useAuth } from '../../lib/auth.jsx'
 import { useI18n } from '../../lib/i18n.jsx'
 import { useNavigate } from 'react-router-dom'
@@ -278,7 +279,8 @@ export default function Assistant() {
   const requestCredits = async (pack) => {
     setBuyBusy(true)
     try {
-      await createIssue(tenantId, {
+      await createIssue({
+        tenantId,
         tenantName: tenant?.name || '',
         title: `[شراء رصيد ذكاء] ${pack.qty} طلب — ${pack.price} ر.س`,
         body: `طلب شراء رصيد مساعد ذكي.\nالباقة: ${pack.qty} طلب إضافي\nالسعر: ${pack.price} ر.س\nالاستهلاك الحالي: اليوم ${usageNorm?.dc ?? 0}/${limits.daily} · الشهر ${usageNorm?.mc ?? 0}/${limits.monthly + aiExtra}\nبعد اعتماد السداد: أضف الكمية إلى tenant.aiExtra من كونسول المنصة.`,
@@ -547,7 +549,7 @@ export default function Assistant() {
             <div key={p.qty} className="card card-pad row-between wrap" style={{ gap: 8 }}>
               <span className="row" style={{ gap: 8 }}><Icon name="zap" size={16} style={{ color: 'var(--brand)' }} /><strong className="num">{p.qty}</strong> <span className="small faint">{ar ? 'طلب إضافي' : 'requests'}</span></span>
               <span className="row" style={{ gap: 6, alignItems: 'center' }}>
-                <span className="badge badge-gold num">{p.price} {ar ? 'ر.س' : 'SAR'}</span>
+                <span className="badge badge-gold num"><Price value={p.price} lang={ar ? 'ar' : 'en'} symbolSize="0.85em" /></span>
                 <button className="btn btn-sm btn-primary" disabled={buyBusy} onClick={() => buyCredits(p)}>
                   <Icon name="card" size={13} /> {ar ? 'ادفع الآن' : 'Pay now'}
                 </button>

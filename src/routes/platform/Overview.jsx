@@ -2,6 +2,7 @@
 // open errors, unread chats. "Today" numbers come from the order activity
 // stream (every order is mirrored into platformActivity with its amount).
 import { useEffect, useMemo, useState } from 'react'
+import { Price } from '../../components/Riyal.jsx'
 import { Link } from 'react-router-dom'
 import Icon from '../../components/Icon.jsx'
 import { Spinner } from '../../components/ui.jsx'
@@ -70,7 +71,7 @@ export default function Overview() {
         </div>
         <div className="stat">
           <div className="label">مبيعات اليوم (تقريبي · بالريال)</div>
-          <div className="value num">{kpi.revenue.toLocaleString('en-US')} <span className="xs faint">SAR</span></div>
+          <div className="value num"><Price value={kpi.revenue} lang="ar" symbolSize="0.62em" /></div>
         </div>
         <div className="stat">
           <div className="label">أخطاء مفتوحة</div>

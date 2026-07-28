@@ -7,6 +7,8 @@
 // helpers are required by other function files.
 const { onDocumentUpdated, onDocumentCreated } = require('firebase-functions/v2/firestore')
 const { getFirestore } = require('firebase-admin/firestore')
+const { shell, facts, lineTable } = require('./emailTemplates.js')
+const { venueBrand, platformBrand, orderTrackUrl } = require('./emailBrand.js')
 const { takeSpend } = require('./spend')
 
 // ------------------------- the meter, in one place -------------------------
@@ -335,7 +337,10 @@ const onOrderCustomerNotify = onDocumentUpdated('tenants/{tid}/orders/{oid}', as
   const waMeter = { db, tid: event.params.tid, channel: 'waUtility', tenant }
   const mailMeter = { db, tid: event.params.tid, channel: 'email', tenant }
 
-  if (phone && ch.whatsapp !== false) {
+  // Same per-stage control as the email above. WhatsApp matters MORE here: it
+  // is the venue's most expensive metered channel, so a status nobody needs is
+  // money spent on annoying the guest.
+  if (phone && stageAllows(tenant, after.status, 'whatsapp')) {
     // Venue's own approved template name wins; else the platform template.
     const tmpl = (creds && creds.templates && creds.templates.templateOrderUpdate) || process.env.WA_TEMPLATE_ORDER_UPDATE
     if (tmpl) {
@@ -366,45 +371,61 @@ const onOrderCustomerNotify = onDocumentUpdated('tenants/{tid}/orders/{oid}', as
       await sendWhatsAppText(phone, customText ? fillTpl(customText) : lines, creds, waMeter).catch(() => {})
     }
   }
-  if (email && ch.email !== false) {
-    const rows = shown.map((l) => `
-      <tr>
-        <td style="padding:9px 14px;border-bottom:1px solid #eceef1;font-size:14px;">${esc(l.name)}${l.qty > 1 ? ` <span style="color:#5c6270;">&times;${l.qty}</span>` : ''}</td>
-        <td style="padding:9px 14px;border-bottom:1px solid #eceef1;font-size:14px;white-space:nowrap;" align="left" dir="ltr">${esc(l.total.toFixed(2))}</td>
-      </tr>`).join('')
-    const moreRow = hidden > 0
-      ? `<tr><td colspan="2" style="padding:9px 14px;border-bottom:1px solid #eceef1;font-size:13px;color:#5c6270;">و${hidden} صنفاً آخر</td></tr>`
-      : ''
-    const table = count > 0 ? `
-      <table role="presentation" cellpadding="0" cellspacing="0" border="0" width="100%" style="margin:16px 0;border:1px solid #eceef1;border-radius:12px;border-collapse:separate;overflow:hidden;">
-        ${rows}${moreRow}
-        <tr>
-          <td style="padding:11px 14px;font-weight:700;font-size:14px;">الإجمالي</td>
-          <td style="padding:11px 14px;font-weight:700;font-size:14px;white-space:nowrap;" align="left" dir="ltr">${esc(totalText)}</td>
-        </tr>
-      </table>` : ''
-    const where = after.tableLabel ? `<p style="margin:0 0 6px;color:#5c6270;font-size:13px;">الطاولة: ${esc(after.tableLabel)}</p>` : ''
-    // the paid email carries the thank-you and, when the venue set one, a real
-    // Google-Maps rating button — the moment the guest is most likely to rate
-    const thanksBlock = isPaid ? `
-         <p style="margin:14px 0 8px;font-size:14px;">${esc(thankText)}</p>
-         ${mapsUrl
-    ? `<p style="margin:0 0 4px;"><a href="${esc(mapsUrl)}" style="display:inline-block;padding:10px 18px;background:#7c2d2d;color:#ffffff;border-radius:10px;text-decoration:none;font-weight:700;font-size:14px;">قيّمنا على خرائط جوجل</a></p>`
-    : `<p style="margin:0 0 4px;color:#5c6270;font-size:13px;">${esc(rateLine)}</p>`}` : ''
+  // THE VENUE'S OWN EMAIL, not ours.
+  //
+  // Brand, logo, colours and footer contact all come from the tenant document
+  // via venueBrand(), so a venue is themed the moment it picks a colour in
+  // Setup — no per-venue template, no code, no deploy. The guest is the
+  // VENUE's customer; our name appears once, small, at the very bottom.
+  //
+  // stageAllows() is what stopped this from firing at every single status. A
+  // guest ordering one coffee used to receive five of these.
+  if (email && stageAllows(tenant, after.status, 'email')) {
+    const brand = venueBrand(tenant)
+    const rows = shown.map((l) => ({ name: l.name, qty: l.qty, total: l.total.toFixed(2) }))
+    if (hidden > 0) rows.push({ name: `و${hidden} صنفاً آخر`, qty: 1, total: '' })
+    const bodyHtml = [
+      `<p style="margin:0 0 12px;">مرحباً ${esc(customerName)},</p>`,
+      `<p style="margin:0 0 10px;font-size:15px;">${esc(customText ? fillTpl(customText) : statusText)}</p>`,
+      facts([
+        ['رقم الطلب', code || '-'],
+        [after.tableLabel ? 'الطاولة' : '', after.tableLabel || ''],
+      ]),
+      count > 0 ? lineTable(rows, 'الإجمالي', totalText) : '',
+      isPaid ? `<p style="margin:14px 0 0;font-size:14px;">${esc(thankText)}</p>` : '',
+    ].filter(Boolean).join('')
+    // WHICH BUTTON, AND WHEN.
+    //
+    // Before payment the guest has exactly one question — «where is my order» —
+    // and the live order page answers it without them replying to the email or
+    // phoning the counter. So tracking is the primary action on every stage up
+    // to payment.
+    //
+    // On the PAID email the order is finished, so tracking would send them to a
+    // page about something already over. That is the moment to ask for a
+    // rating instead: they have just enjoyed it and are still holding the
+    // phone. Tracking drops to the quiet secondary line.
+    //
+    // Either button is omitted entirely when its destination is missing — a
+    // venue with no Maps link, or no slug — rather than rendered dead.
+    const trackUrl = orderTrackUrl(tenant, event.params.oid)
+    const track = trackUrl ? { label: 'متابعة الطلب', href: trackUrl } : null
+    const rate = mapsUrl ? { label: 'قيّمنا على خرائط جوجل', href: mapsUrl } : null
+    const cta = isPaid ? rate : track
+    const secondaryCta = isPaid ? track : null
     await sendEmail({
-      to: email, subject: `${venueName} — ${statusText} ${code}`.replace(/[\r\n]+/g, ' '),
-      fromName: venueName, replyTo: tenant.contactEmail || undefined, meter: mailMeter,
-      html: emailShell(
-        `${esc(venueName)} — ${esc(statusText)}`,
-        `<p style="margin:0 0 12px;">مرحباً ${esc(customerName)},</p>
-         <p style="margin:0 0 4px;">${esc(customText ? fillTpl(customText) : statusText)}</p>
-         <p style="margin:0 0 6px;color:#5c6270;font-size:13px;">رقم الطلب: <span dir="ltr">${esc(code || '-')}</span></p>
-         ${where}
-         ${table}
-         ${thanksBlock}
-         <p style="margin:0;color:#5c6270;font-size:12.5px;">هذه رسالة آلية بخصوص طلبك لدى ${esc(venueName)}.</p>`,
-        `${statusText} — ${venueName}`,
-      ),
+      to: email,
+      subject: `${venueName} — ${statusText} ${code}`.replace(/[\r\n]+/g, ' '),
+      fromName: venueName,
+      replyTo: tenant.contactEmail || undefined,
+      meter: mailMeter,
+      html: shell(brand, {
+        title: `${venueName} — ${statusText}`,
+        preheader: `${statusText} — ${venueName}`,
+        body: bodyHtml,
+        cta,
+        secondaryCta,
+      }),
     }).catch(() => {})
   }
 })
@@ -423,10 +444,17 @@ const onVenueWelcomeEmail = onDocumentCreated('tenants/{tid}', async (event) => 
     meter: 'platform',
     to: email,
     subject: `مرحباً بك في rbt360 — ${(t.name || '').replace(/[\r\n]+/g, ' ')}`,
-    html: emailShell(`أهلاً ${esc(t.name || '')}`, `
-      <p>تم إنشاء منشأتك بنجاح. رابط منيوك العام:</p>
-      <p><a href="${esc(menuUrl)}" style="color:#7c2d2d;font-weight:700">${esc(menuUrl)}</a></p>
-      <p style="color:#5c5c66">ابدأ بإضافة أصنافك وتخصيص مظهرك من لوحة الإدارة.</p>`),
+    // OURS, not the venue's. This is RBT 360 introducing itself to a new owner,
+    // so it wears the platform identity — the one email in the venue's life
+    // where that is the right answer.
+    html: shell(platformBrand({}), {
+      title: `أهلاً ${t.name || ''}`,
+      preheader: 'منشأتك جاهزة — إليك رابط منيوك',
+      body: '<p style="margin:0 0 10px;">تم إنشاء منشأتك بنجاح. منيوك العام صار على الإنترنت وتستطيع مشاركته الآن.</p>'
+        + '<p style="margin:0;color:#5c6270;font-size:13.5px;">ابدأ بإضافة أصنافك وتخصيص مظهرك من لوحة الإدارة.</p>',
+      cta: { label: 'فتح منيوك', href: menuUrl },
+      secondaryCta: { label: 'لوحة الإدارة', href: (process.env.PUBLIC_BASE_URL || '').replace(/\/$/, '') + '/admin' },
+    }),
   }).catch(() => {})
 })
 
@@ -451,10 +479,16 @@ const onStaffInviteEmail = onDocumentCreated('staffInvites/{id}', async (event) 
     meter: inv.tenantId ? { db, tid: inv.tenantId, channel: 'email' } : 'platform',
     to: email,
     subject: `دعوة للانضمام إلى ${(venue || '').replace(/[\r\n]+/g, ' ')} على rbt360`,
-    html: emailShell(`دعوة للعمل في ${esc(venue)}`, `
-      <p>تمت دعوتك للانضمام إلى فريق <strong>${esc(venue)}</strong> بصفة <strong>${esc(roleAr)}</strong>.</p>
-      <p>سجّل الدخول بهذا البريد لتفعيل حسابك:</p>
-      <p><a href="${esc(loginUrl)}" style="color:#7c2d2d;font-weight:700">${esc(loginUrl)}</a></p>`),
+    // The VENUE's identity: the invitee is joining that venue's team, not ours.
+    // The tenant doc was already read above for the name — its theme fields
+    // were being thrown away.
+    html: shell(venueBrand(tSnap && tSnap.exists ? tSnap.data() : { name: venue }), {
+      title: `دعوة للانضمام إلى ${venue}`,
+      preheader: `${venue} دعتك للانضمام إلى فريقها`,
+      body: `<p style="margin:0 0 10px;">تمت دعوتك للانضمام إلى فريق <strong>${esc(venue)}</strong> بصفة <strong>${esc(roleAr)}</strong>.</p>`
+        + '<p style="margin:0;color:#5c6270;font-size:13.5px;">سجّل الدخول بنفس البريد الذي وصلتك عليه هذه الرسالة، وستجد المنشأة في حسابك.</p>',
+      cta: { label: 'تسجيل الدخول', href: loginUrl },
+    }),
   }).catch(() => {})
 })
 

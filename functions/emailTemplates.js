@@ -81,6 +81,38 @@ function lineTable(lines, totalLabel, totalValue) {
   return `<table role="presentation" cellpadding="0" cellspacing="0" border="0" width="100%" style="margin:16px 0;">${rows}${total}</table>`
 }
 
+// A REPORT SECTION: a titled bar over label/value rows.
+//
+// This is the shape a financial summary has to have to be read rather than
+// skimmed — the reader is checking figures against their own expectation, one
+// group at a time, so the groups must be visually separable and the subtotal of
+// each must be findable without counting rows.
+//
+// rows: [label, value, kind?]  where kind is
+//   undefined  ordinary line
+//   'strong'   a subtotal — tinted band, heavier ink
+//   'muted'    an aside that is not part of the arithmetic
+function section(brand, title, rows) {
+  const b = brand || {}
+  const body = (rows || []).filter(Boolean).map(([label, value, kind]) => {
+    const strong = kind === 'strong'
+    const bg = strong ? 'background:#F4F5FA;' : ''
+    const weight = strong ? '700' : '400'
+    const color = kind === 'muted' ? MUTED : INK
+    return `
+    <tr>
+      <td style="${bg}padding:9px 12px;border-bottom:1px solid ${LINE};font-family:${FONT};font-size:13px;font-weight:${weight};color:${color};">${esc(label)}</td>
+      <td style="${bg}padding:9px 12px;border-bottom:1px solid ${LINE};font-family:${FONT};font-size:13px;font-weight:${strong ? '700' : '600'};color:${color};white-space:nowrap;" align="left" dir="ltr">${esc(value)}</td>
+    </tr>`
+  }).join('')
+  if (!body) return ''
+  return `
+  <table role="presentation" cellpadding="0" cellspacing="0" border="0" width="100%" style="margin:0 0 18px;border:1px solid ${LINE};border-radius:6px;border-collapse:separate;border-spacing:0;overflow:hidden;">
+    <tr><td colspan="2" style="background:${esc(b.color || '#1F2A37')};padding:9px 12px;font-family:${FONT};font-size:12.5px;font-weight:700;color:${esc(b.ink || '#ffffff')};">${esc(title)}</td></tr>
+    ${body}
+  </table>`
+}
+
 // The footer carries WHO SENT THIS. For a venue that is its own contact block;
 // for us it is the legal identity that appears on our invoices. A venue footer
 // also carries a quiet «by RBT360» — the guest is the venue's customer, not
@@ -144,4 +176,4 @@ function shell(brand, { title, preheader, body, cta, secondaryCta } = {}) {
 </body></html>`
 }
 
-module.exports = { shell, header, footer, button, facts, lineTable, esc }
+module.exports = { shell, header, footer, button, facts, lineTable, section, esc }

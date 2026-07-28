@@ -8,6 +8,8 @@
 const { onDocumentUpdated } = require('firebase-functions/v2/firestore')
 const logger = require('firebase-functions/logger')
 const { runPaidEffects } = require('./orderEffects.js')
+const { shell, facts } = require('./emailTemplates.js')
+const { venueBrand } = require('./emailBrand.js')
 const { getFirestore, FieldValue } = require('firebase-admin/firestore')
 const { sendWhatsAppTemplate, sendWhatsAppText, sendEmail, emailShell, esc, waCredsFor } = require('./messaging')
 
@@ -145,12 +147,20 @@ async function notifyReceipt(tenant, phone, { code, total, currency, link, email
     }
   }
   if (email && ch.email !== false) {
+    // The VENUE's receipt, in the venue's own colours. The tax invoice becomes a
+    // real button rather than a coloured word — handing it over is the only
+    // reason this email exists.
+    const brand = venueBrand(tenant)
     await sendEmail({
       to: email, fromName: venueName, replyTo: tenant.contactEmail || undefined, meter: mailMeter,
       subject: `${venueName} — فاتورتك ${code ? '#' + code : ''}`.replace(/[\r\n]+/g, ' '),
-      html: emailShell(esc(venueName), `
-        <p>تم استلام دفعتك${code ? ' للطلب <strong>#' + esc(code) + '</strong>' : ''} بمبلغ <strong>${esc(amount)} ${esc(currency)}</strong>.</p>
-        <p><a href="${esc(link)}" style="color:#7c2d2d;font-weight:700">عرض الفاتورة الضريبية</a></p>`),
+      html: shell(brand, {
+        title: `${venueName} — إيصال الدفع`,
+        preheader: `فاتورتك من ${venueName}`,
+        body: '<p style="margin:0 0 10px;">تم استلام دفعتك بنجاح.</p>'
+          + facts([['رقم الطلب', code || ''], ['المبلغ', `${amount} ${currency}`]]),
+        cta: { label: 'عرض الفاتورة الضريبية', href: link },
+      }),
     }).catch(() => {})
   }
 }

@@ -13,6 +13,7 @@
 //      purchase button is a dead end, and the venue's next move is a phone
 //      call to support instead of a payment.
 import { useEffect, useState } from 'react'
+import { Price } from './Riyal.jsx'
 import Icon from '../components/Icon.jsx'
 import { useToast } from './Toast.jsx'
 import { CHANNELS, SPEND_PACKS, limitsFor, extraOf, watchVenueSpend, buySpendPack } from '../lib/spend.js'
@@ -150,7 +151,7 @@ export default function SpendMeter({ tenantId, tenant, ar = true, compact = fals
                         >
                           <span className="num" dir="ltr">+{n(p.qty)}</span>
                           <span className="xs" style={{ opacity: 0.85 }}>
-                            <span className="num" dir="ltr">{p.sar}</span> {ar ? 'ريال' : 'SAR'}
+                            <Price value={p.sar} lang={ar ? 'ar' : 'en'} symbolSize="0.85em" />
                           </span>
                         </button>
                       ))}

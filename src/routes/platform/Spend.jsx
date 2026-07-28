@@ -13,6 +13,7 @@
 //   3. the per-venue table, sorted by cost, with the REFUSALS beside the sends
 //      so a venue pressing against its ceiling is visible before it complains.
 import { useEffect, useMemo, useState } from 'react'
+import { Price } from '../../components/Riyal.jsx'
 import { Link } from 'react-router-dom'
 import Icon from '../../components/Icon.jsx'
 import { Spinner, Empty } from '../../components/ui.jsx'
@@ -194,7 +195,7 @@ function Budget({ controls, roll }) {
           <div style={{ height: 8, borderRadius: 99, background: 'var(--surface-2)', overflow: 'hidden' }}>
             <div style={{ height: '100%', width: `${pct}%`, background: pct >= 100 ? 'var(--danger)' : pct >= 80 ? 'var(--gold)' : 'var(--brand)' }} />
           </div>
-          <div className="xs faint num" dir="ltr">{(spent * USD_TO_SAR).toFixed(2)} SAR</div>
+          <div className="xs faint num"><Price value={(spent * USD_TO_SAR).toFixed(2)} lang="ar" symbolSize="0.9em" /></div>
         </div>
       )}
 
@@ -341,7 +342,7 @@ function VenueTable({ roll }) {
                   })}
                   <td style={{ textAlign: 'center' }}>
                     <strong className="num" dir="ltr">{(Number(r.usd) || 0).toFixed(2)}</strong>
-                    <div className="xs faint num" dir="ltr">{(Number(r.sar) || 0).toFixed(2)} SAR</div>
+                    <div className="xs faint num"><Price value={(Number(r.sar) || 0).toFixed(2)} lang="ar" symbolSize="0.9em" /></div>
                   </td>
                 </tr>
               ))}

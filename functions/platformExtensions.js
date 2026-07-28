@@ -10,6 +10,8 @@ const { onCall, onRequest, HttpsError } = require('firebase-functions/v2/https')
 const logger = require('firebase-functions/logger')
 const { getFirestore, FieldValue } = require('firebase-admin/firestore')
 const { sendEmail, emailShell, esc } = require('./messaging')
+const { shell, facts, section } = require('./emailTemplates.js')
+const { platformBrand } = require('./emailBrand.js')
 const { receiptForSimple, notifyReceipt, invoiceLink } = require('./invoicing')
 const { takeSpend, readSpend, packPrice, extraField, CHANNEL_AR, limitsFor: spendLimitsFor } = require('./spend')
 const { plansConfig, resolvePlanPrice, yearlyAmount } = require('./platformPricing')
@@ -169,13 +171,15 @@ const generateMonthlyInvoices = onSchedule(
             meter: 'platform',
             to: email,
             subject: `فاتورة اشتراك rbt360 — ${period}`,
-            html: emailShell(`فاتورة اشتراك ${esc(d.name || '')}`, `
-              <p>صدرت فاتورة اشتراكك لفترة <strong>${esc(period)}</strong>.</p>
-              <table style="width:100%;border-collapse:collapse;margin:12px 0">
-                <tr><td style="padding:6px 0;color:#5c5c66">الباقة</td><td style="padding:6px 0;text-align:end;font-weight:700">${esc(plan)}</td></tr>
-                <tr><td style="padding:6px 0;color:#5c5c66">المبلغ</td><td style="padding:6px 0;text-align:end;font-weight:700">${esc(amount)} ${esc(currency)}</td></tr>
-              </table>
-              <p><a href="${esc(payUrl)}" style="color:#7c2d2d;font-weight:700">ادفع الفاتورة من لوحة الإدارة</a></p>`),
+            // OUR identity — we are billing them. The footer carries the legal
+            // entity, which is the same one printed on the tax invoice itself.
+            html: shell(platformBrand({}), {
+              title: `فاتورة اشتراك — ${d.name || ''}`,
+              preheader: `فاتورة اشتراك ${period}`,
+              body: `<p style="margin:0 0 10px;">صدرت فاتورة اشتراك «${esc(d.name || '')}» عن فترة <strong>${esc(period)}</strong>.</p>`
+                + facts([['الباقة', plan], ['المبلغ', `${amount} ${currency}`]]),
+              cta: { label: 'سداد الفاتورة', href: payUrl },
+            }),
           }).catch(() => {})
         }
       } catch (_) { /* skip this tenant, keep the rest going */ }
@@ -369,13 +373,16 @@ async function settleInvoiceFromPayment(db, payment) {
           meter: 'platform',
           to: email,
           subject: `تم استلام دفعة اشتراك rbt360 — ${invoice.period || ''}`,
-          html: emailShell('تم استلام دفعتك', `
-            <p>شكراً لك. تم استلام دفعة اشتراك <strong>${esc(d.name || '')}</strong> بنجاح.</p>
-            <table style="width:100%;border-collapse:collapse;margin:12px 0">
-              <tr><td style="padding:6px 0;color:#5c5c66">الفترة</td><td style="padding:6px 0;text-align:end;font-weight:700">${esc(invoice.period || '')}</td></tr>
-              <tr><td style="padding:6px 0;color:#5c5c66">المبلغ</td><td style="padding:6px 0;text-align:end;font-weight:700">${esc(Number(invoice.amount) || 0)} ${esc(invoice.currency || 'SAR')}</td></tr>
-              <tr><td style="padding:6px 0;color:#5c5c66">تفعيل حتى</td><td style="padding:6px 0;text-align:end;font-weight:700">${esc(next.toISOString().slice(0, 10))}</td></tr>
-            </table>`),
+          html: shell(platformBrand({}), {
+            title: 'تم استلام دفعتك',
+            preheader: `إيصال سداد اشتراك ${invoice.period || ''}`,
+            body: `<p style="margin:0 0 10px;">شكراً لك. تم استلام دفعة اشتراك «${esc(d.name || '')}» وتفعيل الباقة.</p>`
+              + facts([
+                ['الفترة', invoice.period || ''],
+                ['المبلغ', `${Number(invoice.amount) || 0} ${invoice.currency || 'SAR'}`],
+                ['مفعّلة حتى', next.toISOString().slice(0, 10)],
+              ]),
+          }),
         }).catch(() => {})
       }
     }

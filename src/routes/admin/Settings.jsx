@@ -2,6 +2,9 @@ import { useState, useEffect, useMemo, useRef, lazy, Suspense } from 'react'
 import { useAuth } from '../../lib/auth.jsx'
 import { CAP } from '../../lib/permissions.js'
 import { VENUE_TYPES, venueType, lex, LEX_KEYS, LEX_LABELS } from '../../lib/venueTypes.js'
+// The stage grid shows the SAME defaults the server enforces — guarded against
+// drift in scripts/guard.mjs.
+import { NOTIFY_STAGES, stageOn } from '../../lib/notifyStages.js'
 
 // Map-based range picking (leaflet) — lazy so the heavy map bundle loads only on demand.
 const MapRangePicker = lazy(() => import('../../components/MapRangePicker.jsx'))
@@ -1617,6 +1620,7 @@ export default function Settings() {
   const [smsTemplate, setSmsTemplate] = useState(tenant?.smsTemplate || '')
   const [notifyWa, setNotifyWa] = useState(tenant?.customerNotify?.whatsapp !== false)
   const [notifyEmail, setNotifyEmail] = useState(tenant?.customerNotify?.email !== false)
+  const [notifyStages, setNotifyStages] = useState(() => tenant?.customerNotify?.stages || {})
 
   // Custom webhook integration states
   const [customWebhookEnabled, setCustomWebhookEnabled] = useState(tenant?.customWebhookEnabled === true)
@@ -1900,7 +1904,7 @@ export default function Settings() {
         accountingSystem,
         smsGateway,
         smsTemplate: smsTemplate.trim(),
-        customerNotify: { whatsapp: notifyWa, email: notifyEmail },
+        customerNotify: { whatsapp: notifyWa, email: notifyEmail, stages: notifyStages },
         customWebhookEnabled,
         customWebhookUrl: customWebhookUrl.trim(),
         membershipPolicy: {
@@ -5707,7 +5711,42 @@ export default function Settings() {
                   <span className="small">{ar ? 'إشعارات الإيميل (إن توفّر إيميل العميل)' : 'Email updates (if a customer email is present)'}</span>
                   <input type="checkbox" checked={notifyEmail} onChange={(e) => setNotifyEmail(e.target.checked)} style={{ width: 22, height: 22 }} />
                 </label>
-                <p className="xs faint" style={{ margin: 0 }}>{ar ? 'قوالب الرسائل ورقم الواتساب الخاص بالمنشأة تُدار من صفحة الرسائل والقوالب، لا من هنا.' : 'Message templates and the venue WhatsApp number are managed on the messaging page, not here.'}</p>
+                {/* WHICH STAGES ACTUALLY SEND.
+                    Every one of the seven order statuses used to notify, so a
+                    guest ordering one coffee received five emails and five
+                    WhatsApp messages. The switches above stay the master
+                    on/off; this grid decides which moments are worth a message.
+                    Defaults are the three a guest actually wants — received,
+                    ready, paid — plus cancelled and refunded. */}
+                <div className="stack" style={{ gap: 6, marginTop: 6, paddingTop: 10, borderTop: '1px solid var(--border)' }}>
+                  <strong className="small">{ar ? 'متى يُرسَل الإشعار؟' : 'Which stages notify?'}</strong>
+                  <p className="xs faint" style={{ margin: 0 }}>{ar ? 'اختر اللحظات التي تستحق رسالة. الواتساب أغلى قناة لديك — مرحلة لا يحتاجها الضيف هي مالٌ يُنفَق على إزعاجه.' : 'Pick the moments worth a message.'}</p>
+                  <div className="row xs faint" style={{ gap: 8, paddingInlineStart: 2 }}>
+                    <span className="grow" />
+                    <span style={{ width: 54, textAlign: 'center' }}>{ar ? 'إيميل' : 'Email'}</span>
+                    <span style={{ width: 54, textAlign: 'center' }}>{ar ? 'واتساب' : 'WA'}</span>
+                  </div>
+                  {NOTIFY_STAGES.map((s) => (
+                    <div key={s.id} className="row" style={{ gap: 8 }}>
+                      <span className="small grow" style={{ minWidth: 0 }}>{ar ? s.ar : s.en}</span>
+                      {['email', 'whatsapp'].map((chn) => (
+                        <span key={chn} style={{ width: 54, textAlign: 'center' }}>
+                          <input
+                            type="checkbox"
+                            aria-label={`${ar ? s.ar : s.en} — ${chn}`}
+                            checked={stageOn(notifyStages, s.id, chn)}
+                            onChange={(e) => setNotifyStages((prev) => ({
+                              ...prev,
+                              [s.id]: { ...(prev[s.id] || {}), [chn]: e.target.checked },
+                            }))}
+                            style={{ width: 20, height: 20 }}
+                          />
+                        </span>
+                      ))}
+                    </div>
+                  ))}
+                </div>
+                <p className="xs faint" style={{ margin: 0 }}>{ar ? 'قوالب الرسائل ورقم الواتساب الخاص بالمنشأة تُدار من صفحة الرسائل والقوالب، لا من هنا. وزر «قيّمنا» يظهر في بريد الدفع تلقائياً متى وضعتَ رابط خرائط جوجل في بيانات المنشأة.' : 'Message templates and the venue WhatsApp number are managed on the messaging page.'}</p>
               </div>
 
               {/* Guest-behaviour tracking — a reporting switch, so it sits with the

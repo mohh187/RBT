@@ -10,7 +10,9 @@
 const { onSchedule } = require('firebase-functions/v2/scheduler')
 const { onDocumentCreated, onDocumentUpdated } = require('firebase-functions/v2/firestore')
 const { getFirestore, FieldValue } = require('firebase-admin/firestore')
-const { sendWhatsAppText, waCredsFor } = require('./messaging')
+const { sendWhatsAppText, waCredsFor, sendEmail } = require('./messaging')
+const { shell, section, esc: eesc } = require('./emailTemplates.js')
+const { platformBrand } = require('./emailBrand.js')
 const { takeSpend } = require('./spend')
 
 // Personalize a template: {name}/{الاسم} → customer name, {venue}/{المنشأة} → venue.
@@ -476,7 +478,10 @@ const ownerDailyReport = onSchedule(
         if (!snap) continue
         const dayOrders = snap.docs.map((d) => d.data()).filter((o) => (Number(o.paidAtMs) || 0) < endMs)
 
-        const settled = dayOrders.filter((o) => ['paid', 'served', 'refunded'].includes(o.status))
+        // paidOnline included: an online-paid order sits on the KITCHEN track
+        // (pending/accepted/served) with paymentStatus paid, so a status-only test
+        // reported a day of online takings as zero.
+        const settled = dayOrders.filter((o) => ['paid', 'served', 'refunded'].includes(o.status) || o.paidOnline === true)
         const paidCount = dayOrders.filter((o) => o.status === 'paid' || o.status === 'served').length
         const cancelledCount = dayOrders.filter((o) => o.status === 'cancelled').length
         const revenue = Math.round(settled.reduce((s, o) =>
@@ -552,10 +557,65 @@ const ownerDailyReport = onSchedule(
           slowLines.forEach((s) => lines.push(`- ${s}`))
         }
 
-        const q = await takeQuota(db, t.id, 1)
-        if (!q) continue
-        const creds = await waCredsFor(db, t.id)
-        await sendWhatsAppText(phone, lines.join('\n'), creds, 'claimed').catch(() => {})
+        // ---- WhatsApp (as before) ----
+        if (phone) {
+          const q = await takeQuota(db, t.id, 1)
+          if (q) {
+            const creds = await waCredsFor(db, t.id)
+            await sendWhatsAppText(phone, lines.join('\n'), creds, 'claimed').catch(() => {})
+          }
+        }
+
+        // ---- Email: the same day, laid out to be READ ----
+        //
+        // Every figure below was already computed for the WhatsApp text; a
+        // plain-text list is fine on a phone but an owner checking yesterday's
+        // takings against their own expectation is auditing, not skimming. So
+        // the same numbers are grouped into titled sections with the subtotal
+        // of each picked out — which is the whole reason to send this by email
+        // as well as by WhatsApp.
+        //
+        // Sent in OUR identity: this is a report from RBT 360 to the owner, not
+        // something the venue sends to anyone.
+        const reportTo = rep.email || (td.ownerUid
+          ? await db.doc(`users/${td.ownerUid}`).get().then((u) => (u.exists ? u.data().email : '')).catch(() => '')
+          : '')
+        if (reportTo && rep.email !== false) {
+          const pb = platformBrand({})
+          const cur = td.currency || 'SAR'
+          const n = (v) => `${Number(v) || 0} ${cur}`
+          const avg = paidCount ? Math.round(revenue / paidCount) : 0
+          const body = [
+            `<p style="margin:0 0 6px;">مرحباً,</p>`,
+            `<p style="margin:0 0 16px;color:#5c6270;font-size:13.5px;">هذا تقرير مبيعات أمس لـ«${eesc(td.name || '')}»، مُجهَّز آلياً.</p>`,
+            section(pb, 'الحركة', [
+              ['الطلبات المدفوعة', String(paidCount)],
+              cancelledCount ? ['الطلبات الملغاة', String(cancelledCount)] : null,
+              ['متوسط قيمة الطلب', n(avg)],
+              ['إجمالي الإيراد', n(revenue), 'strong'],
+            ]),
+            section(pb, 'الإيراد حسب طريقة الدفع', [
+              ['نقداً', String(cash)],
+              ['شبكة', String(card)],
+              ['أونلاين', String(online)],
+              ['مجموع الطلبات المسوّاة', String(cash + card + online), 'strong'],
+            ]),
+            top.length ? section(pb, 'الأكثر مبيعاً', top.map(([nm, q2]) => [nm, String(q2)])) : '',
+            slowLines.length ? section(pb, 'أصناف تحتاج انتباهك', slowLines.map((s) => [s, '', 'muted'])) : '',
+          ].filter(Boolean).join('')
+          await sendEmail({
+            // Platform reporting, not the venue's metered spend.
+            meter: 'platform',
+            to: reportTo,
+            subject: `تقرير مبيعات ${td.name || ''} — ${yDate}`,
+            html: shell(pb, {
+              title: `تقرير مبيعات ${td.name || ''} — ${yDate}`,
+              preheader: `إيراد أمس ${revenue} ${cur} من ${paidCount} طلباً`,
+              body,
+              cta: { label: 'فتح التقرير الكامل', href: (process.env.PUBLIC_BASE_URL || '').replace(/\/$/, '') + '/admin/daily-report' },
+            }),
+          }).catch(() => {})
+        }
       } catch (_) { /* one tenant's failure never stops the loop */ }
     }
   }

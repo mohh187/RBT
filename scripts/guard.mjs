@@ -65,6 +65,15 @@ const MIRRORS = [
     client: 'src/lib/platformSeller.js',
     objects: ['PLATFORM_SELLER'],
   },
+  {
+    // Which order stages notify the guest. The server decides what SENDS; the
+    // settings screen shows the venue what the defaults are. A screen that
+    // displays different defaults from the ones in force is worse than no
+    // screen — the venue configures against a fiction.
+    server: 'functions/messaging.js',
+    client: 'src/lib/notifyStages.js',
+    objects: ['NOTIFY_STAGE_DEFAULTS'],
+  },
 ]
 
 // The object literal that follows `<name> = `, up to its closing brace, with

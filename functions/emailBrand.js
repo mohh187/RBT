@@ -114,4 +114,18 @@ function platformBrand(financeCfg) {
   }
 }
 
-module.exports = { venueBrand, platformBrand, onColor, contrast, absolute, DEFAULT_BRAND, DEFAULT_ACCENT, RBT_BRAND }
+// The guest's live order page — /order/:slug/:orderId (src/App.jsx).
+//
+// This is the single most useful link an order email can carry: it answers
+// «where is my order» without the guest replying to anything or phoning the
+// counter. Empty when the venue has no slug or the id is missing, so the caller
+// renders no button at all rather than a link to a 404.
+function orderTrackUrl(tenant, orderId) {
+  const slug = String((tenant && tenant.slug) || '')
+  const id = String(orderId || '')
+  const base = String(process.env.PUBLIC_BASE_URL || '').replace(/\/+$/, '')
+  if (!slug || !id || !base) return ''
+  return `${base}/order/${encodeURIComponent(slug)}/${encodeURIComponent(id)}`
+}
+
+module.exports = { venueBrand, platformBrand, orderTrackUrl, onColor, contrast, absolute, DEFAULT_BRAND, DEFAULT_ACCENT, RBT_BRAND }
