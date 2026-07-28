@@ -523,7 +523,11 @@ function FooterSec({ c }) {
             <h3>ابدأ</h3>
             <Link to="/signup">إنشاء حساب</Link>
             <Link to="/login">تسجيل الدخول</Link>
-            <a href={`mailto:${SELLER_CONTACT.email}`} dir="ltr" style={{ textAlign: 'start' }}>{SELLER_CONTACT.email}</a>
+            {/* <bdi>, not dir="ltr". Setting a direction reorders the glyphs but
+                leaves the element in its parent's bidi run, so the surrounding
+                neutrals still get pulled around it. Isolation is what actually
+                keeps a Latin address out of the Arabic column's ordering. */}
+            <a href={`mailto:${SELLER_CONTACT.email}`}><bdi>{SELLER_CONTACT.email}</bdi></a>
           </div>
           <div>
             <h3>قانوني</h3>
@@ -536,18 +540,29 @@ function FooterSec({ c }) {
         {/* The company actually behind the brand. These are the SAME values
             stamped onto every tax invoice we issue (src/lib/platformSeller.js,
             drift-guarded against the server copy) — a buyer who checks the
-            footer against the invoice must find them identical. */}
+            footer against the invoice must find them identical.
+
+            EVERY Latin fragment is wrapped in <bdi>. The previous version used
+            <span dir="ltr">, which sets direction WITHOUT isolating, so the
+            neutral characters around it — the spaces, the full stop, the em
+            dash — joined the wrong run and the line rendered as
+            «…المحدودة.Wameed Al-Ibdaa Co. Ltd. — RBT 360 نشاط مسجّل تحتها»,
+            with the stop jumped and the brand name displaced. The em dash was
+            the worst of them: a neutral sitting exactly between two opposing
+            runs has no correct side to fall on, so the fix is not only to
+            isolate but to STOP BUILDING one sentence out of both scripts. Each
+            fact now gets its own labelled line. */}
         <div className="lx-legal">
           <div>
             <strong>{PLATFORM_SELLER.legalNameAr}</strong>
-            <span dir="ltr" style={{ marginInlineStart: 8 }}>{PLATFORM_SELLER.legalNameEn}</span>
-            {' — '}RBT 360 نشاط مسجّل تحتها
+            <bdi className="lx-legal-en">{PLATFORM_SELLER.legalNameEn}</bdi>
           </div>
-          <div>{SELLER_ADDRESS_AR}</div>
+          <div><span>العلامة</span> RBT 360 — نشاط مسجّل تحت السجل أدناه</div>
+          <div><span>العنوان</span> {SELLER_ADDRESS_AR}</div>
           <div>
-            السجل التجاري <span className="num" dir="ltr">{PLATFORM_SELLER.crNumber}</span>
-            {' · '}الرقم الضريبي <span className="num" dir="ltr">{PLATFORM_SELLER.vatNumber}</span>
-            {' · '}الرقم الموحد <span className="num" dir="ltr">{PLATFORM_SELLER.unifiedNumber}</span>
+            <span>السجل التجاري</span> <bdi className="num">{PLATFORM_SELLER.crNumber}</bdi>
+            <span>الرقم الضريبي</span> <bdi className="num">{PLATFORM_SELLER.vatNumber}</bdi>
+            <span>الرقم الموحد</span> <bdi className="num">{PLATFORM_SELLER.unifiedNumber}</bdi>
           </div>
         </div>
 
@@ -586,24 +601,44 @@ function FlowDiagram({ lang }) {
   )
 }
 
+// The live kitchen board. Tickets carry their ITEMS and their elapsed time,
+// because that is what a real KDS ticket carries — an order number over a table
+// name is a wireframe, and it read as one: four sparse cards floating in a wide
+// frame. Six populated tickets fill the same frame and, more usefully, show a
+// visitor what the screen actually does.
 function OrderBoardWin({ lang }) {
   const ar = lang === 'ar'
   const cols = [
-    { h: ar ? 'جديد' : 'New', tk: [[ar ? 'طاولة 5' : 'Table 5', '#142'], [ar ? 'سفري' : 'Takeaway', '#143']] },
-    { h: ar ? 'تحضير' : 'Prep', tk: [[ar ? 'طاولة 2' : 'Table 2', '#141']] },
-    { h: ar ? 'جاهز' : 'Ready', tk: [[ar ? 'طاولة 8' : 'Table 8', '#139']] },
+    { h: ar ? 'جديد' : 'New', k: 'new', tk: [
+      { no: '#142', at: ar ? 'طاولة 5' : 'Table 5', t: '0:40', items: [[ar ? 'سبانش لاتيه' : 'Spanish Latte', 2], [ar ? 'كرواسون' : 'Croissant', 1]] },
+      { no: '#143', at: ar ? 'سفري' : 'Takeaway', t: '1:15', items: [[ar ? 'أمريكانو' : 'Americano', 1]] },
+    ] },
+    { h: ar ? 'تحضير' : 'Prep', k: 'prep', tk: [
+      { no: '#141', at: ar ? 'طاولة 2' : 'Table 2', t: '3:20', items: [[ar ? 'موهيتو' : 'Mojito', 2], [ar ? 'تشيز كيك' : 'Cheesecake', 1]] },
+      { no: '#140', at: ar ? 'طاولة 9' : 'Table 9', t: '4:05', items: [[ar ? 'فلات وايت' : 'Flat White', 1]] },
+    ] },
+    { h: ar ? 'جاهز' : 'Ready', k: 'done', tk: [
+      { no: '#139', at: ar ? 'طاولة 8' : 'Table 8', t: '6:10', items: [[ar ? 'قهوة مقطرة' : 'Filter Coffee', 2]] },
+      { no: '#138', at: ar ? 'توصيل' : 'Delivery', t: '7:45', items: [[ar ? 'تشيز كيك' : 'Cheesecake', 1], [ar ? 'موهيتو' : 'Mojito', 1]] },
+    ] },
   ]
   return (
     <div className="r-win">
-      <div className="r-win-bar"><span className="d" /><span className="d" /><span className="d" /><span className="t">{ar ? 'الكاشير · مباشر' : 'Cashier · live'}</span></div>
+      <div className="r-win-bar"><span className="d" /><span className="d" /><span className="d" /><span className="t">{ar ? 'شاشة المطبخ · مباشر' : 'Kitchen display · live'}</span></div>
       <div className="r-win-body">
         {cols.map((c) => (
           <div key={c.h}>
-            <div className="r-col-h"><span>{c.h}</span><span>{c.tk.length}</span></div>
-            {c.tk.map((tk, i) => (
-              <div key={i} className="r-tk">
-                <div style={{ fontSize: 11, fontWeight: 800 }}>{tk[1]}</div>
-                <div style={{ fontSize: 10, color: 'var(--text-muted)' }}>{tk[0]}</div>
+            <div className="r-col-h"><span>{c.h}</span><span className="num">{c.tk.length}</span></div>
+            {c.tk.map((tk) => (
+              <div key={tk.no} className={`r-tk is-${c.k}`}>
+                <div className="r-tk-h">
+                  <b className="num">{tk.no}</b>
+                  <span>{tk.at}</span>
+                  <i className="num">{tk.t}</i>
+                </div>
+                {tk.items.map(([n, q]) => (
+                  <div key={n} className="r-tk-i"><span className="num">{q}×</span> {n}</div>
+                ))}
               </div>
             ))}
           </div>

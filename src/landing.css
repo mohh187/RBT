@@ -185,6 +185,42 @@
   --t8-bg:rgba(160,175,215,.13); --t8-fg:#AEB8D8;
 }
 
+/* ============ the product mockups: reclaiming app tokens ============
+   The mockups on this page (.r-win, .pw-*, .iv-*, .tv-*, .r-flow) are the
+   REAL product components, so their CSS lives in index.css with the rest of
+   the app — and reads the APP's palette, where --brand is the venue maroon
+   #7c2d2d. That is why the cashier's «pay» button rendered muddy brown on a
+   violet page and every panel came out washed grey.
+
+   All thirteen leaked tokens are reclaimed here. Verified: none of these
+   classes is used outside this page (the auth screen draws its own .eco-*
+   family, already on landing tokens), so the remap is complete, not partial.
+
+   MAPPED TO THE FIXED --n* RAMP AND LITERAL BRAND INKS, NOT to --card/--ink.
+   These are screenshots of a product sitting inside a white bezel on a dark
+   hero. The semantic tokens flip with the theme; --n* does not. Mapping
+   --surface to --card would paint a black slab inside a white laptop frame
+   the moment a visitor switched to dark mode. */
+.rl {
+  --brand: var(--rb-violet);
+  --brand-strong: #5B23D6;
+  --brand-soft: #F0EBFE;
+  --on-brand: #ffffff;
+  --accent: var(--rb-magenta);
+  --gold: #8A5605;           /* 5.9:1 on the tile tint — the old --gold was 2.1:1 */
+  --text: var(--n900);
+  --text-muted: var(--n600);
+  --text-faint: var(--n500);
+  --surface: var(--n0);
+  --surface-2: var(--n50);
+  --bg-2: var(--n50);
+  --border: var(--n100);
+  --border-strong: var(--n300);
+  /* .r-node's glow read an undefined --glow (it was only ever declared under
+     .lpx, a landing that no longer renders) — so the effect was already dead. */
+  --glow: var(--act-ring);
+}
+
 /* ============================ base ============================ */
 .rl {
   --wrap: 1180px;
@@ -361,11 +397,25 @@
   font-size: var(--fs-display); font-weight: var(--fw-bold); line-height: 1.15;
   letter-spacing: -0.02em; margin: var(--s4) 0 0; text-wrap: balance; color: #fff;
 }
-/* the accent phrase carries the gradient — one headline, once per page */
+/* The accent phrase used to be gradient-FILLED TEXT. Two problems with that,
+   and the second is the one that matters: it is the most recognisable single
+   signature of a generated design, and it costs contrast — the pale stops land
+   near 4:1 on this canvas, on the largest and most important words on the page.
+
+   The phrase now reads in plain white and the brand signs it with a stroke
+   beneath. Same identity, stated once, UNDER the words instead of smeared
+   through them. Drawn as a background rather than a pseudo-element so it
+   survives wrapping; box-decoration-break gives each wrapped line its own
+   stroke instead of one bar stretched across the gap. */
 .rl-hero h1 .em {
-  background: linear-gradient(100deg, #7FA2FF, #C79BFF 46%, #FF8FD6);
-  -webkit-background-clip: text; background-clip: text;
-  -webkit-text-fill-color: transparent; color: transparent;
+  color: #fff;
+  background-image: var(--grad);
+  background-repeat: no-repeat;
+  background-size: 100% 0.09em;
+  background-position: 0 92%;
+  padding-bottom: 0.08em;
+  -webkit-box-decoration-break: clone;
+  box-decoration-break: clone;
 }
 .rl-hero .rl-lead { color: var(--on-dark-2); font-size: clamp(1rem, 1.7vw, 1.16rem); margin-top: var(--s4); max-width: 52ch; }
 .rl-cta { display: flex; gap: var(--s3); flex-wrap: wrap; margin-top: var(--s6); }
@@ -414,6 +464,20 @@
 .lx-sat.s2 { top: 54px; inset-inline-end: -26px; animation: lx-float 6.6s ease-in-out infinite 1.2s; }
 .lx-sat.s2 i { background: var(--t2-bg); color: var(--t2-fg); }
 @keyframes lx-float { 0%, 100% { transform: translateY(0); } 50% { transform: translateY(-9px); } }
+
+/* the kitchen board's ticket internals — landing-only, so the app's own
+   .r-tk stays exactly as it is. The rail colour states the column: work
+   arriving, work in hand, work done. */
+.rl .r-tk { margin-bottom: 5px; padding: 7px 8px; }
+.rl .r-tk.is-new  { border-inline-start-color: var(--t2-fg); }
+.rl .r-tk.is-prep { border-inline-start-color: var(--t4-fg); }
+.rl .r-tk.is-done { border-inline-start-color: var(--t7-fg); }
+.rl .r-tk-h { display: flex; align-items: baseline; gap: 6px; font-size: 10px; color: var(--n500); }
+.rl .r-tk-h b { font-size: 11px; font-weight: 700; color: var(--n900); }
+.rl .r-tk-h i { margin-inline-start: auto; font-style: normal; font-variant-numeric: tabular-nums; }
+.rl .r-tk-i { font-size: 10px; color: var(--n600); line-height: 1.6; margin-top: 3px; }
+.rl .r-tk-i span { font-weight: 700; color: var(--n900); }
+.rl .r-col-h { font-weight: 600; }
 
 /* ============================ logo marquee ============================ */
 .lx-logos-title { text-align: center; color: var(--ink-3); font-size: var(--fs-xs); font-weight: var(--fw-semi); margin-bottom: var(--s4); letter-spacing: 0.02em; }
@@ -551,16 +615,23 @@
    The default of 0 matters: if the script never runs, the screen renders
    tilted but fully readable rather than blank. */
 .csa { --p: 0; perspective: 1400px; }
+/* The heading RISES but does not fade. It used to carry
+   `opacity: calc(1 - var(--p) * .45)`, which meant that by the time a reader
+   had scrolled far enough to look at the screen, the sentence explaining it
+   was at 55% — greyed-out copy that reads as a rendering fault, not as an
+   effect. Motion is a fine thing to spend on decoration; legibility is not. */
 .csa-title {
   text-align: center; max-width: 780px; margin-inline: auto;
-  transform: translateY(calc(var(--p) * -34px));
-  opacity: calc(1 - var(--p) * 0.45);
+  transform: translateY(calc(var(--p) * -30px));
   will-change: transform;
 }
 .csa-stage { margin-top: var(--s6); transform-style: preserve-3d; }
-/* the device: tilted and slightly small at rest, flat and full size at the end */
+/* the device: tilted and slightly small at rest, flat and full size at the end.
+   760px, not 940px — the frame is sized to the DENSEST mockup that goes in it.
+   At 940 the cashier grid floated in dead space, which read as a broken layout
+   rather than as a screenshot. */
 .csa-frame {
-  position: relative; margin-inline: auto; max-width: 940px;
+  position: relative; margin-inline: auto; max-width: 760px;
   transform: rotateX(calc((1 - var(--p)) * 26deg)) scale(calc(0.93 + var(--p) * 0.07));
   transform-origin: 50% 0%;
   border-radius: var(--r-2xl); padding: 12px;
@@ -573,6 +644,9 @@
   content: ""; position: absolute; top: 5px; inset-inline: 0; margin-inline: auto;
   width: 84px; height: 4px; border-radius: var(--r-pill); background: rgba(255, 255, 255, 0.16);
 }
+/* --n0, matching the mockups' own remapped --surface above. Both sides of this
+   have to agree: a screen painted white while the window inside it painted
+   var(--card) put a black slab in a white bezel in dark mode. */
 .csa-screen {
   border-radius: var(--r-xl); overflow: hidden; background: var(--n0);
   /* the mockups inside carry their own frames — flatten them into the screen */
@@ -618,7 +692,12 @@
 
 /* ============================ footer ============================ */
 .rl-foot { border-top: 1px solid var(--line); padding-block: var(--s7) var(--s5); background: var(--panel); }
-.rl-foot-grid { display: grid; grid-template-columns: 1.7fr 1fr 1fr 1fr; gap: var(--s6) var(--s5); }
+/* text-align is stated rather than inherited: the columns, the legal block and
+   the payment row all have to hang off the SAME edge, and one stray centred
+   ancestor anywhere above would silently break that alignment for three of
+   the four columns while leaving the widest one looking correct. */
+.rl-foot-grid { display: grid; grid-template-columns: 1.7fr 1fr 1fr 1fr; gap: var(--s6) var(--s5); text-align: start; }
+.rl-foot-grid > div { min-width: 0; }
 .rl-foot-grid a { display: block; color: var(--ink-2); text-decoration: none; font-size: var(--fs-sm); padding: 5px 0; }
 .rl-foot-grid a:hover { color: var(--act); }
 .rl-foot-grid h3 { margin: 0 0 var(--s2); font-size: var(--fs-sm); font-weight: var(--fw-bold); color: var(--ink); }
@@ -632,13 +711,22 @@
 }
 .lx-social a:hover { color: var(--act); border-color: var(--act); transform: translateY(-2px); }
 
-/* the legal identity — the same constant the tax invoice is stamped with */
+/* the legal identity — the same constant the tax invoice is stamped with.
+   Every line hugs the start edge and carries its own label, matching the
+   document sheet's treatment, so the block reads as a record rather than as a
+   paragraph that happens to contain numbers. */
 .lx-legal {
   margin-top: var(--s6); padding-top: var(--s5); border-top: 1px solid var(--line);
-  display: grid; gap: 6px; font-size: var(--fs-xs); color: var(--ink-3); line-height: 1.7;
+  display: grid; gap: 5px; font-size: var(--fs-xs); color: var(--ink-3); line-height: 1.75;
 }
-.lx-legal strong { color: var(--ink-2); font-weight: var(--fw-semi); }
-.lx-legal .num { font-variant-numeric: tabular-nums; }
+.lx-legal strong { color: var(--ink); font-weight: var(--fw-bold); }
+/* the Latin trading name sits beside the Arabic one, isolated and spaced —
+   the two used to collide because nothing separated their bidi runs */
+.lx-legal-en { color: var(--ink-2); margin-inline-start: 10px; }
+/* inline labels, same grammar as the invoice header */
+.lx-legal span { color: var(--ink-3); opacity: 0.72; margin-inline-end: 5px; }
+.lx-legal span:not(:first-child) { margin-inline-start: 14px; }
+.lx-legal .num { font-variant-numeric: tabular-nums; color: var(--ink-2); }
 .lx-pay { display: flex; align-items: center; flex-wrap: wrap; gap: var(--s2); margin-top: var(--s5); }
 .lx-pay .lbl { color: var(--ink-3); font-size: var(--fs-xs); }
 .lx-pay .chip { font-size: var(--fs-2xs); font-weight: var(--fw-bold); color: var(--ink-2); background: var(--card); border: 1px solid var(--line); border-radius: var(--r-sm); padding: 6px 12px; }
