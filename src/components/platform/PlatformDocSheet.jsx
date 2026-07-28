@@ -72,6 +72,10 @@ export default function PlatformDocSheet({ doc, variant = 'taxInvoice', onAccept
         <header className="pdoc-head">
           <div className="pdoc-brand">
             <img src={s.logoUrl || '/brand/word-448.png'} alt={s.brand || 'RBT360'} className="pdoc-logo" />
+            {/* The English name is CENTRED under the Arabic one: the block
+                shrink-wraps to the longer (Arabic) line, so centring inside it
+                puts the Latin lockup exactly under the middle of the name it
+                translates rather than trailing off one edge. */}
             <div className="pdoc-names">
               <strong>{s.legalNameAr}</strong>
               <span dir="ltr" className="pdoc-ltr">{s.legalNameEn}</span>
@@ -88,16 +92,20 @@ export default function PlatformDocSheet({ doc, variant = 'taxInvoice', onAccept
               <div><span>الرقم الضريبي</span> <bdi className="pdoc-ltr pdoc-num">{s.vatNumber}</bdi></div>
             </div>
           </div>
+          {/* Same treatment as the seller block: a tight stack where each line
+              carries its own label, so nothing drifts across the sheet. */}
           <div className="pdoc-meta">
-            <div className="pdoc-title">{TITLE[variant] || TITLE.taxInvoice}</div>
-            <div className="pdoc-title-en">{TITLE_EN[variant] || ''}</div>
+            <div className="pdoc-titles">
+              <div className="pdoc-title">{TITLE[variant] || TITLE.taxInvoice}</div>
+              <div className="pdoc-title-en">{TITLE_EN[variant] || ''}</div>
+            </div>
             <div className="pdoc-no" dir="ltr">{doc.no}</div>
-            <dl className="pdoc-kv">
-              <dt>التاريخ</dt><dd>{dateAr(doc.issuedAtMs)}</dd>
+            <div className="pdoc-kv">
+              <div><span>التاريخ</span> {dateAr(doc.issuedAtMs)}</div>
               {isQuote
-                ? <><dt>ساري حتى</dt><dd className={expired ? 'pdoc-danger' : ''}>{dateAr(doc.validUntil)}</dd></>
-                : <><dt>الاستحقاق</dt><dd>{dateAr(doc.dueAt)}</dd></>}
-            </dl>
+                ? <div className={expired ? 'pdoc-danger' : ''}><span>ساري حتى</span> {dateAr(doc.validUntil)}</div>
+                : <div><span>الاستحقاق</span> {dateAr(doc.dueAt)}</div>}
+            </div>
           </div>
         </header>
 

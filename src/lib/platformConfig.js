@@ -6,6 +6,7 @@ import { doc, getDoc, onSnapshot, setDoc, serverTimestamp } from 'firebase/fires
 import { db } from './firebase.js'
 import { setTenantPlan, setVenueMeta } from './platform.js'
 import { PLANS } from './plans.js'
+import { YEARLY_DISCOUNT } from './platformPricing.js'
 
 const CONFIG_DOC = () => doc(db, 'platformConfig', 'plans')
 
@@ -60,7 +61,15 @@ function normalize(data) {
     const f = d.features?.[p.id]
     features[p.id] = Array.isArray(f) && f.length ? f : (DEFAULT_FEATURES[p.id] || [])
   })
-  return { prices, listPrices, features, promo: d.promo || null }
+  // The yearly-payment discount, mirrored from functions/platformPricing.js.
+  // Carried through so the editor's yearly read-out is computed with the SAME
+  // factor the server bills with, rather than a second hardcoded 0.8.
+  const yd = Number(d.yearlyDiscount)
+  return {
+    prices, listPrices, features,
+    promo: d.promo || null,
+    yearlyDiscount: Number.isFinite(yd) && yd > 0 ? yd : YEARLY_DISCOUNT,
+  }
 }
 
 // One-shot read of the plans config (merged with defaults).

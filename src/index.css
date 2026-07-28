@@ -12145,23 +12145,27 @@ body[data-mch-sheet] .backdrop {
    sits under it as one unit rather than two columns fighting for the eye. */
 .pdoc-brand { display: grid; gap: 10px; justify-items: start; min-width: 0; max-width: 62%; }
 .pdoc-logo { width: 148px; height: auto; }
-.pdoc-names { display: grid; gap: 1px; }
+/* Shrink-wrapped so the longer Arabic line sets the width; centring inside
+   then puts the Latin name under the MIDDLE of the Arabic one. */
+.pdoc-names { display: inline-grid; gap: 1px; text-align: center; justify-items: center; }
 .pdoc-names strong { font-size: 15px; color: #16181d; line-height: 1.4; }
-.pdoc-names span { font-size: 11.5px; color: #6b6f76; }
+.pdoc-names span { font-size: 11px; color: #6b6f76; letter-spacing: .01em; }
 /* Stacked lines, hugging the start edge. Each line carries its own label
    inline, so nothing drifts to the far side of the page: the block reads as
    one column under the company name instead of a label column and a value
    column separated by white space. */
-.pdoc-seller-kv { display: grid; gap: 3px; font-size: 11.5px; line-height: 1.65; color: #3f434d; max-width: 46ch; }
+.pdoc-seller-kv { display: grid; gap: 3px; font-size: 11.5px; line-height: 1.65; color: #3f434d; max-width: 52ch; }
 .pdoc-seller-kv > div { display: block; }
 .pdoc-seller-kv span { color: #9aa0a8; font-size: 10.5px; margin-inline-end: 4px; }
-.pdoc-meta { text-align: start; flex: none; }
-.pdoc-title { font-size: 22px; font-weight: 800; }
-.pdoc-title-en { font-size: 11px; color: #6b6f76; letter-spacing: .08em; text-transform: uppercase; }
-.pdoc-no { font-size: 14px; font-weight: 700; margin: 6px 0 8px; font-variant-numeric: tabular-nums; }
-.pdoc-kv { display: grid; grid-template-columns: auto auto; gap: 2px 12px; margin: 0; font-size: 11.5px; }
-.pdoc-kv dt { color: #6b6f76; }
-.pdoc-kv dd { margin: 0; font-weight: 600; }
+.pdoc-meta { display: grid; gap: 8px; justify-items: start; text-align: start; flex: none; }
+/* Title pair shrink-wraps too, so QUOTATION centres under «عرض سعر». */
+.pdoc-titles { display: inline-grid; gap: 1px; justify-items: center; text-align: center; }
+.pdoc-title { font-size: 21px; font-weight: 800; line-height: 1.25; }
+.pdoc-title-en { font-size: 10.5px; color: #8a8f98; letter-spacing: .16em; text-transform: uppercase; }
+.pdoc-no { font-size: 14px; font-weight: 700; font-variant-numeric: tabular-nums; }
+/* Same tight stack as the seller block — label inline with its value. */
+.pdoc-kv { display: grid; gap: 3px; font-size: 11.5px; line-height: 1.6; color: #3f434d; }
+.pdoc-kv span { color: #9aa0a8; font-size: 10.5px; margin-inline-end: 4px; }
 .pdoc-danger { color: #b3261e; font-weight: 700; }
 
 .pdoc-buyer { display: flex; justify-content: space-between; gap: 24px; flex-wrap: wrap; padding: 16px 0; border-bottom: 1px solid #eceef1; }

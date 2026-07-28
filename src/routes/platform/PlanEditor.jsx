@@ -15,7 +15,7 @@ import {
 import { PlanBadge, StatusChip, toDateInput, fmtWhen } from './shared.jsx'
 
 // ---- (1) one plan's price + editable feature list ----
-function PlanCard({ plan, price, listPrice, features, onChange }) {
+function PlanCard({ plan, price, listPrice, features, onChange, cycle, yearlyDiscount }) {
   const setFeature = (i, val) => {
     const next = features.slice()
     next[i] = val
@@ -26,6 +26,13 @@ function PlanCard({ plan, price, listPrice, features, onChange }) {
   const p = Number(price) || 0
   const lp = Number(listPrice) || 0
   const off = lp > p && lp > 0 ? Math.round(((lp - p) / lp) * 100) : 0
+  // The yearly TOTAL a customer actually pays — twelve months with the yearly
+  // discount applied. Shown as a read-out, not a second editable field: two
+  // independently editable prices for one plan is how they drift apart.
+  const yearlyTotal = Math.round(p * 12 * (Number(yearlyDiscount) || 0.8))
+  const yearlyList = Math.round(lp * 12 * (Number(yearlyDiscount) || 0.8))
+  const shown = cycle === 'yearly' ? yearlyTotal : p
+  const shownList = cycle === 'yearly' ? yearlyList : lp
 
   return (
     <div className="card card-pad stack" style={{ gap: 10 }}>
@@ -33,6 +40,20 @@ function PlanCard({ plan, price, listPrice, features, onChange }) {
         <strong>{plan.ar}</strong>
         <PlanBadge plan={plan.id} />
       </div>
+      {/* What the customer sees for the selected cycle, computed from the one
+          monthly figure below — so the read-out can never disagree with what
+          the quotation charges. */}
+      <div className="row" style={{ gap: 8, alignItems: 'baseline', flexWrap: 'wrap' }}>
+        {shownList > shown && <s className="faint num" dir="ltr">{shownList.toLocaleString('en-US')}</s>}
+        <strong className="num" dir="ltr" style={{ fontSize: 'var(--fs-lg)' }}>{shown.toLocaleString('en-US')}</strong>
+        <span className="xs faint">{cycle === 'yearly' ? 'ريال / سنة (الإجمالي)' : 'ريال / شهر'}</span>
+      </div>
+      {cycle === 'yearly' && (
+        <span className="xs faint">
+          يعادل <span className="num" dir="ltr">{Math.round(yearlyTotal / 12).toLocaleString('en-US')}</span> ريالاً شهرياً —
+          خصم <span className="num" dir="ltr">{Math.round((1 - (Number(yearlyDiscount) || 0.8)) * 100)}%</span> على الدفع السنوي
+        </span>
+      )}
       <label className="stack xs" style={{ gap: 4 }}>
         <span className="faint bold">السعر المعروض (بعد الخصم)</span>
         <div className="row" style={{ gap: 6, alignItems: 'center' }}>
@@ -85,6 +106,9 @@ export default function PlanEditor() {
   const [cfg, setCfg] = useState(null)          // {prices, features} from Firestore
   const [draft, setDraft] = useState(null)       // editable copy
   const [saving, setSaving] = useState(false)
+  // Monthly vs the yearly TOTAL. A view switch only — the stored price is
+  // always the monthly one, and the yearly figure is derived from it.
+  const [cycle, setCycle] = useState('monthly')
 
   // bulk selection + actions
   const [selected, setSelected] = useState(() => new Set())
@@ -248,6 +272,15 @@ export default function PlanEditor() {
         </div>
       </div>
 
+      <div className="row" style={{ gap: 6, alignItems: 'center' }}>
+        <span className="xs faint">اعرض الأسعار</span>
+        {[['monthly', 'شهري'], ['yearly', 'سنوي (الإجمالي)']].map(([id, label]) => (
+          <button key={id} className={`btn btn-sm ${cycle === id ? 'btn-primary' : 'btn-outline'}`} onClick={() => setCycle(id)}>
+            {label}
+          </button>
+        ))}
+      </div>
+
       {/* (1) plan pricing + features */}
       <div style={{ display: 'grid', gap: 'var(--sp-3)', gridTemplateColumns: 'repeat(auto-fill, minmax(240px, 1fr))' }}>
         {PLANS.map((p) => (
@@ -256,6 +289,7 @@ export default function PlanEditor() {
             price={draft.prices[p.id] ?? 0}
             listPrice={draft.listPrices[p.id] ?? 0}
             features={draft.features[p.id] || []}
+            cycle={cycle} yearlyDiscount={cfg?.yearlyDiscount ?? 0.8}
             onChange={(patch) => patchPlan(p.id, patch)}
           />
         ))}
