@@ -2253,7 +2253,7 @@ export function EditorialItemStage({ item, tenant = null, currency, onClose, onA
             <Icon name="close" size={20} />
           </button>
           <div className="edt-ar-viewer">
-            <ARViewer glb={glbSrc} usdz={usdzSrc} alt={name} lang={lang} onPhaseChange={setArPhase} />
+            <ARViewer glb={glbSrc} usdz={usdzSrc} alt={name} lang={lang} heightCm={item?.realHeightCm} onPhaseChange={setArPhase} />
           </div>
           {arPhase !== 'unsupported' && arPhase !== 'error' && (
             <p className="edt-ar-hint">

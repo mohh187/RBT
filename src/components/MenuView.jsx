@@ -2111,6 +2111,7 @@ function ArStage({ item, tenant, lang, onClose }) {
           usdz={usdz}
           alt={name}
           lang={lang}
+          heightCm={item?.realHeightCm}
           onPhaseChange={setPhase}
           onArStatus={(s) => { if (s === 'failed') setArFailed(true) }}
         />

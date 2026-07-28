@@ -203,6 +203,45 @@ const STATUS_AR = {
 // venue's Google Maps link (tenant.googleMapsUrl) — not just a status line.
 const NOTIFY_STATUSES = ['accepted', 'preparing', 'ready', 'served', 'paid', 'cancelled', 'refunded']
 
+// WHICH STAGES ACTUALLY REACH THE GUEST — and who decides.
+//
+// Every one of the seven statuses above used to send. A guest ordering a coffee
+// received: accepted, preparing, ready, served, paid. Five emails and five
+// WhatsApp messages for one cup. That is not a notification system, it is a
+// mailing list nobody subscribed to, and it burns the venue's metered WhatsApp
+// budget on messages that annoy the person paying for them.
+//
+// So the venue chooses. These are only the DEFAULTS, and they are deliberately
+// conservative — the three moments a guest actually wants:
+//   accepted  «we have your order»
+//   ready     «come and get it»
+//   paid      the receipt, and the moment to ask for a rating
+// plus the two they must never miss: cancelled and refunded.
+// «preparing» and «served» tell the guest nothing they cannot see, so they are
+// off unless a venue turns them on.
+const NOTIFY_STAGE_DEFAULTS = {
+  accepted: { email: true, whatsapp: true },
+  preparing: { email: false, whatsapp: false },
+  ready: { email: true, whatsapp: true },
+  served: { email: false, whatsapp: false },
+  paid: { email: true, whatsapp: true },
+  cancelled: { email: true, whatsapp: true },
+  refunded: { email: true, whatsapp: true },
+}
+
+// Resolve one stage/channel against the venue's settings.
+// The old master switches (customerNotify.email / .whatsapp) still win when set
+// to false — turning a channel off entirely must stay one click, and a venue
+// that already switched one off must not have it switched back on by this.
+function stageAllows(tenant, status, channel) {
+  const cn = (tenant && tenant.customerNotify) || {}
+  if (cn[channel] === false) return false
+  const stage = (cn.stages && cn.stages[status]) || {}
+  if (typeof stage[channel] === 'boolean') return stage[channel]
+  const def = NOTIFY_STAGE_DEFAULTS[status]
+  return def ? def[channel] !== false : false
+}
+
 // A WhatsApp template parameter. Meta REJECTS the whole message when a parameter
 // is empty or contains a newline/tab, so every value is collapsed to one line
 // and can never come back empty — an order placed without a name must not cost

@@ -1,0 +1,147 @@
+// ==================== ONE EMAIL TEMPLATE, EVERY SENDER ====================
+//
+// `shell(brand, {...})` renders any email in whichever identity it is handed.
+// The venue's colours and logo arrive as data (see emailBrand.js), so a new
+// venue is branded the moment it picks a colour — there is no per-venue
+// template, no per-venue code, and no deploy involved.
+//
+// ── THE CONSTRAINTS ARE THE DESIGN ──────────────────────────────────────
+// An inbox is not a browser. No <style> block survives Gmail's clipping
+// reliably, no web font loads, no flexbox is safe in Outlook (which renders
+// through Word). So: tables, inline styles only, system font stack, and a
+// hidden preheader so the inbox preview says something useful instead of
+// repeating the subject.
+//
+// ── THE HARD PROJECT RULES APPLY HERE TOO ───────────────────────────────
+// scripts/guard.mjs only walks src/, so nothing mechanically enforces them in
+// functions/ — that makes them easier to break here, not less binding. No
+// emojis. Latin digits only (money() in messaging.js already does this).
+const esc = (s) => String(s == null ? '' : s).replace(/[&<>"']/g, (c) => (
+  { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]
+))
+
+const FONT = "'IBM Plex Sans Arabic','Segoe UI',Tahoma,Arial,sans-serif"
+const INK = '#14151a'
+const MUTED = '#5c6270'
+const LINE = '#e7e9ef'
+const PAGE = '#f2f3f5'
+
+// The masthead. A logo when the venue uploaded one, otherwise its NAME set on
+// the brand colour — never a blank band and never someone else's mark.
+function header(brand) {
+  const b = brand || {}
+  const ink = b.ink || '#ffffff'
+  const logo = b.logoUrl
+    ? `<img src="${esc(b.logoUrl)}" alt="${esc(b.name)}" width="132" style="display:block;max-width:132px;height:auto;border:0;margin:0 auto 10px;">`
+    : ''
+  return `
+  <tr><td style="background:${esc(b.color || '#1F2A37')};padding:22px 28px;text-align:center;">
+    ${logo}
+    <div style="font-family:${FONT};font-size:17px;font-weight:700;color:${esc(ink)};line-height:1.5;">${esc(b.name)}</div>
+  </td></tr>`
+}
+
+// A real button, built the only way that works everywhere: a padded anchor in
+// its own table cell. Never rendered when there is no destination.
+function button(brand, label, href) {
+  if (!href || !label) return ''
+  const b = brand || {}
+  return `
+  <table role="presentation" cellpadding="0" cellspacing="0" border="0" style="margin:20px 0 4px;">
+    <tr><td style="background:${esc(b.color || '#1F2A37')};border-radius:8px;">
+      <a href="${esc(href)}" style="display:inline-block;padding:13px 26px;font-family:${FONT};font-size:14.5px;font-weight:700;color:${esc(b.ink || '#ffffff')};text-decoration:none;">${esc(label)}</a>
+    </td></tr>
+  </table>`
+}
+
+// Label/value rows — order number, table, amount, period. Latin digits, and the
+// value side forced LTR so a number never reorders inside an Arabic line.
+function facts(rows) {
+  const body = (rows || []).filter((r) => r && r[1] !== '' && r[1] != null).map(([k, v]) => `
+    <tr>
+      <td style="padding:7px 0;font-family:${FONT};font-size:13px;color:${MUTED};white-space:nowrap;">${esc(k)}</td>
+      <td style="padding:7px 0;font-family:${FONT};font-size:14px;color:${INK};font-weight:700;" align="left" dir="ltr">${esc(v)}</td>
+    </tr>`).join('')
+  return body ? `<table role="presentation" cellpadding="0" cellspacing="0" border="0" width="100%" style="margin:14px 0;">${body}</table>` : ''
+}
+
+// An itemised table (order lines, invoice lines).
+function lineTable(lines, totalLabel, totalValue) {
+  const rows = (lines || []).map((l) => `
+    <tr>
+      <td style="padding:9px 0;border-bottom:1px solid ${LINE};font-family:${FONT};font-size:14px;color:${INK};">${esc(l.name)}${Number(l.qty) > 1 ? ` <span style="color:${MUTED};">&times;${esc(l.qty)}</span>` : ''}</td>
+      <td style="padding:9px 0;border-bottom:1px solid ${LINE};font-family:${FONT};font-size:14px;color:${INK};white-space:nowrap;" align="left" dir="ltr">${esc(l.total)}</td>
+    </tr>`).join('')
+  if (!rows) return ''
+  const total = totalValue == null ? '' : `
+    <tr>
+      <td style="padding:12px 0 0;font-family:${FONT};font-size:15px;font-weight:700;color:${INK};">${esc(totalLabel || '')}</td>
+      <td style="padding:12px 0 0;font-family:${FONT};font-size:15px;font-weight:700;color:${INK};white-space:nowrap;" align="left" dir="ltr">${esc(totalValue)}</td>
+    </tr>`
+  return `<table role="presentation" cellpadding="0" cellspacing="0" border="0" width="100%" style="margin:16px 0;">${rows}${total}</table>`
+}
+
+// The footer carries WHO SENT THIS. For a venue that is its own contact block;
+// for us it is the legal identity that appears on our invoices. A venue footer
+// also carries a quiet «by RBT360» — the guest is the venue's customer, not
+// ours, so it stays small and last.
+function footer(brand) {
+  const b = brand || {}
+  const bits = [b.address, b.phone, b.vatNumber ? `الرقم الضريبي ${b.vatNumber}` : '']
+    .filter(Boolean).map((x) => `<div style="margin:2px 0;">${esc(x)}</div>`).join('')
+  const site = b.website
+    ? `<div style="margin:6px 0 0;"><a href="${esc(b.website)}" style="color:${esc(b.color || MUTED)};text-decoration:none;font-weight:700;">${esc(String(b.website).replace(/^https?:\/\//, ''))}</a></div>`
+    : ''
+  const legal = b.kind === 'platform' && b.legalName
+    ? `<div style="margin:6px 0 0;">${esc(b.legalName)}${b.crNumber ? ` · س.ت <span dir="ltr">${esc(b.crNumber)}</span>` : ''}</div>`
+    : ''
+  const note = b.footerNote ? `<div style="margin:6px 0 0;">${esc(b.footerNote)}</div>` : ''
+  const powered = b.poweredBy
+    ? `<div style="margin:12px 0 0;padding-top:10px;border-top:1px solid ${LINE};font-size:11px;color:#9aa0ad;">مُشغَّل بواسطة RBT 360</div>`
+    : ''
+  return `
+  <tr><td style="padding:18px 28px 22px;border-top:1px solid ${LINE};background:#fafbfc;" align="center">
+    <div style="font-family:${FONT};font-size:13px;font-weight:700;color:${INK};">${esc(b.name)}</div>
+    <div style="font-family:${FONT};font-size:12px;color:${MUTED};line-height:1.8;margin-top:4px;">${bits}${site}${legal}${note}</div>
+    ${powered}
+  </td></tr>`
+}
+
+/**
+ * Render a complete email.
+ * @param {object} brand  from venueBrand() or platformBrand()
+ * @param {object} opts   { title, preheader, body, cta:{label,href}, secondaryCta }
+ */
+function shell(brand, { title, preheader, body, cta, secondaryCta } = {}) {
+  const b = brand || {}
+  const pre = String(preheader || '').replace(/[<>]/g, '')
+  return `<!doctype html>
+<html dir="rtl" lang="ar" xmlns="http://www.w3.org/1999/xhtml">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<meta name="color-scheme" content="light">
+<title>${esc(title || b.name || '')}</title>
+</head>
+<body style="margin:0;padding:0;background:${PAGE};">
+<div style="display:none;max-height:0;overflow:hidden;opacity:0;">${esc(pre)}</div>
+<table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="background:${PAGE};padding:24px 12px;">
+  <tr><td align="center">
+    <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="max-width:580px;width:100%;background:#ffffff;border:1px solid ${LINE};border-radius:14px;overflow:hidden;">
+      ${header(b)}
+      <tr><td style="padding:26px 28px 8px;" align="right">
+        <h1 style="margin:0;font-family:${FONT};font-size:19px;line-height:1.5;font-weight:700;color:${INK};">${esc(title || '')}</h1>
+      </td></tr>
+      <tr><td style="padding:2px 28px 24px;font-family:${FONT};color:#3f434d;font-size:14.5px;line-height:1.85;" align="right">
+        ${body || ''}
+        ${cta ? button(b, cta.label, cta.href) : ''}
+        ${secondaryCta && secondaryCta.href ? `<div style="margin:12px 0 0;"><a href="${esc(secondaryCta.href)}" style="font-family:${FONT};font-size:13.5px;color:${esc(b.color || MUTED)};font-weight:700;text-decoration:none;">${esc(secondaryCta.label)}</a></div>` : ''}
+      </td></tr>
+      ${footer(b)}
+    </table>
+  </td></tr>
+</table>
+</body></html>`
+}
+
+module.exports = { shell, header, footer, button, facts, lineTable, esc }

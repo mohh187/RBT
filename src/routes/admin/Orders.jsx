@@ -136,7 +136,7 @@ export default function Orders() {
       >
         <div className="row-between">
           <div className="row" style={{ gap: 6, alignItems: 'center' }}>
-            <strong style={{ fontSize: 15 }}>#{orderNumber(o.code)}</strong>
+            <strong style={{ fontSize: 15 }}>{orderNumber(o.code)}</strong>
             {o.rush && <span className="badge badge-danger" style={{ fontSize: 10 }}><Icon name="flame" size={11} style={{ verticalAlign: 'middle' }} /> {ar ? 'عاجل' : 'Rush'}</span>}
             <span className="badge" style={{ fontSize: 10, background: 'var(--surface-2)' }}>
               <Icon name={o.orderType === 'dine_in' ? 'tables' : o.orderType === 'curbside' ? 'car' : 'bag'} size={12} style={{ verticalAlign: 'middle' }} /> {typeLabel(o)}
@@ -296,7 +296,7 @@ export default function Orders() {
           {[...filteredOrders].sort((a, b) => msOf(b) - msOf(a)).map((o) => (
             <button key={o.id} type="button" className="ord-tl-row" onClick={() => setActiveOrderId(o.id)}>
               <span className="xs faint num" style={{ flex: 'none', minWidth: 52 }}>{fmtTime(o)}</span>
-              <span className="bold" style={{ flex: 'none', display: 'inline-flex', alignItems: 'center', gap: 3 }}>#{orderNumber(o.code)}{o.rush && <Icon name="flame" size={12} style={{ color: 'var(--danger)' }} />}</span>
+              <span className="bold" style={{ flex: 'none', display: 'inline-flex', alignItems: 'center', gap: 3 }}>{orderNumber(o.code)}{o.rush && <Icon name="flame" size={12} style={{ color: 'var(--danger)' }} />}</span>
               <span className={`badge ${badgeFor(o)}`} style={{ fontSize: 10, flex: 'none' }}>{t(`status_${o.status}`) || o.status}</span>
               <span className="xs muted grow" style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', textAlign: 'start' }}>
                 {typeLabel(o)}{o.customerName ? ` · ${o.customerName}` : ''} · {itemsSummary(o)}

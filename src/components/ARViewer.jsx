@@ -107,7 +107,42 @@ function Card({ icon, title, note }) {
  * @param {(status:string)=>void} onArStatus   forwards model-viewer 'ar-status'
  * @param {(phase:string)=>void}  onPhaseChange 'loading' | 'ready' | 'unsupported' | 'error'
  */
-export default function ARViewer({ glb, usdz, alt = '', lang = 'ar', onArStatus, onPhaseChange }) {
+// ---- what the generator gets wrong, corrected at render time ----
+//
+// 1. THE CHROME. Meshy is asked for PBR (`enable_pbr: true`), so it estimates a
+//    metallic-roughness map from a single photograph. On a glossy white cup that
+//    estimator regularly guesses METAL, and the model renders as polished
+//    nickel — a silver teacup on a café menu.
+//    Forcing metalness to 0 is not a workaround, it is the physically correct
+//    value for the subject: ceramic, glass, liquid, bread, sauce and paper are
+//    all dielectric. Nothing a café sells is a metal. Roughness and normal maps
+//    are left untouched, so the real surface detail the photo captured survives
+//    — only the false mirror goes.
+function demetalize(el) {
+  const materials = (el && el.model && el.model.materials) || []
+  materials.forEach((m) => {
+    try { m.pbrMetallicRoughness.setMetallicFactor(0) } catch (_) { /* older build, skip */ }
+  })
+}
+
+// 2. THE SIZE. A reconstruction comes back at an arbitrary scale, so a cortado
+//    and a sharing platter both arrive "one unit tall" and both fill the frame.
+//    The guest cannot tell what they are ordering — which is the entire reason
+//    to show a model. Scaling to a real height in metres makes the viewer
+//    honest, and makes AR placement land at the true size on the table.
+const DEFAULT_HEIGHT_CM = 11 // a standard cup with its saucer
+function fitRealScale(el, heightCm) {
+  const target = (Number(heightCm) || DEFAULT_HEIGHT_CM) / 100 // metres
+  try {
+    const d = el.getDimensions()
+    if (!d || !(d.y > 0)) return
+    const k = target / d.y
+    if (!Number.isFinite(k) || k <= 0) return
+    el.scale = `${k} ${k} ${k}`
+  } catch (_) { /* getDimensions is unavailable until the model is parsed */ }
+}
+
+export default function ARViewer({ glb, usdz, alt = '', lang = 'ar', heightCm, onArStatus, onPhaseChange }) {
   const ar = lang === 'ar'
   const reduced = usePrefersReduced()
 
@@ -165,7 +200,13 @@ export default function ARViewer({ glb, usdz, alt = '', lang = 'ar', onArStatus,
     elRef.current = el
     if (!el || el._rbtArvBound) return
     el._rbtArvBound = true
-    el.addEventListener('load', () => setModelLoaded(true))
+    el.addEventListener('load', () => {
+      setModelLoaded(true)
+      // Both corrections need the parsed model, so they belong here and not on
+      // the element's attributes.
+      demetalize(el)
+      fitRealScale(el, heightCm)
+    })
     el.addEventListener('error', () => setPhase('error'))
     if (onArStatus) el.addEventListener('ar-status', (e) => onArStatus(e && e.detail ? e.detail.status : ''))
   }
@@ -192,6 +233,9 @@ export default function ARViewer({ glb, usdz, alt = '', lang = 'ar', onArStatus,
   const showLoading = phase === 'lib' || (phase === 'view' && !modelLoaded)
   return (
     <div style={WRAP}>
+      {/* ar-scale is FIXED, not auto: the model is scaled to its true height on
+          load, and «auto» would let Scene Viewer resize it again — at which point
+          the size stops meaning anything to the guest. */}
       {phase === 'view' && (
         <model-viewer
           ref={bind}
@@ -200,7 +244,7 @@ export default function ARViewer({ glb, usdz, alt = '', lang = 'ar', onArStatus,
           alt={alt}
           ar=""
           ar-modes="scene-viewer webxr quick-look"
-          ar-scale="auto"
+          ar-scale="fixed"
           camera-controls=""
           touch-action="pan-y"
           exposure="1"

@@ -3021,7 +3021,12 @@ body[data-theme='dark'] .pos-fullscreen[data-systheme='glass'] { background: var
 .dash-hour.peak span { background: var(--brand); }
 
 /* ===== Orders templates (kanban / grid / timeline) ===== */
-.ord-lanes { display: grid; grid-auto-flow: column; grid-auto-columns: minmax(230px, 1fr); gap: var(--sp-3); overflow-x: auto; align-items: start; padding-bottom: var(--sp-2); }
+/* WRAP, do not scroll. These lanes were grid-auto-flow:column with overflow-x,
+   so on any screen narrower than five 230px lanes the last one sat off-canvas —
+   and because scrollbars are hidden project-wide there was nothing to say so.
+   The «منتهية» lane and its cards were simply invisible. auto-fit wraps instead:
+   five across when they fit, two rows when they do not, never a hidden column. */
+.ord-lanes { display: grid; grid-template-columns: repeat(auto-fit, minmax(215px, 1fr)); gap: var(--sp-3); align-items: start; padding-bottom: var(--sp-2); }
 /* On a phone the 5-lane kanban was 3.2 viewport-widths wide: only «جديدة» was
    visible and قيد التحضير / جاهزة / منتهية sat entirely off-screen behind a
    horizontal scroller nested inside a vertically-scrolling page — the hardest
