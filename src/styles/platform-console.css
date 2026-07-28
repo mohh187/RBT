@@ -1,0 +1,412 @@
+/* =====================================================================
+   RBT 360 — ERP density layer for the platform console.
+
+   WHAT THIS IS. The console is an internal tool used all day by people
+   who already know it. That audience is served by DENSITY, not by
+   breathing room: more rows on screen, less travel between them, and a
+   shape language that says «system of record» rather than «app». This
+   file is that translation — Odoo Enterprise / SAP Fiori proportions,
+   applied to the components index.css already ships.
+
+   ── THE SCOPE IS THE WHOLE DESIGN ──────────────────────────────────
+   Every selector here begins `.platform-scope.admin-shell`. NEVER a
+   bare `.platform-scope`. That is not stylistic:
+
+     PlatformLayout.jsx:203  <div className="admin-shell platform-scope">   ← target
+     Legal.jsx:30            <div className="platform-scope">               ← PUBLIC page
+     AdminLayout             <div className="admin-shell">                  ← venue dashboards
+
+   `.platform-scope` alone is also on the PUBLIC terms/privacy pages,
+   which borrow the RBT palette. Scoping this file to that class alone
+   would have turned a document people read into a dense control panel.
+   Requiring both classes excludes the public pages and the venue
+   dashboards in one stroke, and — bonus — lands at (0,2,0)/(0,3,0),
+   which is exactly what is needed to win against platform-brand.css.
+
+   ── CASCADE ────────────────────────────────────────────────────────
+   Loaded from PlatformLayout.jsx AFTER platform-brand.css. That file
+   has no `!important` anywhere, so equal specificity + later order
+   wins; its component rules are (0,2,0) and ours are (0,3,0), so most
+   of this wins outright. The two `!important`s below are annotated
+   where they appear — both exist to beat an inline style or an
+   `!important` in index.css, never to win an argument with a stylesheet.
+
+   ── WHAT IT DELIBERATELY DOES NOT TOUCH ────────────────────────────
+   Printable documents and live tenant previews. Both render real paper
+   / real venue UI inside the console and must keep the comfortable
+   scale. See the escape hatches at the end.
+   ===================================================================== */
+
+/* ============================================================
+   1 · GEOMETRY — the whole feel, in about thirty declarations
+   ============================================================
+   index.css sets these at :root and platform-brand.css declares NONE
+   of them, so there is nothing to fight. Claiming the radius scale
+   explicitly also closes a live leak: src/lib/skins.js sets
+   `data-shape` on <html> per TENANT, so today a venue that picked
+   round or pill corners reshapes the platform console. (0,1,0) on
+   <html> cannot beat (0,2,0) here. */
+.platform-scope.admin-shell {
+  /* type — one scale, no second system */
+  --fs-xs: 0.6875rem;    /* 11 — table headers, meta */
+  --fs-sm: 0.75rem;      /* 12 — tables, nav, buttons */
+  --fs-base: 0.8125rem;  /* 13 — body */
+  --fs-md: 0.875rem;     /* 14 */
+  --fs-lg: 1rem;         /* 16 — page title */
+  --fs-xl: 1.125rem;     /* 18 */
+  --fs-2xl: 1.375rem;    /* 22 */
+
+  /* space */
+  --sp-1: 2px;  --sp-2: 4px;  --sp-3: 6px;  --sp-4: 8px;
+  --sp-5: 10px; --sp-6: 12px; --sp-8: 16px; --sp-10: 20px; --sp-12: 24px;
+
+  /* radius — --r-pill is the single loudest lever on the page. Rounded
+     pills on badges and chips are the strongest «consumer app» signal
+     the console had; squaring them changes the read more than any
+     colour choice does. */
+  --r-sm: 2px; --r-md: 3px; --r-lg: 4px; --r-xl: 6px; --r-pill: 3px;
+
+  /* elevation — an ERP separates with lines, not with shadows */
+  --sh-1: none;
+  --sh-2: 0 1px 3px rgba(16, 22, 60, 0.12);
+  --sh-3: 0 6px 20px rgba(16, 22, 60, 0.16);
+
+  --tap: 36px;
+  --appbar-h: 48px;
+  --bottomnav-h: 58px;
+
+  /* private to this file */
+  --pc-gut: 12px;      /* page gutter — see the sticky header note below */
+  --pc-row-y: 5px;     /* the vertical rhythm of one record row */
+  --pc-cell: 5px 8px;  /* one table cell */
+}
+
+/* Controls shrink only where there is a mouse. Below 980px the console
+   is a phone app (the sidebar is hidden and .bottom-nav navigates), so
+   --tap stays at a touch-safe 36px there. */
+@media (min-width: 980px) {
+  .platform-scope.admin-shell { --tap: 30px; --appbar-h: 44px; }
+}
+/* ...and a touch laptop is still a touch device. */
+@media (min-width: 980px) and (pointer: coarse) {
+  .platform-scope.admin-shell { --tap: 38px; }
+}
+
+/* ============================================================
+   2 · CHROME
+   ============================================================ */
+
+/* Flat. platform-brand paints two radial brand washes on the shell;
+   a wash behind a data table is decoration competing with content. */
+.platform-scope.admin-shell,
+[data-theme='dark'] .platform-scope.admin-shell { background: var(--bg); }
+
+/* Solid bar, one hairline, no blur, no gradient underline. */
+.platform-scope.admin-shell .app-bar {
+  background: var(--surface);
+  -webkit-backdrop-filter: none; backdrop-filter: none;
+  border-bottom: 1px solid var(--border);
+  box-shadow: none;
+  padding-inline: var(--pc-gut);
+}
+.platform-scope.admin-shell .app-bar::after { display: none; }
+
+/* index.css:4674 declares this hover with !important inside an
+   @media (hover:hover) block, so specificity alone cannot reach it.
+   A control that swells on hover belongs in a consumer app. */
+@media (hover: hover) {
+  .platform-scope.admin-shell .app-bar .icon-btn:hover {
+    transform: none !important;
+    background: var(--surface-2) !important;
+  }
+}
+
+/* Views switch instantly. A 200ms fade-up on every navigation is
+   pleasant once and a tax on the hundredth screen of the day. */
+.platform-scope.admin-shell .page { animation: none; padding-block: var(--sp-4); }
+.platform-scope.admin-shell .page-title {
+  font-size: var(--fs-lg);
+  font-weight: 700;
+  /* platform-brand sets -0.01em here. Negative tracking on Arabic pulls
+     joined letterforms into each other — it is a Latin-display trick
+     that does not transfer. */
+  letter-spacing: 0;
+  margin-bottom: 0;
+}
+
+/* ============================================================
+   3 · SIDEBAR — keep the navy, lose the theatre
+   ============================================================
+   The dark rail against light content IS the ERP silhouette, and
+   platform-brand already re-declares the palette on this element so
+   every child themes itself correctly. What is not ERP about it is the
+   purple bloom, the glow and the rounded active pill. */
+@media (min-width: 980px) {
+  .platform-scope.admin-shell .admin-sidebar {
+    /* PlatformLayout sets --sidebar-w inline, and an inline custom
+       property beats every stylesheet. So set the width itself. */
+    width: 216px;
+    padding: var(--sp-4) var(--sp-3) var(--sp-3);
+    background: #0e1338;
+    border-inline-end: 1px solid #1f2757;
+  }
+  [data-theme='dark'] .platform-scope.admin-shell .admin-sidebar { background: #090d2a; }
+}
+.platform-scope.admin-shell .admin-side-nav { gap: 0; }
+.platform-scope.admin-shell .admin-side-nav a {
+  padding: 4px 8px;
+  border-radius: var(--r-sm);
+  font-size: var(--fs-sm);
+  font-weight: 600;
+  gap: 8px;
+}
+.platform-scope.admin-shell .admin-side-nav a.active {
+  background: rgba(255, 255, 255, 0.1);
+  box-shadow: none;
+  color: #fff;
+}
+/* a square rail at full height, not a floating lozenge */
+.platform-scope.admin-shell .admin-side-nav a.active::after {
+  top: 0; bottom: 0; width: 2px; border-radius: 0;
+}
+.platform-scope.admin-shell .admin-side-title {
+  font-size: 10px;
+  letter-spacing: 0;   /* same Arabic tracking problem as .page-title */
+  padding: 6px 8px 2px;
+}
+.platform-scope.admin-shell .admin-side-group { margin-top: var(--sp-3); }
+.platform-scope.admin-shell .admin-sidebar .rbt-mark { filter: none; }
+.platform-scope.admin-shell .admin-side-foot { padding-top: var(--sp-3); gap: 2px; }
+
+/* ============================================================
+   4 · SURFACES
+   ============================================================ */
+.platform-scope.admin-shell .card {
+  border-radius: var(--r-md);
+  border-color: var(--border);   /* undo the blue-mixed keyline */
+  box-shadow: none;
+}
+[data-theme='dark'] .platform-scope.admin-shell .card { box-shadow: none; }
+.platform-scope.admin-shell .card-pad { padding: var(--sp-5); }
+
+/* KPI strip: ONE bordered block divided by hairlines, rather than four
+   floating cards. The 1px gap over a border-coloured background is the
+   cheapest way to draw shared internal rules across a grid. */
+.platform-scope.admin-shell .stat-grid {
+  gap: 1px;
+  background: var(--border);
+  border: 1px solid var(--border);
+  border-radius: var(--r-md);
+  overflow: hidden;
+}
+.platform-scope.admin-shell .stat {
+  border: 0; border-radius: 0; box-shadow: none;
+  padding: var(--sp-4) var(--sp-5);
+  background: var(--surface);
+}
+.platform-scope.admin-shell .stat::before { display: none; }  /* gradient strip */
+.platform-scope.admin-shell .stat .value { font-size: var(--fs-lg); font-weight: 700; margin-top: 2px; }
+.platform-scope.admin-shell .stat .label { font-size: var(--fs-xs); }
+
+/* A list row is a row, not a card in a stack of cards. */
+.platform-scope.admin-shell .list-row {
+  border: 0;
+  border-bottom: 1px solid var(--border);
+  border-radius: 0;
+  background: transparent;
+  padding: var(--pc-row-y) var(--sp-4);
+}
+.platform-scope.admin-shell .list-row:last-child { border-bottom: 0; }
+
+/* ============================================================
+   5 · CONTROLS
+   ============================================================ */
+.platform-scope.admin-shell .btn {
+  font-size: var(--fs-sm);
+  font-weight: 600;
+  border-radius: var(--r-md);
+  /* THE HIGHEST-LEVERAGE DECLARATION IN THIS FILE.
+     ~45 buttons across the console carry an inline `padding: '6px 10px'`
+     and friends, which no token change can reach. index.css sets only
+     padding-INLINE on .btn, so its padding-block is 0 by design — this
+     restores that and lets min-height own the height again. It is an
+     !important because an inline style is the thing being beaten. */
+  padding-block: 0 !important;
+}
+.platform-scope.admin-shell .btn-sm { min-height: 26px; }
+.platform-scope.admin-shell .btn-xs { min-height: 22px; }
+.platform-scope.admin-shell .btn-primary { box-shadow: none; }
+
+.platform-scope.admin-shell .input,
+.platform-scope.admin-shell .select,
+.platform-scope.admin-shell .textarea {
+  padding: 2px var(--sp-3);
+  font-size: var(--fs-sm);
+  border-radius: var(--r-md);
+}
+.platform-scope.admin-shell .textarea { min-height: 54px; padding-block: var(--sp-3); }
+.platform-scope.admin-shell .input:focus,
+.platform-scope.admin-shell .select:focus,
+.platform-scope.admin-shell .textarea:focus { box-shadow: 0 0 0 2px var(--ring); }
+
+.platform-scope.admin-shell .badge { padding: 1px 6px; font-weight: 600; border-radius: 2px; }
+.platform-scope.admin-shell .chip { min-height: 24px; padding: 2px var(--sp-4); border-radius: var(--r-sm); }
+
+.platform-scope.admin-shell .stack { gap: var(--sp-3); }
+.platform-scope.admin-shell .row,
+.platform-scope.admin-shell .row-between { gap: var(--sp-3); }
+
+/* The `.divide` family: 24 more inline `padding: '8px 0'` values live on
+   rows inside these. Same reasoning as .btn above — an inline style is
+   what is being beaten, not a stylesheet. */
+.platform-scope.admin-shell .divide > * { padding-block: var(--pc-row-y) !important; }
+
+/* ============================================================
+   6 · FULL BLEED
+   ============================================================
+   index.css clamps every console screen to --maxw (1080px) and centres
+   it. An ERP runs edge to edge — the tables need the columns. Overriding
+   the RULE rather than the --maxw token, because --maxw is a global
+   token read elsewhere and repurposing it inside one subtree to mean
+   something different is how a token stops meaning anything. */
+@media (min-width: 980px) {
+  .platform-scope.admin-shell .admin-main > .container { padding-block: 0; }
+  .platform-scope.admin-shell .admin-main > .container > * {
+    max-width: none;
+    padding-inline: var(--pc-gut);
+  }
+}
+
+/* ============================================================
+   7 · TABLES — greenfield, and scoped
+   ============================================================
+   index.css contains ZERO bare table/th/td styling: every table in the
+   app is namespaced (.acc-table, .bhv-table, .pdoc-table). So element
+   selectors here are safe, and they pay off immediately — the five
+   tables the console already renders (Audit, Finance x2, Spend,
+   Insights) improve without a line of JSX changing.
+
+   Shape borrowed from .acc-table (index.css:9392), tightened. */
+.platform-scope.admin-shell table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: var(--fs-sm);
+}
+.platform-scope.admin-shell th,
+.platform-scope.admin-shell td {
+  padding: var(--pc-cell);
+  text-align: start;
+  vertical-align: middle;
+}
+.platform-scope.admin-shell thead th {
+  position: sticky; top: 0; z-index: 1;
+  background: var(--surface-2);
+  font-size: var(--fs-xs);
+  font-weight: 700;
+  color: var(--text-muted);
+  letter-spacing: 0;
+  white-space: nowrap;
+  /* border-collapse drops borders on sticky cells in Blink and WebKit —
+     the header's underline has to be drawn as an inset shadow or it
+     vanishes the moment the body scrolls under it. */
+  box-shadow: inset 0 -1px 0 var(--border-strong);
+}
+.platform-scope.admin-shell tbody td { border-bottom: 1px solid var(--border); }
+.platform-scope.admin-shell tbody tr:last-child td { border-bottom: 0; }
+.platform-scope.admin-shell tbody tr:hover { background: color-mix(in srgb, var(--brand) 5%, var(--surface)); }
+.platform-scope.admin-shell tfoot td {
+  border-top: 1px solid var(--border-strong);
+  border-bottom: 0;
+  font-weight: 700;
+  background: var(--surface-2);
+}
+
+/* opt-in wrapper + modifiers. Scrollbars are already suppressed globally
+   (index.css:1494), so overflow here costs nothing visually. */
+.platform-scope.admin-shell .pc-table-wrap {
+  overflow: auto;
+  border: 1px solid var(--border);
+  border-radius: var(--r-md);
+  background: var(--surface);
+}
+.platform-scope.admin-shell .pc-table { min-width: 560px; }
+.platform-scope.admin-shell .pc-num { text-align: end; font-variant-numeric: tabular-nums; }
+.platform-scope.admin-shell .pc-nowrap { white-space: nowrap; }
+
+/* ============================================================
+   8 · RECORD LISTS — nine screens, zero JSX
+   ============================================================
+   Nine console screens render one `.card.card-pad.row` per record
+   inside a `.stack`. That is a stack of floating cards where the data
+   wants to be a table. This turns them into one bordered block with
+   hairline rows.
+
+   THE `.row` IN THE SELECTOR IS LOAD-BEARING, NOT DECORATION.
+   Overview.jsx puts four `.card.card-pad.stack` dashboard panels
+   directly inside its own `.stack`. A selector matching plain
+   `.card.card-pad` would fuse those four panels into a single seamless
+   slab. Requiring `.row` — the signature of a record ROW rather than a
+   content panel — excludes it, and excludes Growth, Health,
+   SupportTools, LandingStudio and PlanEditor along with it.
+
+   `:has()` is already an accepted primitive here (index.css:1086).
+
+   THIS RULE IS A TRANSITIONAL MEASURE. It is a heuristic that is
+   invisible to anyone reading the JSX: the next person to put a second
+   `.card card-pad row` panel inside a `.stack` will silently get a
+   fused block and no idea why. It is paired with the explicit
+   .pc-rows/.pc-row classes below, and it gets DELETED once the nine
+   screens are migrated to those. */
+.platform-scope.admin-shell .pc-rows,
+.platform-scope.admin-shell .stack:has(> .card.card-pad.row + .card.card-pad.row) {
+  gap: 0 !important;              /* beats the inline gap on the wrapper */
+  border: 1px solid var(--border);
+  border-radius: var(--r-md);
+  background: var(--surface);
+  overflow: hidden;
+}
+.platform-scope.admin-shell .pc-row,
+.platform-scope.admin-shell .stack:has(> .card.card-pad.row + .card.card-pad.row) > .card.card-pad.row {
+  display: flex;
+  align-items: center;
+  border: 0;
+  border-bottom: 1px solid var(--border);
+  border-radius: 0;
+  box-shadow: none;
+  background: transparent;
+  padding: var(--pc-row-y) var(--sp-5);
+  gap: var(--sp-3) !important;    /* beats the inline gap on each row */
+}
+.platform-scope.admin-shell .pc-row:last-child,
+.platform-scope.admin-shell .stack:has(> .card.card-pad.row + .card.card-pad.row) > .card.card-pad.row:last-child {
+  border-bottom: 0;
+}
+@media (hover: hover) {
+  .platform-scope.admin-shell .pc-row:hover,
+  .platform-scope.admin-shell .stack:has(> .card.card-pad.row + .card.card-pad.row) > .card.card-pad.row:hover {
+    background: color-mix(in srgb, var(--brand) 5%, transparent);
+  }
+}
+
+/* ============================================================
+   9 · ESCAPE HATCHES
+   ============================================================
+   Two things rendered INSIDE the console are not console UI, and both
+   would be wrecked by the scale above.
+
+   1. PlatformDocSheet — an A4 tax invoice / quotation. It is paper.
+      Its own rules are deliberately literal px and hex ("a document is
+      white paper in both modes"), but the buttons and cards around it
+      are not, so the reset is stated rather than left to luck.
+   2. Live tenant previews inside the design tools — those render a
+      venue's real interface, which must look like the venue's, not
+      like ours. */
+.platform-scope.admin-shell .pdoc-page,
+.platform-scope.admin-shell .pdoc,
+.platform-scope.admin-shell [data-menu-layout] {
+  --fs-xs: 0.75rem; --fs-sm: 0.8125rem; --fs-base: 0.9375rem;
+  --fs-md: 1.0625rem; --fs-lg: 1.375rem; --fs-xl: 1.75rem;
+  --sp-3: 12px; --sp-4: 16px; --sp-5: 20px; --sp-6: 24px;
+  --r-sm: 8px; --r-md: 14px; --r-lg: 20px; --r-pill: 999px;
+  --tap: 44px;
+}

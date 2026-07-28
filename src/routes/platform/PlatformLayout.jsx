@@ -11,6 +11,9 @@ import { alertParty, requestNotifyPermission, notifyState } from '../../lib/noti
 import PlatformSearch from '../../components/PlatformSearch.jsx'
 import { BRAND_MARK_URL } from '../../components/BrandMark.jsx'
 import '../../styles/platform-brand.css'
+// Order matters: the density layer overrides the brand layer, and both are
+// scoped so they can never reach the venue dashboards or the public pages.
+import '../../styles/platform-console.css'
 
 // Grouped navigation (24 screens). Sidebar shows all with faint section headers;
 // the mobile bottom-nav shows the 5 essentials. Ctrl/Cmd+K opens the search.
