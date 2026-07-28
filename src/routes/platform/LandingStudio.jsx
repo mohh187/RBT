@@ -184,6 +184,24 @@ export default function LandingStudio() {
         </Card>
       )}
 
+      {tab === 'reveal' && (
+        <Card title="الشاشة المتحركة" icon="theater">
+          <Switch on={draft.reveal?.enabled !== false} onChange={(v) => upd((d) => { if (!d.reveal) d.reveal = {}; d.reveal.enabled = v })} label="إظهار القسم" wide />
+          <TxtIn label="السطر الصغير فوق العنوان" value={draft.reveal?.kicker || ''} onChange={(v) => upd((d) => { d.reveal.kicker = v })} />
+          <TxtIn label="العنوان" value={draft.reveal?.title || ''} onChange={(v) => upd((d) => { d.reveal.title = v })} />
+          <AreaIn label="النص التعريفي" value={draft.reveal?.subtitle || ''} onChange={(v) => upd((d) => { d.reveal.subtitle = v })} rows={2} />
+          <label className="stack" style={{ gap: 4 }}>
+            <span className="xs faint bold">الشاشة المعروضة داخل الإطار</span>
+            <select className="input" style={{ maxWidth: 260 }} value={draft.reveal?.visual || 'ops'} onChange={(e) => upd((d) => { d.reveal.visual = e.target.value })}>
+              {VISUAL_OPTIONS.filter((o) => o.id).map((o) => <option key={o.id} value={o.id}>{o.ar}</option>)}
+            </select>
+          </label>
+          <div className="xs faint">
+            الإطار يميل ثم يستوي مع تمرير الزائر. الحركة زخرفية بالكامل — من يفعّل «تقليل الحركة» في جهازه يرى الشاشة مستوية ومقروءة من البداية.
+          </div>
+        </Card>
+      )}
+
       {tab === 'features' && (
         <Card title="شبكة المزايا" icon="grid">
           <TxtIn label="العنوان" value={draft.features.title} onChange={(v) => upd((d) => { d.features.title = v })} />

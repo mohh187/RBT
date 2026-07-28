@@ -49,6 +49,17 @@ export const LANDING_DEFAULTS = {
     ],
   },
 
+  // Scroll-driven device reveal (src/components/ContainerScroll.jsx). `visual`
+  // picks from the same live-mockup set the showcase sections use, so this
+  // section can be re-pointed at any screen without touching code.
+  reveal: {
+    enabled: true,
+    kicker: 'شاهده يعمل',
+    title: 'الشاشة التي يقف أمامها فريقك كل يوم',
+    subtitle: 'كاشير ومطبخ وطاولات على لوحة واحدة تتحدث لحظياً — لا ورق، ولا نداء بين الصالة والمطبخ.',
+    visual: 'ops',
+  },
+
   features: {
     title: 'كل ما تحتاجه منشأتك — في مكان واحد',
     subtitle: 'أكثر من عشرين وحدة متكاملة تعمل معاً، لا أدوات متفرقة.',
@@ -243,6 +254,7 @@ export const LANDING_DEFAULTS = {
     { key: 'announcement', enabled: false },
     { key: 'hero', enabled: true },
     { key: 'logos', enabled: true },
+    { key: 'reveal', enabled: true },
     { key: 'features', enabled: true },
     { key: 'showcase', enabled: true },
     { key: 'stats', enabled: true },
@@ -261,6 +273,7 @@ export const SECTION_META = [
   { key: 'announcement', ar: 'شريط الإعلان', icon: 'bellRing' },
   { key: 'hero', ar: 'الواجهة الرئيسية', icon: 'flame' },
   { key: 'logos', ar: 'شريط العملاء', icon: 'store' },
+  { key: 'reveal', ar: 'الشاشة المتحركة', icon: 'theater' },
   { key: 'features', ar: 'شبكة المزايا', icon: 'grid' },
   { key: 'showcase', ar: 'أقسام العرض', icon: 'layers' },
   { key: 'stats', ar: 'الأرقام', icon: 'chartBar' },
@@ -297,8 +310,19 @@ export function mergeLanding(overrides) {
     have.add(s.key)
     list.push({ key: s.key, enabled: s.enabled !== false })
   }
+  // A newly shipped section is inserted WHERE IT WAS DESIGNED TO GO, not
+  // appended. Appending sounds harmless until you ship a hero-adjacent
+  // section and it debuts underneath the footer CTA on every venue that has
+  // ever pressed «publish» — visible, wrong, and silent. We find the last
+  // section that precedes it in the default order and is actually present,
+  // and slot it in after that; the operator's own ordering is untouched.
   for (const k of known) {
-    if (!have.has(k)) list.push({ key: k, enabled: LANDING_DEFAULTS.sections.find((d) => d.key === k).enabled !== false })
+    if (have.has(k)) continue
+    const enabled = LANDING_DEFAULTS.sections.find((d) => d.key === k).enabled !== false
+    const before = known.slice(0, known.indexOf(k)).reverse().find((p) => have.has(p))
+    const at = before ? list.findIndex((s) => s.key === before) + 1 : 0
+    list.splice(at, 0, { key: k, enabled })
+    have.add(k)
   }
   m.sections = list
   return m

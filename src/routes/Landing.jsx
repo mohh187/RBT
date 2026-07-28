@@ -19,6 +19,7 @@ import { Link } from 'react-router-dom'
 import { useAuth } from '../lib/auth.jsx'
 import { useI18n } from '../lib/i18n.jsx'
 import BrandMark, { RbtMark, RbtTagline } from '../components/BrandMark.jsx'
+import ContainerScroll from '../components/ContainerScroll.jsx'
 import Icon from '../components/Icon.jsx'
 import { Price } from '../components/Riyal.jsx'
 import { db } from '../lib/firebase.js'
@@ -78,6 +79,7 @@ export default function Landing() {
   const RENDER = {
     hero: HeroSec,
     logos: LogosSec,
+    reveal: RevealSec,
     features: FeaturesSec,
     showcase: ShowcaseSec,
     stats: StatsSec,
@@ -144,6 +146,7 @@ export default function Landing() {
           const Sec = RENDER[k]
           if (!Sec) return null
           if (k === 'logos' && !content.logos.enabled) return null
+          if (k === 'reveal' && content.reveal?.enabled === false) return null
           if (k === 'stats' && !content.stats.enabled) return null
           if (k === 'faq' && !content.faq.enabled) return null
           return <Sec key={k} c={content} pricing={pricing} />
@@ -291,6 +294,30 @@ function ShowcaseSec({ c }) {
         )
       })}
     </>
+  )
+}
+
+// The scroll-driven reveal. Deliberately placed on a panel rather than the
+// page: the device is dark-framed, and it needs a surface to sit ON.
+function RevealSec({ c }) {
+  const r = c.reveal || {}
+  const Visual = VISUALS[r.visual] || VISUALS.ops
+  return (
+    <section className="rl-sec rl-panel">
+      <div className="rl-wrap">
+        <ContainerScroll
+          title={(
+            <>
+              {r.kicker && <span className="rl-kicker">{r.kicker}</span>}
+              <h2 className="rl-h2">{r.title}</h2>
+              {r.subtitle && <p className="rl-lead">{r.subtitle}</p>}
+            </>
+          )}
+        >
+          <Visual lang="ar" />
+        </ContainerScroll>
+      </div>
+    </section>
   )
 }
 

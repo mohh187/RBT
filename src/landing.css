@@ -543,6 +543,54 @@
 .rl-plan .rl-btn { margin-top: auto; }
 .rl-fineprint { text-align: center; color: var(--ink-3); font-size: var(--fs-xs); margin-top: var(--s6); max-width: 70ch; margin-inline: auto; }
 
+/* ==================== scroll-driven device reveal ====================
+   Driven by --p (0 → 1) which src/components/ContainerScroll.jsx writes on
+   the .csa element once per animation frame. Every rule below is a pure
+   function of that one number, so there is no second source of truth about
+   where in the animation we are.
+   The default of 0 matters: if the script never runs, the screen renders
+   tilted but fully readable rather than blank. */
+.csa { --p: 0; perspective: 1400px; }
+.csa-title {
+  text-align: center; max-width: 780px; margin-inline: auto;
+  transform: translateY(calc(var(--p) * -34px));
+  opacity: calc(1 - var(--p) * 0.45);
+  will-change: transform;
+}
+.csa-stage { margin-top: var(--s6); transform-style: preserve-3d; }
+/* the device: tilted and slightly small at rest, flat and full size at the end */
+.csa-frame {
+  position: relative; margin-inline: auto; max-width: 940px;
+  transform: rotateX(calc((1 - var(--p)) * 26deg)) scale(calc(0.93 + var(--p) * 0.07));
+  transform-origin: 50% 0%;
+  border-radius: var(--r-2xl); padding: 12px;
+  background: linear-gradient(180deg, var(--n800), var(--n950));
+  box-shadow: var(--e-4), 0 0 0 1px rgba(255, 255, 255, 0.06) inset;
+  will-change: transform;
+}
+/* the bezel notch — reads as hardware, costs one pseudo-element */
+.csa-frame::before {
+  content: ""; position: absolute; top: 5px; inset-inline: 0; margin-inline: auto;
+  width: 84px; height: 4px; border-radius: var(--r-pill); background: rgba(255, 255, 255, 0.16);
+}
+.csa-screen {
+  border-radius: var(--r-xl); overflow: hidden; background: var(--n0);
+  /* the mockups inside carry their own frames — flatten them into the screen */
+}
+.csa-screen .r-win, .csa-screen .tv, .csa-screen .tsw {
+  width: 100%; max-width: 100%; margin: 0; border: 0; border-radius: 0; box-shadow: none;
+}
+@media (max-width: 800px) {
+  .csa { perspective: 900px; }
+  .csa-frame { padding: 8px; border-radius: var(--r-xl); }
+  .csa-screen { border-radius: var(--r-lg); }
+}
+@media (prefers-reduced-motion: reduce) {
+  /* the component pins --p to 1; belt and braces in case the script is absent */
+  .csa-frame { transform: none; }
+  .csa-title { transform: none; opacity: 1; }
+}
+
 /* ============================ faq ============================ */
 .lx-faq2 { display: grid; grid-template-columns: 1fr 1fr; gap: var(--s3); max-width: 1000px; margin-inline: auto; }
 .lx-faq-item { background: var(--card); border: 1px solid var(--line); border-radius: var(--r-lg); padding: var(--s5); }
