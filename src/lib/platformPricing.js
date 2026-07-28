@@ -8,6 +8,9 @@
 // SYNC CONTRACT: FALLBACK_PRICES and FALLBACK_LIST_PRICES are a hand-synced
 // mirror. scripts/guard.mjs fails the build if they drift — a page that shows
 // one price while the invoice charges another is a complaint, not a bug report.
+import { doc, onSnapshot } from 'firebase/firestore'
+import { db } from './firebase.js'
+
 export const FALLBACK_PRICES = { menu: 99, ops: 199, pro: 349, enterprise: 549 }
 export const FALLBACK_LIST_PRICES = { menu: 149, ops: 299, pro: 499, enterprise: 1299 }
 export const YEARLY_DISCOUNT = 0.8
@@ -55,3 +58,30 @@ export function promoOf(planId, cfg) {
     validUntil: until || null,
   }
 }
+
+// Live subscription to the ONE price list — platformConfig/plans, the same
+// document the monthly billing cron and the quotation builder read.
+//
+// WHY THE PUBLIC LANDING READS IT DIRECTLY. The page used to print a second
+// table kept in src/lib/plans.js. Two tables is how a landing ends up
+// advertising 549 while the invoice charges 899, and nobody notices until a
+// customer forwards the screenshot. A price list is public information by
+// definition — it is printed on the marketing page either way — so the doc
+// carries a public-read rule and the page reads the real thing.
+//
+// The error callback paints the fallbacks rather than leaving a blank price:
+// a pricing section that renders nothing is worse than one that renders the
+// shipped defaults, and the server is still the only thing that charges.
+export function watchPricing(cb) {
+  return onSnapshot(
+    doc(db, 'platformConfig', 'plans'),
+    (s) => cb(normalizePlanConfig(s.exists() ? s.data() : null)),
+    () => cb(normalizePlanConfig(null)),
+  )
+}
+
+// What a plan costs for a whole year, paid up front. Derived — never a second
+// stored field, because two independently editable prices for one plan is
+// precisely how they drift apart.
+export const yearlyTotal = (monthly, cfg) =>
+  Math.round(Number(monthly || 0) * 12 * (Number(cfg && cfg.yearlyDiscount) || YEARLY_DISCOUNT))

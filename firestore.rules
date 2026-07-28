@@ -1044,6 +1044,13 @@ service cloud.firestore {
     // Landing-page CMS doc: the public marketing page reads it unauthenticated
     // (overlapping matches are OR'd — writes still require a platform admin).
     match /platformConfig/landing  { allow read: if true; }
+    // The price list. Public-read for the same reason the landing page exists:
+    // prices, list prices, the promo window and the per-plan feature bullets
+    // are all printed on a page anyone can load. Reading it directly is what
+    // stops the marketing page from advertising one number while the invoice
+    // charges another. WRITES still require a platform admin (rule above).
+    // CONSTRAINT: nothing private may ever be stored on this document.
+    match /platformConfig/plans    { allow read: if true; }
 
     // Realistic-3D conversion log: managers read it for the usage meter;
     // ONLY Cloud Functions write it (Admin SDK bypasses rules).

@@ -16,6 +16,7 @@ import { watchAllTenants } from '../../lib/platform.js'
 import { watchPlansConfig } from '../../lib/platformConfig.js'
 import { PLANS } from '../../lib/plans.js'
 import { normalizePlanConfig, promoOf } from '../../lib/platformPricing.js'
+import { sellerPreview } from '../../lib/platformSeller.js'
 import {
   createQuote, convertQuoteToInvoice, linkDocumentTenant,
   watchQuotes, watchPlatformDocs, quoteUrl, invoiceUrl,
@@ -24,26 +25,12 @@ import {
 import { fmtWhen } from './shared.jsx'
 import PlatformDocSheet from '../../components/platform/PlatformDocSheet.jsx'
 
-// The seller identity for a PREVIEW only. The stored document always takes its
-// seller from the server's frozen constant (functions/platformSeller.js) — this
-// exists so the preview looks right before anything is written, and is
-// hand-synced with that file.
-const PREVIEW_SELLER = {
-  legalNameAr: 'شركة وميض الابداع المحدودة',
-  legalNameEn: 'Wameed Al-Ibdaa Co. Ltd.',
-  brand: 'RBT360',
-  crNumber: '1009203280',
-  vatNumber: '312896412200003',
-  addressAr: '4107 طريق الإمام فيصل بن تركي بن عبدالله، حي أم سليم، الرياض 12744، المملكة العربية السعودية',
-  bankNameAr: 'مصرف الراجحي',
-  iban: 'SA2680000282608019595858',
-  swift: 'RJHISARI',
-  contactEmail: 'support@rbt360sa.com',
-  website: 'rbt360sa.com',
-  logoUrl: '/brand/word-448.png',
-  showIban: true,
-  vatRate: 15,
-}
+// The seller identity for a PREVIEW only. The stored document always takes
+// its seller from the server's frozen constant (functions/platformSeller.js).
+// This reads the browser mirror of that same constant rather than a third
+// hand-typed copy — scripts/guard.mjs fails the build if the two drift.
+const PREVIEW_SELLER = sellerPreview()
+
 const PREVIEW_TERMS = [
   'الأسعار بالريال السعودي ولا تشمل ضريبة القيمة المضافة، وتُضاف بنسبة 15% كما هو مبيّن أعلاه.',
   'يبدأ الاشتراك من تاريخ السداد، ويشمل التهيئة والتدريب الأولي ودعماً فنياً طوال مدة الاشتراك.',

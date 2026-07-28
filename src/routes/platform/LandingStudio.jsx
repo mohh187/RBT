@@ -10,8 +10,11 @@ import { Spinner } from '../../components/ui.jsx'
 import { useToast } from '../../components/Toast.jsx'
 import { db } from '../../lib/firebase.js'
 import { doc, setDoc } from 'firebase/firestore'
+import { Link } from 'react-router-dom'
 import { mergeLanding, watchLanding, SECTION_META } from '../../lib/landingContent.js'
-import { PLANS, PLAN_PRICES, YEARLY_DISCOUNT } from '../../lib/plans.js'
+import { PLANS } from '../../lib/plans.js'
+import { normalizePlanConfig, promoOf, watchPricing, yearlyTotal } from '../../lib/platformPricing.js'
+import { fmtNum } from '../../lib/format.js'
 
 const TABS = [
   ...SECTION_META,
@@ -37,11 +40,15 @@ export default function LandingStudio() {
   const [busy, setBusy] = useState(false)
   const [previewN, setPreviewN] = useState(0)
   const [showPreview, setShowPreview] = useState(false)
+  // The live price list, so this screen shows the operator the same numbers
+  // the public page prints rather than a stale constant.
+  const [pricing, setPricing] = useState(() => normalizePlanConfig(null))
 
   useEffect(() => watchLanding(db, (merged) => {
     setBase(merged)
     setDraft((d) => (d === null ? structuredClone(merged) : d))
   }), [])
+  useEffect(() => watchPricing(setPricing), [])
 
   const dirty = useMemo(() => {
     if (!draft || !base) return false
@@ -236,38 +243,58 @@ export default function LandingStudio() {
 
       {tab === 'pricing' && (
         <div className="stack" style={{ gap: 'var(--sp-3)' }}>
-          <div className="card card-pad" style={{ borderColor: 'var(--warning)' }}>
-            <p className="small">
-              <Icon name="warning" size={14} style={{ verticalAlign: 'middle', color: 'var(--warning)' }} /> الأسعار المعروضة تأتي تلقائياً من <code>src/lib/plans.js</code> (خصم سنوي {Math.round((1 - YEARLY_DISCOUNT) * 100)}%). «تجاوز السعر» يغيّر العرض فقط — سعر الدفع الفعلي يُحتسب دائماً من الخادم عند الاشتراك.
-            </p>
+          {/* ONE price list. This screen edits the MARKETING COPY around the
+              prices; the prices themselves live in the plan editor, which is
+              the same document the monthly billing cron and the quotation
+              builder read. The old «price override» field here was a second
+              place to type a price — and two places to type a price is how a
+              landing ends up advertising one number while the invoice charges
+              another. It is gone; the figures below are read-only mirrors. */}
+          <div className="card card-pad">
+            <div className="row-between" style={{ gap: 'var(--sp-3)', flexWrap: 'wrap' }}>
+              <p className="small" style={{ margin: 0, maxWidth: '62ch' }}>
+                <Icon name="wallet" size={14} style={{ verticalAlign: 'middle' }} /> الأسعار المعروضة على الصفحة تأتي مباشرةً من <b>جدول الأسعار</b> — نفس المستند الذي يفوتر منه الخادم ويُبنى منه عرض السعر. لا يوجد سعر ثانٍ يُكتب هنا.
+              </p>
+              <Link to="/platform/plans" className="btn btn-outline btn-sm"><Icon name="wallet" size={14} /> تعديل الأسعار</Link>
+            </div>
           </div>
           <Card title="نصوص قسم الباقات" icon="wallet">
             <TxtIn label="العنوان" value={draft.pricing.title} onChange={(v) => upd((d) => { d.pricing.title = v })} />
             <TxtIn label="النص الفرعي" value={draft.pricing.subtitle} onChange={(v) => upd((d) => { d.pricing.subtitle = v })} />
             <AreaIn label="ملاحظة أسفل الباقات" value={draft.pricing.note} onChange={(v) => upd((d) => { d.pricing.note = v })} rows={2} />
+            <div className="stack" style={{ gap: 4 }}>
+              <span className="xs faint bold">الدورة التي تفتح عليها البطاقات</span>
+              <div className="row" style={{ gap: 8 }}>
+                {[{ id: 'monthly', ar: 'شهري' }, { id: 'yearly', ar: 'سنوي' }].map((o) => (
+                  <button
+                    key={o.id}
+                    className={`btn btn-sm ${(draft.pricing.cycleDefault || 'monthly') === o.id ? 'btn-primary' : 'btn-outline'}`}
+                    onClick={() => upd((d) => { d.pricing.cycleDefault = o.id })}
+                  >{o.ar}</button>
+                ))}
+              </div>
+              <div className="xs faint">الزائر يستطيع التبديل بنفسه — هذا يحدّد ما يراه أولاً فقط. السعر السنوي محسوب دائماً من الشهري بخصم {fmtNum(Math.round((1 - (pricing.yearlyDiscount || 0.8)) * 100), 'ar')}%.</div>
+            </div>
           </Card>
           {PLANS.map((p) => {
             const t = draft.pricing.tiers[p.id] || {}
             const patch = (fn) => upd((d) => { if (!d.pricing.tiers[p.id]) d.pricing.tiers[p.id] = {}; fn(d.pricing.tiers[p.id]) })
+            const monthly = pricing.prices?.[p.id] ?? 0
+            const promo = promoOf(p.id, pricing)
             return (
-              <Card key={p.id} title={`باقة «${p.ar}» — السعر من الخادم: ${PLAN_PRICES[p.id]} ر.س/شهر`} icon="wallet">
+              <Card key={p.id} title={`باقة «${p.ar}»`} icon="wallet">
+                <div className="row" style={{ gap: 'var(--sp-3)', flexWrap: 'wrap', alignItems: 'center' }}>
+                  <span className="badge">{fmtNum(monthly, 'ar')} ريال / شهر</span>
+                  <span className="badge">{fmtNum(yearlyTotal(monthly, pricing), 'ar')} ريال / سنة</span>
+                  {promo
+                    ? <span className="badge badge-success">{promo.labelAr} — قبل: {fmtNum(promo.listPrice, 'ar')} ريال</span>
+                    : <span className="xs faint">لا يوجد سعر مشطوب لهذه الباقة</span>}
+                </div>
                 <div className="row" style={{ gap: 8, flexWrap: 'wrap' }}>
                   <TxtIn label="السطر التسويقي" value={t.tagline || ''} onChange={(v) => patch((x) => { x.tagline = v })} grow />
                   <TxtIn label="شارة أعلى البطاقة" value={t.badge || ''} onChange={(v) => patch((x) => { x.badge = v })} grow placeholder="الأكثر اختياراً" />
                 </div>
-                <div className="row" style={{ gap: 12, flexWrap: 'wrap', alignItems: 'center' }}>
-                  <Switch on={!!t.highlight} onChange={(v) => patch((x) => { x.highlight = v })} label="بطاقة مميزة" />
-                  <Switch on={!!t.glow} onChange={(v) => patch((x) => { x.glow = v })} label="توهّج ذهبي" />
-                  <label className="row" style={{ gap: 6, alignItems: 'center' }}>
-                    <span className="xs faint bold">تجاوز السعر (اختياري)</span>
-                    <input
-                      className="input num" style={{ width: 100 }} dir="ltr" type="number" min="0"
-                      value={t.priceOverride ?? ''}
-                      onChange={(e) => patch((x) => { x.priceOverride = e.target.value === '' ? null : Number(e.target.value) })}
-                      placeholder={String(PLAN_PRICES[p.id])}
-                    />
-                  </label>
-                </div>
+                <Switch on={!!t.highlight} onChange={(v) => patch((x) => { x.highlight = v })} label="بطاقة مميزة (اجعلها لباقة واحدة فقط — أربع بطاقات مميزة تعني لا بطاقة مميزة)" wide />
                 <Lines label="المزايا الظاهرة (سطر لكل ميزة)" value={t.bullets || []} onChange={(v) => patch((x) => { x.bullets = v })} />
                 <Lines label="مزايا «عرض المزيد» (سطر لكل ميزة)" value={t.more || []} onChange={(v) => patch((x) => { x.more = v })} rows={3} />
               </Card>
@@ -329,9 +356,12 @@ export default function LandingStudio() {
       {tab === 'theme' && (
         <Card title="المظهر" icon="palette">
           <div className="row" style={{ gap: 8, alignItems: 'flex-end', flexWrap: 'wrap' }}>
-            <TxtIn label="لون رئيسي بديل (فارغ = لون العلامة)" value={draft.theme.accent} onChange={(v) => upd((d) => { d.theme.accent = v })} dir="ltr" placeholder="#7c2d2d" />
+            <TxtIn label="لون الأزرار البديل (فارغ = لون العلامة)" value={draft.theme.accent} onChange={(v) => upd((d) => { d.theme.accent = v })} dir="ltr" placeholder="#6429DE" />
             <input type="color" className="input" style={{ width: 52, height: 40, padding: 4, cursor: 'pointer' }} value={/^#[0-9a-fA-F]{6}$/.test(draft.theme.accent) ? draft.theme.accent : '#7c2d2d'} onChange={(e) => upd((d) => { d.theme.accent = e.target.value })} aria-label="اختيار اللون" />
             {draft.theme.accent && <button className="btn btn-outline btn-sm" onClick={() => upd((d) => { d.theme.accent = '' })}>مسح</button>}
+          </div>
+          <div className="xs faint">
+            يغيّر لون كل أزرار الدعوة للتسجيل معاً. اختر لوناً <b>داكناً</b> — نصوص الأزرار بيضاء، ولون فاتح يجعلها غير مقروءة. اتركه فارغاً ليبقى بنفسجي العلامة.
           </div>
           <div className="bold small" style={{ marginTop: 8 }}>كثافة الأقسام</div>
           <div className="row" style={{ gap: 8 }}>

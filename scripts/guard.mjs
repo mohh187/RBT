@@ -56,6 +56,15 @@ const MIRRORS = [
     objects: ['FALLBACK_PRICES', 'FALLBACK_LIST_PRICES'],
     scalars: ['YEARLY_DISCOUNT'],
   },
+  {
+    // The legal identity. It prints on the landing footer (client) and is
+    // stamped onto every issued invoice (server). A CR or VAT number that
+    // disagrees between the marketing page and the tax invoice is a
+    // discrepancy the buyer's accountant finds before we do.
+    server: 'functions/platformSeller.js',
+    client: 'src/lib/platformSeller.js',
+    objects: ['PLATFORM_SELLER'],
+  },
 ]
 
 // The object literal that follows `<name> = `, up to its closing brace, with

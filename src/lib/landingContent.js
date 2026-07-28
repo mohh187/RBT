@@ -123,7 +123,11 @@ export const LANDING_DEFAULTS = {
   pricing: {
     title: 'باقات تناسب كل مرحلة',
     subtitle: 'ابدأ بالمنيو فقط وترقَّ حين تكبر — أسعار واضحة وبدون أي عمولة على الطلبات.',
-    note: 'الأسعار شهرية بالريال السعودي. الدفع يتم بأمان عبر بوابة الدفع، وقيمة الاشتراك النهائية تُحتسب دائماً من الخادم.',
+    note: 'الأسعار بالريال السعودي ولا تشمل ضريبة القيمة المضافة. الأرقام المعروضة تأتي مباشرةً من جدول الأسعار الذي يفوتر منه الخادم — لا جدول ثانٍ في الصفحة.',
+    // Which figure the cards open on. The yearly number is always DERIVED from
+    // the monthly price times the configured discount — the page never stores
+    // a second price.
+    cycleDefault: 'monthly',
     tiers: {
       menu: {
         tagline: 'لحضور رقمي أنيق',

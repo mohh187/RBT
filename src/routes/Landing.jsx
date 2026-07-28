@@ -1,9 +1,19 @@
-// Public landing — fully CMS-driven (platformConfig/landing over
-// src/lib/landingContent.js defaults). Section order & visibility, every text,
-// bullet, tier and FAQ come from the merged content object; prices come from
-// src/lib/plans.js unless a tier sets priceOverride (server stays the truth at
-// checkout). Design: the RBT 360 identity (landing.css) — navy canvas, the
-// blue→violet→magenta gradient as the energy, BrandMark.jsx as the mark.
+// Public landing — CMS-driven copy over LIVE pricing.
+//
+// COPY comes from platformConfig/landing merged over src/lib/landingContent.js
+// (section order, visibility, every headline, bullet, tier blurb and FAQ).
+//
+// PRICES come from platformConfig/plans — the SAME document the monthly
+// billing cron and the quotation builder read. The page used to print a second
+// table out of src/lib/plans.js, which is how a landing ends up advertising
+// 549 while the invoice charges 899. There is now one price list.
+//
+// LEGAL IDENTITY in the footer comes from src/lib/platformSeller.js, the
+// mirror of the constant stamped onto every tax invoice we issue. Guarded
+// against drift by scripts/guard.mjs.
+//
+// DESIGN: see landing.css. The short version — the brand gradient signs, it
+// does not decorate; one action colour carries every conversion button.
 import { useEffect, useState, Fragment } from 'react'
 import { Link } from 'react-router-dom'
 import { useAuth } from '../lib/auth.jsx'
@@ -13,10 +23,10 @@ import Icon from '../components/Icon.jsx'
 import { Price } from '../components/Riyal.jsx'
 import { db } from '../lib/firebase.js'
 import { mergeLanding, watchLanding } from '../lib/landingContent.js'
-import { PLANS, PLAN_PRICES, YEARLY_DISCOUNT } from '../lib/plans.js'
+import { PLANS } from '../lib/plans.js'
+import { PLATFORM_SELLER, SELLER_ADDRESS_AR, SELLER_CONTACT } from '../lib/platformSeller.js'
+import { normalizePlanConfig, promoOf, watchPricing, yearlyTotal } from '../lib/platformPricing.js'
 import '../landing.css'
-
-const YEARLY_PCT = Math.round((1 - YEARLY_DISCOUNT) * 100)
 
 // href-aware link: SPA routes via <Link>, anchors/external via <a>.
 function Smart({ href, className, style, children, onClick }) {
@@ -30,11 +40,15 @@ export default function Landing() {
   const { user, tenantId, loading } = useAuth()
 
   const [content, setContent] = useState(() => mergeLanding({}))
+  // The live price list. Seeded with the shipped fallbacks so the pricing
+  // section paints real numbers on the first frame instead of dashes.
+  const [pricing, setPricing] = useState(() => normalizePlanConfig(null))
   const [annc, setAnnc] = useState(true)
   const [menuOpen, setMenuOpen] = useState(false)
   const [showTop, setShowTop] = useState(false)
 
   useEffect(() => watchLanding(db, setContent), [])
+  useEffect(() => watchPricing(setPricing), [])
 
   useEffect(() => {
     const io = new IntersectionObserver(
@@ -73,11 +87,16 @@ export default function Landing() {
   }
 
   const accent = content.theme?.accent?.trim()
-  const rootStyle = accent ? { '--brand': accent, '--brand-2': accent } : undefined
+  // The studio may override the action colour. It maps to --act alone: the
+  // gradient stays the logo's, and every conversion button on the page moves
+  // together rather than one of them drifting.
+  const rootStyle = accent ? { '--act': accent, '--act-hover': accent } : undefined
   const waNumber = String(content.whatsappFloat?.number || '').replace(/[^0-9]/g, '')
 
   return (
     <div className={`rl ${content.theme?.density === 'compact' ? 'lx-compact' : ''}`} dir="rtl" style={rootStyle}>
+      {/* Keyboard users reach the content without tabbing the entire header. */}
+      <a href="#main" className="rl-skip">تخطَّ إلى المحتوى</a>
       {sessionTarget && (
         <div className="rl-session">
           <span>أنت مسجّل الدخول بالفعل</span>
@@ -95,32 +114,41 @@ export default function Landing() {
         </div>
       )}
 
+      {/* The mark sits on a plate that hangs from the top edge of the header,
+          underlined by the brand gradient — the one element on the page that
+          could not belong to any other company. */}
       <header className="rl-nav">
-        <BrandMark />
-        <nav className="links">
+        <Link to="/" className="rl-plate" aria-label="RBT 360 — الصفحة الرئيسية"><BrandMark size={28} /></Link>
+        <nav className="links" aria-label="أقسام الصفحة">
           {navLinks.map(([href, label]) => <a key={href} href={href}>{label}</a>)}
         </nav>
         <div className="act">
-          <button className="rl-icon-btn" onClick={toggleTheme} aria-label="theme"><Icon name={theme === 'dark' ? 'sun' : 'moon'} size={17} /></button>
-          <Link to="/login" className="rl-btn ghost" style={{ padding: '9px 16px' }}>تسجيل الدخول</Link>
-          <Link to="/signup" className="rl-btn" style={{ padding: '9px 18px' }}>إنشاء حساب</Link>
-          <button className="rl-icon-btn rl-burger" onClick={() => setMenuOpen((v) => !v)} aria-label="menu"><Icon name={menuOpen ? 'close' : 'more'} /></button>
+          <button className="rl-icon-btn" onClick={toggleTheme} aria-label={theme === 'dark' ? 'التبديل للوضع الفاتح' : 'التبديل للوضع الداكن'}>
+            <Icon name={theme === 'dark' ? 'sun' : 'moon'} size={17} />
+          </button>
+          <Link to="/login" className="rl-btn ghost">تسجيل الدخول</Link>
+          <Link to="/signup" className="rl-btn">إنشاء حساب</Link>
+          <button className="rl-icon-btn rl-burger" onClick={() => setMenuOpen((v) => !v)} aria-expanded={menuOpen} aria-label={menuOpen ? 'إغلاق القائمة' : 'فتح القائمة'}>
+            <Icon name={menuOpen ? 'close' : 'more'} />
+          </button>
         </div>
       </header>
       <div className={`rl-mobnav ${menuOpen ? 'open' : ''}`}>
         {navLinks.map(([href, label]) => <a key={href} href={href} onClick={() => setMenuOpen(false)}>{label}</a>)}
         {/* the header hides the login link on narrow phones — keep it reachable here */}
-        <Link to="/login" style={{ padding: '13px 6px', color: 'var(--brand)', fontWeight: 700, textDecoration: 'none' }} onClick={() => setMenuOpen(false)}>تسجيل الدخول</Link>
+        <Link to="/login" style={{ padding: '13px 6px', color: 'var(--act)', fontWeight: 700, textDecoration: 'none' }} onClick={() => setMenuOpen(false)}>تسجيل الدخول</Link>
       </div>
 
-      {flowKeys.map((k) => {
-        const Sec = RENDER[k]
-        if (!Sec) return null
-        if (k === 'logos' && !content.logos.enabled) return null
-        if (k === 'stats' && !content.stats.enabled) return null
-        if (k === 'faq' && !content.faq.enabled) return null
-        return <Sec key={k} c={content} />
-      })}
+      <main id="main">
+        {flowKeys.map((k) => {
+          const Sec = RENDER[k]
+          if (!Sec) return null
+          if (k === 'logos' && !content.logos.enabled) return null
+          if (k === 'stats' && !content.stats.enabled) return null
+          if (k === 'faq' && !content.faq.enabled) return null
+          return <Sec key={k} c={content} pricing={pricing} />
+        })}
+      </main>
 
       <FooterSec c={content} />
 
@@ -139,16 +167,20 @@ export default function Landing() {
 function HeroSec({ c }) {
   const h = c.hero
   return (
-    <section className="rl-hero lx-heroS">
+    <section className="rl-hero">
       <div className="rl-hero-bg" aria-hidden="true" />
       <div className="rl-wrap lx-hero">
         <div className="lx-hero-txt">
           <span className="rl-kicker">نظام تشغيل منشأتك</span>
           <h1>{h.title} {h.titleAccent && <span className="em">{h.titleAccent}</span>}</h1>
           <p className="rl-lead">{h.subtitle}</p>
-          <div className="rl-cta lx-start">
-            <Smart href={h.ctaHref || '/signup'} className="rl-btn lg">{h.ctaText}</Smart>
-            {h.secondaryText && <Smart href={h.secondaryHref || '#pricing'} className="rl-btn ghost lg">{h.secondaryText}</Smart>}
+          {/* On the permanently-dark hero the action colour inverts to white:
+              a deep violet pill on near-black navy clears the text check but
+              not the 3:1 boundary check against the canvas behind it. Same
+              button, inverted for its surface — not a second style. */}
+          <div className="rl-cta">
+            <Smart href={h.ctaHref || '/signup'} className="rl-btn onDark lg">{h.ctaText}</Smart>
+            {h.secondaryText && <Smart href={h.secondaryHref || '#pricing'} className="rl-btn onDark ghost lg">{h.secondaryText}</Smart>}
           </div>
           {(h.badges || []).length > 0 && (
             <div className="lx-badges">
@@ -157,9 +189,21 @@ function HeroSec({ c }) {
           )}
           <div className="lx-tagline"><RbtTagline size={10} /></div>
         </div>
+        {/* The collage SHOWS the product instead of describing it: the real
+            POS component, with the two moments a venue owner actually watches
+            for floating off its edges. Both satellites read the same numbers
+            the mock renders — nothing here is an invented metric. */}
         <div className="lx-hero-media reveal">
           <span className="lx-hero-chip" aria-hidden="true"><RbtMark size={52} /></span>
           <div className="rl-frame"><CashierMock lang="ar" /></div>
+          <div className="lx-sat s1" aria-hidden="true">
+            <i><Icon name="check" size={16} /></i>
+            <div><b>طلب طاولة 7</b><span>وصل المطبخ الآن</span></div>
+          </div>
+          <div className="lx-sat s2" aria-hidden="true">
+            <i><Icon name="qr" size={16} /></i>
+            <div><b>مسح ثم طلب</b><span>بدون تطبيق</span></div>
+          </div>
         </div>
       </div>
     </section>
@@ -194,17 +238,20 @@ function FeaturesSec({ c }) {
           <h2 className="rl-h2">{f.title}</h2>
           {f.subtitle && <p className="rl-lead">{f.subtitle}</p>}
         </div>
+        {/* Eight tint slots, cycled. Each tile gets an identity from its plate
+            colour without introducing a second type style — and every glyph
+            colour clears 4.5:1 on its own tint, so no tile is decorative-only. */}
         <div className="rl-fgrid reveal">
-          {(f.items || []).map((it, i) => (
-            <div key={`${it.title}-${i}`} className="rl-feat">
-              <div className="rl-feat-top">
-                <div className="rl-fic"><Icon name={it.icon || 'star'} size={22} /></div>
-                <span className="no">{String(i + 1).padStart(2, '0')}</span>
-              </div>
-              <strong>{it.title}</strong>
-              <p>{it.desc}</p>
-            </div>
-          ))}
+          {(f.items || []).map((it, i) => {
+            const slot = (i % 8) + 1
+            return (
+              <article key={`${it.title}-${i}`} className="rl-feat" style={{ '--_tb': `var(--t${slot}-bg)`, '--_tf': `var(--t${slot}-fg)` }}>
+                <div className="rl-fic"><Icon name={it.icon || 'star'} size={24} /></div>
+                <h3>{it.title}</h3>
+                <p>{it.desc}</p>
+              </article>
+            )
+          })}
         </div>
       </div>
     </section>
@@ -247,21 +294,47 @@ function ShowcaseSec({ c }) {
   )
 }
 
+// Splits «+160» / «0%» into figure and unit so the unit can carry the accent
+// while the figure stays ink — the small typographic move that makes a number
+// read as a claim rather than as a label.
+function splitFigure(v) {
+  const m = String(v ?? '').match(/^([^\d]*)([\d.,]*)(.*)$/)
+  if (!m) return { pre: '', fig: String(v ?? ''), post: '' }
+  return { pre: m[1], fig: m[2], post: m[3] }
+}
+
 function StatsSec({ c }) {
   return (
     <section className="rl-sec pad-sm">
       <div className="rl-wrap rl-stats reveal">
-        {(c.stats.items || []).map((s, i) => (
-          <div key={`${s.label}-${i}`} className="rl-stat"><div className="v num">{s.value}</div><div className="l">{s.label}</div></div>
-        ))}
+        {(c.stats.items || []).map((s, i) => {
+          const { pre, fig, post } = splitFigure(s.value)
+          return (
+            <div key={`${s.label}-${i}`} className="rl-stat">
+              <div className="v num">
+                {pre && <span className="u">{pre}</span>}
+                <span>{fig}</span>
+                {post && <span className="u">{post}</span>}
+              </div>
+              <div className="l">{s.label}</div>
+            </div>
+          )
+        })}
       </div>
     </section>
   )
 }
 
-function PricingSec({ c }) {
+function PricingSec({ c, pricing }) {
   const pr = c.pricing
   const [open, setOpen] = useState({})
+  // Which figure the cards show. The yearly number is COMPUTED from the one
+  // stored monthly price — never a second editable field, because two prices
+  // for one plan is exactly how they end up disagreeing.
+  const [cycle, setCycle] = useState(pr.cycleDefault === 'yearly' ? 'yearly' : 'monthly')
+  const yearly = cycle === 'yearly'
+  const offPct = Math.round((1 - (Number(pricing?.yearlyDiscount) || 0.8)) * 100)
+
   return (
     <section id="pricing" className="rl-sec rl-panel">
       <div className="rl-wrap">
@@ -269,35 +342,54 @@ function PricingSec({ c }) {
           <span className="rl-kicker">الباقات</span>
           <h2 className="rl-h2">{pr.title}</h2>
           {pr.subtitle && <p className="rl-lead">{pr.subtitle}</p>}
+          <div className="lx-cycle" role="group" aria-label="دورة الدفع">
+            {[['monthly', 'شهري'], ['yearly', 'سنوي']].map(([id, label]) => (
+              <button key={id} className={cycle === id ? 'on' : ''} aria-pressed={cycle === id} onClick={() => setCycle(id)}>
+                {label}
+                {id === 'yearly' && <span className="off num">وفّر {offPct}%</span>}
+              </button>
+            ))}
+          </div>
         </div>
         <div className="rl-plans reveal">
           {PLANS.map((p) => {
             const t = pr.tiers?.[p.id] || {}
-            const price = Number.isFinite(Number(t.priceOverride)) && t.priceOverride !== null && t.priceOverride !== ''
-              ? Number(t.priceOverride)
-              : PLAN_PRICES[p.id]
-            const yearly = Math.round(price * YEARLY_DISCOUNT)
+            // The live price list — the one the server bills from.
+            const monthly = Number(pricing?.prices?.[p.id]) || 0
+            const promo = promoOf(p.id, pricing)
+            const shown = yearly ? yearlyTotal(monthly, pricing) : monthly
+            // The struck original is shown in the SAME unit as the price beside
+            // it. Comparing a yearly «before» against a monthly «now» is the
+            // kind of arithmetic a customer notices and stops trusting.
+            const was = promo ? (yearly ? yearlyTotal(promo.listPrice, pricing) : promo.listPrice) : 0
             const extra = t.more || []
             const isOpen = !!open[p.id]
             return (
-              <div key={p.id} className={`rl-plan ${t.highlight ? 'feat' : ''} ${t.glow ? 'lx-ent' : ''}`}>
+              <div key={p.id} className={`rl-plan ${t.highlight ? 'feat' : ''}`}>
                 {t.badge && <span className="rl-plan-badge">{t.badge}</span>}
                 {t.tagline && <span className="rl-plan-tag">{t.tagline}</span>}
                 <h3>{p.ar}</h3>
                 <div className="lx-price">
-                  <Price value={price} lang="ar" symbolSize="0.62em" />
-                  <span className="per">/ شهرياً</span>
+                  <Price value={shown} lang="ar" symbolSize="0.6em" />
+                  <span className="per">{yearly ? '/ سنوياً' : '/ شهرياً'}</span>
                 </div>
+                {promo ? (
+                  <div className="lx-was">
+                    <s><Price value={was} lang="ar" symbolSize="0.9em" /></s>
+                    <span className="cut num">{promo.labelAr} {promo.discountPct}%</span>
+                  </div>
+                ) : null}
                 <div className="lx-yearly">
-                  سنوياً: <Price value={yearly} lang="ar" symbolSize="0.8em" /> شهرياً
-                  <span className="save num">وفّر {YEARLY_PCT}%</span>
+                  {yearly
+                    ? <>يعادل <Price value={Math.round(shown / 12)} lang="ar" symbolSize="0.9em" /> شهرياً</>
+                    : <>أو <Price value={yearlyTotal(monthly, pricing)} lang="ar" symbolSize="0.9em" /> سنوياً بخصم <span className="num">{offPct}%</span></>}
                 </div>
                 <ul>
                   {(t.bullets || []).map((it) => <li key={it}><Icon name="check" size={16} className="ic" /> {it}</li>)}
                   {isOpen && extra.map((it) => <li key={it}><Icon name="add" size={16} className="ic" /> {it}</li>)}
                 </ul>
                 {extra.length > 0 && (
-                  <button className="lx-more" onClick={() => setOpen((o) => ({ ...o, [p.id]: !o[p.id] }))}>
+                  <button className="lx-more" onClick={() => setOpen((o) => ({ ...o, [p.id]: !o[p.id] }))} aria-expanded={isOpen}>
                     {isOpen ? 'عرض أقل' : `عرض المزيد (${extra.length})`} <Icon name={isOpen ? 'minus' : 'add'} size={14} />
                   </button>
                 )}
@@ -322,9 +414,12 @@ function FaqSec({ c }) {
           <h2 className="rl-h2">أسئلة يكثر طرحها</h2>
         </div>
         <div className="lx-faq2 reveal">
+          {/* Real headings, not styled <strong>. A flat outline with one h1 and
+              seven h2s gives a screen-reader user no way to move between the
+              questions, the features or the plans. */}
           {(c.faq.items || []).map((f, i) => (
             <div key={`${f.q}-${i}`} className="lx-faq-item">
-              <strong>{f.q}</strong>
+              <h3>{f.q}</h3>
               <p>{f.a}</p>
             </div>
           ))}
@@ -342,7 +437,7 @@ function CtaSec({ c }) {
           <span className="lx-cta-mark" aria-hidden="true"><RbtMark size={380} mono /></span>
           <h2>{c.cta.title}</h2>
           <p>{c.cta.subtitle}</p>
-          <Link to="/signup" className="rl-btn lg">{c.cta.buttonText}</Link>
+          <Link to="/signup" className="rl-btn onDark lg">{c.cta.buttonText}</Link>
           <span className="lx-tagline"><RbtTagline size={10} mono /></span>
         </div>
       </div>
@@ -351,6 +446,10 @@ function CtaSec({ c }) {
 }
 
 /* ============================ footer ============================ */
+
+// Every social link needs a NAME, not just a glyph — an icon-only anchor is
+// an unlabelled link to anyone using a screen reader.
+const SOCIAL_AR = { whatsapp: 'واتساب', x: 'منصة إكس', instagram: 'انستقرام', tiktok: 'تيك توك', email: 'البريد الإلكتروني' }
 
 // Minimal inline glyphs for networks Icon.jsx doesn't carry (rules: SVG only).
 function SocialGlyph({ kind }) {
@@ -378,11 +477,11 @@ function FooterSec({ c }) {
         <div className="rl-foot-grid">
           <div>
             <BrandMark size={34} tagline />
-            {f.about && <p style={{ color: 'var(--ink-2)', maxWidth: 320, marginTop: 12, fontSize: '0.9rem', lineHeight: 1.7 }}>{f.about}</p>}
+            {f.about && <p className="rl-foot-about">{f.about}</p>}
             {socialLinks.length > 0 && (
               <div className="lx-social">
                 {socialLinks.map((s) => (
-                  <a key={s.k} href={s.href} target="_blank" rel="noreferrer" aria-label={s.k}>
+                  <a key={s.k} href={s.href} target="_blank" rel="noreferrer" aria-label={SOCIAL_AR[s.k] || s.k}>
                     {s.icon ? <Icon name={s.icon} size={16} /> : <SocialGlyph kind={s.k} />}
                   </a>
                 ))}
@@ -390,28 +489,48 @@ function FooterSec({ c }) {
             )}
           </div>
           <div>
-            <strong>روابط</strong>
+            <h3>روابط</h3>
             {(f.links || []).map((l, i) => <Smart key={`${l.href}-${i}`} href={l.href}>{l.label}</Smart>)}
           </div>
           <div>
-            <strong>ابدأ</strong>
+            <h3>ابدأ</h3>
             <Link to="/signup">إنشاء حساب</Link>
             <Link to="/login">تسجيل الدخول</Link>
+            <a href={`mailto:${SELLER_CONTACT.email}`} dir="ltr" style={{ textAlign: 'start' }}>{SELLER_CONTACT.email}</a>
           </div>
           <div>
-            <strong>قانوني</strong>
+            <h3>قانوني</h3>
             <Link to="/legal/terms">الشروط والأحكام</Link>
             <Link to="/legal/privacy">سياسة الخصوصية</Link>
             <Link to="/legal/refund">الاسترجاع</Link>
           </div>
         </div>
+
+        {/* The company actually behind the brand. These are the SAME values
+            stamped onto every tax invoice we issue (src/lib/platformSeller.js,
+            drift-guarded against the server copy) — a buyer who checks the
+            footer against the invoice must find them identical. */}
+        <div className="lx-legal">
+          <div>
+            <strong>{PLATFORM_SELLER.legalNameAr}</strong>
+            <span dir="ltr" style={{ marginInlineStart: 8 }}>{PLATFORM_SELLER.legalNameEn}</span>
+            {' — '}RBT 360 نشاط مسجّل تحتها
+          </div>
+          <div>{SELLER_ADDRESS_AR}</div>
+          <div>
+            السجل التجاري <span className="num" dir="ltr">{PLATFORM_SELLER.crNumber}</span>
+            {' · '}الرقم الضريبي <span className="num" dir="ltr">{PLATFORM_SELLER.vatNumber}</span>
+            {' · '}الرقم الموحد <span className="num" dir="ltr">{PLATFORM_SELLER.unifiedNumber}</span>
+          </div>
+        </div>
+
         {f.showPayments !== false && (
           <div className="lx-pay">
             <span className="lbl">وسائل دفع مقبولة:</span>
             {['مدى', 'Visa', 'Mastercard', 'Apple Pay'].map((p) => <span key={p} className="chip">{p}</span>)}
           </div>
         )}
-        <p className="rl-foot-copy">© 2026 RBT 360. جميع الحقوق محفوظة.</p>
+        <p className="rl-foot-copy">© 2026 {PLATFORM_SELLER.legalNameAr}. جميع الحقوق محفوظة.</p>
       </div>
     </footer>
   )
