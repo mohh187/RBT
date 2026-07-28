@@ -8,6 +8,8 @@ import OrderDetail from '../../components/OrderDetail.jsx'
 import { watchOrdersSince } from '../../lib/db.js'
 import { Price } from '../../components/Riyal.jsx'
 import { orderNumber, timeAgo } from '../../lib/format.js'
+// ONE definition of «the money moved» — see the comment on isSettled.
+import { isSettled } from '../../lib/accounting.js'
 import { sectionTemplate, templateOptions } from '../../lib/systemTemplates.js'
 import { useSectionTemplate } from '../../lib/useSectionTemplate.js'
 
@@ -67,7 +69,7 @@ export default function Orders() {
     let activeCount = 0
 
     orders.forEach((o) => {
-      if (o.status === 'paid') {
+      if (isSettled(o)) {
         sales += o.total || 0
         paidCount++
       } else if (!['cancelled', 'refunded'].includes(o.status)) {
@@ -97,9 +99,9 @@ export default function Orders() {
       // 2. Status filter
       let matchStatus = true
       if (statusFilter === 'active') {
-        matchStatus = !['paid', 'cancelled', 'refunded'].includes(o.status)
+        matchStatus = !isSettled(o) && !['cancelled', 'refunded'].includes(o.status)
       } else if (statusFilter === 'paid') {
-        matchStatus = o.status === 'paid'
+        matchStatus = isSettled(o)
       } else if (statusFilter === 'cancelled') {
         matchStatus = ['cancelled', 'refunded'].includes(o.status)
       }
@@ -118,7 +120,7 @@ export default function Orders() {
   const msOf = (o) => (o.createdAt?.toMillis ? o.createdAt.toMillis() : 0)
   const dateOf = (o) => (o.createdAt?.toDate ? o.createdAt.toDate() : new Date(o.createdAt))
   const fmtTime = (o) => dateOf(o).toLocaleTimeString(ar ? 'ar-SA-u-nu-latn' : 'en-GB', { hour: '2-digit', minute: '2-digit' })
-  const badgeFor = (o) => (o.status === 'paid' || o.status === 'ready' || o.status === 'served' ? 'badge-success' : ['cancelled', 'refunded'].includes(o.status) ? 'badge-danger' : 'badge-gold')
+  const badgeFor = (o) => (isSettled(o) || o.status === 'ready' || o.status === 'served' ? 'badge-success' : ['cancelled', 'refunded'].includes(o.status) ? 'badge-danger' : 'badge-gold')
   const typeLabel = (o) => (o.orderType === 'dine_in' ? (o.tableLabel || (ar ? 'طاولة' : 'Table')) : o.orderType === 'curbside' ? (ar ? 'سيارة' : 'Car') : o.orderType === 'delivery' ? (ar ? 'توصيل' : 'Delivery') : o.orderType === 'pickup' ? (ar ? 'استلام' : 'Pickup') : (ar ? 'سفري' : 'Takeaway'))
   const itemsSummary = (o) => (o.items || []).map((it) => `${it.qty} × ${lang === 'en' && it.nameEn ? it.nameEn : it.nameAr}`).join(ar ? '، ' : ', ')
 

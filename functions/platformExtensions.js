@@ -7,6 +7,7 @@
 // getFirestore() is resolved lazily inside every handler.
 const { onSchedule } = require('firebase-functions/v2/scheduler')
 const { onCall, onRequest, HttpsError } = require('firebase-functions/v2/https')
+const logger = require('firebase-functions/logger')
 const { getFirestore, FieldValue } = require('firebase-admin/firestore')
 const { sendEmail, emailShell, esc } = require('./messaging')
 const { receiptForSimple, notifyReceipt, invoiceLink } = require('./invoicing')
@@ -444,6 +445,36 @@ async function moyasarChargeToken({ amount, token, description, callbackUrl, met
 // so a saved-card charge can never bill a different amount than a fresh one.
 // ANONYMOUS for order/booking/ticket (public diners); subscription needs an
 // authenticated manager/admin of the venue.
+// The sum of what an order's own lines say it costs.
+//
+// Order writers do NOT agree on one field, so this reads what each actually
+// emits: MenuView/CashierPOS/OrderDetail all write `unitPrice` + `lineTotal`.
+// A previous version of the anti-underpay guard summed `l.price` — a field no
+// writer has ever produced — so it always measured 0 and never fired once.
+// Exported and pure so it can be TESTED; the version that shipped broken was
+// untestable inline code inside a Firestore-bound function.
+function orderLinesSum(items) {
+  return (items || []).reduce((sum, l) => {
+    const line = Number(l && l.lineTotal) || (Number(l && l.unitPrice) || 0) * (Number(l && l.qty) || 1)
+    return sum + (Number.isFinite(line) ? line : 0)
+  }, 0)
+}
+
+// Anti-underpay: the amount about to be charged must not fall below what the
+// order's own lines add up to, minus the reductions the order records. An order
+// with no priced lines is unverifiable, not invalid — the price check in
+// onNewOrder is the authority there; this is the second line of defence.
+function orderTotalIsSane(order) {
+  const o = order || {}
+  const itemsSum = orderLinesSum(o.items)
+  if (!(itemsSum > 0)) return true
+  const discount = (Number(o.discount) || 0)
+    + (Number(o.loyaltyDiscount) || 0)
+    + (Number(o.memberDiscount) || 0)
+    + (Number(o.offerDiscount) || 0)
+  return (Number(o.total) || 0) + 0.01 >= itemsSum - discount
+}
+
 async function deriveIntentAmount(db, { kind, tenantId, refId, request }) {
   let amountSar = 0
   let description = ''
@@ -451,12 +482,15 @@ async function deriveIntentAmount(db, { kind, tenantId, refId, request }) {
     const s = await db.doc(`tenants/${tenantId}/orders/${refId}`).get()
     if (!s.exists) throw new HttpsError('not-found', 'order not found')
     const o = s.data()
+    // An order the server already refused must never be payable. Validation in
+    // onNewOrder cancels a tampered or out-of-stock order — without this check
+    // the guest could still be charged for it, because nothing else here looks
+    // at status.
+    if (o.status === 'cancelled' || o.status === 'refunded') {
+      throw new HttpsError('failed-precondition', 'order is no longer payable')
+    }
     amountSar = Number(o.total) || 0
-    // Anti-underpay guard (R3): the charged total must not fall BELOW the order's
-    // own line items minus any recorded discount — blocks a tampered `total`.
-    const itemsSum = (o.items || []).reduce((sum, l) => sum + (Number(l.price) || 0) * (Number(l.qty) || 0), 0)
-    const discount = (Number(o.discount) || 0) + (Number(o.loyaltyDiscount) || 0)
-    if (itemsSum > 0 && amountSar + 0.01 < itemsSum - discount) {
+    if (!orderTotalIsSane(o)) {
       throw new HttpsError('failed-precondition', 'order total below its line items')
     }
     description = `Order ${o.code || refId}`
@@ -677,7 +711,35 @@ async function settleFromPayment(db, payment) {
       statusHistory: FieldValue.arrayUnion({ status: 'paid', at: Date.now(), by: 'online' }),
     }
     if (held) patch.status = 'pending'
-    await oRef.set(patch, { merge: true }).catch(() => {})
+    // THE CLAIM IS RELEASED IF THIS FAILS.
+    //
+    // The intent is claimed above so only one caller dispatches. But this write
+    // — the one that actually turns a captured payment into a live order — used
+    // to end in `.catch(() => {})`. If it failed, the money was taken, the
+    // intent said 'paid', every webhook redelivery returned {already:true}, and
+    // expireUnpaidOrders cancelled the order twenty minutes later. The guest was
+    // charged and their order silently vanished, with nothing anywhere to say so.
+    //
+    // So: on failure, hand the claim back. Moyasar redelivers a webhook that was
+    // not acknowledged, and the next delivery re-runs the whole dispatch. A
+    // retry is safe precisely because the claim is atomic.
+    try {
+      await oRef.set(patch, { merge: true })
+    } catch (e) {
+      await intentRef.update({
+        status: 'created',
+        settleError: (e && e.message) || 'order activation failed',
+        settleErrorAt: FieldValue.serverTimestamp(),
+      }).catch(() => {})
+      await writeAudit(db, {
+        kind: 'payment', action: 'settleRetry', tenantId: tid,
+        refId: intent.refId, providerRef: payment.id,
+      }).catch(() => {})
+      logger.error('[settle] order activation failed — claim released for retry', {
+        tid, orderId: intent.refId, paymentId: payment.id, error: (e && e.message) || String(e),
+      })
+      throw e // a non-2xx tells Moyasar to redeliver
+    }
     // Stock + popularity (onNewOrder skipped the held order): decrement stock and
     // bump soldCount so the 'auto' featured strip reflects real best-sellers.
     if (held && !order.stockDecremented) {
@@ -1480,6 +1542,10 @@ const dinerOrderAi = onCall({ timeoutSeconds: 60, memory: '512MiB' }, async (req
 })
 
 module.exports = {
+  // pure + exported so the anti-underpay guard is TESTABLE — the version that
+  // shipped broken was untestable inline code inside a Firestore-bound function
+  orderLinesSum,
+  orderTotalIsSane,
   generateMonthlyInvoices,
   setPlatformRole,
   startPlanSubscription,

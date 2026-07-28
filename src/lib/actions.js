@@ -2,6 +2,7 @@
 // Each run() calls the normal db layer, so Firestore rules remain the security backstop.
 // risk: 'safe' (auto) | 'confirm' (ask) | 'danger' (ask, sensitive/irreversible).
 import * as db from './db.js'
+import { isSettled } from './accounting.js'
 import { db as fsdb } from './firebase.js'
 import { collection, getDocs, query, where } from 'firebase/firestore'
 import { resolveMembershipPolicy, tierForPoints } from './membership.js'
@@ -145,7 +146,7 @@ export const ACTIONS = [
   { name: 'today_summary', risk: 'safe', description: "Today's orders, revenue, active orders.", parameters: obj({}),
     run: async (_a, { tid }) => { const o = await db.listOrdersSince(tid, startOfToday()); const set = o.filter((x) => ['paid', 'served', 'refunded'].includes(x.status)); return { orders: o.length, revenue: Math.round(set.reduce((s, x) => s + (x.total || 0) - (x.status === 'refunded' ? (x.refund?.amount || 0) : 0), 0)), active: o.filter((x) => ['pending', 'accepted', 'preparing', 'ready'].includes(x.status)).length } } },
   { name: 'sales_report', risk: 'safe', description: 'Revenue, order count, avg ticket and payment-method breakdown over the last N days.', parameters: obj({ days: num('days back, default 7') }),
-    run: async (a, { tid }) => { const list = (await db.listOrdersSince(tid, daysAgo(Number(a.days) || 7))).filter((o) => o.status !== 'cancelled'); const rev = list.reduce((s, o) => s + (o.total || 0), 0); const byMethod = {}; list.filter((o) => ['paid', 'refunded'].includes(o.status)).forEach((o) => { if (o.paymentBreakdown) Object.entries(o.paymentBreakdown).forEach(([m, v]) => { byMethod[m] = (byMethod[m] || 0) + (Number(v) || 0) }); else { const m = o.paymentMethod || 'cash'; byMethod[m] = (byMethod[m] || 0) + (o.total || 0) } }); return { revenue: Math.round(rev), orders: list.length, avg: list.length ? Math.round(rev / list.length) : 0, byMethod } } },
+    run: async (a, { tid }) => { const list = (await db.listOrdersSince(tid, daysAgo(Number(a.days) || 7))).filter((o) => o.status !== 'cancelled'); const rev = list.reduce((s, o) => s + (o.total || 0), 0); const byMethod = {}; list.filter(isSettled).forEach((o) => { if (o.paymentBreakdown) Object.entries(o.paymentBreakdown).forEach(([m, v]) => { byMethod[m] = (byMethod[m] || 0) + (Number(v) || 0) }); else { const m = o.paymentMethod || 'cash'; byMethod[m] = (byMethod[m] || 0) + (o.total || 0) } }); return { revenue: Math.round(rev), orders: list.length, avg: list.length ? Math.round(rev / list.length) : 0, byMethod } } },
   { name: 'top_items', risk: 'safe', description: 'Best-selling items over the last N days.', parameters: obj({ days: num('days back'), limit: num('how many') }),
     run: async (a, { tid }) => { const list = (await db.listOrdersSince(tid, daysAgo(Number(a.days) || 7))).filter((o) => o.status !== 'cancelled'); const t = {}; list.forEach((o) => (o.items || []).forEach((it) => { const k = it.nameAr || 'item'; t[k] = (t[k] || 0) + (it.qty || 1) })); return Object.entries(t).sort((x, y) => y[1] - x[1]).slice(0, Number(a.limit) || 10).map(([name, qty]) => ({ name, qty })) } },
   { name: 'peak_hours', risk: 'safe', description: 'Busiest hours of the day over the last N days.', parameters: obj({ days: num('days back') }),

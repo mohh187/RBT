@@ -120,8 +120,21 @@ export const METHOD_LABELS = {
   other: { ar: 'أخرى', en: 'Other' },
 }
 
-// A settled order is one whose money actually moved (mirrors Reports.jsx).
-export const isSettled = (o) => ['paid', 'refunded'].includes(o?.status)
+// A settled order is one whose money actually moved.
+//
+// THE `paidOnline` TERM IS NOT A REFINEMENT — IT IS THE WHOLE ONLINE CHANNEL.
+// A pay-first order is settled by the server, which sets paymentStatus:'paid'
+// and paidOnline:true but leaves `status` on the KITCHEN track ('pending' ->
+// 'accepted' -> 'served'), because the food still has to be made. The cashier
+// is explicitly told not to collect for it. So its status never becomes 'paid',
+// and every book that tested `status === 'paid'` reported a day's online
+// takings as zero: money in the bank, absent from the P&L, absent from the
+// Z-report, absent from the orders dashboard.
+//
+// This is THE definition. Reports.jsx, Orders.jsx and actions.js each carried
+// their own copy of the old test — that is how the three of them stayed wrong
+// together. They now import this one.
+export const isSettled = (o) => !!o && (['paid', 'refunded'].includes(o.status) || o.paidOnline === true)
 export const refundOf = (o) => (o?.status === 'refunded' ? num(o?.refund?.amount) : 0)
 // The moment the money landed — paidAt when known, else creation time.
 export const settledAt = (o) => toMs(o?.paidAtMs) || toMs(o?.paidAt) || toMs(o?.createdAt)

@@ -4,6 +4,7 @@ import { useAuth } from '../../lib/auth.jsx'
 import { useI18n } from '../../lib/i18n.jsx'
 import { Spinner, Empty } from '../../components/ui.jsx'
 import { watchOrdersSince, watchCustomers, watchItems, watchCategories, watchExpensesSince, addExpense, deleteExpense } from '../../lib/db.js'
+import { isSettled } from '../../lib/accounting.js'
 import { money } from '../../lib/format.js'
 import { Price as RiyalPrice } from '../../components/Riyal.jsx'
 import Icon from '../../components/Icon.jsx'
@@ -126,7 +127,7 @@ export default function Reports() {
     const takeaway = list.filter((o) => o.orderType === 'takeaway').length
 
     // financial / Z-report: settled (paid + refunded) by payment method + tips + VAT + refunds
-    const paidList = (orders || []).filter((o) => ['paid', 'refunded'].includes(o.status))
+    const paidList = (orders || []).filter(isSettled)
     const refundOf = (o) => (o.status === 'refunded' ? (o.refund?.amount || 0) : 0)
     const byMethod = {}
     let tips = 0

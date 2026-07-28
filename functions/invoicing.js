@@ -6,6 +6,8 @@
 // invoice artifact: viewable at /invoice/:tid/:id and linked over WhatsApp.
 // Generation is idempotent (guarded by order.receiptId) and server-authoritative.
 const { onDocumentUpdated } = require('firebase-functions/v2/firestore')
+const logger = require('firebase-functions/logger')
+const { runPaidEffects } = require('./orderEffects.js')
 const { getFirestore, FieldValue } = require('firebase-admin/firestore')
 const { sendWhatsAppTemplate, sendWhatsAppText, sendEmail, emailShell, esc, waCredsFor } = require('./messaging')
 
@@ -170,6 +172,30 @@ const onOrderPaid = onDocumentUpdated('tenants/{tid}/orders/{oid}', async (event
   const becamePaid = (after.status === 'paid' && before.status !== 'paid') ||
                      (after.paidOnline === true && before.paidOnline !== true)
   const becameRefunded = after.status === 'refunded' && before.status !== 'refunded'
+
+  if (becamePaid) {
+    // EVERY consequence of payment, not just the receipt.
+    //
+    // This trigger already fired on both paid-signals, so it is the one place
+    // that sees a cash close and an online settlement alike — which makes it
+    // the right home for the material consumption, the loyalty progress and the
+    // customer record. Those used to run ONLY in the browser, and only on the
+    // cash path, so the entire online channel silently skipped them.
+    //
+    // Idempotency is shared with the client's own guard (same
+    // `sideEffectsTriggered` claim), so a cash order whose browser already did
+    // the work finds nothing left to do here.
+    const tSnap = await db.doc(`tenants/${tid}`).get().catch(() => null)
+    const tenant = (tSnap && tSnap.exists) ? tSnap.data() : {}
+    const res = await runPaidEffects(db, tid, oid, after, {
+      tenant,
+      actor: after.paidByName || (after.paidOnline ? 'online' : ''),
+    }).catch((e) => ({ errors: [(e && e.message) || 'effects failed'] }))
+    // A partial run is worse than a failed one — it must not be silent.
+    if (res && res.errors && res.errors.length) {
+      logger.error('[paidEffects] partial', { tid, oid, errors: res.errors })
+    }
+  }
 
   if (becamePaid && !after.receiptId) {
     const r = await receiptForOrder(db, tid, oid, after).catch(() => null)

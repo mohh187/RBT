@@ -89,7 +89,22 @@ function bestOfferDiscount(offers, cart, subtotal, couponCode, isMember, now) {
 
 exports.onNewOrder = onDocumentCreated('tenants/{tid}/orders/{oid}', async (event) => {
   const order = event.data && event.data.data()
-  if (!order || order.status !== 'pending') return
+  // ONLINE ORDERS USED TO SKIP THIS ENTIRE FUNCTION.
+  //
+  // A pay-first order is created as 'awaiting_payment' (src/lib/db.js), and the
+  // old gate here was `status !== 'pending' -> return`. So for the whole online
+  // channel nothing checked prices, nothing checked stock, and nothing checked
+  // that the discounts claimed by the client were real. The one guard that was
+  // supposed to catch a tampered total lived in createPayIntent and was reading
+  // a field (`l.price`) that no order writer has ever emitted — so it measured
+  // zero and never fired. Two layers, both asleep.
+  //
+  // Validation now runs for BOTH statuses, which puts it BEFORE the guest is
+  // charged rather than after. Only the two effects that assume a live kitchen
+  // ticket stay exclusive to 'pending': the finished-goods decrement (which
+  // settleFromPayment performs on payment instead) and the staff push.
+  const held = !!order && order.status === 'awaiting_payment'
+  if (!order || (order.status !== 'pending' && !held)) return
   const tid = event.params.tid
   const db = getFirestore()
 
@@ -268,13 +283,21 @@ exports.onNewOrder = onDocumentCreated('tenants/{tid}/orders/{oid}', async (even
   // 4. Passed validation → the server is the authority for finished-goods stock
   // (the client decrementStock is permission-denied for anonymous diners). Also
   // overwrite the client-supplied drinkUnits with the server value (loyalty integrity).
-  if (!order.stockDecremented) {
+  if (!order.stockDecremented && !held) {
     await Promise.all(lines.filter((l) => l.itemId && (l.qty || 0) > 0).map((l) =>
       // soldCount powers the 'auto' (best-sellers) featured strip on the menu.
       db.doc(`tenants/${tid}/items/${l.itemId}`).update({ stock: FieldValue.increment(-(l.qty || 1)), soldCount: FieldValue.increment(l.qty || 1) }).catch(() => {})
     ))
     await event.data.ref.update({ drinkUnits, stockDecremented: true }).catch(() => {})
+  } else if (held) {
+    // A held order must NOT decrement stock — it may never be paid, and
+    // settleFromPayment does it at settlement. But drinkUnits is the server's
+    // word on loyalty eligibility and has to overwrite the client's either way.
+    await event.data.ref.update({ drinkUnits }).catch(() => {})
   }
+
+  // Nothing to announce for a held order: there is no ticket until it is paid.
+  if (held) return
 
   const tokensSnap = await db.collection(`tenants/${tid}/pushTokens`).get()
   const docs = tokensSnap.docs
