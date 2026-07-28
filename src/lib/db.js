@@ -1472,23 +1472,39 @@ export async function getMemberByPhone(tid, phone) {
   return { token: d.token, active: true, discountPct: d.discountPct || 0, tier: d.tier || '' }
 }
 
-// ---------- staff invites (no-backend invite flow) ----------
-const inviteKey = (email) => email.trim().toLowerCase()
-export const inviteRef = (email) => doc(db, 'staffInvites', inviteKey(email))
+// ---------- staff invites ----------
+// Doc id is `{emailLower}__{tenantId}`. It used to be the email alone, which
+// meant one address could hold exactly one pending invite across the WHOLE
+// platform, and claiming it overwrote the user's tenantId — so accepting an
+// invite to venue B silently evicted them from venue A. Per-venue ids remove
+// both problems and keep duplicate prevention free (a deterministic id is a
+// write collision, not a query).
+const inviteKey = (email) => String(email || '').trim().toLowerCase()
+export const inviteId = (email, tid) => `${inviteKey(email)}__${tid}`
+export const inviteRef = (email, tid) => doc(db, 'staffInvites', inviteId(email, tid))
 
-export async function getInvite(email) {
-  const s = await getDoc(inviteRef(email))
-  return s.exists() ? { email: inviteKey(email), ...s.data() } : null
+export async function getInvite(email, tid) {
+  const s = await getDoc(inviteRef(email, tid))
+  return s.exists() ? { id: s.id, ...s.data() } : null
 }
 export async function createInvite(email, { tenantId, role, venueName, invitedBy, name }) {
-  return setDoc(inviteRef(email), { tenantId, role: role || 'waiter', name: name || '', venueName: venueName || '', invitedBy: invitedBy || '', createdAt: serverTimestamp() })
+  // `email` is now a FIELD as well as part of the id — the claim callable
+  // queries on it, and the invite-email trigger reads it from the body.
+  return setDoc(inviteRef(email, tenantId), {
+    email: inviteKey(email),
+    tenantId, role: role || 'waiter', name: name || '', venueName: venueName || '',
+    invitedBy: invitedBy || '', createdAt: serverTimestamp(),
+  })
 }
-export async function deleteInvite(email) {
-  return deleteDoc(inviteRef(email))
+export async function deleteInvite(email, tid) {
+  return deleteDoc(inviteRef(email, tid))
 }
 export function watchInvites(tid, cb) {
   const q = query(collection(db, 'staffInvites'), where('tenantId', '==', tid))
-  return onSnapshot(q, (s) => cb(s.docs.map((d) => ({ email: d.id, ...d.data() }))), () => cb([]))
+  // The doc id is `{email}__{tid}` now, so the email comes from the FIELD.
+  // `|| d.id` keeps rows from before the id change readable until the backfill
+  // runs — an old doc's id IS its email.
+  return onSnapshot(q, (s) => cb(s.docs.map((d) => ({ id: d.id, ...d.data(), email: d.data().email || d.id }))), () => cb([]))
 }
 
 // ---------- staff directory (per-tenant; strictly isolated by tenant) ----------
@@ -1918,14 +1934,19 @@ export async function savePushToken(tid, token, uid) {
   })
 }
 
-// Called at login: if the user has no tenant but a pending invite matches their email, claim it.
-export async function claimInviteFor(uid, email) {
-  if (!email) return null
-  const inv = await getInvite(email)
-  if (!inv) return null
-  await setDoc(userRef(uid), { tenantId: inv.tenantId, role: inv.role || 'waiter', ...(inv.name ? { displayName: inv.name } : {}) }, { merge: true })
-  await deleteInvite(email)
-  return inv
+// Called at login. Claiming is SERVER-SIDE now: the callable reads the address
+// Firebase verified on the token, not one the client hands it. The old client
+// version read staffInvites/{email} and then wrote its own users doc, which was
+// a privilege-escalation chain — see functions/staffInvites.js for the details.
+//
+// Returns { claimed, added, active }: `claimed` are venues now bound as active,
+// `added` are venues the user was joined to WITHOUT being moved (because they
+// already work somewhere) — the caller can offer to switch.
+export async function claimInviteFor() {
+  const { httpsCallable } = await import('firebase/functions')
+  const { functions } = await import('./firebase.js')
+  const res = await httpsCallable(functions, 'claimStaffInvites')({})
+  return res && res.data ? res.data : { claimed: [], added: [], active: null }
 }
 
 // ---------- recipes modifications ----------

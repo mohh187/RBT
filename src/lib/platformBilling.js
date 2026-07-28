@@ -56,16 +56,33 @@ export async function markInvoicePaid(id) {
   })
 }
 
-export async function markUnpaid(id) {
+// A payment that happened cannot un-happen. `markUnpaid` used to null `paidAt`
+// on a settled invoice — rewriting financial history, and unrecoverable once
+// the invoice carries a sequential number and a tax QR. Reversing a settled
+// invoice is a CREDIT NOTE; this only exists for an invoice mistakenly marked
+// paid by hand, and it says so in the record.
+export async function markUnpaid(id, reason = '') {
   await updateDoc(doc(db, 'platformInvoices', id), {
     status: 'unpaid',
     paidAt: null,
+    // The correction is itself part of the audit trail.
+    correction: { was: 'paid', at: Date.now(), reason: String(reason || '').slice(0, 300) },
     updatedAt: serverTimestamp(),
   })
 }
 
-export async function deleteInvoice(id) {
-  await deleteDoc(doc(db, 'platformInvoices', id))
+// NEVER DELETE A FINANCIAL RECORD. A deleted invoice punches a hole in the
+// number sequence, and a sequence with holes is exactly what an auditor walks
+// looking for. Abandoning one writes a void with a stated reason: a numbered,
+// explained entry that stays in the ledger.
+export async function voidInvoice(id, { reason, by } = {}) {
+  await updateDoc(doc(db, 'platformInvoices', id), {
+    status: 'void',
+    voidReason: String(reason || '').slice(0, 300),
+    voidedBy: by || '',
+    voidedAt: serverTimestamp(),
+    updatedAt: serverTimestamp(),
+  })
 }
 
 // MRR = sum of paid invoices for the most recent billing period present.

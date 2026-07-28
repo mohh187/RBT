@@ -9,6 +9,7 @@ import Icon from '../../components/Icon.jsx'
 import { Spinner, Empty } from '../../components/ui.jsx'
 import { useToast } from '../../components/Toast.jsx'
 import { watchAllTenants } from '../../lib/platform.js'
+import { useAuth } from '../../lib/auth.jsx'
 import { PLANS } from '../../lib/plans.js'
 import { PlanBadge, fmtWhen, toDateInput } from './shared.jsx'
 import {
@@ -16,7 +17,7 @@ import {
   createInvoice,
   markInvoicePaid,
   markUnpaid,
-  deleteInvoice,
+  voidInvoice,
   computeMRR,
   watchCoupons,
   saveCoupon,
@@ -28,8 +29,8 @@ const periodNow = () => {
   const d = new Date()
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`
 }
-const STATUS_BADGE = { paid: 'badge-success', unpaid: 'badge-warning', overdue: 'badge-danger' }
-const STATUS_AR = { paid: 'مدفوعة', unpaid: 'غير مدفوعة', overdue: 'متأخرة' }
+const STATUS_BADGE = { paid: 'badge-success', unpaid: 'badge-warning', overdue: 'badge-danger', void: '', pending: 'badge-warning' }
+const STATUS_AR = { paid: 'مدفوعة', unpaid: 'غير مدفوعة', overdue: 'متأخرة', void: 'ملغاة', pending: 'غير مدفوعة' }
 
 // ---------- create invoice form ----------
 function CreateInvoiceForm({ tenants, onDone }) {
@@ -92,17 +93,20 @@ function CreateInvoiceForm({ tenants, onDone }) {
 // ---------- invoices tab ----------
 function InvoicesTab({ invoices, tenants }) {
   const toast = useToast()
+  const { user } = useAuth()
   const [filter, setFilter] = useState('all') // all | unpaid | paid
   const [showForm, setShowForm] = useState(false)
 
   const rows = useMemo(() => {
     if (filter === 'all') return invoices
-    return invoices.filter((i) => (filter === 'paid' ? i.status === 'paid' : i.status !== 'paid'))
+    // A voided invoice is neither paid nor collectable — it must not sit in the
+    // «unpaid» list inflating what you think you are owed.
+    return invoices.filter((i) => (filter === 'paid' ? i.status === 'paid' : i.status !== 'paid' && i.status !== 'void'))
   }, [invoices, filter])
 
   const counts = useMemo(() => ({
     all: invoices.length,
-    unpaid: invoices.filter((i) => i.status !== 'paid').length,
+    unpaid: invoices.filter((i) => i.status !== 'paid' && i.status !== 'void').length,
     paid: invoices.filter((i) => i.status === 'paid').length,
   }), [invoices])
 
@@ -110,12 +114,22 @@ function InvoicesTab({ invoices, tenants }) {
     try { await markInvoicePaid(inv.id); toast.success('سُجّل الدفع') } catch { toast.error('تعذّر التحديث') }
   }
   const unpay = async (inv) => {
-    try { await markUnpaid(inv.id); toast.success('أُعيدت كغير مدفوعة') } catch { toast.error('تعذّر التحديث') }
+    // Only ever a correction to a hand-marked payment — a real settled payment
+    // is reversed with a credit note, not by rewriting this record.
+    const reason = window.prompt(`سبب إرجاع الفاتورة ${inv.period || inv.id} إلى «غير مدفوعة»؟\n(للتصحيح اليدوي فقط — عكس دفعة حقيقية يكون بإشعار دائن)`, 'تسجيل دفع بالخطأ')
+    if (reason === null) return
+    try { await markUnpaid(inv.id, reason); toast.success('أُعيدت كغير مدفوعة') } catch { toast.error('تعذّر التحديث') }
   }
   const remove = async (inv) => {
-    // deleting a FINANCIAL record needs explicit confirmation with its identity
-    if (!window.confirm(`حذف الفاتورة ${inv.period || inv.id} بمبلغ ${inv.amount || 0} ${inv.currency || 'SAR'}؟ لا يمكن التراجع.`)) return
-    try { await deleteInvoice(inv.id); toast.success('حُذفت الفاتورة') } catch { toast.error('تعذّر الحذف') }
+    // NOT a delete. A financial record with a sequential number leaves a hole
+    // when deleted, and a hole is what an auditor looks for. It is voided with
+    // a stated reason and stays in the ledger.
+    const reason = window.prompt(`إلغاء الفاتورة ${inv.period || inv.id} بمبلغ ${inv.amount || 0} ${inv.currency || 'SAR'}؟\nتبقى في السجل ملغاةً بسبب مكتوب — ولا تُحذف.`, '')
+    if (reason === null) return
+    try {
+      await voidInvoice(inv.id, { reason, by: user?.email || '' })
+      toast.success('أُلغيت الفاتورة وبقيت في السجل')
+    } catch { toast.error('تعذّر الإلغاء') }
   }
 
   return (
@@ -177,7 +191,7 @@ function InvoicesTab({ invoices, tenants }) {
 function CollectionTab({ invoices }) {
   const groups = useMemo(() => {
     const map = new Map()
-    invoices.filter((i) => i.status !== 'paid').forEach((i) => {
+    invoices.filter((i) => i.status !== 'paid' && i.status !== 'void').forEach((i) => {
       const key = i.tenantId || '—'
       const g = map.get(key) || { tenantId: i.tenantId, tenantName: i.tenantName, items: [], total: 0, currency: i.currency || 'SAR' }
       g.items.push(i)
@@ -336,10 +350,10 @@ export default function Billing() {
 
   const mrr = useMemo(() => computeMRR(invoices || []), [invoices])
   const totalDue = useMemo(
-    () => (invoices || []).filter((i) => i.status !== 'paid').reduce((s, i) => s + (Number(i.amount) || 0), 0),
+    () => (invoices || []).filter((i) => i.status !== 'paid' && i.status !== 'void').reduce((s, i) => s + (Number(i.amount) || 0), 0),
     [invoices],
   )
-  const unpaidCount = useMemo(() => (invoices || []).filter((i) => i.status !== 'paid').length, [invoices])
+  const unpaidCount = useMemo(() => (invoices || []).filter((i) => i.status !== 'paid' && i.status !== 'void').length, [invoices])
 
   if (invoices === null) return <Spinner />
 

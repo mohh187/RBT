@@ -308,6 +308,50 @@ async function getControls(db) {
 // not leave the next test failing closed.
 function invalidateControls() { _controlsAt = 0; _errorOpen = 0; _errorClosedLogged = false }
 
+// ------------------------------------------- the PLATFORM-wide Gemini wall
+// Every other wall in this file is per venue. That is exactly wrong for the
+// one resource all venues share: a single Gemini API key on a single Google
+// billing account, which Google rate-limits by SPEND — Tier 1 allows
+// 10 USD per rolling 10 minutes.
+//
+// The arithmetic that makes this urgent, from this file's own constants:
+// aiImage and tableImage are the same model at 0.039 USD, and each carries its
+// OWN 4-per-minute venue wall. So one venue may legitimately burn 8 images a
+// minute = 3.12 USD per 10 minutes. FOUR venues generating at once exceed
+// Google's limit — whereupon Google pauses EVERY Gemini request on the billing
+// account and the manager assistant, the guest ordering assistant, item image
+// generation and table images all die simultaneously, on a busy evening, while
+// every per-venue meter still reads green.
+//
+// A platform average of 1 USD/minute would sit exactly on Google's line, so
+// the wall is set well under it. The venue walls stay as they are; this one
+// exists solely to stop the SUM.
+const GEMINI_CHANNELS = new Set(['aiText', 'aiImage', 'tableImage', 'dinerAi'])
+const PLATFORM_GEMINI_USD_PER_MIN = 0.6
+
+// One document per minute, so contention is naturally bounded by time rather
+// than by sharding — and an old minute's document is never touched again.
+// Transactional, because an approximate wall in front of a hard vendor limit
+// is not a wall. If the transaction fails, takeSpend's existing fail-open path
+// (with its bounded blind-grant budget) takes over.
+async function takePlatformGemini(db, channel, rates) {
+  const usd = Number((rates && rates[channel]) || UNIT_COST_USD[channel]) || 0
+  if (!usd) return true
+  const ref = db.doc(`platformCounters/geminiMin-${minuteKey().replace(/[^0-9]/g, '')}`)
+  return db.runTransaction(async (tx) => {
+    const s = await tx.get(ref)
+    const cur = s.exists ? (Number(s.data().usd) || 0) : 0
+    if (cur + usd > PLATFORM_GEMINI_USD_PER_MIN) return false
+    tx.set(ref, {
+      usd: cur + usd,
+      n: (s.exists ? (Number(s.data().n) || 0) : 0) + 1,
+      minute: minuteKey(),
+      at: FieldValue.serverTimestamp(),
+    }, { merge: true })
+    return true
+  })
+}
+
 // ------------------------------------------------------------------ the meter
 // Ask for `want` units of `channel` for venue `tid`. Returns how many were
 // GRANTED — the caller must send exactly that many.
@@ -343,6 +387,19 @@ async function takeSpend(db, tid, channel, want = 1, opts = {}) {
   }
   // A suspended venue is switched off, including its wallet.
   if (tenant.active === false) return { granted: 0, reason: 'suspended' }
+
+  // The shared-key wall, BEFORE the per-venue ones: a venue can be well within
+  // its own quota while the platform as a whole is about to be cut off by
+  // Google. Only the caller's first unit is checked — these channels are
+  // called one at a time, and metering a bulk grant against a per-minute
+  // platform wall would refuse work that is not actually concurrent.
+  if (GEMINI_CHANNELS.has(channel)) {
+    const ok = await takePlatformGemini(db, channel, controls.unitCostUsd).catch(() => true)
+    if (!ok) {
+      await noteRefusal(db, tid, channel, n, 'platformBurst', tenant).catch(() => {})
+      return { granted: 0, reason: 'platformBurst' }
+    }
+  }
 
   const lim = limitsFor(tenant, channel)
   if (lim.month === 0) return { granted: 0, reason: 'disabled', limits: lim }
@@ -493,6 +550,7 @@ async function noteRefusal(db, tid, channel, count, reason, tenant) {
   const reasonAr = {
     cap: 'تجاوز السقف الشهري', daily: 'تجاوز السقف اليومي',
     burst: 'تجاوز الحد اللحظي (قد يكون خللاً متكرراً)', killed: 'أوقفته المنصة',
+    platformBurst: 'بلغت المنصة كلها حدّ الذكاء الاصطناعي في هذه الدقيقة — حماية من إيقاف Google للمفتاح',
   }[reason] || reason
   let name = tenant && tenant.name ? tenant.name : ''
   if (!name) {
@@ -503,7 +561,9 @@ async function noteRefusal(db, tid, channel, count, reason, tenant) {
     tenantId: tid,
     tenantName: name,
     type: 'spendLimit',
-    severity: reason === 'burst' ? 'high' : 'warn',
+    // platformBurst means the SHARED key is at its ceiling — that is a
+    // platform incident, not one venue's usage story.
+    severity: (reason === 'burst' || reason === 'platformBurst') ? 'high' : 'warn',
     title: `حد الإنفاق — ${CHANNEL_AR[channel] || channel}`,
     body: `${name || tid}: ${reasonAr}. رُفضت ${count} رسالة/طلب.`,
     channel,

@@ -430,6 +430,7 @@ exports.geminiProxy = onCall(async (request) => {
         cap: 'انتهى رصيدك الشهري من الذكاء الاصطناعي. يمكنك شراء رصيد إضافي أو ترقية باقتك.',
         daily: 'بلغت حدّك اليومي من طلبات الذكاء الاصطناعي — يتجدّد غداً.',
         burst: 'طلبات كثيرة في وقت قصير — انتظر دقيقة.',
+        platformBurst: 'الذكاء الاصطناعي مزدحم على المنصة الآن — أعد المحاولة بعد لحظات.',
         killed: 'الذكاء الاصطناعي موقوف مؤقتاً من المنصة.',
         suspended: 'الاشتراك موقوف.',
         disabled: 'الذكاء الاصطناعي غير مفعّل لهذه المنشأة.',
@@ -990,6 +991,10 @@ Object.assign(exports, require('./campaigns'))
 
 // ---- staff security (server-side salted PIN verify + caps-mirror seeding) ----
 Object.assign(exports, require('./staffSecurity'))
+
+// ---- staff invites: claiming is server-side, on the VERIFIED token email ----
+// The client version was a privilege-escalation chain (see functions/staffInvites.js).
+exports.claimStaffInvites = require('./staffInvites').claimStaffInvites
 
 // ---- customer/venue messaging (WhatsApp order updates + Resend emails) ----
 // Register ONLY the triggers (the send helpers stay internal to messaging.js).

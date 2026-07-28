@@ -94,6 +94,14 @@ service cloud.firestore {
       // create: bootstrap (no privileged keys — the real createUserProfile path),
       // OR owner self-onboard proven by the tenant named in the same tx, OR an
       // invite claim that matches a staffInvite for this email.
+      // THE INVITE BRANCH IS GONE — DELIBERATELY. It authorised a privileged
+      // create by looking up `staffInvites/$(request.resource.data.email)`,
+      // i.e. against an email the writer chose in the same request. Any user
+      // could name a pending manager invite's address and mint themselves a
+      // manager binding. Staff bindings are now written ONLY by the
+      // claimStaffInvites callable (Admin SDK, verified token email).
+      // What remains: a plain bootstrap profile, or an owner proving ownership
+      // of the tenant named in the same transaction.
       allow create: if isSignedIn() && request.auth.uid == uid
         && (
           !request.resource.data.keys().hasAny(['role', 'tenantId', 'caps'])
@@ -101,12 +109,6 @@ service cloud.firestore {
               && request.resource.data.tenantId != null
               && !request.resource.data.keys().hasAny(['caps'])
               && getAfter(/databases/$(database)/documents/tenants/$(request.resource.data.tenantId)).data.ownerUid == uid)
-          || (request.resource.data.role != 'owner'
-              && request.resource.data.tenantId != null
-              && !request.resource.data.keys().hasAny(['caps'])
-              && exists(/databases/$(database)/documents/staffInvites/$(request.resource.data.email))
-              && get(/databases/$(database)/documents/staffInvites/$(request.resource.data.email)).data.tenantId == request.resource.data.tenantId
-              && get(/databases/$(database)/documents/staffInvites/$(request.resource.data.email)).data.role == request.resource.data.role)
         );
       // `caps` (per-staffer capability overrides) is manager-owned — a staffer must
       // NOT be able to self-grant capabilities by writing their own users doc.
@@ -115,17 +117,17 @@ service cloud.firestore {
       // to the tenant inside the SAME transaction that creates the tenant, and a
       // plain get() sees the PRE-transaction state (tenant not there yet), which
       // rejected the link and broke every fresh venue creation.
+      // Same removal as create, and this is the branch that was actually
+      // exploitable: it read `resource.data.email` — the field already sitting
+      // on the attacker's own bootstrap doc — and granted {tenantId, role} on
+      // the strength of it. An owner still self-links (proven by ownerUid);
+      // everyone else is bound by the server.
       allow update: if isSignedIn() && request.auth.uid == uid
         && (
           !request.resource.data.diff(resource.data).affectedKeys().hasAny(['role', 'tenantId', 'caps'])
           || (request.resource.data.role == 'owner'
               && request.resource.data.tenantId != null
               && getAfter(/databases/$(database)/documents/tenants/$(request.resource.data.tenantId)).data.ownerUid == uid)
-          || (request.resource.data.role != 'owner'
-              && request.resource.data.tenantId != null
-              && exists(/databases/$(database)/documents/staffInvites/$(resource.data.email))
-              && get(/databases/$(database)/documents/staffInvites/$(resource.data.email)).data.tenantId == request.resource.data.tenantId
-              && get(/databases/$(database)/documents/staffInvites/$(resource.data.email)).data.role == request.resource.data.role)
         );
     }
 
@@ -161,13 +163,25 @@ service cloud.firestore {
       allow write: if false;
     }
 
-    // ---- staff invites (no-backend invite flow) ----
-    // Managers of the target tenant create invites; the invited user reads & claims their own (by email == doc id).
-    match /staffInvites/{email} {
-      allow get: if isSignedIn();
-      allow list: if isSignedIn() && isManager(resource.data.tenantId);
+    // ---- staff invites ----
+    // Doc id is `{emailLower}__{tenantId}`, so one address may hold a pending
+    // invite at several venues at once (the old email-only id allowed exactly
+    // one platform-wide, and claiming it evicted the user from wherever they
+    // already worked).
+    //
+    // CLAIMING IS SERVER-SIDE ONLY — the claimStaffInvites callable, which
+    // reads the address Firebase verified. It used to be a client read + a
+    // self-write, and that was a privilege-escalation chain: `allow get: if
+    // isSignedIn()` let anyone probe for a pending manager invite, and the
+    // users-doc rules then authorised the escalation against an `email` field
+    // the attacker had written themselves. Hence: no public get, no public
+    // delete, and the invite branches in /users are gone.
+    match /staffInvites/{id} {
+      allow get, list: if isPlatformAdmin() || (isSignedIn() && isManager(resource.data.tenantId));
       allow create, update: if isSignedIn() && isManager(request.resource.data.tenantId);
-      allow delete: if isSignedIn(); // manager cancels, or invited user deletes on claim
+      // Only the venue that issued it may cancel it. Previously ANY signed-in
+      // account could delete ANY venue's pending invites.
+      allow delete: if isPlatformAdmin() || (isSignedIn() && isManager(resource.data.tenantId));
     }
 
     // ---- tenant root ----
@@ -211,12 +225,20 @@ service cloud.firestore {
                           // by the payment webhook and debited only by the meter, so
                           // a client write would be minting paid credit for free.
                           'spendCaps', 'spendCapsDaily', 'spendExtra',
+                          // groupId binds a venue to an owning group. Writable by
+                          // the venue, a manager could join someone else's group
+                          // and read its billing — and later ride its subscription.
+                          // Added BEFORE the branch feature exists, because a
+                          // deny-key is strictly more restrictive and no document
+                          // carries the field yet. (branchLabel stays writable —
+                          // it is cosmetic.)
+                          'groupId',
                           'smsApiKey']))
         || ((hasCap(tid, 'manage_settings') || hasCap(tid, 'manage_appearance') || hasCap(tid, 'manage_loyalty') || hasCap(tid, 'manage_campaigns') || hasCap(tid, 'manage_integrations'))
             && !request.resource.data.diff(resource.data).affectedKeys()
                  .hasAny(['plan', 'planStatus', 'planExpiresAt', 'active', 'suspendReason', 'platformNote', 'ownerUid', 'features', 'roleCaps', 'msgsSent', 'msgCapMonthly',
                           'aiLimits', 'aiExtra', 'ar3dMonthly', 'ar3dUnlimited', 'dinerAiMonthly',
-                          'spendCaps', 'spendCapsDaily', 'spendExtra', 'smsApiKey']));
+                          'spendCaps', 'spendCapsDaily', 'spendExtra', 'groupId', 'smsApiKey']));
       allow delete: if roleIn(tid, ['owner']) || isPlatformSuper();
 
       // Platform admins READ every tenant subcollection (support & oversight from

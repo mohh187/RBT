@@ -156,7 +156,7 @@ export default function Staff({ staffFocus, onFocusHandled }) {
                   <div className="bold small" dir="ltr">{inv.email}</div>
                   <div className="xs faint">{roleLabel(inv.role)}</div>
                 </div>
-                {isManager && <button className="icon-btn" style={{ color: 'var(--danger)' }} onClick={() => deleteInvite(inv.email)}><Icon name="delete" size={18} /></button>}
+                {isManager && <button className="icon-btn" style={{ color: 'var(--danger)' }} onClick={() => deleteInvite(inv.email, tenantId)}><Icon name="delete" size={18} /></button>}
               </div>
             ))}
           </div>

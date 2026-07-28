@@ -49,13 +49,16 @@ export function AuthProvider({ children }) {
     ])
     setIsPlatformAdmin(platformAdmin)
     let prof = initialProfile
-    // Auto-join: a signed-in user with no venue who has a pending staff invite gets claimed.
-    if (!prof?.tenantId && fbUser.email) {
+    // Auto-join: pending staff invites for this VERIFIED address are claimed
+    // server-side. Runs even when the user already has a venue — the callable
+    // joins them to the other venue without moving them, so an invite can no
+    // longer evict someone from where they already work.
+    if (fbUser.email) {
       try {
-        const claimed = await claimInviteFor(fbUser.uid, fbUser.email)
-        if (claimed) prof = await getUserProfile(fbUser.uid)
+        const res = await claimInviteFor()
+        if (res && (res.claimed || []).length) prof = await getUserProfile(fbUser.uid)
       } catch (_) {
-        /* ignore */
+        /* an invite that cannot be claimed must never block signing in */
       }
     }
     setProfile(prof)

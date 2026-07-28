@@ -11,6 +11,7 @@ const { getFirestore, FieldValue } = require('firebase-admin/firestore')
 const { sendEmail, emailShell, esc } = require('./messaging')
 const { receiptForSimple, notifyReceipt, invoiceLink } = require('./invoicing')
 const { takeSpend, readSpend, packPrice, extraField, CHANNEL_AR, limitsFor: spendLimitsFor } = require('./spend')
+const { plansConfig, resolvePlanPrice, yearlyAmount } = require('./platformPricing')
 
 // Take one unit off a metered channel or refuse the call outright, with a
 // message the venue can act on. Used by the three AI features whose bespoke
@@ -27,6 +28,7 @@ async function claimSpend(db, tenantId, channel, want = 1) {
     cap: `اكتمل رصيدك الشهري من «${label}». يمكنك شراء رصيد إضافي من صفحة الفوترة، أو ترقية باقتك.`,
     daily: `بلغت الحد اليومي من «${label}» — يتجدد غداً.`,
     burst: 'طلبات كثيرة في وقت قصير — انتظر دقيقة ثم أعد المحاولة.',
+    platformBurst: 'الذكاء الاصطناعي مزدحم على المنصة الآن — أعد المحاولة بعد لحظات.',
     killed: `«${label}» موقوف مؤقتاً من إدارة المنصة.`,
     suspended: 'اشتراك المنشأة موقوف.',
     disabled: `«${label}» غير مفعّل في باقتك — رقِّ اشتراكك أو اشترِ رصيداً.`,
@@ -96,11 +98,9 @@ const generateMonthlyInvoices = onSchedule(
     const db = getFirestore()
     const period = currentPeriod()
 
-    // Plan prices (SAR by default). Missing doc / plan → 0.
-    const cfgSnap = await db.doc('platformConfig/plans').get().catch(() => null)
-    const cfg = cfgSnap && cfgSnap.exists ? (cfgSnap.data() || {}) : {}
-    const prices = cfg.prices || {}
-    const currency = cfg.currency || 'SAR'
+    // The single price config, shared with self-signup.
+    const planCfg = await plansConfig(db)
+    const currency = planCfg.currency
 
     const tenants = await db.collection('tenants').get()
     const now = new Date()
@@ -122,19 +122,23 @@ const generateMonthlyInvoices = onSchedule(
         // Billing begins only once the platform assigns an explicit plan.
         if (!d.plan) return
         const plan = d.plan
-        // Per-venue negotiated price wins over the plan list price. It lives in
-        // the platform-only platformVenueMeta doc (the tenant doc is public);
-        // the tenant-doc field is read only as a legacy pre-migration fallback.
-        // Before this, the console's «سعر خاص» was never billed at all.
+        // ONE price resolver, shared with self-signup (functions/platformPricing.js).
+        // These two used to read different tables, so a venue paid 549 to join
+        // and was then billed 399 a month later for the same service.
         const metaSnap = await db.doc(`platformVenueMeta/${t.id}`).get().catch(() => null)
         const meta = metaSnap && metaSnap.exists ? (metaSnap.data() || {}) : {}
-        const rawCustom = meta.customPrice != null ? meta.customPrice : d.customPrice
-        const custom = rawCustom == null ? null : Number(rawCustom)
-        const amount = custom != null && Number.isFinite(custom) && custom >= 0
-          ? custom
-          : (Number(prices[plan]) || 0)
+        const amount = resolvePlanPrice({ ...d, id: t.id }, meta, planCfg)
+        if (amount == null) return
 
-        // Idempotency: one invoice per tenant per period.
+        // IDEMPOTENCY IS THE DOCUMENT ID, NOT A QUERY. The old check was
+        // `where(tenantId).where(period).limit(1)` — a read, then a write, with
+        // a gap in between. A scheduler retry (or a 540s timeout mid-fan-out
+        // followed by a re-run) raced that gap and double-billed every venue.
+        // A deterministic id makes the duplicate a write collision instead.
+        const invId = `sub_${t.id}_${period}`
+        const existing = await db.doc(`platformInvoices/${invId}`).get().catch(() => null)
+        if (existing && existing.exists) return
+        // Legacy auto-id invoices from before this change still count as issued.
         const dup = await db.collection('platformInvoices')
           .where('tenantId', '==', t.id)
           .where('period', '==', period)
@@ -143,7 +147,7 @@ const generateMonthlyInvoices = onSchedule(
           .catch(() => null)
         if (dup && !dup.empty) return
 
-        await db.collection('platformInvoices').add({
+        await db.doc(`platformInvoices/${invId}`).set({
           tenantId: t.id,
           tenantName: d.name || '',
           plan,
@@ -962,28 +966,32 @@ const auditRetention = onSchedule(
 )
 
 // ============ Self-serve plan subscription (signup checkout) ============
-// The ONLY price source for self-signup plans. Adjust here; the client page
-// mirrors these numbers for display only and is never trusted.
-const PLAN_PRICES = { menu: 99, ops: 199, pro: 349, enterprise: 549 } // SAR / month
-const YEARLY_DISCOUNT = 0.8 // yearly = 12 months at 20% off
-
+// Prices come from functions/platformPricing.js — the SAME resolver the
+// monthly cron uses. The duplicate table that used to live here is what made
+// a self-signup pay 549 and then be re-billed 399 for the identical service.
+//
 // A venue manager creates their OWN pending plan invoice (server-priced), then
 // pays it through the normal 'subscription' pay-intent flow; the payment webhook
 // (settleInvoiceFromPayment) marks it paid AND activates plan + expiry + email.
 const startPlanSubscription = onCall(async (request) => {
   const { planId, yearly } = request.data || {}
-  if (!PLAN_PRICES[planId]) throw new HttpsError('invalid-argument', 'unknown plan')
   const uid = request.auth && request.auth.uid
   if (!uid) throw new HttpsError('unauthenticated', 'sign in first')
   const db = getFirestore()
+  const planCfg = await plansConfig(db)
+  if (!planCfg.prices[planId]) throw new HttpsError('invalid-argument', 'unknown plan')
   const uSnap = await db.collection('users').doc(uid).get()
   const u = uSnap.exists ? uSnap.data() : {}
   const tid = u.tenantId
   if (!tid || !['owner', 'manager'].includes(u.role)) throw new HttpsError('permission-denied', 'managers only')
   const tSnap = await db.doc(`tenants/${tid}`).get()
   const tName = tSnap.exists ? (tSnap.data().name || '') : ''
-  const monthly = PLAN_PRICES[planId]
-  const amount = yearly ? Math.round(monthly * 12 * YEARLY_DISCOUNT) : monthly
+  const metaSnap = await db.doc(`platformVenueMeta/${tid}`).get().catch(() => null)
+  const meta = metaSnap && metaSnap.exists ? (metaSnap.data() || {}) : {}
+  // A negotiated price honoured at signup too — previously the console's
+  // «سعر خاص» was ignored here and only applied from the next monthly run.
+  const monthly = resolvePlanPrice({ ...(tSnap.exists ? tSnap.data() : {}), plan: planId }, meta, planCfg)
+  const amount = yearly ? yearlyAmount(monthly, planCfg) : monthly
   const now = new Date()
   const ref = await db.collection('platformInvoices').add({
     tenantId: tid, tenantName: tName, plan: planId, amount, currency: 'SAR',
@@ -1310,6 +1318,7 @@ async function takeDinerAiCredit(db, tenantId) {
   if (r.granted >= 1 || r.reason === 'error-open') return
   throw new HttpsError('resource-exhausted', {
     burst: 'المساعد مشغول الآن — أعد المحاولة بعد لحظات.',
+    platformBurst: 'المساعد مشغول الآن — أعد المحاولة بعد لحظات.',
     daily: 'بلغ المساعد حدّه اليومي في هذا المطعم — جرّب غداً أو اطلب من النادل.',
     killed: 'المساعد متوقف مؤقتاً.',
     disabled: 'المساعد غير مفعّل في هذا المطعم.',

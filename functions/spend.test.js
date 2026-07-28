@@ -326,6 +326,55 @@ async function run() {
     })
   }
 
+  // ---------- 11. the PLATFORM-wide Gemini wall ----------
+  {
+    // Every other wall is per venue. This one guards the single shared API key
+    // against Google's spend-based rate limit, which no per-venue cap can see.
+    // Cap is 0.6 USD/min; aiImage is 0.039 → 15 images platform-wide, then stop.
+    const db = makeDb({
+      'tenants/a': { plan: 'enterprise' },
+      'tenants/b': { plan: 'enterprise' },
+      'tenants/c': { plan: 'enterprise' },
+      'tenants/d': { plan: 'enterprise' },
+    })
+    let granted = 0
+    let platformRefusals = 0
+    // Four venues each well inside their OWN 4/min image wall.
+    for (let round = 0; round < 4; round++) {
+      for (const tid of ['a', 'b', 'c', 'd']) {
+        const r = await takeSpend(db, tid, 'aiImage', 1)
+        granted += r.granted
+        if (r.reason === 'platformBurst') platformRefusals += 1
+      }
+    }
+    check('the shared-key wall stops the platform sum at 15 images/min', granted === 15, granted)
+    check('and it refuses with its own reason, not a venue one', platformRefusals === 1, platformRefusals)
+    // Each venue individually is still under its own 4/min wall — proving the
+    // per-venue meters could never have caught this.
+    const perVenue = Object.entries(db._store)
+      .filter(([k]) => k.includes('counters/spend-'))
+      .map(([, v]) => (v.b && v.b.aiImage) || 0)
+    check('no single venue exceeded its own burst wall', perVenue.every((n) => n <= 4), perVenue)
+  }
+  {
+    // A text turn is 0.0018 — the wall must not bite ordinary assistant use.
+    const db = makeDb({ 'tenants/a': { plan: 'enterprise' } })
+    let g = 0
+    for (let i = 0; i < 30; i++) g += (await takeSpend(db, 'a', 'aiText', 1)).granted
+    check('ordinary assistant traffic is untouched by the platform wall', g === 30, g)
+  }
+  {
+    // Non-Gemini channels must never consult it.
+    const db = makeDb({ 'tenants/a': { plan: 'enterprise' } })
+    db.runTransaction = async (fn) => {
+      // Fail ONLY the platform-counter transaction; a real one would still work.
+      throw new Error('should not be called for waUtility')
+    }
+    const r = await takeSpend(db, 'a', 'waUtility', 1)
+    check('waUtility does not touch the Gemini wall', r.granted === 1 && r.reason === 'error-open', r)
+    invalidateControls()
+  }
+
   console.log(`\n${pass} passed, ${fail} failed`)
   process.exit(fail ? 1 : 0)
 }

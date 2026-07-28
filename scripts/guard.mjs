@@ -38,10 +38,29 @@ walk(SRC)
 // SPEND_PACKS is in here for a sharper reason than the rest: the client SHOWS
 // a price and the server CHARGES one. If those two ever disagree the customer
 // is billed an amount they did not see.
-const MIRRORED = ['PLAN_QUOTAS', 'BURST_PER_MINUTE', 'UNIT_COST_USD', 'SPEND_PACKS']
-const grab = (src, name) => {
-  // the literal that follows `<name> = ` up to its closing brace, comments and
-  // whitespace stripped so formatting differences are not reported as drift
+// Every server/client pair whose numbers must agree. Add a pair here rather
+// than trusting a «change BOTH sides together» comment — that is precisely the
+// contract this exists because nobody keeps.
+const MIRRORS = [
+  {
+    server: 'functions/spend.js',
+    client: 'src/lib/spend.js',
+    objects: ['PLAN_QUOTAS', 'BURST_PER_MINUTE', 'UNIT_COST_USD', 'SPEND_PACKS'],
+    // A single number, but every margin figure the finance engine produces
+    // multiplies through it — a drift here misstates the whole P&L silently.
+    scalars: ['USD_TO_SAR'],
+  },
+  {
+    server: 'functions/platformPricing.js',
+    client: 'src/lib/platformPricing.js',
+    objects: ['FALLBACK_PRICES', 'FALLBACK_LIST_PRICES'],
+    scalars: ['YEARLY_DISCOUNT'],
+  },
+]
+
+// The object literal that follows `<name> = `, up to its closing brace, with
+// comments and whitespace stripped so formatting differences are not drift.
+const grabObject = (src, name) => {
   const at = src.indexOf(`${name} = {`)
   if (at < 0) return null
   const open = src.indexOf('{', at)
@@ -52,17 +71,27 @@ const grab = (src, name) => {
   }
   return null
 }
-try {
-  const server = readFileSync(join(ROOT, 'functions', 'spend.js'), 'utf8')
-  const client = readFileSync(join(ROOT, 'src', 'lib', 'spend.js'), 'utf8')
-  for (const name of MIRRORED) {
-    const a = grab(server, name)
-    const b = grab(client, name)
-    if (!a || !b) violations.push(`spend mirror: ${name} not found in ${!a ? 'functions/spend.js' : 'src/lib/spend.js'}`)
-    else if (a !== b) violations.push(`spend mirror DRIFT in ${name}\n      functions/spend.js: ${a}\n      src/lib/spend.js:   ${b}`)
+// A bare numeric assignment: `const USD_TO_SAR = 3.75`.
+const grabScalar = (src, name) => {
+  const m = src.match(new RegExp(`${name}\\s*=\\s*(-?[0-9.]+)`))
+  return m ? m[1] : null
+}
+
+for (const pair of MIRRORS) {
+  try {
+    const server = readFileSync(join(ROOT, ...pair.server.split('/')), 'utf8')
+    const client = readFileSync(join(ROOT, ...pair.client.split('/')), 'utf8')
+    const check = (name, grab) => {
+      const a = grab(server, name)
+      const b = grab(client, name)
+      if (!a || !b) violations.push(`mirror: ${name} not found in ${!a ? pair.server : pair.client}`)
+      else if (a !== b) violations.push(`mirror DRIFT in ${name}\n      ${pair.server}: ${a}\n      ${pair.client}: ${b}`)
+    }
+    for (const name of pair.objects || []) check(name, grabObject)
+    for (const name of pair.scalars || []) check(name, grabScalar)
+  } catch (e) {
+    violations.push(`mirror ${pair.server} <-> ${pair.client}: could not compare — ${e.message}`)
   }
-} catch (e) {
-  violations.push(`spend mirror: could not compare — ${e.message}`)
 }
 
 if (violations.length) {

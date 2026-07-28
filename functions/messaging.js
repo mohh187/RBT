@@ -394,9 +394,12 @@ const onVenueWelcomeEmail = onDocumentCreated('tenants/{tid}', async (event) => 
 // TRIGGER: email a staff invite when a manager creates one (staffInvites/{email},
 // doc id = the invitee's email). The invitee previously only discovered the invite
 // on next login — now they get a direct notification.
-const onStaffInviteEmail = onDocumentCreated('staffInvites/{email}', async (event) => {
+const onStaffInviteEmail = onDocumentCreated('staffInvites/{id}', async (event) => {
   const inv = event.data && event.data.data()
-  const email = event.params.email
+  // The doc id is `{email}__{tenantId}` now, so the address comes from the
+  // BODY. `|| event.params.id` keeps any pre-migration doc working, whose id
+  // is the bare email. Getting this wrong makes invite emails stop silently.
+  const email = String((inv && inv.email) || event.params.id || '').trim().toLowerCase()
   if (!inv || !email || !email.includes('@')) return
   const db = getFirestore()
   const tSnap = inv.tenantId ? await db.doc(`tenants/${inv.tenantId}`).get().catch(() => null) : null
