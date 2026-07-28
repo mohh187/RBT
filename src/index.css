@@ -19,8 +19,11 @@
   --border: #e7e7ea;
   --border-strong: #d6d6db;
 
-  --brand-base: #7c2d2d;     /* كبدي / maroon — set by applyTheme(); derived per mode */
-  --accent-base: #5c5c66;
+  /* The base default, mirroring DEFAULT_THEME in src/lib/themes.js. Only ever
+     painted before a venue theme loads, or where there is no venue — every
+     venue persists its own colours at creation. */
+  --brand-base: #1F2A37;
+  --accent-base: #8A6A3F;
   --brand: var(--brand-base);
   --brand-strong: color-mix(in srgb, var(--brand-base) 80%, #000);
   --brand-soft: color-mix(in srgb, var(--brand-base) 9%, var(--surface));

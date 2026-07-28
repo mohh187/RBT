@@ -24,6 +24,7 @@ import { db } from './firebase.js'
 import { randomToken, slugify, normalizePhone } from './format.js'
 import { isEligible, tierForPoints, newMembership, DEFAULT_MEMBERSHIP_POLICY, resolveMembershipPolicy } from './membership.js'
 import { roleDefaultCaps } from './permissions.js'
+import { DEFAULT_THEME } from './themes.js'
 
 export { serverTimestamp, increment }
 
@@ -78,9 +79,12 @@ export async function createTenant(ownerUid, { name, type, slug, currency, theme
           slug: finalSlug,
           ownerUid,
           currency: currency || 'SAR',
-          themeColor: themeColor || '#171717',
-          themeAccent: themeAccent || '#525252',
-          themePreset: themePreset || 'mono',
+          // Falls back to the ONE default (src/lib/themes.js DEFAULT_THEME).
+          // This used to hardcode a third answer ('mono'/#171717) that agreed
+          // with neither the onboarding form nor resolveTenantTheme.
+          themeColor: themeColor || DEFAULT_THEME.brand,
+          themeAccent: themeAccent || DEFAULT_THEME.accent,
+          themePreset: themePreset || DEFAULT_THEME.id,
           locale: 'ar',
           loyaltyEnabled: true,
           loyaltyThreshold: 5,

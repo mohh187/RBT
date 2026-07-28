@@ -8,7 +8,7 @@ import BrandMark from '../components/BrandMark.jsx'
 import { createTenant, findTenantByOwner, linkOwnerTenant } from '../lib/db.js'
 import { seedSampleMenu } from '../lib/seed.js'
 import { slugify } from '../lib/format.js'
-import { THEMES, applyTheme } from '../lib/themes.js'
+import { THEMES, applyTheme, DEFAULT_THEME } from '../lib/themes.js'
 import { recordLegalConsent, REQUIRED_CONSENT, CONSENT_VERSION } from '../lib/legal.js'
 
 import Icon from '../components/Icon.jsx'
@@ -53,9 +53,9 @@ export default function Onboarding() {
   const [type, setType] = useState(draft.type || 'cafe')
   const [typeLabel, setTypeLabel] = useState(draft.typeLabel || '')
   const [currency, setCurrency] = useState(draft.currency || 'SAR')
-  const [preset, setPreset] = useState(draft.preset || 'maroon')
-  const [color, setColor] = useState(draft.color || '#7c2d2d')
-  const [accent, setAccent] = useState(draft.accent || '#5c5c66')
+  const [preset, setPreset] = useState(draft.preset || DEFAULT_THEME.id)
+  const [color, setColor] = useState(draft.color || DEFAULT_THEME.brand)
+  const [accent, setAccent] = useState(draft.accent || DEFAULT_THEME.accent)
   const [seed, setSeed] = useState(true)
   const [agreed, setAgreed] = useState(false)
   const [busy, setBusy] = useState(false)

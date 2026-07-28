@@ -5,7 +5,25 @@ import { guardContrast } from './contrastGuard.js'
 // through the whole UI (menu, admin, cashier). Base light/dark is neutral
 // white/black; presets tint the accents. Tenants can also pick a custom color.
 
+// THE DEFAULT IS FIRST, AND ONLY THE DEFAULT CHANGED.
+//
+// Every entry below `classic` is byte-for-byte what it always was. That is the
+// whole safety argument: a venue already on «كبدي» keeps the exact colour it
+// picked, because presets are matched by id and its id still resolves to the
+// same two hex values. Nothing about a live venue moves.
+//
+// What DOES change is what a NEW venue starts on, and that was safe to change
+// for a reason worth writing down: createTenant() in src/lib/db.js always
+// persists themeColor/themeAccent/themePreset at creation, so no existing
+// venue is relying on a fallback to know its own colour. The fallbacks in this
+// file only ever fire when there is no venue at all.
+//
+// Deep slate over brass: a neutral that flatters food photography, carries any
+// cuisine, and dates slowly. A default is worn by every venue that never opens
+// the theme picker, so it has to be the least opinionated thing in the list —
+// not the most characterful.
 export const THEMES = [
+  { id: 'classic', name: { ar: 'كلاسيكي', en: 'Classic' }, brand: '#1F2A37', accent: '#8A6A3F' },
   { id: 'maroon', name: { ar: 'كبدي', en: 'Maroon' }, brand: '#7c2d2d', accent: '#5c5c66' },
   { id: 'mono', name: { ar: 'أبيض وأسود', en: 'Mono' }, brand: '#171717', accent: '#525252' },
   { id: 'coffee', name: { ar: 'قهوة', en: 'Coffee' }, brand: '#8B5E3C', accent: '#6B8E5A' },
@@ -53,12 +71,19 @@ export function applyTheme({ brand, accent } = {}) {
   guardContrast()
 }
 
+// The colours used when nothing has been chosen. Kept as one named constant so
+// «the default» is a single fact rather than six copies of a hex value that
+// drift apart. THEMES[0] is that default by construction.
+export const DEFAULT_THEME = THEMES[0]
+
 // Resolve the effective theme for a tenant (preset + optional custom override).
+// A stored themeColor always wins, which is why changing the default above
+// cannot reach a venue that has ever been through onboarding.
 export function resolveTenantTheme(tenant) {
-  if (!tenant) return { brand: '#7c2d2d', accent: '#5c5c66' }
+  if (!tenant) return { brand: DEFAULT_THEME.brand, accent: DEFAULT_THEME.accent }
   const preset = tenant.themePreset ? getTheme(tenant.themePreset) : null
   return {
-    brand: tenant.themeColor || preset?.brand || '#7c2d2d',
-    accent: tenant.themeAccent || preset?.accent || '#5c5c66',
+    brand: tenant.themeColor || preset?.brand || DEFAULT_THEME.brand,
+    accent: tenant.themeAccent || preset?.accent || DEFAULT_THEME.accent,
   }
 }
