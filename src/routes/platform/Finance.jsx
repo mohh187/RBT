@@ -139,7 +139,7 @@ export default function Finance() {
 function Stat({ label, value, sub, tone }) {
   return (
     <div className="stack" style={{
-      gap: 2, padding: '12px 16px', borderRadius: 12, minWidth: 140,
+      gap: 2, padding: 'var(--sp-4) var(--sp-5)', borderRadius: 'var(--r-md)', minWidth: 140,
       background: 'var(--surface-2)',
       border: `1px solid ${tone === 'bad' ? 'var(--danger)' : 'transparent'}`,
     }}>
@@ -191,12 +191,12 @@ function Pnl({ pnl, basis }) {
           <Icon name="download" size={13} /> تصدير
         </button>
       </div>
-      <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 'var(--fs-sm)' }}>
+      <table className="pc-table">
         <tbody>
           {rows.map(([label, val, kind]) => (
             <tr key={label} style={{ borderTop: kind ? '1px solid var(--border)' : 'none' }}>
-              <td style={{ padding: '7px 4px', fontWeight: kind ? 700 : 400 }}>{label}</td>
-              <td className="num" dir="ltr" style={{ padding: '7px 4px', textAlign: 'start', fontWeight: kind ? 700 : 400, color: val < 0 ? 'var(--danger)' : undefined }}>
+              <td style={{ fontWeight: kind ? 700 : 400 }}>{label}</td>
+              <td className="num" dir="ltr" style={{ textAlign: 'start', fontWeight: kind ? 700 : 400, color: val < 0 ? 'var(--danger)' : undefined }}>
                 {n2(val)}
               </td>
             </tr>
@@ -224,25 +224,25 @@ function Margins({ rows }) {
           <span><span className="num">{nInt(losing.length)}</span> منشأة تكلّفك أكثر مما تدفع. راجع سقوفها أو باقتها.</span>
         </div>
       )}
-      <div style={{ overflowX: 'auto' }}>
-        <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 'var(--fs-sm)' }}>
+      <div className="pc-table-wrap">
+        <table className="pc-table">
           <thead>
             <tr>
-              <th style={TH}>المنشأة</th>
-              <th style={{ ...TH, textAlign: 'center' }}>الإيراد</th>
-              <th style={{ ...TH, textAlign: 'center' }}>التكلفة</th>
-              <th style={{ ...TH, textAlign: 'center' }}>الرسوم</th>
-              <th style={{ ...TH, textAlign: 'center' }}>الهامش</th>
+              <th>المنشأة</th>
+              <th style={{ textAlign: 'center' }}>الإيراد</th>
+              <th style={{ textAlign: 'center' }}>التكلفة</th>
+              <th style={{ textAlign: 'center' }}>الرسوم</th>
+              <th style={{ textAlign: 'center' }}>الهامش</th>
             </tr>
           </thead>
           <tbody>
             {rows.map((r) => (
               <tr key={r.tenantId} style={{ borderTop: '1px solid var(--border)' }}>
-                <td style={TD}><Link to={`/platform/venues/${r.tenantId}`}>{r.tenantName || r.tenantId}</Link></td>
-                <td style={{ ...TD, textAlign: 'center' }} className="num" dir="ltr">{n2(r.revenue)}</td>
-                <td style={{ ...TD, textAlign: 'center' }} className="num" dir="ltr">{n2(r.cost)}</td>
-                <td style={{ ...TD, textAlign: 'center' }} className="num" dir="ltr">{n2(r.fees)}</td>
-                <td style={{ ...TD, textAlign: 'center', color: r.margin < 0 ? 'var(--danger)' : 'var(--ok, inherit)' }}>
+                <td><Link to={`/platform/venues/${r.tenantId}`}>{r.tenantName || r.tenantId}</Link></td>
+                <td style={{ textAlign: 'center' }} className="num" dir="ltr">{n2(r.revenue)}</td>
+                <td style={{ textAlign: 'center' }} className="num" dir="ltr">{n2(r.cost)}</td>
+                <td style={{ textAlign: 'center' }} className="num" dir="ltr">{n2(r.fees)}</td>
+                <td style={{ textAlign: 'center', color: r.margin < 0 ? 'var(--danger)' : 'var(--ok, inherit)' }}>
                   <strong className="num" dir="ltr">{n2(r.margin)}</strong>
                   <div className="xs faint num" dir="ltr">{r.marginPct}%</div>
                 </td>
@@ -302,5 +302,3 @@ function Vat({ data }) {
   )
 }
 
-const TH = { padding: '8px 10px', textAlign: 'start', color: 'var(--text-faint)', fontWeight: 600, whiteSpace: 'nowrap' }
-const TD = { padding: '8px 10px', verticalAlign: 'middle' }

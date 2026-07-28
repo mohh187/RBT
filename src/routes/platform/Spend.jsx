@@ -274,7 +274,7 @@ function Stat({ label, value, sub, strong, danger }) {
     <div
       className="stack"
       style={{
-        gap: 2, padding: '10px 14px', borderRadius: 12, minWidth: 116,
+        gap: 2, padding: 'var(--sp-4) var(--sp-5)', borderRadius: 'var(--r-md)', minWidth: 116,
         background: 'var(--surface-2)',
         border: `1px solid ${danger ? 'var(--danger)' : 'transparent'}`,
       }}
@@ -307,29 +307,29 @@ function VenueTable({ roll }) {
       {!rows.length ? (
         <Empty icon="store" title={onlyBlocked ? 'لا توجد منشأة بلغت حدودها' : 'لا إنفاق هذا الشهر'} />
       ) : (
-        <div style={{ overflowX: 'auto' }}>
-          <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 'var(--fs-sm)' }}>
+        <div className="pc-table-wrap">
+          <table className="pc-table">
             <thead>
               <tr style={{ textAlign: 'start' }}>
-                <th style={TH}>المنشأة</th>
-                <th style={TH}>الباقة</th>
-                {CHANNELS.map((c) => <th key={c.key} style={{ ...TH, textAlign: 'center' }}>{c.short}</th>)}
-                <th style={{ ...TH, textAlign: 'center' }}>التكلفة</th>
+                <th>المنشأة</th>
+                <th>الباقة</th>
+                {CHANNELS.map((c) => <th key={c.key} style={{ textAlign: 'center' }}>{c.short}</th>)}
+                <th style={{ textAlign: 'center' }}>التكلفة</th>
               </tr>
             </thead>
             <tbody>
               {rows.map((r) => (
                 <tr key={r.id} style={{ borderTop: '1px solid var(--border)' }}>
-                  <td style={TD}>
+                  <td>
                     <Link to={`/platform/venues/${r.id}`} className="bold" style={{ textDecoration: 'none' }}>
                       {r.name || r.id}
                     </Link>
                   </td>
-                  <td style={TD}><PlanBadge plan={r.plan} /></td>
+                  <td><PlanBadge plan={r.plan} /></td>
                   {CHANNELS.map((c) => {
                     const blocked = Number(r[`blocked_${c.key}`]) || 0
                     return (
-                      <td key={c.key} style={{ ...TD, textAlign: 'center' }}>
+                      <td key={c.key} style={{ textAlign: 'center' }}>
                         <span className="num">{n(r[c.key])}</span>
                         {blocked > 0 && (
                           <div className="xs num" style={{ color: 'var(--danger)' }} title={`رُفضت ${blocked}`}>
@@ -339,7 +339,7 @@ function VenueTable({ roll }) {
                       </td>
                     )
                   })}
-                  <td style={{ ...TD, textAlign: 'center' }}>
+                  <td style={{ textAlign: 'center' }}>
                     <strong className="num" dir="ltr">{(Number(r.usd) || 0).toFixed(2)}</strong>
                     <div className="xs faint num" dir="ltr">{(Number(r.sar) || 0).toFixed(2)} SAR</div>
                   </td>
@@ -357,5 +357,3 @@ function VenueTable({ roll }) {
   )
 }
 
-const TH = { padding: '8px 10px', textAlign: 'start', color: 'var(--text-faint)', fontWeight: 600, whiteSpace: 'nowrap' }
-const TD = { padding: '8px 10px', verticalAlign: 'middle' }

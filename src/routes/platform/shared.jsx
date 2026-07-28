@@ -39,7 +39,7 @@ const SEV_COLOR = { high: 'var(--danger)', warn: 'var(--gold)', info: 'var(--tex
 export function ActivityRow({ a, showTenant = true }) {
   const meta = KINDS[a.kind] || { icon: 'bell' }
   return (
-    <div className="row" style={{ gap: 10, alignItems: 'flex-start', padding: '8px 0' }}>
+    <div className="row" style={{ gap: 10, alignItems: 'flex-start' }}>
       <span style={{ color: SEV_COLOR[a.severity] || SEV_COLOR.info, marginTop: 2, flex: 'none' }}>
         <Icon name={meta.icon} size={17} />
       </span>

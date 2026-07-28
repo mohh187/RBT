@@ -177,31 +177,31 @@ export default function Insights() {
                 <div><div className="bold">ترتيب المنشآت (أعلى إيراداً)</div><div className="xs faint">أحدث تجميع · {latest?.date || ''}</div></div>
                 <span className="xs faint">{ranking.length}</span>
               </div>
-              <div style={{ overflowX: 'auto', padding: '0 var(--sp-2) var(--sp-4)' }}>
+              <div className="pc-table-wrap" style={{ border: 0 }}>
                 {ranking.length === 0 ? (
                   <Empty icon="store" title="لا توجد بيانات منشآت" hint="ينتظر أول تجميع يومي" />
                 ) : (
-                  <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 'var(--fs-sm)' }}>
+                  <table className="pc-table">
                     <thead>
-                      <tr className="xs faint" style={{ textAlign: 'start' }}>
-                        <th style={{ textAlign: 'start', padding: '6px 8px' }}>#</th>
-                        <th style={{ textAlign: 'start', padding: '6px 8px' }}>المنشأة</th>
-                        <th style={{ textAlign: 'end', padding: '6px 8px' }}>الطلبات</th>
-                        <th style={{ textAlign: 'end', padding: '6px 8px' }}>الإيراد</th>
-                        <th style={{ textAlign: 'end', padding: '6px 8px' }}>متوسط الطلب</th>
+                      <tr>
+                        <th>#</th>
+                        <th>المنشأة</th>
+                        <th className="pc-num">الطلبات</th>
+                        <th className="pc-num">الإيراد</th>
+                        <th className="pc-num">متوسط الطلب</th>
                       </tr>
                     </thead>
                     <tbody>
                       {ranking.map((r, i) => (
-                        <tr key={r.tid} style={{ borderTop: '1px solid var(--border)' }}>
-                          <td className="num faint" style={{ padding: '7px 8px' }}>{i + 1}</td>
-                          <td style={{ padding: '7px 8px' }}>
+                        <tr key={r.tid}>
+                          <td className="num faint">{i + 1}</td>
+                          <td>
                             <div className="small bold truncate" style={{ maxWidth: 200 }}>{r.name}</div>
                             {r.lastOrderAt ? <div className="xs faint">{fmtWhen(r.lastOrderAt)}</div> : null}
                           </td>
-                          <td className="num" style={{ textAlign: 'end', padding: '7px 8px' }}>{r.orders}</td>
-                          <td className="num bold" style={{ textAlign: 'end', padding: '7px 8px' }}>{r.revenue.toLocaleString('en-US')}</td>
-                          <td className="num" style={{ textAlign: 'end', padding: '7px 8px' }}>{r.aov.toLocaleString('en-US')}</td>
+                          <td className="num pc-num">{r.orders}</td>
+                          <td className="num bold pc-num">{r.revenue.toLocaleString('en-US')}</td>
+                          <td className="num pc-num">{r.aov.toLocaleString('en-US')}</td>
                         </tr>
                       ))}
                     </tbody>

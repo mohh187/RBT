@@ -85,36 +85,36 @@ export default function Audit() {
       {filtered.length === 0 ? (
         <Empty icon="notepad" title="لا توجد أحداث" hint="لم يُسجَّل أي إجراء مطابق بعد." />
       ) : (
-        <div className="card" style={{ overflowX: 'auto' }}>
-          <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 'var(--fs-sm)' }}>
+        <div className="pc-table-wrap">
+          <table className="pc-table">
             <thead>
-              <tr style={{ textAlign: 'start', color: 'var(--text-muted)' }}>
-                <th style={th}>الإجراء</th>
-                <th style={th}>المنشأة</th>
-                <th style={th}>المشرف</th>
-                <th style={th}>التفاصيل</th>
-                <th style={th}>الوقت</th>
+              <tr>
+                <th>الإجراء</th>
+                <th>المنشأة</th>
+                <th>المشرف</th>
+                <th>التفاصيل</th>
+                <th>الوقت</th>
               </tr>
             </thead>
             <tbody>
               {filtered.map((r) => (
-                <tr key={r.id} style={{ borderTop: '1px solid var(--border)' }}>
-                  <td style={td}>
+                <tr key={r.id}>
+                  <td>
                     <span className={`badge ${BADGE[r.action] || 'badge-info'}`}>{actionLabel(r.action)}</span>
                   </td>
-                  <td style={td}>
+                  <td>
                     {r.targetName ? <div className="bold truncate">{r.targetName}</div> : <span className="faint">—</span>}
                     {r.targetTid ? <div className="xs faint num truncate">{r.targetTid}</div> : null}
                   </td>
-                  <td style={td}>
+                  <td>
                     <span className="truncate">{r.byEmail || <span className="faint">—</span>}</span>
                   </td>
-                  <td style={{ ...td, maxWidth: 320 }}>
+                  <td style={{ maxWidth: 320 }}>
                     <span className="xs muted" style={{ wordBreak: 'break-word' }}>
                       {typeof r.detail === 'string' ? r.detail : r.detail ? JSON.stringify(r.detail) : '—'}
                     </span>
                   </td>
-                  <td style={{ ...td, whiteSpace: 'nowrap' }}>
+                  <td className="pc-nowrap">
                     <span className="xs faint num">{fmtWhen(r.at)}</span>
                   </td>
                 </tr>
@@ -127,5 +127,3 @@ export default function Audit() {
   )
 }
 
-const th = { textAlign: 'start', padding: '10px 12px', fontWeight: 600, whiteSpace: 'nowrap' }
-const td = { textAlign: 'start', padding: '10px 12px', verticalAlign: 'top' }
