@@ -1,4 +1,4 @@
-import { Component } from 'react'
+import { Component, lazy } from 'react'
 import { reportBoundaryError } from '../lib/monitor.js'
 
 // ---------------------------------------------------------------------------
@@ -26,10 +26,64 @@ import { reportBoundaryError } from '../lib/monitor.js'
 //      covers the screen.
 // ---------------------------------------------------------------------------
 
+// A chunk failure that FAILED TO FETCH. These are the textbook signatures.
 const CHUNK_RE = /Loading chunk|Loading CSS chunk|dynamically imported module|Importing a module script failed|Failed to fetch|Load failed|css chunk/i
 
+// A chunk failure that SUCCEEDED, and that is the whole problem.
+//
+// firebase.json rewrites `**` to /index.html. So a tab holding a pre-deploy
+// URL like /assets/Screens-OLDHASH.js does not get a 404 — it gets index.html
+// with a 200. The fetch succeeds, `vite:preloadError` never fires, and none of
+// the phrases above ever appear. The failure surfaces one layer later, in one
+// of two shapes depending on how far the browser got parsing HTML as ESM:
+//
+//   1. Parse died on the doctype     → SyntaxError "Unexpected token '<'"
+//   2. Parse produced an empty module → React.lazy reads `.default` of
+//      undefined → TypeError, phrased differently per engine:
+//        Chrome/Edge  Cannot read properties of undefined (reading 'default')
+//        Safari       undefined is not an object (evaluating '….default')
+//        Firefox      can't access property "default", … is undefined
+//
+// Both are stale-chunk tells, not app bugs: `.default` is module-interop
+// vocabulary that application code effectively never reads, and a lone `<` is
+// not valid JavaScript anywhere. Treating them as stale is a judgement, so it
+// is bounded by the same throttle as every other path here — a wrong guess
+// costs exactly one reload, never a loop.
+// NOTE the `undefined` in the first alternative. An earlier draft matched any
+// `reading 'default'`, which also swallowed `Cannot read properties of NULL
+// (reading 'default')` — a genuine application bug that would then have been
+// "fixed" by a reload and never reported. A missing module is always
+// `undefined`; `null` is something our own code did.
+const STALE_MODULE_RE = /Unexpected token '<'|properties of undefined \(reading '(default|then)'\)|undefined is not an object \(evaluating '[^']*\.(default|then)'\)|can't access property "(default|then)", [^,]* is undefined/i
+
 export function isChunkError(err) {
-  return CHUNK_RE.test(String((err && err.message) || err || ''))
+  const msg = String((err && err.message) || err || '')
+  return CHUNK_RE.test(msg) || STALE_MODULE_RE.test(msg)
+}
+
+// The PRIMARY stale-chunk defence — and the only one that checks a fact instead
+// of matching a sentence.
+//
+// React.lazy requires its factory to resolve to a module carrying a `default`
+// export. When hosting answers a deleted chunk URL with index.html (200,
+// text/html — verified against production, not assumed), the import either dies
+// parsing `<` or resolves to a module with no exports at all. Asking "does this
+// have a default export?" catches BOTH, on every engine, without needing to
+// know how that engine words its error. The regexes above stay as the net for
+// failures that never reach this function.
+//
+// Use for every code-split route: `lazyRoute(() => import('./X.jsx'))`.
+export function lazyRoute(factory) {
+  return lazy(() => factory().then((m) => {
+    if (m && m.default) return m
+    reloadOnceForStaleChunk()
+    // Throw anyway. If the reload was throttled — a real outage rather than a
+    // deploy — the boundary must show its recovery card rather than leave the
+    // route suspended forever on a promise that already settled. The wording is
+    // deliberate: it matches CHUNK_RE, so every downstream handler agrees on
+    // what this is.
+    throw new Error('Loading chunk failed: module resolved without a default export')
+  }))
 }
 
 // Throttled one-shot reload, shared at module scope so nested boundaries and the

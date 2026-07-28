@@ -1,5 +1,12 @@
 import { Component } from 'react'
 import Icon from './Icon.jsx'
+// A chunk failure has a recognisable shape across browsers, and that shape is
+// defined ONCE, in ErrorBoundary.jsx. There used to be a second copy in this
+// file and the two had already drifted: this one never learned the
+// stale-module signatures, so the same deploy-time failure self-healed on one
+// path and reached the user as a raw crash on the other. Two detectors for one
+// condition is a bug waiting for whoever next updates only one of them.
+import { isChunkError } from './ErrorBoundary.jsx'
 import '../styles/chunkfail.css'
 
 // Why this exists:
@@ -27,13 +34,6 @@ const TXT = {
     stale: 'The app may have just been updated. Reloading fetches the new version.',
     reload: 'Reload page',
   },
-}
-
-// A chunk failure has a recognisable shape across browsers. Anything else is a
-// real bug in our own code and must not be dressed up as a network problem.
-function isChunkError(err) {
-  const msg = String(err?.message || err || '')
-  return /Loading chunk|Loading CSS chunk|Failed to fetch dynamically imported module|error loading dynamically imported module|Importing a module script failed/i.test(msg)
 }
 
 export default class ChunkBoundary extends Component {
