@@ -38,11 +38,16 @@ export default function PlatformDocSheet({ doc, variant = 'taxInvoice', onAccept
   const [qr, setQr] = useState('')
   useEffect(() => {
     let alive = true
-    const payload = doc?.zatca?.qr
+    // THE ZATCA QR IS FOR TAX INVOICES ONLY — never a quotation.
+    // It encodes seller, VAT number, timestamp and the VAT actually charged;
+    // printing it on a document that is not a tax invoice would put a
+    // regulator's marker on a non-taxable offer and invite exactly the
+    // confusion it exists to prevent. Quotations therefore carry no QR at all.
+    const payload = variant === 'quote' ? '' : (doc?.zatca?.qr || '')
     if (!payload) { setQr(''); return undefined }
     qrDataUrl(payload, { size: 132 }).then((u) => { if (alive) setQr(u) }).catch(() => {})
     return () => { alive = false }
-  }, [doc?.zatca?.qr])
+  }, [doc?.zatca?.qr, variant])
 
   if (!doc) return null
   const s = doc.seller || {}
@@ -55,16 +60,32 @@ export default function PlatformDocSheet({ doc, variant = 'taxInvoice', onAccept
     <div className="pdoc-page">
       <div className="pdoc" dir="rtl">
         {/* ---------- letterhead ---------- */}
+        {/* Logo ABOVE the company details, not beside them: the mark reads as
+            the letterhead and the legal text sits under it as one block,
+            instead of two columns competing for the eye. */}
+        {/* Logo, then the trading name, then a LABELLED GRID.
+            The details were a ragged right-aligned stack — an eighty-character
+            address above a twenty-character email, with the CR and VAT numbers
+            running together on one line. Labels in a fixed first column give
+            the eye a single edge to follow and make every value findable
+            without reading the whole block. */}
         <header className="pdoc-head">
           <div className="pdoc-brand">
             <img src={s.logoUrl || '/brand/word-448.png'} alt={s.brand || 'RBT360'} className="pdoc-logo" />
-            <div className="pdoc-seller">
+            <div className="pdoc-names">
               <strong>{s.legalNameAr}</strong>
-              <span>{s.legalNameEn}</span>
-              <span>{s.addressAr}</span>
-              <span dir="ltr" className="pdoc-ltr">
-                {[s.contactEmail, s.contactPhone, s.website].filter(Boolean).join('  ·  ')}
-              </span>
+              <span dir="ltr" className="pdoc-ltr">{s.legalNameEn}</span>
+            </div>
+            {/* Stacked lines hugging the start edge — label and value sit
+                TOGETHER on each line. A two-column grid pushed the values to
+                the far side of the sheet and left a river of white space
+                between a label and the thing it names. */}
+            <div className="pdoc-seller-kv">
+              <div><span>العنوان</span> {s.addressAr}</div>
+              {s.contactEmail ? <div><span>البريد</span> <bdi className="pdoc-ltr">{s.contactEmail}</bdi></div> : null}
+              {s.contactPhone ? <div><span>الهاتف</span> <bdi className="pdoc-ltr pdoc-num">{s.contactPhone}</bdi></div> : null}
+              <div><span>السجل التجاري</span> <bdi className="pdoc-ltr pdoc-num">{s.crNumber}</bdi></div>
+              <div><span>الرقم الضريبي</span> <bdi className="pdoc-ltr pdoc-num">{s.vatNumber}</bdi></div>
             </div>
           </div>
           <div className="pdoc-meta">
@@ -76,8 +97,6 @@ export default function PlatformDocSheet({ doc, variant = 'taxInvoice', onAccept
               {isQuote
                 ? <><dt>ساري حتى</dt><dd className={expired ? 'pdoc-danger' : ''}>{dateAr(doc.validUntil)}</dd></>
                 : <><dt>الاستحقاق</dt><dd>{dateAr(doc.dueAt)}</dd></>}
-              <dt>الرقم الضريبي</dt><dd dir="ltr" className="pdoc-ltr">{s.vatNumber}</dd>
-              <dt>السجل التجاري</dt><dd dir="ltr" className="pdoc-ltr">{s.crNumber}</dd>
             </dl>
           </div>
         </header>

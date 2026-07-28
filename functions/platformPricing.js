@@ -20,13 +20,50 @@ const FALLBACK_PRICES = { menu: 99, ops: 199, pro: 349, enterprise: 549 }
 const FALLBACK_LIST_PRICES = { menu: 149, ops: 299, pro: 499, enterprise: 1299 }
 const YEARLY_DISCOUNT = 0.8
 
-// What each plan actually includes, for the quotation. Mirrors DEFAULT_FEATURES
-// in src/lib/platformConfig.js; the console's edits override it.
+// What each plan actually includes, spelled out — a quotation that says
+// «كل مزايا احترافي» tells a buyer nothing they can evaluate. Each plan lists
+// its OWN concrete capabilities plus one carry-over line, so the sheet stands
+// on its own without the reader holding three other price lists in their head.
+//
+// Deliberately NOT listing realistic AR 3D models: that feature's future is
+// undecided, and a quotation is a commitment. Nothing goes on a customer's
+// document that we are considering withdrawing.
+//
+// Mirrors DEFAULT_FEATURES in src/lib/platformConfig.js; the console's edits
+// at platformConfig/plans.features override it entirely.
 const FALLBACK_FEATURES = {
-  menu: ['منيو رقمي بـ QR', 'هوية وشعار وألوان المنشأة', 'استقبال الطلبات من المنيو', 'صفحة المنشأة العامة'],
-  ops: ['كل مزايا «منيو»', 'كاشير ونقطة بيع', 'إدارة الطلبات والطاولات', 'شاشة المطبخ KDS', 'الحجوزات ونداء النادل'],
-  pro: ['كل مزايا «منيو + تشغيل»', 'مكتبة الثيمات والسكنات', 'خلفيات وفيديو وعلامة مائية', 'نطاق مخصّص', 'حملات واتساب وبرنامج الولاء'],
-  enterprise: ['كل مزايا «احترافي»', 'إدارة الموظفين والحضور والرواتب', 'التقارير والمحاسبة الكاملة', 'مجسمات AR واقعية بالذكاء الاصطناعي', 'المساعد الذكي للإدارة'],
+  menu: [
+    'منيو رقمي بـ QR لكل طاولة، بأصناف وصور ومكوّنات وأسعار',
+    'هوية المنشأة كاملة: الشعار والألوان والخطوط والخلفيات',
+    'استقبال طلبات الضيوف من المنيو مباشرة',
+    'صفحة عامة للمنشأة بالموقع وأوقات العمل ووسائل التواصل',
+    'إشعار الضيف بحالة طلبه على واتساب',
+  ],
+  ops: [
+    'كل ما في باقة «منيو»',
+    'كاشير ونقطة بيع كاملة مع الطباعة الحرارية',
+    'إدارة الطلبات وخريطة الطاولات وحالة كل طاولة',
+    'شاشة مطبخ KDS بترتيب زمني وتنبيهات',
+    'الحجوزات ونداء النادل وطلبات التوصيل',
+    'تقارير المبيعات اليومية وإغلاق الورديات',
+  ],
+  pro: [
+    'كل ما في باقة «منيو + تشغيل»',
+    'مكتبة ثيمات وسكنات كاملة لتصميم المنيو',
+    'خلفيات وفيديو وعلامة مائية وتخصيص كامل للمظهر',
+    'نطاق إلكتروني مخصّص باسم منشأتك',
+    'حملات واتساب مجدولة وبرنامج ولاء ونقاط',
+    'العروض والكوبونات والأسعار الموسمية',
+  ],
+  enterprise: [
+    'كل ما في باقة «احترافي»',
+    'إدارة الموظفين: الحضور والانصراف والورديات والرواتب',
+    'الصلاحيات التفصيلية لكل موظف',
+    'المحاسبة الكاملة: قائمة الدخل والتدفق النقدي والإقرار الضريبي',
+    'الفواتير الضريبية المعتمدة برمز ZATCA',
+    'المساعد الذكي للإدارة — تحليل وتقارير وتوصيات',
+    'إدارة المخزون والمواد الخام والتكلفة الفعلية للصنف',
+  ],
 }
 
 // Read the console's plan config once, with the fallbacks merged in. Returns

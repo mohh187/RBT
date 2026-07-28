@@ -12141,10 +12141,20 @@ body[data-mch-sheet] .backdrop {
 .pdoc-num { font-variant-numeric: tabular-nums; }
 
 .pdoc-head { display: flex; justify-content: space-between; gap: 28px; align-items: flex-start; border-bottom: 2px solid #16181d; padding-bottom: 18px; }
-.pdoc-brand { display: flex; gap: 14px; align-items: flex-start; min-width: 0; }
-.pdoc-logo { width: 132px; height: auto; flex: none; }
-.pdoc-seller { display: grid; gap: 2px; font-size: 12px; color: #4a4e57; min-width: 0; }
-.pdoc-seller strong { font-size: 15px; color: #16181d; }
+/* Logo ABOVE the company block — the mark is the letterhead, the legal text
+   sits under it as one unit rather than two columns fighting for the eye. */
+.pdoc-brand { display: grid; gap: 10px; justify-items: start; min-width: 0; max-width: 62%; }
+.pdoc-logo { width: 148px; height: auto; }
+.pdoc-names { display: grid; gap: 1px; }
+.pdoc-names strong { font-size: 15px; color: #16181d; line-height: 1.4; }
+.pdoc-names span { font-size: 11.5px; color: #6b6f76; }
+/* Stacked lines, hugging the start edge. Each line carries its own label
+   inline, so nothing drifts to the far side of the page: the block reads as
+   one column under the company name instead of a label column and a value
+   column separated by white space. */
+.pdoc-seller-kv { display: grid; gap: 3px; font-size: 11.5px; line-height: 1.65; color: #3f434d; max-width: 46ch; }
+.pdoc-seller-kv > div { display: block; }
+.pdoc-seller-kv span { color: #9aa0a8; font-size: 10.5px; margin-inline-end: 4px; }
 .pdoc-meta { text-align: start; flex: none; }
 .pdoc-title { font-size: 22px; font-weight: 800; }
 .pdoc-title-en { font-size: 11px; color: #6b6f76; letter-spacing: .08em; text-transform: uppercase; }
@@ -12238,3 +12248,19 @@ body[data-mch-sheet] .backdrop {
 .brsw-item.is-on { background: color-mix(in srgb, var(--brand) 12%, transparent); color: var(--brand); font-weight: 700; }
 .brsw-note { font-size: 10px; color: var(--text-faint); padding: 4px 8px 2px; }
 /* ==== /branch switcher v1 ==== */
+
+/* Document held open inside the console for printing — no round trip to the
+   public link just to hand a customer a PDF. The toolbar is .no-print, so the
+   printed page is the sheet alone. */
+.pdoc-overlay { min-height: 100dvh; background: var(--bg); }
+.pdoc-overlay-bar {
+  position: sticky; top: 0; z-index: 5;
+  display: flex; align-items: center; gap: 10px;
+  padding: 10px 16px; background: var(--surface); border-bottom: 1px solid var(--border);
+}
+/* The live preview inside the create form: the real sheet, scaled into the
+   panel so the operator judges the actual document, not a summary line. */
+.pdoc-preview { border: 1px solid var(--border); border-radius: var(--r-md, 10px); overflow: hidden; }
+.pdoc-preview .pdoc-page { padding: 12px; min-height: 0; }
+.pdoc-preview .pdoc { max-width: none; box-shadow: none; }
+.pdoc-preview .pdoc-actions { display: none; }

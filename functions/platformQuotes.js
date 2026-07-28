@@ -195,6 +195,96 @@ const acceptQuote = onCall(async (request) => {
   return { invoiceId: inv.id, no: inv.no, total: inv.total }
 })
 
+// ------------------------------------------ convert, from the console
+// The admin-side counterpart to acceptQuote: turn a quotation into a real tax
+// invoice without waiting for the customer to click, for the common case where
+// the deal was closed by phone.
+//
+// UNLIKE acceptQuote it does NOT require a tenantId — a quote is often written
+// for a prospect who has no account yet. The invoice is issued unlinked, and
+// linkDocumentTenant attaches it once the venue exists. An unlinked invoice is
+// readable by platform admins only, which is correct: there is no venue to
+// show it to.
+const convertQuoteToInvoice = onCall(async (request) => {
+  const uid = request.auth && request.auth.uid
+  if (!uid) throw new HttpsError('unauthenticated', 'sign in')
+  const db = getFirestore()
+  const adminSnap = await db.doc(`platformAdmins/${uid}`).get()
+  if (!adminSnap.exists) throw new HttpsError('permission-denied', 'platform admins only')
+
+  const { quoteId, tenantId } = request.data || {}
+  if (!quoteId) throw new HttpsError('invalid-argument', 'quoteId required')
+  const snap = await db.doc(`platformQuotes/${quoteId}`).get()
+  if (!snap.exists) throw new HttpsError('not-found', 'العرض غير موجود')
+  const q = snap.data()
+  if (q.convertedInvoiceId) return { invoiceId: q.convertedInvoiceId, already: true }
+
+  const tid = tenantId || q.tenantId || null
+  let tenantName = q.buyer && q.buyer.nameAr
+  if (tid) {
+    const t = await db.doc(`tenants/${tid}`).get().catch(() => null)
+    if (t && t.exists) tenantName = t.data().name || tenantName
+  }
+
+  const inv = await issueDocument(db, {
+    series: 'invoice', docType: 'taxInvoice', kind: 'subscription',
+    tenantId: tid, tenantName,
+    buyer: q.buyer,
+    // Rebuilt from the quote's own stored lines — the amount is never taken
+    // from the request.
+    lines: (q.lines || []).map((l) => ({
+      sku: l.sku, descAr: l.descAr, qty: l.qty,
+      listPrice: l.listPrice, unitPrice: l.unitPrice, discountLabelAr: l.discountLabelAr,
+    })),
+    planId: q.planId, billing: q.billing,
+    period: todayRiyadh().slice(0, 7),
+    status: 'unpaid', source: 'quote', quoteId,
+    financeCfg: await financeCfg(db),
+  })
+
+  await snap.ref.set({
+    status: 'converted', convertedInvoiceId: inv.id,
+    ...(tid && !q.tenantId ? { tenantId: tid } : {}),
+    convertedAt: FieldValue.serverTimestamp(), updatedAt: FieldValue.serverTimestamp(),
+  }, { merge: true })
+  return { invoiceId: inv.id, no: inv.no, total: inv.total, linked: !!tid }
+})
+
+// Attach an already-issued document to a venue. Used after a prospect's
+// account is created, so their invoice appears in their own billing screen.
+//
+// It NEVER re-links a document that already has a venue: moving an issued tax
+// invoice from one legal buyer to another is not an edit, it is a different
+// invoice — and it would silently remove the first venue's access to a record
+// of what they paid.
+const linkDocumentTenant = onCall(async (request) => {
+  const uid = request.auth && request.auth.uid
+  if (!uid) throw new HttpsError('unauthenticated', 'sign in')
+  const db = getFirestore()
+  const adminSnap = await db.doc(`platformAdmins/${uid}`).get()
+  if (!adminSnap.exists) throw new HttpsError('permission-denied', 'platform admins only')
+
+  const { invoiceId, tenantId } = request.data || {}
+  if (!invoiceId || !tenantId) throw new HttpsError('invalid-argument', 'invoiceId + tenantId required')
+  const ref = db.doc(`platformInvoices/${invoiceId}`)
+  const snap = await ref.get()
+  if (!snap.exists) throw new HttpsError('not-found', 'المستند غير موجود')
+  const inv = snap.data()
+  if (inv.tenantId && inv.tenantId !== tenantId) {
+    throw new HttpsError('failed-precondition', 'المستند مرتبط بمنشأة أخرى — أصدر إشعاراً دائناً وفاتورة جديدة بدل نقله')
+  }
+  const t = await db.doc(`tenants/${tenantId}`).get()
+  if (!t.exists) throw new HttpsError('not-found', 'المنشأة غير موجودة')
+
+  await ref.set({
+    tenantId, tenantName: t.data().name || '', updatedAt: FieldValue.serverTimestamp(),
+  }, { merge: true })
+  if (inv.quoteId) {
+    await db.doc(`platformQuotes/${inv.quoteId}`).set({ tenantId }, { merge: true }).catch(() => {})
+  }
+  return { ok: true, tenantId, tenantName: t.data().name || '' }
+})
+
 // -------------------------------------------------------------- expire
 const expireQuotes = onSchedule(
   { schedule: '0 3 * * *', timeZone: 'Asia/Riyadh', timeoutSeconds: 300 },
@@ -211,4 +301,4 @@ const expireQuotes = onSchedule(
   },
 )
 
-module.exports = { createQuote, getPublicQuote, acceptQuote, expireQuotes, DEFAULT_TERMS_AR }
+module.exports = { createQuote, getPublicQuote, acceptQuote, convertQuoteToInvoice, linkDocumentTenant, expireQuotes, DEFAULT_TERMS_AR }

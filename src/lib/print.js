@@ -6,7 +6,10 @@ function tlv(tag, value) {
   const val = new TextEncoder().encode(String(value))
   return [tag, val.length, ...val]
 }
-function zatcaBase64({ seller, vatNo, ts, total, vat }) {
+// Exported so the PLATFORM document sheet reuses this encoder instead of
+// growing a third copy (the server has one in functions/invoicing.js, this is
+// the browser mirror). One encoder means a Phase-2 change lands everywhere.
+export function zatcaBase64({ seller, vatNo, ts, total, vat }) {
   const bytes = [...tlv(1, seller), ...tlv(2, vatNo), ...tlv(3, ts), ...tlv(4, total), ...tlv(5, vat)]
   let bin = ''
   bytes.forEach((b) => { bin += String.fromCharCode(b) })

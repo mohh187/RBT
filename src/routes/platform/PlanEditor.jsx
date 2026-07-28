@@ -15,7 +15,7 @@ import {
 import { PlanBadge, StatusChip, toDateInput, fmtWhen } from './shared.jsx'
 
 // ---- (1) one plan's price + editable feature list ----
-function PlanCard({ plan, price, features, onChange }) {
+function PlanCard({ plan, price, listPrice, features, onChange }) {
   const setFeature = (i, val) => {
     const next = features.slice()
     next[i] = val
@@ -23,6 +23,9 @@ function PlanCard({ plan, price, features, onChange }) {
   }
   const addFeature = () => onChange({ features: [...features, ''] })
   const removeFeature = (i) => onChange({ features: features.filter((_, j) => j !== i) })
+  const p = Number(price) || 0
+  const lp = Number(listPrice) || 0
+  const off = lp > p && lp > 0 ? Math.round(((lp - p) / lp) * 100) : 0
 
   return (
     <div className="card card-pad stack" style={{ gap: 10 }}>
@@ -31,13 +34,28 @@ function PlanCard({ plan, price, features, onChange }) {
         <PlanBadge plan={plan.id} />
       </div>
       <label className="stack xs" style={{ gap: 4 }}>
-        <span className="faint bold">السعر الشهري</span>
+        <span className="faint bold">السعر المعروض (بعد الخصم)</span>
         <div className="row" style={{ gap: 6, alignItems: 'center' }}>
           <input
             type="number" min="0" className="input input-sm num" style={{ width: 110 }}
             value={price} onChange={(e) => onChange({ price: e.target.value })}
           />
           <span className="xs faint">ريال / شهر</span>
+        </div>
+      </label>
+      {/* The struck-through «before» price. It only ever prints when it is
+          genuinely higher AND the launch offer is switched on — a fake
+          «before» price is the kind of thing a customer checks. */}
+      <label className="stack xs" style={{ gap: 4 }}>
+        <span className="faint bold">السعر الأصلي (يظهر مشطوباً)</span>
+        <div className="row" style={{ gap: 6, alignItems: 'center' }}>
+          <input
+            type="number" min="0" className="input input-sm num" style={{ width: 110 }}
+            value={listPrice} onChange={(e) => onChange({ listPrice: e.target.value })}
+          />
+          <span className="xs faint">
+            {off > 0 ? `الخصم يظهر ${off}%` : 'اتركه صفراً أو أقل من السعر المعروض ليختفي الشطب'}
+          </span>
         </div>
       </label>
       <div className="stack xs" style={{ gap: 6 }}>
@@ -82,32 +100,51 @@ export default function PlanEditor() {
   useEffect(() => watchPlansConfig((c) => {
     setCfg(c)
     // Only seed the draft the first time (or keep it if user hasn't touched it).
-    setDraft((prev) => prev || { prices: { ...c.prices }, features: cloneFeatures(c.features) })
+    setDraft((prev) => prev || {
+      prices: { ...c.prices }, listPrices: { ...(c.listPrices || {}) }, features: cloneFeatures(c.features),
+      promo: { ...(c.promo || { active: false, labelAr: 'سعر الانطلاقة', validUntil: 0 }) },
+    })
   }), [])
 
-  const dirty = useMemo(() => cfg && draft && JSON.stringify({ prices: draft.prices, features: draft.features }) !== JSON.stringify({ prices: cfg.prices, features: cfg.features }), [cfg, draft])
+  const dirty = useMemo(() => {
+    if (!cfg || !draft) return false
+    const a = { prices: draft.prices, listPrices: draft.listPrices, features: draft.features, promo: draft.promo }
+    const b = { prices: cfg.prices, listPrices: cfg.listPrices || {}, features: cfg.features, promo: cfg.promo || { active: false, labelAr: 'سعر الانطلاقة', validUntil: 0 } }
+    return JSON.stringify(a) !== JSON.stringify(b)
+  }, [cfg, draft])
 
   if (tenants === null || draft === null) return <Spinner />
 
   const patchPlan = (planId, patch) => {
     setDraft((d) => {
-      const next = { prices: { ...d.prices }, features: cloneFeatures(d.features) }
+      const next = { ...d, prices: { ...d.prices }, listPrices: { ...d.listPrices }, features: cloneFeatures(d.features) }
       if (patch.price !== undefined) next.prices[planId] = patch.price
+      if (patch.listPrice !== undefined) next.listPrices[planId] = patch.listPrice
       if (patch.features !== undefined) next.features[planId] = patch.features
       return next
     })
   }
+  const patchPromo = (patch) => setDraft((d) => ({ ...d, promo: { ...d.promo, ...patch } }))
 
   const saveConfig = async () => {
     setSaving(true)
     try {
       const prices = {}
+      const listPrices = {}
       const features = {}
       PLANS.forEach((p) => {
         prices[p.id] = Number(draft.prices[p.id]) || 0
+        listPrices[p.id] = Number(draft.listPrices[p.id]) || 0
         features[p.id] = (draft.features[p.id] || []).map((s) => String(s).trim()).filter(Boolean)
       })
-      await savePlansConfig({ prices, features })
+      await savePlansConfig({
+        prices, listPrices, features,
+        promo: {
+          active: !!draft.promo.active,
+          labelAr: String(draft.promo.labelAr || 'سعر الانطلاقة').trim(),
+          validUntil: Number(draft.promo.validUntil) || 0,
+        },
+      })
       toast.success('تم حفظ الباقات والأسعار')
     } catch {
       toast.error('تعذّر حفظ الإعدادات')
@@ -171,12 +208,53 @@ export default function PlanEditor() {
         </button>
       </div>
 
+      {/* the launch offer — ONE switch that turns every struck-through price
+          on or off, so ending it in January is a single click, not an edit
+          per plan */}
+      <div className="card card-pad stack" style={{ gap: 10 }}>
+        <div className="row-between wrap" style={{ gap: 10 }}>
+          <div>
+            <strong className="small">عرض الانطلاقة</strong>
+            <div className="xs faint">
+              حين يكون مفعّلاً وساري المدة، تُطبع الأسعار الأصلية مشطوبةً في عروض الأسعار والفواتير.
+              إطفاؤه هنا يوقفها كلها دفعةً واحدة.
+            </div>
+          </div>
+          <button
+            className={`btn btn-sm ${draft.promo.active ? 'btn-primary' : 'btn-outline'}`}
+            onClick={() => patchPromo({ active: !draft.promo.active })}
+          >
+            <Icon name={draft.promo.active ? 'ok' : 'no'} size={14} /> {draft.promo.active ? 'مفعّل' : 'متوقف'}
+          </button>
+        </div>
+        <div className="row" style={{ gap: 8, flexWrap: 'wrap', alignItems: 'flex-end' }}>
+          <label className="stack" style={{ gap: 4, minWidth: 170 }}>
+            <span className="xs faint bold">اسم العرض على المستند</span>
+            <input className="input input-sm" value={draft.promo.labelAr || ''} onChange={(e) => patchPromo({ labelAr: e.target.value })} />
+          </label>
+          <label className="stack" style={{ gap: 4, minWidth: 170 }}>
+            <span className="xs faint bold">ساري حتى</span>
+            <input
+              className="input input-sm" type="date"
+              value={draft.promo.validUntil ? new Date(Number(draft.promo.validUntil)).toISOString().slice(0, 10) : ''}
+              onChange={(e) => patchPromo({ validUntil: e.target.value ? Date.parse(`${e.target.value}T23:59:59+03:00`) : 0 })}
+            />
+          </label>
+          <span className="xs faint">
+            {draft.promo.active && draft.promo.validUntil && Date.now() > Number(draft.promo.validUntil)
+              ? 'انتهت المدة — لن يظهر أي شطب حتى تُمدَّد.'
+              : 'اتركه فارغاً ليستمر بلا تاريخ انتهاء.'}
+          </span>
+        </div>
+      </div>
+
       {/* (1) plan pricing + features */}
       <div style={{ display: 'grid', gap: 'var(--sp-3)', gridTemplateColumns: 'repeat(auto-fill, minmax(240px, 1fr))' }}>
         {PLANS.map((p) => (
           <PlanCard
             key={p.id} plan={p}
             price={draft.prices[p.id] ?? 0}
+            listPrice={draft.listPrices[p.id] ?? 0}
             features={draft.features[p.id] || []}
             onChange={(patch) => patchPlan(p.id, patch)}
           />

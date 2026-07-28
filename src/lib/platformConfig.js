@@ -12,23 +12,55 @@ const CONFIG_DOC = () => doc(db, 'platformConfig', 'plans')
 // Sensible defaults so the editor always renders even before the doc exists.
 export const DEFAULT_PRICES = { menu: 0, ops: 99, pro: 199, enterprise: 399 }
 export const DEFAULT_FEATURES = {
-  menu: ['منيو رقمي QR', 'هوية وشعار وألوان', 'استقبال طلبات أساسية'],
-  ops: ['كل مزايا «منيو»', 'كاشير ونقطة بيع', 'إدارة الطلبات والطاولات', 'شاشة المطبخ KDS'],
-  pro: ['كل مزايا «منيو + تشغيل»', 'مكتبة الثيمات والسكنات', 'خلفيات وفيديو وعلامة مائية'],
-  enterprise: ['كل مزايا «احترافي»', 'إدارة الموظفين الكاملة', 'الأداء والرواتب والورديات', 'التقارير الكاملة'],
+  menu: [
+    "منيو رقمي بـ QR لكل طاولة، بأصناف وصور ومكوّنات وأسعار",
+    "هوية المنشأة كاملة: الشعار والألوان والخطوط والخلفيات",
+    "استقبال طلبات الضيوف من المنيو مباشرة",
+    "صفحة عامة للمنشأة بالموقع وأوقات العمل ووسائل التواصل",
+    "إشعار الضيف بحالة طلبه على واتساب"
+  ],
+  ops: [
+    "كل ما في باقة «منيو»",
+    "كاشير ونقطة بيع كاملة مع الطباعة الحرارية",
+    "إدارة الطلبات وخريطة الطاولات وحالة كل طاولة",
+    "شاشة مطبخ KDS بترتيب زمني وتنبيهات",
+    "الحجوزات ونداء النادل وطلبات التوصيل",
+    "تقارير المبيعات اليومية وإغلاق الورديات"
+  ],
+  pro: [
+    "كل ما في باقة «منيو + تشغيل»",
+    "مكتبة ثيمات وسكنات كاملة لتصميم المنيو",
+    "خلفيات وفيديو وعلامة مائية وتخصيص كامل للمظهر",
+    "نطاق إلكتروني مخصّص باسم منشأتك",
+    "حملات واتساب مجدولة وبرنامج ولاء ونقاط",
+    "العروض والكوبونات والأسعار الموسمية"
+  ],
+  enterprise: [
+    "كل ما في باقة «احترافي»",
+    "إدارة الموظفين: الحضور والانصراف والورديات والرواتب",
+    "الصلاحيات التفصيلية لكل موظف",
+    "المحاسبة الكاملة: قائمة الدخل والتدفق النقدي والإقرار الضريبي",
+    "الفواتير الضريبية المعتمدة برمز ZATCA",
+    "المساعد الذكي للإدارة — تحليل وتقارير وتوصيات",
+    "إدارة المخزون والمواد الخام والتكلفة الفعلية للصنف"
+  ]
 }
 
 function normalize(data) {
   const d = data || {}
   const prices = { ...DEFAULT_PRICES }
+  const listPrices = {}
   const features = {}
   PLANS.forEach((p) => {
     const raw = d.prices?.[p.id]
     if (raw !== undefined && raw !== null && raw !== '') prices[p.id] = Number(raw) || 0
+    // The struck-through «before» price. Zero means «no strike» — see promoOf
+    // in platformPricing.js for the three conditions it must satisfy to print.
+    listPrices[p.id] = Number(d.listPrices?.[p.id]) || 0
     const f = d.features?.[p.id]
     features[p.id] = Array.isArray(f) && f.length ? f : (DEFAULT_FEATURES[p.id] || [])
   })
-  return { prices, features }
+  return { prices, listPrices, features, promo: d.promo || null }
 }
 
 // One-shot read of the plans config (merged with defaults).

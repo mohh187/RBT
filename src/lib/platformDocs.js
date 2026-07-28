@@ -12,6 +12,11 @@ const call = (name) => (payload) => httpsCallable(functions, name)(payload || {}
 // ------------------------------------------------------------- quotations
 export const createQuote = call('createQuote')
 export const acceptQuote = call('acceptQuote')
+// Admin-side conversion, for a deal closed by phone rather than by the
+// customer clicking. Accepts a quote with no venue yet.
+export const convertQuoteToInvoice = call('convertQuoteToInvoice')
+// Attach an already-issued document to a venue once their account exists.
+export const linkDocumentTenant = call('linkDocumentTenant')
 
 export function watchQuotes(cb, max = 100) {
   const q = query(collection(db, 'platformQuotes'), orderBy('createdAt', 'desc'), limit(max))
