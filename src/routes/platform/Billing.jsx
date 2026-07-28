@@ -6,6 +6,7 @@
 import { useEffect, useMemo, useState } from 'react'
 import { Link } from 'react-router-dom'
 import Icon from '../../components/Icon.jsx'
+import { Price } from '../../components/Riyal.jsx'
 import { Spinner, Empty } from '../../components/ui.jsx'
 import { useToast } from '../../components/Toast.jsx'
 import { watchAllTenants } from '../../lib/platform.js'
@@ -163,7 +164,7 @@ function InvoicesTab({ invoices, tenants }) {
                 </div>
               </div>
               <PlanBadge plan={inv.plan} />
-              <span className="bold num">{money(inv.amount, inv.currency)}</span>
+              <span className="bold num"><Price value={inv.amount} currency={inv.currency || 'SAR'} lang="ar" symbolSize="0.85em" /></span>
               <span className={`badge ${STATUS_BADGE[inv.status] || 'badge-warning'}`}>{STATUS_AR[inv.status] || inv.status}</span>
               <div className="row" style={{ gap: 6 }}>
                 {inv.status !== 'paid' ? (
@@ -209,14 +210,14 @@ function CollectionTab({ invoices }) {
         <div key={g.tenantId || '—'} className="card card-pad stack" style={{ gap: 8 }}>
           <div className="row-between" style={{ flexWrap: 'wrap', gap: 8 }}>
             <Link to={`/platform/venues/${g.tenantId}`} className="bold">{g.tenantName || g.tenantId}</Link>
-            <span className="badge badge-warning num">مستحق {money(g.total, g.currency)}</span>
+            <span className="badge badge-warning num">مستحق <Price value={g.total} currency={g.currency || 'SAR'} lang="ar" symbolSize="0.85em" /></span>
           </div>
           <div className="stack divide" style={{ gap: 0 }}>
             {g.items.map((i) => (
               <div key={i.id} className="row-between" style={{ padding: '6px 0', gap: 8 }}>
                 <span className="small">{i.period || 'بدون فترة'}</span>
                 <span className="xs faint num">{fmtWhen(i.createdAt)}</span>
-                <span className="small bold num">{money(i.amount, i.currency)}</span>
+                <span className="small bold num"><Price value={i.amount} currency={i.currency || 'SAR'} lang="ar" symbolSize="0.85em" /></span>
               </div>
             ))}
           </div>
@@ -312,7 +313,7 @@ function CouponsTab({ coupons }) {
               <div className="grow" style={{ minWidth: 120 }}>
                 <span className="bold num" dir="ltr" style={{ letterSpacing: 1 }}>{c.code}</span>
                 <div className="xs faint">
-                  {c.type === 'fixed' ? money(c.value, 'SAR') : `${c.value}%`}
+                  {c.type === 'fixed' ? <Price value={c.value} lang="ar" symbolSize="0.85em" /> : `${c.value}%`}
                   {c.expiresAt ? ` · حتى ${toDateInput(c.expiresAt)}` : ' · بلا انتهاء'}
                 </div>
               </div>
@@ -368,11 +369,11 @@ export default function Billing() {
       <div className="stat-grid">
         <div className="stat">
           <div className="row" style={{ gap: 6, alignItems: 'center' }}><Icon name="trending" size={15} /><span className="faint xs">الإيراد الشهري MRR</span></div>
-          <strong className="num">{money(mrr)}</strong>
+          <strong className="num"><Price value={mrr} lang="ar" symbolSize="0.8em" /></strong>
         </div>
         <div className="stat">
           <div className="row" style={{ gap: 6, alignItems: 'center' }}><Icon name="wallet" size={15} /><span className="faint xs">إجمالي المستحقات</span></div>
-          <strong className="num" style={{ color: totalDue > 0 ? 'var(--warning)' : 'var(--success)' }}>{money(totalDue)}</strong>
+          <strong className="num" style={{ color: totalDue > 0 ? 'var(--warning)' : 'var(--success)' }}><Price value={totalDue} lang="ar" symbolSize="0.8em" /></strong>
         </div>
         <div className="stat">
           <div className="row" style={{ gap: 6, alignItems: 'center' }}><Icon name="file" size={15} /><span className="faint xs">فواتير غير مدفوعة</span></div>

@@ -1,14 +1,18 @@
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { useNavigate, Navigate } from 'react-router-dom'
 import { httpsCallable } from 'firebase/functions'
 import { functions } from '../lib/firebase.js'
 import { useAuth } from '../lib/auth.jsx'
 import { useI18n } from '../lib/i18n.jsx'
 import { useToast } from '../components/Toast.jsx'
-import { BrandMark, FullSpinner } from '../components/ui.jsx'
+import { FullSpinner } from '../components/ui.jsx'
+import BrandMark from '../components/BrandMark.jsx'
 import { startPayment } from '../lib/payments.js'
-import { PLANS, PLAN_PRICES, YEARLY_DISCOUNT } from '../lib/plans.js'
+import { PLANS } from '../lib/plans.js'
+import { normalizePlanConfig, promoOf, watchPricing, yearlyTotal } from '../lib/platformPricing.js'
+import { Price } from '../components/Riyal.jsx'
 import Icon from '../components/Icon.jsx'
+import '../landing.css'
 
 // Plan selection right after venue creation — the signup→payment bridge.
 // «ابدأ التجربة» keeps today's behavior (full trial); a paid pick creates a
@@ -29,12 +33,21 @@ export default function ChoosePlan() {
   const navigate = useNavigate()
   const [yearly, setYearly] = useState(false)
   const [busy, setBusy] = useState('')
+  // THE PRICE LIST THE SERVER BILLS FROM. This screen used to print
+  // PLAN_PRICES out of src/lib/plans.js while startPlanSubscription derived the
+  // real amount server-side — so an owner could pick a plan showing 549 and be
+  // invoiced something else. On a page whose only job is to take money, the
+  // displayed number and the charged number have to come from one place.
+  const [pricing, setPricing] = useState(() => normalizePlanConfig(null))
+  useEffect(() => watchPricing(setPricing), [])
 
   if (loading) return <FullSpinner />
   if (!user) return <Navigate to="/login" replace />
   if (!tenantId) return <Navigate to="/onboarding" replace />
 
-  const priceOf = (id) => (yearly ? Math.round(PLAN_PRICES[id] * 12 * YEARLY_DISCOUNT) : PLAN_PRICES[id])
+  const offPct = Math.round((1 - (Number(pricing?.yearlyDiscount) || 0.8)) * 100)
+  const monthlyOf = (id) => Number(pricing?.prices?.[id]) || 0
+  const priceOf = (id) => (yearly ? yearlyTotal(monthlyOf(id), pricing) : monthlyOf(id))
 
   const subscribe = async (planId) => {
     setBusy(planId)
@@ -56,42 +69,50 @@ export default function ChoosePlan() {
   }
 
   return (
-    <div className="auth-shell" style={{ alignItems: 'flex-start', paddingTop: 32 }}>
-      <div className="stack" style={{ width: 'min(1060px, 100%)', margin: '0 auto', gap: 18 }}>
-        <div className="stack" style={{ alignItems: 'center', gap: 6, textAlign: 'center' }}>
-          <BrandMark />
-          <h2 style={{ fontSize: 'var(--fs-xl)', margin: 0 }}>{ar ? 'اختر باقة منشأتك' : 'Choose your plan'}</h2>
-          <p className="muted small" style={{ margin: 0 }}>
+    <div className="cpl" dir={ar ? 'rtl' : 'ltr'}>
+      <div className="cpl-in">
+        <div className="cpl-head">
+          <BrandMark size={30} />
+          <h1 className="cpl-h">{ar ? 'اختر باقة منشأتك' : 'Choose your plan'}</h1>
+          <p className="cpl-sub">
             {tenant?.name ? `${tenant.name} — ` : ''}{ar ? 'ابدأ تجربة مجانية كاملة المزايا 14 يوماً، أو اشترك الآن وتُفعَّل باقتك لحظة الدفع.' : 'Start a full 14-day trial, or subscribe now.'}
           </p>
-          <div className="segmented" style={{ marginTop: 4 }}>
-            <button className={!yearly ? 'active' : ''} onClick={() => setYearly(false)}>{ar ? 'شهري' : 'Monthly'}</button>
-            <button className={yearly ? 'active' : ''} onClick={() => setYearly(true)}>{ar ? 'سنوي (خصم 20%)' : 'Yearly (-20%)'}</button>
+          <div className="cpl-cycle" role="group" aria-label={ar ? 'دورة الدفع' : 'Billing cycle'}>
+            <button className={!yearly ? 'on' : ''} aria-pressed={!yearly} onClick={() => setYearly(false)}>{ar ? 'شهري' : 'Monthly'}</button>
+            <button className={yearly ? 'on' : ''} aria-pressed={yearly} onClick={() => setYearly(true)}>
+              {ar ? `سنوي (خصم ${offPct}%)` : `Yearly (-${offPct}%)`}
+            </button>
           </div>
         </div>
 
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(230px, 1fr))', gap: 12 }}>
+        <div className="cpl-grid">
           {PLANS.map((p) => {
-            const top = p.id === 'enterprise'
             const popular = p.id === 'pro'
+            const promo = promoOf(p.id, pricing)
+            // The struck original is shown in the SAME unit as the price next
+            // to it — a yearly «before» beside a monthly «now» is arithmetic a
+            // buyer notices at exactly the wrong moment.
+            const was = promo ? (yearly ? yearlyTotal(promo.listPrice, pricing) : promo.listPrice) : 0
             return (
-              <div key={p.id} className="card card-pad stack" style={{ gap: 10, position: 'relative', border: top ? '2px solid var(--brand)' : undefined }}>
-                {popular && <span className="badge badge-gold" style={{ position: 'absolute', top: 10, insetInlineEnd: 10 }}>{ar ? 'الأكثر اختياراً' : 'Popular'}</span>}
-                {top && <span className="badge" style={{ position: 'absolute', top: 10, insetInlineEnd: 10, background: 'var(--brand)', color: 'var(--on-brand, #fff)' }}>{ar ? 'الأقوى' : 'Top'}</span>}
-                <strong style={{ fontSize: 'var(--fs-lg)' }}>{ar ? p.ar : p.en}</strong>
-                <div className="row" style={{ gap: 4, alignItems: 'baseline' }}>
-                  <span className="num" style={{ fontSize: 26, fontWeight: 900, color: 'var(--brand)' }}>{priceOf(p.id)}</span>
-                  <span className="xs faint">{ar ? `ر.س / ${yearly ? 'سنة' : 'شهر'}` : `SAR / ${yearly ? 'yr' : 'mo'}`}</span>
+              <div key={p.id} className={`cpl-card ${popular ? 'feat' : ''}`}>
+                {popular && <span className="cpl-tag">{ar ? 'الأكثر اختياراً' : 'Popular'}</span>}
+                <div className="cpl-name">{ar ? p.ar : p.en}</div>
+                <div className="cpl-price">
+                  <Price value={priceOf(p.id)} lang={lang} symbolSize="0.58em" />
+                  <span className="cpl-per">{ar ? (yearly ? '/ سنة' : '/ شهر') : (yearly ? '/ yr' : '/ mo')}</span>
                 </div>
-                <ul className="stack" style={{ gap: 6, margin: 0, padding: 0, listStyle: 'none' }}>
+                {promo ? (
+                  <div className="cpl-was">
+                    <s><Price value={was} lang={lang} symbolSize="0.9em" /></s>
+                    <span className="cut num">{promo.labelAr} {promo.discountPct}%</span>
+                  </div>
+                ) : null}
+                <ul className="cpl-feats">
                   {TIER_FEATURES[p.id].map((f, i) => (
-                    <li key={i} className="row xs" style={{ gap: 6, alignItems: 'flex-start' }}>
-                      <Icon name="check" size={13} style={{ color: 'var(--success)', flex: 'none', marginTop: 2 }} />
-                      <span>{f}</span>
-                    </li>
+                    <li key={i}><Icon name="check" size={13} className="ic" /><span>{f}</span></li>
                   ))}
                 </ul>
-                <button className={`btn ${top || popular ? 'btn-primary' : 'btn-outline'} btn-block`} disabled={!!busy} onClick={() => subscribe(p.id)}>
+                <button className={`onb-btn ${popular ? '' : 'ghost'}`} disabled={!!busy} onClick={() => subscribe(p.id)}>
                   {busy === p.id ? (ar ? 'يفتح الدفع…' : 'Opening checkout…') : (ar ? 'اشترك وادفع الآن' : 'Subscribe now')}
                 </button>
               </div>
@@ -99,11 +120,11 @@ export default function ChoosePlan() {
           })}
         </div>
 
-        <button className="btn btn-ghost" style={{ alignSelf: 'center' }} onClick={() => navigate('/setup', { replace: true })}>
-          {ar ? 'أو ابدأ التجربة المجانية 14 يوماً بكل المزايا ←' : 'Or start the full 14-day free trial'}
+        <button className="cpl-alt" onClick={() => navigate('/setup', { replace: true })}>
+          {ar ? 'أو ابدأ التجربة المجانية 14 يوماً بكل المزايا' : 'Or start the full 14-day free trial'}
         </button>
-        <p className="xs faint" style={{ textAlign: 'center', margin: 0 }}>
-          {ar ? 'الأسعار من جدول الخادم — الدفع عبر ميسر (بطاقة/مدى/Apple Pay) وتُفعَّل الباقة تلقائياً لحظة السداد مع فاتورة بريدية.' : 'Server-priced; Moyasar checkout; plan activates automatically on payment.'}
+        <p className="cpl-fine">
+          {ar ? 'الأسعار بالريال السعودي ولا تشمل ضريبة القيمة المضافة، وتأتي من جدول الأسعار نفسه الذي يفوتر منه الخادم. الدفع عبر ميسر (بطاقة أو مدى أو Apple Pay) وتُفعَّل الباقة تلقائياً لحظة السداد مع فاتورة بريدية.' : 'Prices exclude VAT and come from the same table the server bills from. Moyasar checkout; the plan activates automatically on payment.'}
         </p>
       </div>
     </div>

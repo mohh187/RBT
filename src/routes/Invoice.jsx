@@ -8,7 +8,6 @@ import { Price } from '../components/Riyal.jsx'
 import Icon from '../components/Icon.jsx'
 
 // Numbers/dates in Latin digits (hard rule) even under an Arabic locale.
-const money = (n) => new Intl.NumberFormat('ar-SA-u-nu-latn', { minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(Number(n) || 0)
 function fmtDate(ts) {
   const d = ts?.toDate ? ts.toDate() : ts ? new Date(ts) : null
   if (!d || isNaN(d)) return ''
@@ -81,14 +80,14 @@ export default function Invoice() {
         </div>
 
         <div className="inv-totals">
-          <div className="inv-trow"><span>المجموع الفرعي</span><span>{money(rec.subtotal)} {currency}</span></div>
-          {hasVat && <div className="inv-trow"><span>شامل ض.ق.م ({new Intl.NumberFormat('ar-SA-u-nu-latn').format(rec.vatRate)}%)</span><span>{money(rec.vat)} {currency}</span></div>}
+          <div className="inv-trow"><span>المجموع الفرعي</span><span><Price value={rec.subtotal} currency={currency} lang="ar" symbolSize="0.85em" /></span></div>
+          {hasVat && <div className="inv-trow"><span>شامل ض.ق.م ({new Intl.NumberFormat('ar-SA-u-nu-latn').format(rec.vatRate)}%)</span><span><Price value={rec.vat} currency={currency} lang="ar" symbolSize="0.85em" /></span></div>}
           <div className="inv-trow inv-grand"><span>الإجمالي</span><span><Price value={rec.total} currency={currency} lang="ar" /></span></div>
         </div>
 
         {refunded && rec.refund && (
           <div className="inv-refund">
-            <Icon name="repeat" size={14} /> تم استرجاع {money(rec.refund.amount)} {currency}{rec.refund.reason ? ` — ${rec.refund.reason}` : ''}
+            <Icon name="repeat" size={14} /> تم استرجاع <Price value={rec.refund.amount} currency={currency} lang="ar" symbolSize="0.85em" />{rec.refund.reason ? ` — ${rec.refund.reason}` : ''}
           </div>
         )}
 

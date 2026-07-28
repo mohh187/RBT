@@ -3,7 +3,8 @@ import { Link, useNavigate, Navigate } from 'react-router-dom'
 import { useAuth } from '../lib/auth.jsx'
 import { useI18n } from '../lib/i18n.jsx'
 import { useToast } from '../components/Toast.jsx'
-import { BrandMark, FullSpinner } from '../components/ui.jsx'
+import { FullSpinner } from '../components/ui.jsx'
+import BrandMark from '../components/BrandMark.jsx'
 import { createTenant, findTenantByOwner, linkOwnerTenant } from '../lib/db.js'
 import { seedSampleMenu } from '../lib/seed.js'
 import { slugify } from '../lib/format.js'
@@ -12,13 +13,19 @@ import { recordLegalConsent, REQUIRED_CONSENT, CONSENT_VERSION } from '../lib/le
 
 import Icon from '../components/Icon.jsx'
 import { VENUE_TYPES } from '../lib/venueTypes.js'
+// The platform identity — the same stylesheet the landing and the auth screens
+// use. Signup and setup are one continuous flow and must look like one.
+import '../landing.css'
 
 const CURRENCIES = ['SAR', 'AED', 'KWD', 'QAR', 'BHD', 'OMR', 'EGP', 'USD']
 
+// The checklist tells the owner what each step is FOR. Three numbered circles
+// labelled «الهوية / المظهر / الانطلاق» name the steps without explaining any
+// of them; a setup wizard's job is to make the remaining work feel known.
 const STEPS = [
-  { key: 'identity', icon: 'store', ar: 'الهوية', en: 'Identity' },
-  { key: 'look', icon: 'palette', ar: 'المظهر', en: 'Look' },
-  { key: 'launch', icon: 'zap', ar: 'الانطلاق', en: 'Launch' },
+  { key: 'identity', icon: 'store', ar: 'الهوية', en: 'Identity', subAr: 'الاسم والرابط ونوع النشاط والعملة', subEn: 'Name, link, activity and currency' },
+  { key: 'look', icon: 'palette', ar: 'المظهر', en: 'Look', subAr: 'ألوان منشأتك كما يراها ضيوفك', subEn: 'Your colours, as guests will see them' },
+  { key: 'launch', icon: 'zap', ar: 'الانطلاق', en: 'Launch', subAr: 'مراجعة أخيرة ثم إنشاء المنشأة', subEn: 'A last look, then create' },
 ]
 
 // What the platform actually ships with — shown on the last step.
@@ -168,20 +175,14 @@ export default function Onboarding() {
   const stepMeta = STEPS[step - 1]
 
   return (
-    <div className="auth-shell onb-shell">
-      <form className="onb-card card card-pad" onSubmit={onFormSubmit}>
-        <div className="onb-head">
-          <BrandMark />
-          <h2 style={{ fontSize: 'var(--fs-xl)' }}>{t('createVenue')}</h2>
-          <p className="muted small">{t('onboardingIntro')}</p>
+    <div className="onb" dir={ar ? 'rtl' : 'ltr'}>
+      {/* ---- the brief: what this is, and what is left to do ---- */}
+      <aside className="onb-aside">
+        <BrandMark size={30} mono />
+        <div>
+          <div className="onb-aside-h">{t('createVenue')}</div>
+          <p className="onb-aside-p">{t('onboardingIntro')}</p>
         </div>
-
-        {isPlatformAdmin && (
-          <Link to="/platform" className="btn btn-outline btn-block" style={{ color: 'var(--brand)' }}>
-            <Icon name="sparkles" size={15} style={{ verticalAlign: 'middle', marginInlineEnd: 6 }} />
-            {ar ? 'أنت مدير المنصة — الدخول إلى لوحة المنصّة' : 'You are a platform admin — open the console'}
-          </Link>
-        )}
 
         <ol className="onb-steps" aria-label={ar ? 'خطوات الإنشاء' : 'Setup steps'}>
           {STEPS.map((s, i) => {
@@ -197,177 +198,199 @@ export default function Onboarding() {
                   aria-current={n === step ? 'step' : undefined}
                   aria-label={ar ? s.ar : s.en}
                 >
-                  {n < step ? <Icon name="check" size={15} /> : n}
+                  {n < step ? <Icon name="check" size={14} /> : n}
                 </button>
-                <span className="onb-step-lbl">{ar ? s.ar : s.en}</span>
+                <span className="onb-step-txt">
+                  <span className="onb-step-lbl">{ar ? s.ar : s.en}</span>
+                  <span className="onb-step-sub">{ar ? s.subAr : s.subEn}</span>
+                </span>
               </li>
             )
           })}
         </ol>
 
-        <h3 className="onb-panel-title">
-          <Icon name={stepMeta.icon} size={17} />
-          {ar ? stepMeta.ar : stepMeta.en}
-        </h3>
+        <p className="onb-aside-foot">
+          {ar ? 'يمكنك تغيير كل ما تختاره هنا لاحقاً من إعدادات منشأتك.' : 'Everything chosen here can be changed later from your settings.'}
+        </p>
+      </aside>
 
-        {step === 1 && (
-          <div className="onb-panel">
-            <div className="field">
-              <label>{t('venueName')}</label>
-              <input className="input" value={name} onChange={(e) => setName(e.target.value)} placeholder={ar ? 'مثال: مقهى الرصيف' : 'e.g. Rasif Coffee'} autoFocus />
+      {/* ---- the form ---- */}
+      <main className="onb-main">
+        <form className="onb-form" onSubmit={onFormSubmit}>
+          <div className="onb-top">
+            <div>
+              <h1 className="onb-h">{ar ? stepMeta.ar : stepMeta.en}</h1>
+              <p>{ar ? stepMeta.subAr : stepMeta.subEn}</p>
             </div>
-
-            <div className="field">
-              <label>{t('venueSlug')}</label>
-              <div className="input-group">
-                <span className="faint small">/m/</span>
-                <input
-                  className="input"
-                  value={slug}
-                  onChange={(e) => {
-                    setSlugTouched(true)
-                    setSlug(slugify(e.target.value))
-                  }}
-                  placeholder="rasif-coffee"
-                />
-              </div>
-              <span className="xs faint">{t('slugHint')}</span>
-            </div>
-
-            {/* Venue type drives the whole system's vocabulary and the AI's
-                understanding of the business — so it is chosen up front, from
-                the full catalogue, with a free-text path for anything new. */}
-            <div className="field">
-              <label>{t('venueType')}</label>
-              <div className="row wrap" style={{ gap: 6 }}>
-                {VENUE_TYPES.map((ty) => (
-                  <button
-                    type="button"
-                    key={ty.id}
-                    onClick={() => setType(ty.id)}
-                    className={`chip ${type === ty.id ? 'active' : ''}`}
-                  >
-                    <Icon name={ty.icon} size={14} style={{ verticalAlign: 'middle', marginInlineEnd: 4 }} /> {ty.ar}
-                  </button>
-                ))}
-              </div>
-              {type === 'other' && (
-                <input
-                  className="input"
-                  style={{ marginTop: 8 }}
-                  placeholder="اكتب نوع نشاطك (مثال: محمصة بن، محل شوكولاتة)"
-                  value={typeLabel}
-                  onChange={(e) => setTypeLabel(e.target.value)}
-                />
-              )}
-              <span className="xs faint">يضبط النظام مفرداته على نشاطك — «مشروب» أو «طبق» أو «منتج» — ويستخدمها الذكاء في كل ما يكتبه ويصممه لك.</span>
-            </div>
-
-            <div className="field">
-              <label>{t('currency')}</label>
-              <select className="select" value={currency} onChange={(e) => setCurrency(e.target.value)}>
-                {CURRENCIES.map((c) => <option key={c} value={c}>{c}</option>)}
-              </select>
-            </div>
+            <span className="onb-count" dir="ltr">{step} / {STEPS.length}</span>
           </div>
-        )}
 
-        {step === 2 && (
-          <div className="onb-panel">
-            <div className="field">
-              <label>{t('theme')}</label>
-              <div className="row wrap" style={{ gap: 6 }}>
-                {THEMES.map((th) => (
-                  <button type="button" key={th.id} className={`chip ${preset === th.id ? 'active' : ''}`}
-                    onClick={() => { setPreset(th.id); setColor(th.brand); setAccent(th.accent); applyTheme({ brand: th.brand, accent: th.accent }) }}>
-                    <span style={{ width: 12, height: 12, borderRadius: '50%', background: th.brand, display: 'inline-block', marginInlineEnd: 4 }} />
-                    {th.name[lang] || th.name.ar}
-                  </button>
-                ))}
+          {isPlatformAdmin && (
+            <Link to="/platform" className="onb-admin">
+              <Icon name="sparkles" size={15} />
+              {ar ? 'أنت مدير المنصة — الدخول إلى لوحة المنصّة' : 'You are a platform admin — open the console'}
+            </Link>
+          )}
+
+          {step === 1 && (
+            <div className="onb-panel">
+              <div className="onb-field">
+                <label htmlFor="onb-name">{t('venueName')}</label>
+                <input id="onb-name" className="input" value={name} onChange={(e) => setName(e.target.value)} placeholder={ar ? 'مثال: مقهى الرصيف' : 'e.g. Rasif Coffee'} autoFocus />
+              </div>
+
+              <div className="onb-field">
+                <label htmlFor="onb-slug">{t('venueSlug')}</label>
+                {/* the prefix is welded to the field so the shape of the final
+                    address is visible while it is being typed */}
+                <div className="onb-slug">
+                  <span dir="ltr">/m/</span>
+                  <input
+                    id="onb-slug"
+                    className="input"
+                    dir="ltr"
+                    value={slug}
+                    onChange={(e) => { setSlugTouched(true); setSlug(slugify(e.target.value)) }}
+                    placeholder="rasif-coffee"
+                  />
+                </div>
+                <span className="onb-hint">{t('slugHint')}</span>
+              </div>
+
+              {/* Venue type drives the whole system's vocabulary and the AI's
+                  understanding of the business — so it is chosen up front, from
+                  the full catalogue, with a free-text path for anything new. */}
+              <div className="onb-field">
+                <label>{t('venueType')}</label>
+                <div className="onb-chips">
+                  {VENUE_TYPES.map((ty) => (
+                    <button type="button" key={ty.id} onClick={() => setType(ty.id)} className={`onb-chip ${type === ty.id ? 'on' : ''}`} aria-pressed={type === ty.id}>
+                      <Icon name={ty.icon} size={13} /> {ty.ar}
+                    </button>
+                  ))}
+                </div>
+                {type === 'other' && (
+                  <input
+                    className="input"
+                    style={{ marginTop: 8 }}
+                    placeholder="اكتب نوع نشاطك (مثال: محمصة بن، محل شوكولاتة)"
+                    value={typeLabel}
+                    onChange={(e) => setTypeLabel(e.target.value)}
+                  />
+                )}
+                <span className="onb-hint">يضبط النظام مفرداته على نشاطك — «مشروب» أو «طبق» أو «منتج» — ويستخدمها الذكاء في كل ما يكتبه ويصممه لك.</span>
+              </div>
+
+              <div className="onb-field">
+                <label htmlFor="onb-cur">{t('currency')}</label>
+                <select id="onb-cur" className="select" value={currency} onChange={(e) => setCurrency(e.target.value)}>
+                  {CURRENCIES.map((c) => <option key={c} value={c}>{c}</option>)}
+                </select>
               </div>
             </div>
+          )}
 
-            <div className="row" style={{ gap: 'var(--sp-2)' }}>
-              <label className="onb-colorpick">
-                <input type="color" value={color} onChange={(e) => { setColor(e.target.value); applyTheme({ brand: e.target.value, accent }) }} />
-                <span>{ar ? 'اللون الأساسي' : 'Brand color'}</span>
-              </label>
-              <label className="onb-colorpick">
-                <input type="color" value={accent} onChange={(e) => { setAccent(e.target.value); applyTheme({ brand: color, accent: e.target.value }) }} />
-                <span>{ar ? 'اللون الثانوي' : 'Accent color'}</span>
-              </label>
-            </div>
-
-            <div className="field">
-              <label>{ar ? 'معاينة سريعة' : 'Quick preview'}</label>
-              <div className="onb-preview" aria-hidden="true">
-                <div className="onb-preview-top" style={{ background: color }}>
-                  <span className="onb-preview-logo" />
-                  <span className="onb-preview-name">{name.trim() || (ar ? 'منشأتك' : 'Your venue')}</span>
+          {step === 2 && (
+            <div className="onb-panel">
+              <div className="onb-field">
+                <label>{t('theme')}</label>
+                <div className="onb-chips">
+                  {THEMES.map((th) => (
+                    <button type="button" key={th.id} className={`onb-chip ${preset === th.id ? 'on' : ''}`} aria-pressed={preset === th.id}
+                      onClick={() => { setPreset(th.id); setColor(th.brand); setAccent(th.accent); applyTheme({ brand: th.brand, accent: th.accent }) }}>
+                      <span className="sw" style={{ background: th.brand }} />
+                      {th.name[lang] || th.name.ar}
+                    </button>
+                  ))}
                 </div>
-                <div className="onb-preview-body">
-                  <div className="onb-preview-chips">
-                    <span className="onb-preview-chip" style={{ background: color }}>{ar ? 'الأصناف' : 'Items'}</span>
-                    <span className="onb-preview-chip is-ghost" style={{ color: accent, borderColor: accent }}>{ar ? 'العروض' : 'Offers'}</span>
+              </div>
+
+              <div className="onb-picks">
+                <label className="onb-pick">
+                  <input type="color" value={color} onChange={(e) => { setColor(e.target.value); applyTheme({ brand: e.target.value, accent }) }} />
+                  <span>{ar ? 'اللون الأساسي' : 'Brand color'}</span>
+                </label>
+                <label className="onb-pick">
+                  <input type="color" value={accent} onChange={(e) => { setAccent(e.target.value); applyTheme({ brand: color, accent: e.target.value }) }} />
+                  <span>{ar ? 'اللون الثانوي' : 'Accent color'}</span>
+                </label>
+              </div>
+
+              {/* The ONLY place the venue's colours appear. The wizard's own
+                  chrome stays on the platform palette — a setup flow that
+                  repaints itself as you click through it is disorienting, and
+                  it also blurs whose brand is whose. */}
+              <div className="onb-field">
+                <label>{ar ? 'هكذا سيراها ضيوفك' : 'How your guests will see it'}</label>
+                <div className="onb-preview" aria-hidden="true">
+                  <div className="onb-preview-top" style={{ background: color }}>
+                    <span className="onb-preview-logo" />
+                    <span className="onb-preview-name">{name.trim() || (ar ? 'منشأتك' : 'Your venue')}</span>
                   </div>
-                  <span className="onb-preview-line" style={{ width: '72%' }} />
-                  <span className="onb-preview-line" style={{ width: '48%' }} />
+                  <div className="onb-preview-body">
+                    <div className="onb-preview-chips">
+                      <span className="onb-preview-chip" style={{ background: color }}>{ar ? 'الأصناف' : 'Items'}</span>
+                      <span className="onb-preview-chip is-ghost" style={{ color: accent, borderColor: accent }}>{ar ? 'العروض' : 'Offers'}</span>
+                    </div>
+                    <span className="onb-preview-line" style={{ width: '72%' }} />
+                    <span className="onb-preview-line" style={{ width: '48%' }} />
+                  </div>
                 </div>
               </div>
             </div>
-          </div>
-        )}
+          )}
 
-        {step === 3 && (
-          <div className="onb-panel">
-            <div className="field">
-              <label>{ar ? 'ماذا جهّزنا لك' : 'What we prepared for you'}</label>
-              <ul className="onb-feats">
-                {FEATURES.map((f) => (
-                  <li key={f.icon} className="onb-feat">
-                    <Icon name={f.icon} size={17} className="ic" />
-                    <span>{ar ? f.ar : f.en}</span>
-                  </li>
-                ))}
-              </ul>
+          {step === 3 && (
+            <div className="onb-panel">
+              <div className="onb-field">
+                <label>{ar ? 'ماذا جهّزنا لك' : 'What we prepared for you'}</label>
+                <ul className="onb-feats">
+                  {FEATURES.map((f) => (
+                    <li key={f.icon} className="onb-feat">
+                      <Icon name={f.icon} size={16} className="ic" />
+                      <span>{ar ? f.ar : f.en}</span>
+                    </li>
+                  ))}
+                </ul>
+              </div>
+
+              <label className="onb-check">
+                <input type="checkbox" checked={seed} onChange={(e) => setSeed(e.target.checked)} />
+                <span>{ar ? 'إضافة منيو تجريبي للبدء بسرعة' : 'Add a sample menu to start quickly'}</span>
+              </label>
+
+              <label className="onb-check">
+                <input type="checkbox" checked={agreed} onChange={(e) => setAgreed(e.target.checked)} />
+                <span>
+                  {ar ? 'أوافق على ' : 'I accept the '}
+                  <a href="/legal/terms" target="_blank" rel="noreferrer">{ar ? 'الشروط والأحكام' : 'Terms'}</a>
+                  {ar ? ' و' : ' & '}
+                  <a href="/legal/privacy" target="_blank" rel="noreferrer">{ar ? 'سياسة الخصوصية' : 'Privacy Policy'}</a>
+                </span>
+              </label>
             </div>
+          )}
 
-            <label className="list-row" style={{ cursor: 'pointer' }}>
-              <input type="checkbox" checked={seed} onChange={(e) => setSeed(e.target.checked)} style={{ width: 20, height: 20 }} />
-              <span className="small">{ar ? 'إضافة منيو تجريبي للبدء بسرعة' : 'Add a sample menu to start quickly'}</span>
-            </label>
-
-            <label className="list-row" style={{ cursor: 'pointer', alignItems: 'flex-start' }}>
-              <input type="checkbox" checked={agreed} onChange={(e) => setAgreed(e.target.checked)} style={{ width: 20, height: 20, marginTop: 2 }} />
-              <span className="small">
-                {ar ? 'أوافق على ' : 'I accept the '}
-                <a href="/legal/terms" target="_blank" rel="noreferrer" style={{ color: 'var(--brand)', fontWeight: 700 }}>{ar ? 'الشروط والأحكام' : 'Terms'}</a>
-                {ar ? ' و' : ' & '}
-                <a href="/legal/privacy" target="_blank" rel="noreferrer" style={{ color: 'var(--brand)', fontWeight: 700 }}>{ar ? 'سياسة الخصوصية' : 'Privacy Policy'}</a>
-              </span>
-            </label>
+          <div className="onb-nav">
+            {step > 1 && (
+              <button type="button" className="onb-btn ghost" onClick={() => setStep(step - 1)} disabled={busy}>
+                <Icon name="back" size={15} />
+                {ar ? 'رجوع' : 'Back'}
+              </button>
+            )}
+            {step < 3 ? (
+              <button type="submit" className="onb-btn grow">
+                {ar ? 'التالي' : 'Next'}
+                <Icon name="next" size={15} />
+              </button>
+            ) : (
+              <button type="submit" className="onb-btn grow" disabled={busy || !agreed}>
+                {busy ? t('saving') : t('createVenueCta')}
+              </button>
+            )}
           </div>
-        )}
-
-        <div className="onb-nav">
-          {step > 1 && (
-            <button type="button" className="btn btn-outline onb-btn" onClick={() => setStep(step - 1)} disabled={busy}>
-              <Icon name="back" size={15} style={{ verticalAlign: 'middle', marginInlineEnd: 4 }} />
-              {ar ? 'رجوع' : 'Back'}
-            </button>
-          )}
-          {step < 3 ? (
-            <button type="submit" className="btn btn-primary onb-btn onb-btn-main">
-              {ar ? 'التالي' : 'Next'}
-              <Icon name="next" size={15} style={{ verticalAlign: 'middle', marginInlineStart: 4 }} />
-            </button>
-          ) : (
-            <button type="submit" className="btn btn-primary btn-lg onb-btn onb-btn-main" disabled={busy || !agreed}>
-              {busy ? t('saving') : t('createVenueCta')}
-            </button>
-          )}
-        </div>
-      </form>
+        </form>
+      </main>
     </div>
   )
 }
