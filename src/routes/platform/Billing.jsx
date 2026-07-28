@@ -152,9 +152,9 @@ function InvoicesTab({ invoices, tenants }) {
       {rows.length === 0 ? (
         <Empty icon="wallet" title="لا فواتير" hint="أنشئ فاتورة يدوية أو انتظر توليد الفواتير الشهرية تلقائياً" />
       ) : (
-        <div className="stack" style={{ gap: 'var(--sp-2)' }}>
+        <div className="pc-rows">
           {rows.map((inv) => (
-            <div key={inv.id} className="card card-pad row" style={{ gap: 10, flexWrap: 'wrap', alignItems: 'center' }}>
+            <div key={inv.id} className="pc-row">
               <div className="grow" style={{ minWidth: 160 }}>
                 <Link to={`/platform/venues/${inv.tenantId}`} className="bold">{inv.tenantName || inv.tenantId}</Link>
                 <div className="xs faint">
@@ -306,9 +306,9 @@ function CouponsTab({ coupons }) {
       {coupons.length === 0 ? (
         <Empty icon="ticket" title="لا قسائم" hint="أنشئ قسائم خصم على الاشتراكات لتفعيلها للمنشآت" />
       ) : (
-        <div className="stack" style={{ gap: 'var(--sp-2)' }}>
+        <div className="pc-rows">
           {coupons.map((c) => (
-            <div key={c.id} className="card card-pad row" style={{ gap: 10, flexWrap: 'wrap', alignItems: 'center' }}>
+            <div key={c.id} className="pc-row">
               <div className="grow" style={{ minWidth: 120 }}>
                 <span className="bold num" dir="ltr" style={{ letterSpacing: 1 }}>{c.code}</span>
                 <div className="xs faint">

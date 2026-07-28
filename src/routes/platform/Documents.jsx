@@ -163,9 +163,9 @@ function QuotesTab({ tenants, quotes, cfg, onOpen }) {
       {quotes.length === 0 ? (
         <Empty icon="file" title="لا عروض أسعار" hint="أنشئ عرضاً وأرسل رابطه للعميل — يقبله ويدفع مباشرة." />
       ) : (
-        <div className="stack" style={{ gap: 'var(--sp-2)' }}>
+        <div className="pc-rows">
           {quotes.map((q) => (
-            <div key={q.id} className="card card-pad row" style={{ gap: 10, flexWrap: 'wrap', alignItems: 'center' }}>
+            <div key={q.id} className="pc-row">
               <div className="grow" style={{ minWidth: 180 }}>
                 <div className="row" style={{ gap: 8, alignItems: 'center' }}>
                   <strong className="num" dir="ltr">{q.no}</strong>
@@ -420,9 +420,9 @@ function InvoicesTab({ docs, onOpen, tenants }) {
     return <Empty icon="receipt" title="لا فواتير بالنظام الجديد بعد" hint="تصدر تلقائياً عند قبول عرض سعر أو في دورة الفوترة الشهرية." />
   }
   return (
-    <div className="stack" style={{ gap: 'var(--sp-2)' }}>
+    <div className="pc-rows">
       {rows.map((d) => (
-        <div key={d.id} className="card card-pad row" style={{ gap: 10, flexWrap: 'wrap', alignItems: 'center' }}>
+        <div key={d.id} className="pc-row">
           <div className="grow" style={{ minWidth: 180 }}>
             <div className="row" style={{ gap: 8, alignItems: 'center' }}>
               <strong className="num" dir="ltr">{d.no}</strong>

@@ -341,51 +341,43 @@
    wants to be a table. This turns them into one bordered block with
    hairline rows.
 
-   THE `.row` IN THE SELECTOR IS LOAD-BEARING, NOT DECORATION.
-   Overview.jsx puts four `.card.card-pad.stack` dashboard panels
-   directly inside its own `.stack`. A selector matching plain
-   `.card.card-pad` would fuse those four panels into a single seamless
-   slab. Requiring `.row` — the signature of a record ROW rather than a
-   content panel — excludes it, and excludes Growth, Health,
-   SupportTools, LandingStudio and PlanEditor along with it.
+   `.pc-rows` wraps, `.pc-row` is one record. Both are stated in the
+   JSX, which is the point.
 
-   `:has()` is already an accepted primitive here (index.css:1086).
+   There WAS a `:has(> .card.card-pad.row + .card.card-pad.row)` rule
+   here that found those lists by shape and needed no JSX at all. It
+   worked, and it shipped for exactly one commit — but a rule that
+   restyles a list because of what its children happen to be is
+   invisible to anyone reading the component. The next person to put two
+   `.card card-pad row` panels in a `.stack` would have got a fused
+   block and no way to find out why. Now that all seven call sites name
+   the class, the heuristic is gone.
 
-   THIS RULE IS A TRANSITIONAL MEASURE. It is a heuristic that is
-   invisible to anyone reading the JSX: the next person to put a second
-   `.card card-pad row` panel inside a `.stack` will silently get a
-   fused block and no idea why. It is paired with the explicit
-   .pc-rows/.pc-row classes below, and it gets DELETED once the nine
-   screens are migrated to those. */
-.platform-scope.admin-shell .pc-rows,
-.platform-scope.admin-shell .stack:has(> .card.card-pad.row + .card.card-pad.row) {
-  gap: 0 !important;              /* beats the inline gap on the wrapper */
+   A note from migrating them: a blunt find-and-replace over the seven
+   wrappers also caught an eighth in Billing.jsx that holds grouped
+   PANELS rather than record rows. The `:has()` rule would have skipped
+   it correctly — it required `.row` on the children precisely so that
+   Overview's four dashboard panels could not fuse. The heuristic was
+   right; the sweep was the careless part. */
+.platform-scope.admin-shell .pc-rows {
+  display: flex;
+  flex-direction: column;
   border: 1px solid var(--border);
   border-radius: var(--r-md);
   background: var(--surface);
   overflow: hidden;
 }
-.platform-scope.admin-shell .pc-row,
-.platform-scope.admin-shell .stack:has(> .card.card-pad.row + .card.card-pad.row) > .card.card-pad.row {
+.platform-scope.admin-shell .pc-row {
   display: flex;
   align-items: center;
-  border: 0;
+  flex-wrap: wrap;
+  gap: var(--sp-3);
   border-bottom: 1px solid var(--border);
-  border-radius: 0;
-  box-shadow: none;
-  background: transparent;
   padding: var(--pc-row-y) var(--sp-5);
-  gap: var(--sp-3) !important;    /* beats the inline gap on each row */
 }
-.platform-scope.admin-shell .pc-row:last-child,
-.platform-scope.admin-shell .stack:has(> .card.card-pad.row + .card.card-pad.row) > .card.card-pad.row:last-child {
-  border-bottom: 0;
-}
+.platform-scope.admin-shell .pc-row:last-child { border-bottom: 0; }
 @media (hover: hover) {
-  .platform-scope.admin-shell .pc-row:hover,
-  .platform-scope.admin-shell .stack:has(> .card.card-pad.row + .card.card-pad.row) > .card.card-pad.row:hover {
-    background: color-mix(in srgb, var(--brand) 5%, transparent);
-  }
+  .platform-scope.admin-shell .pc-row:hover { background: color-mix(in srgb, var(--brand) 5%, transparent); }
 }
 
 /* ============================================================

@@ -90,7 +90,7 @@ export default function Overview() {
           </div>
           <div className="divide">
             {unreadThreads.map((th) => (
-              <Link key={th.id} to={`/platform/chat/${th.id}`} className="row-between" style={{ padding: '8px 0' }}>
+              <Link key={th.id} to={`/platform/chat/${th.id}`} className="row-between">
                 <div className="grow" style={{ minWidth: 0 }}>
                   <div className="small bold">{th.tenantName || th.id}</div>
                   <div className="xs faint" style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{th.lastText}</div>
@@ -112,7 +112,7 @@ export default function Overview() {
         ) : (
           <div className="divide">
             {newest.map((t) => (
-              <Link key={t.id} to={`/platform/venues/${t.id}`} className="row-between" style={{ padding: '8px 0', gap: 8 }}>
+              <Link key={t.id} to={`/platform/venues/${t.id}`} className="row-between" style={{ gap: 8 }}>
                 <div className="grow" style={{ minWidth: 0 }}>
                   <div className="small bold">{t.name || t.id}</div>
                   <div className="xs faint">/{t.slug} · {fmtWhen(t.createdAt)}</div>
@@ -147,7 +147,7 @@ export default function Overview() {
           </div>
           <div className="divide">
             {errors.filter((e) => e.status !== 'resolved').slice(0, 5).map((e) => (
-              <div key={e.id} className="row-between" style={{ padding: '8px 0', gap: 8 }}>
+              <div key={e.id} className="row-between" style={{ gap: 8 }}>
                 <div className="grow" style={{ minWidth: 0 }}>
                   <div className="small bold" style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{e.message}</div>
                   <div className="xs faint">{e.tenantName || e.tenantId || 'زائر'} · {fmtWhen(e.at)}</div>

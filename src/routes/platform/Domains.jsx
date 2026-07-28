@@ -90,11 +90,11 @@ export default function Domains() {
       </div>
 
       {/* list */}
-      <div className="stack" style={{ gap: 'var(--sp-2)' }}>
+      <div className="pc-rows">
         {domains.length === 0 ? (
           <Empty icon="store" title="لا نطاقات مربوطة" hint="اربط أول نطاق مخصّص لمنشأة" />
         ) : domains.map((d) => (
-          <div key={d.id} className="card card-pad row" style={{ gap: 10, flexWrap: 'wrap', alignItems: 'center' }}>
+          <div key={d.id} className="pc-row">
             <div className="grow" style={{ minWidth: 160 }}>
               <a href={`https://${d.id}`} target="_blank" rel="noreferrer" className="bold" dir="ltr">{d.id}</a>
               <div className="xs faint">

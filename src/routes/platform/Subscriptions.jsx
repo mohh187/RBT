@@ -46,7 +46,7 @@ function VenueRow({ t, onSaved }) {
   }
 
   return (
-    <div className="card card-pad row" style={{ gap: 10, flexWrap: 'wrap', alignItems: 'center' }}>
+    <div className="pc-row">
       <div className="grow" style={{ minWidth: 150 }}>
         <Link to={`/platform/venues/${t.id}`} className="bold">{t.name || t.id}</Link>
         <div className="xs faint">/{t.slug} · انضمت {fmtWhen(t.createdAt)}</div>
@@ -119,7 +119,7 @@ export default function Subscriptions() {
             </button>
           ))}
         </div>
-        <div className="stack" style={{ gap: 'var(--sp-2)' }}>
+        <div className="pc-rows">
           {rows.map((t) => <VenueRow key={t.id} t={t} />)}
         </div>
       </div>

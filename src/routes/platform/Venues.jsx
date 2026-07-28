@@ -70,7 +70,7 @@ export default function Venues() {
         />
         <div className="row" style={{ gap: 6, flexWrap: 'wrap' }}>
           {FILTERS.map(([id, label]) => (
-            <button key={id} className={`btn ${filter === id ? 'btn-primary' : 'btn-outline'}`} onClick={() => setFilter(id)} style={{ padding: '6px 12px' }}>
+            <button key={id} className={`btn ${filter === id ? 'btn-primary' : 'btn-outline'}`} onClick={() => setFilter(id)}>
               {label}
             </button>
           ))}
@@ -80,9 +80,9 @@ export default function Venues() {
       {rows.length === 0 ? (
         <Empty icon="store" title="لا نتائج" hint="جرّب بحثاً أو فلتراً مختلفاً" />
       ) : (
-        <div className="stack" style={{ gap: 'var(--sp-2)' }}>
+        <div className="pc-rows">
           {rows.map((t) => (
-            <div key={t.id} className="card card-pad row" style={{ gap: 10, flexWrap: 'wrap', alignItems: 'center' }}>
+            <div key={t.id} className="pc-row">
               {t.logoUrl ? (
                 <img src={t.logoUrl} alt="" style={{ width: 38, height: 38, borderRadius: 10, objectFit: 'cover', flex: 'none' }} />
               ) : (
@@ -97,16 +97,16 @@ export default function Venues() {
               <PlanBadge plan={t.plan} />
               <StatusChip tenant={t} />
               <div className="row" style={{ gap: 10 }}>
-                <Link to={`/platform/venues/${t.id}`} className="btn btn-outline" style={{ padding: '6px 10px', minWidth: 42, minHeight: 42 }} title="التفاصيل">
+                <Link to={`/platform/venues/${t.id}`} className="btn btn-outline" style={{ minWidth: 'var(--tap)' }} title="التفاصيل">
                   <Icon name="eye" size={16} />
                 </Link>
-                <Link to={`/platform/chat/${t.id}`} className="btn btn-outline" style={{ padding: '6px 10px', minWidth: 42, minHeight: 42 }} title="دردشة">
+                <Link to={`/platform/chat/${t.id}`} className="btn btn-outline" style={{ minWidth: 'var(--tap)' }} title="دردشة">
                   <Icon name="mail" size={16} />
                 </Link>
                 <button
                   className="btn btn-outline"
                   disabled={togglingId === t.id}
-                  style={{ padding: '6px 10px', minWidth: 42, minHeight: 42, marginInlineStart: 4, color: t.active === false ? 'var(--success)' : 'var(--danger)' }}
+                  style={{ minWidth: 'var(--tap)', marginInlineStart: 4, color: t.active === false ? 'var(--success)' : 'var(--danger)' }}
                   onClick={() => toggleActive(t)}
                   title={t.active === false ? 'تفعيل الحساب' : 'إيقاف الحساب'}
                 >
