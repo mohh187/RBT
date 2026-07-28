@@ -372,4 +372,110 @@ async function noteJobRun(db, name, { ms, docsRead, timeoutSeconds, ok = true, e
   }
 }
 
-module.exports = { vendorProbe, geminiCapGuard, noteJobRun }
+// ------------------------------------------------- venue low-balance nudge
+// Today a venue only learns it has run out when a send is REFUSED. This tells
+// them before that, and it is the only item in the observability work that
+// makes money rather than saving it: aiText packs run 52-73x margin and are
+// the least sold thing on the platform.
+//
+// THREE TRIGGERS, AND THE SECOND IS THE ONE THAT MATTERS:
+//   level     — used >= 80% of the ceiling.
+//   pace      — the venue's own 7-day rate projects past the ceiling with 5+
+//               days still to go. A venue at 45% on day 8 is tracking to 170%,
+//               and a level-only rule stays silent until day 20 — by which
+//               point the warning is a post-mortem.
+//   depletion — under 15% of a PURCHASED pack remains. Highest conversion of
+//               the three, because they have already shown they will pay.
+//
+// NEVER OVER WHATSAPP. It would burn the most expensive unit on the platform
+// to warn about spending, and on waMarketing it would consume the very budget
+// being warned about. In-app announcement (zero marginal cost, and where
+// managers already look) then a push; email only at the very top.
+const NUDGE_COOLDOWN_DAYS = 14
+
+const venueBalanceNudge = onSchedule(
+  { schedule: '0 11 * * *', timeZone: 'Asia/Riyadh', timeoutSeconds: 540, memory: '512MiB' },
+  async () => {
+    const db = getFirestore()
+    const spend = require('./spend')
+    const period = spend.periodKey()
+    const now = Date.now()
+    const dayOfMonth = Number(new Date().toLocaleDateString('en-CA', { timeZone: 'Asia/Riyadh' }).slice(8, 10)) || 1
+    const daysInMonth = new Date(new Date().getFullYear(), new Date().getMonth() + 1, 0).getDate()
+    const daysLeft = daysInMonth - dayOfMonth
+
+    const tenants = await db.collection('tenants').get()
+    for (const t of tenants.docs) {
+      const td = t.data() || {}
+      // A suspended or expired venue needs a renewal conversation, not a
+      // top-up pitch.
+      if (td.active === false || td.planStatus === 'expired') continue
+
+      const usage = await spend.readSpend(db, t.id, period).catch(() => null)
+      if (!usage) continue
+      const nudgeSnap = await db.doc(`tenants/${t.id}/counters/nudges`).get().catch(() => null)
+      const nudges = nudgeSnap && nudgeSnap.exists ? (nudgeSnap.data() || {}) : {}
+
+      const hits = []
+      for (const ch of spend.CHANNELS) {
+        const lim = spend.limitsFor(td, ch)
+        if (lim.month <= 0) continue // unlimited or plan-locked: nothing to top up
+        const used = Number(usage[ch]) || 0
+        if (used <= 0) continue
+        const pct = used / lim.month
+        const projected = (used / dayOfMonth) * daysInMonth
+
+        const last = nudges[ch] || {}
+        const cooled = !last.at || (now - Number(last.at)) > NUDGE_COOLDOWN_DAYS * 86400000
+        // A fresh month is genuinely new information, so the window resets.
+        const newPeriod = last.period !== period
+        if (!cooled && !newPeriod) continue
+
+        const level = pct >= 0.8
+        const pace = projected >= lim.month && daysLeft >= 5 && pct < 0.8
+        const depleted = lim.extra > 0 && lim.extra <= Math.max(1, Math.round((lim.extra + used) * 0.15))
+        if (!level && !pace && !depleted) continue
+
+        hits.push({
+          ch, label: spend.CHANNEL_AR[ch] || ch, used, cap: lim.month,
+          pct: Math.round(pct * 100),
+          reason: level ? 'level' : pace ? 'pace' : 'depleted',
+          crossesOn: pace ? Math.max(1, Math.ceil(lim.month / (used / dayOfMonth))) : null,
+        })
+      }
+      if (!hits.length) continue
+
+      // COMBINE, DO NOT MULTIPLY. A venue pressing four ceilings has one
+      // problem — «my plan is too small» — not four. One announcement naming
+      // all of them beats four notifications that each look like spam.
+      const lines = hits.map((h) => (
+        h.reason === 'pace'
+          ? `${h.label}: استهلكت ${h.used} من ${h.cap} — وبهذا المعدّل ينفد يوم ${h.crossesOn} من الشهر.`
+          : h.reason === 'depleted'
+            ? `${h.label}: رصيدك المشترى أوشك على النفاد.`
+            : `${h.label}: استهلكت ${h.pct}% من ${h.cap}.`
+      ))
+      const primary = hits[0].ch
+
+      await db.collection(`tenants/${t.id}/announcements`).add({
+        fromPlatform: true,
+        title: hits.length > 1 ? 'رصيدك في عدة خدمات أوشك على النفاد' : `رصيد «${hits[0].label}» أوشك على النفاد`,
+        body: `${lines.join('\n')}\n\nيمكنك شحن رصيد إضافي فوراً من صفحة الفوترة — أو ترقية باقتك.`,
+        // ONE TAP from the notice to checkout: the billing screen opens with
+        // this channel's packs already expanded. Removing that tap is worth
+        // more than any wording change.
+        link: `/admin/billing?buy=${primary}`,
+        linkLabel: 'شحن رصيد الآن',
+        severity: 'warn',
+        at: FieldValue.serverTimestamp(),
+        createdAt: FieldValue.serverTimestamp(),
+      }).catch(() => {})
+
+      const patch = {}
+      hits.forEach((h) => { patch[h.ch] = { at: now, period, pct: h.pct, reason: h.reason } })
+      await db.doc(`tenants/${t.id}/counters/nudges`).set(patch, { merge: true }).catch(() => {})
+    }
+  },
+)
+
+module.exports = { vendorProbe, geminiCapGuard, noteJobRun, venueBalanceNudge }

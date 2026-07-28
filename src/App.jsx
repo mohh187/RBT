@@ -128,6 +128,9 @@ const PlatformGrowth = lazy(() => import('./routes/platform/Growth.jsx'))
 const PlatformSettings = lazy(() => import('./routes/platform/PlatformSettings.jsx'))
 const PlatformCompliance = lazy(() => import('./routes/platform/Compliance.jsx'))
 const PlatformSpend = lazy(() => import('./routes/platform/Spend.jsx'))
+const PlatformDocuments = lazy(() => import('./routes/platform/Documents.jsx'))
+const PlatformFinance = lazy(() => import('./routes/platform/Finance.jsx'))
+const PlatformHealth = lazy(() => import('./routes/platform/Health.jsx'))
 const PlatformInvoiceDoc = lazy(() => import('./routes/PlatformInvoice.jsx'))
 const PublicQuote = lazy(() => import('./routes/PublicQuote.jsx'))
 const PlatformAssistant = lazy(() => import('./routes/platform/PlatformAssistant.jsx'))
@@ -549,6 +552,9 @@ export default function App() {
         <Route path="support" element={<PlatformSupportTools />} />
         <Route path="billing" element={<PlatformBilling />} />
         <Route path="spend" element={<PlatformSpend />} />
+        <Route path="documents" element={<PlatformDocuments />} />
+        <Route path="finance" element={<PlatformFinance />} />
+        <Route path="health" element={<PlatformHealth />} />
         <Route path="plans" element={<PlatformPlanEditor />} />
         <Route path="design-tools" element={<PlatformDesignTools />} />
         <Route path="growth" element={<PlatformGrowth />} />

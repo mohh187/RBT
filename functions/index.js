@@ -1017,7 +1017,7 @@ Object.assign(exports, require('./platformQuotes'))
 // Vendor-side limits that stop a feature with our own counters reading green
 // (WhatsApp quality/templates/tier, Meshy balance, Resend domains, key expiry),
 // and the Gemini month projection.
-Object.assign(exports, (({ vendorProbe, geminiCapGuard }) => ({ vendorProbe, geminiCapGuard }))(require('./observability')))
+Object.assign(exports, (({ vendorProbe, geminiCapGuard, venueBalanceNudge }) => ({ vendorProbe, geminiCapGuard, venueBalanceNudge }))(require('./observability')))
 
 // ---- spend meters: cross-venue rollup + the monthly budget circuit breaker ----
 // The per-send metering itself is inline at each call site (see functions/spend.js);

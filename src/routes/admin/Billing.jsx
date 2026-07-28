@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react'
+import { useSearchParams } from 'react-router-dom'
 import { collection, getDocs, query, where, limit } from 'firebase/firestore'
 import { db } from '../../lib/firebase.js'
 import { useAuth } from '../../lib/auth.jsx'
@@ -25,6 +26,10 @@ export default function Billing() {
   const ar = lang === 'ar'
   const toast = useToast()
   const { tenantId, tenant } = useAuth()
+  // ?buy=<channel> arrives from a low-balance notice and pre-expands that
+  // channel's packs, so the notification lands one tap from checkout.
+  const [params] = useSearchParams()
+  const buyChannel = params.get('buy') || ''
   const [invoices, setInvoices] = useState(null)
   const [creditReqs, setCreditReqs] = useState([])
 
@@ -80,7 +85,7 @@ export default function Billing() {
       {/* what the plan is actually being SPENT on — the same counters the
           server checks before every message, so the number here is the number
           that will refuse you. */}
-      <SpendMeter tenantId={tenantId} tenant={tenant} ar={ar} />
+      <SpendMeter tenantId={tenantId} tenant={tenant} ar={ar} defaultOpen={buyChannel} />
 
       {/* payment methods — honest state */}
       <div className="card card-pad row" style={{ gap: 10, alignItems: 'flex-start' }}>

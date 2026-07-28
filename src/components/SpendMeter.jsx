@@ -34,10 +34,14 @@ const REASON = {
   },
 }
 
-export default function SpendMeter({ tenantId, tenant, ar = true, compact = false }) {
+export default function SpendMeter({ tenantId, tenant, ar = true, compact = false, defaultOpen = '' }) {
   const toast = useToast()
   const [usage, setUsage] = useState(null)
-  const [open, setOpen] = useState('')   // which channel's packs are showing
+  // A low-balance notice links straight here as /admin/billing?buy=waMarketing,
+  // so the packs for THAT channel are already expanded. One tap from the
+  // notification to checkout — removing that tap is worth more than any
+  // wording change.
+  const [open, setOpen] = useState(defaultOpen)
   const [busy, setBusy] = useState('')
 
   useEffect(() => {

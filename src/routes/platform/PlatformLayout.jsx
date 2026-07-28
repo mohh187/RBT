@@ -31,6 +31,8 @@ const NAV_GROUPS = [
     { to: '/platform/subscriptions', icon: 'wallet', label: 'الاشتراكات' },
     { to: '/platform/billing', icon: 'receipt', label: 'الفواتير' },
     { to: '/platform/spend', icon: 'zap', label: 'الإنفاق والحدود' },
+    { to: '/platform/documents', icon: 'file', label: 'المستندات' },
+    { to: '/platform/finance', icon: 'chartBar', label: 'المالية' },
     { to: '/platform/plans', icon: 'layers', label: 'محرر الخطط' },
     { to: '/platform/growth', icon: 'award', label: 'النمو' },
   ] },
@@ -42,6 +44,7 @@ const NAV_GROUPS = [
   ] },
   { title: 'النظام', items: [
     { to: '/platform/assistant', icon: 'sparkles', label: 'المساعد الذكي' },
+    { to: '/platform/health', icon: 'zap', label: 'الصحة والتنبيهات' },
     { to: '/platform/audit', icon: 'notepad', label: 'المراقبة' },
     { to: '/platform/roles', icon: 'key', label: 'الأدوار' },
     { to: '/platform/settings', icon: 'settings', label: 'الإعدادات' },
