@@ -4,6 +4,7 @@ import { useAuth } from '../lib/auth.jsx'
 import { useI18n } from '../lib/i18n.jsx'
 import Sheet from './Sheet.jsx'
 import Icon from './Icon.jsx'
+import BranchSwitcher from './BranchSwitcher.jsx'
 import StaffBell from './StaffBell.jsx'
 import InstallButton from './InstallButton.jsx'
 import { watchActiveOrders, healMemberMirrors, healStaffCapsMirrors, healRegisteredCustomers, healImageRatios } from '../lib/db.js'
@@ -334,6 +335,9 @@ export default function AdminLayout() {
           </Link>
           <button className="admin-side-toggle" onClick={toggleSide} aria-label="collapse sidebar"><Icon name={collapsed ? 'back' : 'next'} size={16} /></button>
         </div>
+        {/* Renders NOTHING for a single-venue account — which is every account
+            today, so this line is invisible until a group exists. */}
+        <BranchSwitcher />
         <nav className="admin-side-nav">
           {visibleNav.map((n) => (
             <NavLink key={n.to} to={n.to} end={n.exact} className={({ isActive }) => (isActive ? 'active' : '')}>

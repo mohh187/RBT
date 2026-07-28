@@ -131,6 +131,20 @@ service cloud.firestore {
         );
     }
 
+    // Which venues this user may SWITCH to. Deliberately a subcollection with
+    // write:false, and NOT a field on users/{uid}: the update rule above lets
+    // a user write any key that is not role/tenantId/caps, so a `memberships`
+    // FIELD would sail straight through and let anyone grant themselves
+    // membership of any venue. A subcollection has no such hole.
+    //
+    // This list is an INDEX FOR THE UI, not an authorization source —
+    // switchTenant re-verifies against tenants/{tid}.ownerUid or an active
+    // staff doc every time, so a stale row is inert.
+    match /users/{uid}/memberships/{tid} {
+      allow read: if isSignedIn() && (request.auth.uid == uid || isPlatformAdmin());
+      allow write: if false;
+    }
+
     // ---- public slug -> tenant lookup ----
     match /tenantSlugs/{slug} {
       allow read: if true;
@@ -1062,6 +1076,26 @@ service cloud.firestore {
     match /platformAudit/{id}      { allow read: if isPlatformAdmin(); allow write: if false; }
     // Error-push throttle signatures (written by onErrorReported via Admin SDK).
     match /platformErrorSignatures/{id} { allow read, write: if false; }
+
+    // ---- branches: one owner, several venues ----
+    // A group is read by whoever is currently WORKING inside one of its
+    // branches. It lives at the top level, not under tenants/{tid}, because
+    // that document is world-readable and group billing state must not be.
+    match /venueGroups/{gid} {
+      allow read: if isPlatformAdmin()
+        || (isSignedIn()
+            && exists(/databases/$(database)/documents/tenants/$(userDoc().tenantId))
+            && get(/databases/$(database)/documents/tenants/$(userDoc().tenantId)).data.groupId == gid);
+      // Groups and branches are created only by the createBranch callable.
+      allow write: if false;
+      match /daily/{date} {
+        allow read: if isPlatformAdmin()
+          || (isSignedIn()
+              && exists(/databases/$(database)/documents/tenants/$(userDoc().tenantId))
+              && get(/databases/$(database)/documents/tenants/$(userDoc().tenantId)).data.groupId == gid);
+        allow write: if false;
+      }
+    }
 
     // ---- observability ----
     // Live health board + the operational alert feed. Written by the probes

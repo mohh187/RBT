@@ -817,6 +817,9 @@ exports.platformDailyRollup = onSchedule({ schedule: '55 23 * * *', timeZone: 'A
   const start = new Date(); start.setHours(0, 0, 0, 0)
   const tenants = await db.collection('tenants').get()
   const byTenant = {}
+  // Consolidated per-group totals, accumulated from reads this function is
+  // already performing — see the fan-out below.
+  const byGroup = {}
   let totalOrders = 0, totalRevenue = 0, activeTenants = 0
   await inBatches(tenants.docs, 25, async (t) => {
     const tid = t.id
@@ -827,6 +830,22 @@ exports.platformDailyRollup = onSchedule({ schedule: '55 23 * * *', timeZone: 'A
     const lastSnap = await db.collection(`tenants/${tid}/orders`).orderBy('createdAt', 'desc').limit(1).get().catch(() => null)
     const lastAt = lastSnap && !lastSnap.empty ? lastSnap.docs[0].data().createdAt : null
     byTenant[tid] = { name: t.data().name || '', orders: orders.length, revenue, currency: t.data().currency || 'SAR', lastOrderAt: lastAt || null }
+    // Group fan-out rides along on reads this function is ALREADY doing, so a
+    // consolidated multi-branch report costs zero extra Firestore reads — one
+    // extra write per group per day, and nothing else.
+    const gid = t.data().groupId
+    if (gid) {
+      const g = byGroup[gid] || (byGroup[gid] = { orders: 0, byCurrency: {}, byBranch: {} })
+      const cur = t.data().currency || 'SAR'
+      g.orders += orders.length
+      // Bucketed BY CURRENCY, never summed across them. A group with a branch
+      // in another country must not show riyals added to dirhams.
+      g.byCurrency[cur] = (g.byCurrency[cur] || 0) + revenue
+      g.byBranch[tid] = {
+        name: t.data().name || '', branchLabel: t.data().branchLabel || '',
+        orders: orders.length, revenue, currency: cur, lastOrderAt: lastAt || null,
+      }
+    }
     totalOrders += orders.length
     totalRevenue += revenue
     if (orders.length > 0) activeTenants++
@@ -837,6 +856,11 @@ exports.platformDailyRollup = onSchedule({ schedule: '55 23 * * *', timeZone: 'A
     orders: totalOrders, revenue: totalRevenue, byTenant,
     at: FieldValue.serverTimestamp(),
   })
+  await Promise.all(Object.entries(byGroup).map(([gid, g]) => (
+    db.doc(`venueGroups/${gid}/daily/${dateId}`).set({
+      date: dateId, ...g, at: FieldValue.serverTimestamp(),
+    }).catch(() => {})
+  )))
 })
 
 // Support impersonation: mint a custom token for a venue's OWNER so a platform
@@ -1009,6 +1033,9 @@ exports.onOrderPaid = require('./invoicing').onOrderPaid
 // ---- per-venue share + install identity (crawler og tags + dynamic manifest) ----
 // Serves /m/** and /join/** (see firebase.json rewrites) with the VENUE's meta.
 exports.venueShell = require('./venueMeta').venueShell
+
+// ---- branches: one owner, several venues (navigation, not authorization) ----
+Object.assign(exports, (({ switchTenant, createBranch, backfillMemberships }) => ({ switchTenant, createBranch, backfillMemberships }))(require('./branches')))
 
 // ---- platform documents: quotations that convert into tax invoices ----
 Object.assign(exports, require('./platformQuotes'))

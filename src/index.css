@@ -12207,3 +12207,34 @@ body[data-mch-sheet] .backdrop {
   @page { margin: 14mm; }
 }
 /* ==== /platform documents v1 ==== */
+
+/* ==== branch switcher v1 ==== */
+/* Only ever rendered when a user belongs to more than one venue, so this block
+   is dead CSS for every single-venue account — which is all of them today. */
+.brsw { position: relative; padding: 0 10px 8px; }
+.brsw-btn {
+  display: flex; align-items: center; gap: 7px; width: 100%;
+  padding: 7px 10px; border-radius: var(--r-md, 10px);
+  background: var(--surface-2); border: 1px solid var(--border);
+  color: var(--text); font-size: var(--fs-xs); font-weight: 600;
+}
+.brsw-label { flex: 1; text-align: start; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+/* A full-screen invisible scrim so a tap anywhere closes the menu — cheaper
+   and more reliable than a document listener that has to be torn down. */
+.brsw-scrim { position: fixed; inset: 0; z-index: 60; background: transparent; border: 0; }
+.brsw-menu {
+  position: absolute; inset-inline: 10px; top: calc(100% - 4px); z-index: 61;
+  display: grid; gap: 2px; padding: 6px;
+  background: var(--surface); border: 1px solid var(--border);
+  border-radius: var(--r-md, 10px); box-shadow: var(--sh-3);
+}
+.brsw-head { font-size: 10px; color: var(--text-faint); padding: 2px 8px 4px; }
+.brsw-item {
+  display: flex; align-items: center; gap: 7px; width: 100%;
+  padding: 8px 9px; border-radius: 8px; background: transparent; border: 0;
+  color: var(--text); font-size: var(--fs-xs); text-align: start;
+}
+.brsw-item:hover { background: var(--surface-2); }
+.brsw-item.is-on { background: color-mix(in srgb, var(--brand) 12%, transparent); color: var(--brand); font-weight: 700; }
+.brsw-note { font-size: 10px; color: var(--text-faint); padding: 4px 8px 2px; }
+/* ==== /branch switcher v1 ==== */
