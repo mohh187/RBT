@@ -189,4 +189,8 @@ module.exports = {
   notifyReceipt,
   invoiceLink,
   nextReceiptNo,
+  // The ZATCA TLV encoder is shared with the PLATFORM document engine
+  // (functions/platformInvoicing.js) rather than forked — one encoder, so a
+  // Phase-2 change lands in both places at once.
+  zatcaBase64,
 }

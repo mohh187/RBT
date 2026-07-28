@@ -12120,3 +12120,90 @@ body[data-mch-sheet] .backdrop {
 .spend-bar.is-near > i { background: var(--gold); }
 .spend-bar.is-full > i { background: var(--danger); }
 /* ==== /spend v1 ==== */
+
+/* ==== platform documents v1 ==== */
+/* The printable A4 sheet: tax invoice, credit note, quotation. Deliberately a
+   PRINT stylesheet and not a PDF library — the browser's own text engine is
+   the only thing that shapes Arabic and handles bidi correctly (see the note
+   at the top of PlatformDocSheet.jsx).
+
+   Colours are literal, not theme tokens: a document is white paper in both
+   light and dark mode, and a token that flips would print white ink on white. */
+.pdoc-page { min-height: 100dvh; display: flex; flex-direction: column; align-items: center; gap: 14px; padding: 24px 16px; background: var(--bg, #f4f4f6); }
+.pdoc {
+  width: 100%; max-width: 820px; background: #fff; color: #16181d;
+  border: 1px solid #e7e7ea; border-radius: 14px; padding: 34px 36px;
+  box-shadow: 0 8px 30px rgba(0,0,0,.06);
+  font-family: 'Tajawal', 'Segoe UI', Tahoma, Arial, sans-serif; line-height: 1.7;
+}
+/* Latin runs (IBAN, VAT number, email) inside an RTL sheet. */
+.pdoc-ltr { direction: ltr; unicode-bidi: isolate; }
+.pdoc-num { font-variant-numeric: tabular-nums; }
+
+.pdoc-head { display: flex; justify-content: space-between; gap: 28px; align-items: flex-start; border-bottom: 2px solid #16181d; padding-bottom: 18px; }
+.pdoc-brand { display: flex; gap: 14px; align-items: flex-start; min-width: 0; }
+.pdoc-logo { width: 132px; height: auto; flex: none; }
+.pdoc-seller { display: grid; gap: 2px; font-size: 12px; color: #4a4e57; min-width: 0; }
+.pdoc-seller strong { font-size: 15px; color: #16181d; }
+.pdoc-meta { text-align: start; flex: none; }
+.pdoc-title { font-size: 22px; font-weight: 800; }
+.pdoc-title-en { font-size: 11px; color: #6b6f76; letter-spacing: .08em; text-transform: uppercase; }
+.pdoc-no { font-size: 14px; font-weight: 700; margin: 6px 0 8px; font-variant-numeric: tabular-nums; }
+.pdoc-kv { display: grid; grid-template-columns: auto auto; gap: 2px 12px; margin: 0; font-size: 11.5px; }
+.pdoc-kv dt { color: #6b6f76; }
+.pdoc-kv dd { margin: 0; font-weight: 600; }
+.pdoc-danger { color: #b3261e; font-weight: 700; }
+
+.pdoc-buyer { display: flex; justify-content: space-between; gap: 24px; flex-wrap: wrap; padding: 16px 0; border-bottom: 1px solid #eceef1; }
+.pdoc-buyer > div { display: grid; gap: 2px; font-size: 12.5px; color: #4a4e57; }
+.pdoc-buyer strong { font-size: 15px; color: #16181d; }
+.pdoc-buyer-ids { text-align: start; }
+.pdoc-label { font-size: 10.5px; color: #8a8f98; letter-spacing: .06em; text-transform: uppercase; }
+
+.pdoc-features { padding: 14px 0; border-bottom: 1px solid #eceef1; }
+.pdoc-features ul { list-style: none; margin: 6px 0 0; padding: 0; display: grid; grid-template-columns: 1fr 1fr; gap: 4px 18px; font-size: 12.5px; }
+.pdoc-features li { display: flex; gap: 6px; align-items: center; }
+.pdoc-features svg { color: #1c7a44; flex: none; }
+
+.pdoc-table { width: 100%; border-collapse: collapse; margin: 18px 0 0; font-size: 13px; }
+.pdoc-table th { background: #f6f7f9; color: #4a4e57; font-size: 11.5px; font-weight: 700; padding: 9px 10px; text-align: start; border-bottom: 1px solid #e3e5e9; }
+.pdoc-table td { padding: 11px 10px; border-bottom: 1px solid #eceef1; vertical-align: top; }
+.pdoc-c { text-align: center; }
+.pdoc-was { color: #9aa0a8; margin-inline-end: 6px; }
+.pdoc-disc { font-size: 11px; color: #1c7a44; margin-top: 3px; }
+
+.pdoc-totals { display: flex; justify-content: space-between; align-items: flex-start; gap: 24px; padding: 18px 0; flex-wrap: wrap; }
+.pdoc-qr { display: grid; gap: 4px; justify-items: center; }
+.pdoc-qr img { width: 116px; height: 116px; }
+.pdoc-qr-cap { font-size: 10px; color: #8a8f98; }
+.pdoc-sum { display: grid; grid-template-columns: auto auto; gap: 6px 26px; margin: 0; min-width: 260px; font-size: 13.5px; }
+.pdoc-sum dt { color: #4a4e57; }
+.pdoc-sum dd { margin: 0; text-align: start; font-weight: 600; }
+.pdoc-save { color: #1c7a44; }
+.pdoc-grand { font-size: 17px; font-weight: 800; color: #16181d; border-top: 2px solid #16181d; padding-top: 8px; margin-top: 4px; }
+.pdoc-cur { font-size: 12px; font-weight: 600; color: #6b6f76; }
+
+.pdoc-bank { padding: 12px 0; border-top: 1px solid #eceef1; }
+.pdoc-bank-row { display: flex; gap: 18px; flex-wrap: wrap; font-size: 12.5px; margin-top: 4px; }
+.pdoc-iban { font-weight: 700; letter-spacing: .04em; }
+.pdoc-terms { padding: 12px 0; border-top: 1px solid #eceef1; }
+.pdoc-terms ol { margin: 6px 0 0; padding-inline-start: 18px; font-size: 11.5px; color: #4a4e57; display: grid; gap: 3px; }
+.pdoc-notes { font-size: 12px; color: #4a4e57; padding: 10px 12px; background: #f6f7f9; border-radius: 8px; margin-top: 10px; }
+.pdoc-foot { display: grid; gap: 3px; margin-top: 18px; padding-top: 12px; border-top: 1px solid #eceef1; font-size: 10.5px; color: #8a8f98; text-align: center; }
+.pdoc-actions { display: flex; gap: 10px; flex-wrap: wrap; justify-content: center; }
+
+@media (max-width: 640px) {
+  .pdoc { padding: 22px 18px; }
+  .pdoc-head { flex-direction: column; gap: 14px; }
+  .pdoc-features ul { grid-template-columns: 1fr; }
+}
+/* The sheet is the ONLY thing that prints. */
+@media print {
+  .pdoc-page { background: #fff; padding: 0; display: block; }
+  .pdoc { box-shadow: none; border: none; max-width: none; border-radius: 0; padding: 0; }
+  .no-print { display: none !important; }
+  .pdoc-table { page-break-inside: auto; }
+  .pdoc-table tr { page-break-inside: avoid; }
+  @page { margin: 14mm; }
+}
+/* ==== /platform documents v1 ==== */

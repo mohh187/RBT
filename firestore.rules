@@ -1063,6 +1063,37 @@ service cloud.firestore {
     // Error-push throttle signatures (written by onErrorReported via Admin SDK).
     match /platformErrorSignatures/{id} { allow read, write: if false; }
 
+    // ---- observability ----
+    // Live health board + the operational alert feed. Written by the probes
+    // (Admin SDK). An admin may ACKNOWLEDGE an alert, and nothing else: the
+    // allowed keys are pinned so the field set cannot be repurposed to rewrite
+    // an alert's severity or body after the fact.
+    match /platformHealth/{id} { allow read: if isPlatformAdmin(); allow write: if false; }
+    match /platformAlerts/{id} {
+      allow read: if isPlatformAdmin();
+      allow create, delete: if false;
+      allow update: if isPlatformAdmin()
+        && request.resource.data.diff(resource.data).affectedKeys()
+             .hasOnly(['status', 'ackedBy', 'ackedAt', 'ackNote', 'snoozeUntil']);
+    }
+    // Estimate-vs-actual per vendor per month. Platform-admin writable because
+    // the «actual» comes from a human reading an invoice — there is no API for
+    // it while the vendor accounts are shared with the owner's other systems.
+    match /platformVendorSpend/{id} { allow read, write: if isPlatformAdmin(); }
+
+    // Quotations carry a prospect's VAT number AND a negotiated price. A
+    // leaked negotiated price is a commercial injury, so the collection is
+    // closed to everyone but the console — the prospect's own view goes
+    // through the getPublicQuote callable, which compares a token. An
+    // unguessable document id is not a permission model.
+    match /platformQuotes/{id} { allow read: if isPlatformAdmin(); allow write: if false; }
+
+    // Invoice / quotation sequence counters, and the platform-wide Gemini
+    // per-minute counter. SERVER ONLY: a client-writable invoice counter is a
+    // way to mint duplicate legal numbers, and a client-writable spend counter
+    // is a way to erase the wall in front of Google's rate limit.
+    match /platformCounters/{id} { allow read, write: if false; }
+
     // Public status page — anyone can read; only the platform posts incidents.
     match /platformStatus/{id} {
       allow read: if true;

@@ -677,6 +677,12 @@ function makeRollup(onSchedule, getFirestore) {
     const budget = controls.monthlyBudgetUsd
     const pct = budget > 0 ? totalUsd / budget : 0
 
+    // A DAILY series, for the cost of one map field on a document that is
+    // already being written. Without it there is no burn-down curve and no
+    // projection — and a projection is what turns «you are at 40%» into «you
+    // cross the budget on the 22nd», which is the difference between a warning
+    // and a post-mortem. ~30 keys a month.
+    const today = dayKey()
     await db.doc(`platformStats/spend-${period}`).set({
       period,
       tenants: tenants.size,
@@ -689,6 +695,7 @@ function makeRollup(onSchedule, getFirestore) {
       budgetPct: Math.round(pct * 1000) / 10,
       rates,
       byTenant,
+      daily: { [today]: { usd: totalUsd, at: Date.now() } },
       at: FieldValue.serverTimestamp(),
     }, { merge: true })
 
@@ -700,6 +707,18 @@ function makeRollup(onSchedule, getFirestore) {
     const st = await stateRef.get().catch(() => null)
     const s = st && st.exists ? (st.data() || {}) : {}
     const firedFor = s.budgetFired && s.budgetFired.period === period ? s.budgetFired : { period, warn: false, trip: false }
+
+    // PROJECTION, not just level. A level threshold at 80% stays silent while
+    // the month is young and only speaks once it is nearly too late; the run
+    // rate says «you cross the budget on the 22nd» while there is still time.
+    // The projection is a WARNING only — it never trips the breaker, because
+    // acting on a forecast would stop real messages over an arithmetic guess.
+    const dayNum = Number(dayKey().slice(8, 10)) || 1
+    const daysInMonth = new Date(new Date().getFullYear(), new Date().getMonth() + 1, 0).getDate()
+    const projected = (totalUsd / dayNum) * daysInMonth
+    const crossesOnDay = projected > budget && totalUsd > 0
+      ? Math.max(1, Math.ceil(budget / (totalUsd / dayNum)))
+      : null
 
     const patch = {}
     let alert = null
@@ -721,6 +740,16 @@ function makeRollup(onSchedule, getFirestore) {
       alert = {
         title: 'الميزانية على وشك النفاد',
         body: `بلغ إنفاق المنصة ${Math.round(pct * 100)}% من ميزانية الشهر (${totalUsd.toFixed(2)} من ${budget} دولار).`,
+        severity: 'warn',
+      }
+    } else if (crossesOnDay && !firedFor.projected && !firedFor.warn && !firedFor.trip) {
+      // Fires while still comfortably under the level thresholds — that is the
+      // whole point of it.
+      patch['budgetFired.period'] = period
+      patch['budgetFired.projected'] = true
+      alert = {
+        title: 'الاتجاه الحالي يتجاوز الميزانية',
+        body: `المصروف ${totalUsd.toFixed(2)} من ${budget} دولار (${Math.round(pct * 100)}%)، لكن معدّل الإنفاق يصل ${projected.toFixed(2)} نهاية الشهر — أي التجاوز يوم ${crossesOnDay}.`,
         severity: 'warn',
       }
     }

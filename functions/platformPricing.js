@@ -20,6 +20,15 @@ const FALLBACK_PRICES = { menu: 99, ops: 199, pro: 349, enterprise: 549 }
 const FALLBACK_LIST_PRICES = { menu: 149, ops: 299, pro: 499, enterprise: 1299 }
 const YEARLY_DISCOUNT = 0.8
 
+// What each plan actually includes, for the quotation. Mirrors DEFAULT_FEATURES
+// in src/lib/platformConfig.js; the console's edits override it.
+const FALLBACK_FEATURES = {
+  menu: ['منيو رقمي بـ QR', 'هوية وشعار وألوان المنشأة', 'استقبال الطلبات من المنيو', 'صفحة المنشأة العامة'],
+  ops: ['كل مزايا «منيو»', 'كاشير ونقطة بيع', 'إدارة الطلبات والطاولات', 'شاشة المطبخ KDS', 'الحجوزات ونداء النادل'],
+  pro: ['كل مزايا «منيو + تشغيل»', 'مكتبة الثيمات والسكنات', 'خلفيات وفيديو وعلامة مائية', 'نطاق مخصّص', 'حملات واتساب وبرنامج الولاء'],
+  enterprise: ['كل مزايا «احترافي»', 'إدارة الموظفين والحضور والرواتب', 'التقارير والمحاسبة الكاملة', 'مجسمات AR واقعية بالذكاء الاصطناعي', 'المساعد الذكي للإدارة'],
+}
+
 // Read the console's plan config once, with the fallbacks merged in. Returns
 // { prices, listPrices, promo, currency, vatMode, yearlyDiscount }.
 async function plansConfig(db) {
@@ -37,6 +46,10 @@ async function plansConfig(db) {
   return {
     prices: merge(FALLBACK_PRICES, d.prices),
     listPrices: merge(FALLBACK_LIST_PRICES, d.listPrices),
+    // The feature bullets a quotation prints. The console already edits these
+    // at platformConfig/plans.features; the fallbacks keep a quote printable
+    // before anyone has touched that screen.
+    features: { ...FALLBACK_FEATURES, ...(d.features && typeof d.features === 'object' ? d.features : {}) },
     promo: d.promo && typeof d.promo === 'object' ? d.promo : null,
     currency: d.currency || 'SAR',
     // Platform B2B prices are quoted EXCLUSIVE of VAT — see platformInvoicing.
@@ -81,4 +94,4 @@ function yearlyAmount(monthly, cfg) {
   return Math.round(monthly * 12 * (Number.isFinite(f) ? f : YEARLY_DISCOUNT))
 }
 
-module.exports = { FALLBACK_PRICES, FALLBACK_LIST_PRICES, YEARLY_DISCOUNT, plansConfig, resolvePlanPrice, promoOf, yearlyAmount }
+module.exports = { FALLBACK_PRICES, FALLBACK_LIST_PRICES, FALLBACK_FEATURES, YEARLY_DISCOUNT, plansConfig, resolvePlanPrice, promoOf, yearlyAmount }

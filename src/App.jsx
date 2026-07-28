@@ -128,6 +128,8 @@ const PlatformGrowth = lazy(() => import('./routes/platform/Growth.jsx'))
 const PlatformSettings = lazy(() => import('./routes/platform/PlatformSettings.jsx'))
 const PlatformCompliance = lazy(() => import('./routes/platform/Compliance.jsx'))
 const PlatformSpend = lazy(() => import('./routes/platform/Spend.jsx'))
+const PlatformInvoiceDoc = lazy(() => import('./routes/PlatformInvoice.jsx'))
+const PublicQuote = lazy(() => import('./routes/PublicQuote.jsx'))
 const PlatformAssistant = lazy(() => import('./routes/platform/PlatformAssistant.jsx'))
 const PlatformSegments = lazy(() => import('./routes/platform/Segments.jsx'))
 const StatusPage = lazy(() => import('./routes/StatusPage.jsx'))
@@ -321,6 +323,10 @@ export default function App() {
       <Route path="/pay/return" element={<PayReturn />} />
       <Route path="/pay/:intentId" element={<InlineCheckout />} />
       <Route path="/invoice/:tid/:id" element={<Invoice />} />
+      {/* platform-issued documents: a tax invoice/credit note the venue can open
+          from an email link, and a prospect-facing quotation guarded by a token */}
+      <Route path="/inv/:id" element={<PlatformInvoiceDoc />} />
+      <Route path="/quote/:id/:token" element={<PublicQuote />} />
 
       {/* diner-facing */}
       <Route path="/m/:slug" element={<PublicMenu />} />

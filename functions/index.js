@@ -1010,6 +1010,15 @@ exports.onOrderPaid = require('./invoicing').onOrderPaid
 // Serves /m/** and /join/** (see firebase.json rewrites) with the VENUE's meta.
 exports.venueShell = require('./venueMeta').venueShell
 
+// ---- platform documents: quotations that convert into tax invoices ----
+Object.assign(exports, require('./platformQuotes'))
+
+// ---- observability: what the spend meter structurally cannot see ----
+// Vendor-side limits that stop a feature with our own counters reading green
+// (WhatsApp quality/templates/tier, Meshy balance, Resend domains, key expiry),
+// and the Gemini month projection.
+Object.assign(exports, (({ vendorProbe, geminiCapGuard }) => ({ vendorProbe, geminiCapGuard }))(require('./observability')))
+
 // ---- spend meters: cross-venue rollup + the monthly budget circuit breaker ----
 // The per-send metering itself is inline at each call site (see functions/spend.js);
 // this is the aggregate the console reads and the breaker that can stop the
