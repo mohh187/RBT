@@ -15,7 +15,7 @@ const seen = new Set()
 let sent = 0
 const MAX_PER_SESSION = 15
 
-function report(message, stack, kind) {
+function report(message, stack, kind, componentStack) {
   try {
     if (!firebaseReady || !db) return
     const msg = String(message || '').slice(0, 1900)
@@ -27,6 +27,16 @@ function report(message, stack, kind) {
     addDoc(collection(db, 'platformErrors'), {
       message: msg,
       stack: String(stack || '').slice(0, 1900),
+      // THE COMPONENT STACK IS THE ANSWER, and we used to throw it away.
+      //
+      // A minified production JS stack for a React render crash is mostly
+      // React's own internals — it says a hook blew up, not WHOSE. React hands
+      // the owning component chain to componentDidCatch as its second argument,
+      // and the boundary was ignoring it. For the class of crash where the
+      // message alone is useless ("Cannot read properties of null (reading
+      // 'useState')" is the same text for every possible cause), this is the
+      // only field that identifies the culprit.
+      componentStack: String(componentStack || '').slice(0, 1900),
       kind,
       url: String(location.href).slice(0, 300),
       ua: navigator.userAgent.slice(0, 200),
@@ -41,8 +51,8 @@ function report(message, stack, kind) {
 
 // React render crashes are swallowed by an error boundary (they never reach
 // window.onerror), so the boundary reports through the same dedupe/cap pipe.
-export function reportBoundaryError(err) {
-  report((err && (err.message || err.code)) || String(err || 'boundary error'), err && err.stack, 'boundary')
+export function reportBoundaryError(err, componentStack) {
+  report((err && (err.message || err.code)) || String(err || 'boundary error'), err && err.stack, 'boundary', componentStack)
 }
 
 let installed = false

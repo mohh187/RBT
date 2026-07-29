@@ -180,26 +180,80 @@ function styles(variant) {
 export default class ErrorBoundary extends Component {
   constructor(props) {
     super(props)
-    this.state = { err: null }
+    this.state = { err: null, componentStack: '', copied: false }
     this.onReload = this.onReload.bind(this)
     this.onRetry = this.onRetry.bind(this)
+    this.onCopy = this.onCopy.bind(this)
+  }
+
+  onCopy() {
+    const { err, componentStack } = this.state
+    const text = [
+      `message: ${(err && (err.message || err.code)) || String(err || '')}`,
+      `screen:  ${this.props.label || '-'}`,
+      `url:     ${(() => { try { return location.href } catch (_) { return '-' } })()}`,
+      `ua:      ${(() => { try { return navigator.userAgent } catch (_) { return '-' } })()}`,
+      '',
+      'stack:',
+      (err && err.stack) || '(none)',
+      '',
+      'component stack:',
+      componentStack || '(none)',
+    ].join('\n')
+    const done = () => { this.setState({ copied: true }) }
+    try {
+      // The clipboard API is unavailable on insecure origins and inside some
+      // in-app browsers — which is exactly where a diner hits this. Fall back to
+      // the old selection trick rather than leaving the button dead.
+      if (navigator.clipboard && navigator.clipboard.writeText) {
+        navigator.clipboard.writeText(text).then(done).catch(() => this.copyFallback(text, done))
+      } else {
+        this.copyFallback(text, done)
+      }
+    } catch (_) { this.copyFallback(text, done) }
+  }
+
+  copyFallback(text, done) {
+    try {
+      const ta = document.createElement('textarea')
+      ta.value = text
+      ta.setAttribute('readonly', '')
+      ta.style.cssText = 'position:fixed;top:-9999px;opacity:0;'
+      document.body.appendChild(ta)
+      ta.select()
+      document.execCommand('copy')
+      document.body.removeChild(ta)
+      done()
+    } catch (_) { /* nothing more to try; the monitor still has it */ }
   }
 
   static getDerivedStateFromError(err) {
     return { err }
   }
 
-  componentDidCatch(err) {
+  // REACT'S SECOND ARGUMENT IS THE DIAGNOSIS, and this used to drop it.
+  //
+  // `info.componentStack` is the chain of components that owned the throwing
+  // render. Without it, a minified production stack for a render crash is
+  // almost entirely React internals — you learn that a hook failed, never which
+  // component's. That is fatal for errors whose text is identical across every
+  // possible cause: "Cannot read properties of null (reading 'useState')" is
+  // what React throws whenever the dispatcher is null, and the dispatcher is
+  // null for half a dozen unrelated reasons. The component stack is the only
+  // thing that separates them.
+  componentDidCatch(err, info) {
     // A stale chunk self-heals with one reload; never report it or paint a card.
     if (isChunkError(err) && reloadOnceForStaleChunk()) return
+    const componentStack = (info && info.componentStack) || ''
+    this.setState({ componentStack })
     try {
       const label = this.props.label
       if (label && err && typeof err === 'object') {
         // Prefix the message with the screen so distinct screens dedupe/report
         // separately, without losing the original stack.
-        reportBoundaryError({ message: `[${label}] ${err.message || err.code || err}`, code: err.code, stack: err.stack })
+        reportBoundaryError({ message: `[${label}] ${err.message || err.code || err}`, code: err.code, stack: err.stack }, componentStack)
       } else {
-        reportBoundaryError(err)
+        reportBoundaryError(err, componentStack)
       }
     } catch (_) { /* the monitor must never itself break the boundary */ }
   }
@@ -212,7 +266,7 @@ export default class ErrorBoundary extends Component {
     // react/no-did-update-set-state here, but eslint-plugin-react is not in
     // this config, and a disable naming an unknown rule is itself an error.)
     if (this.state.err && prev.resetKey !== this.props.resetKey) {
-      this.setState({ err: null })
+      this.setState({ err: null, componentStack: '', copied: false })
     }
   }
 
@@ -225,7 +279,7 @@ export default class ErrorBoundary extends Component {
     // a widget that can recover; a lazy route cannot (React marks a rejected
     // payload permanently and re-throws it), which is why route-level cards show
     // reload, not retry.
-    this.setState({ err: null })
+    this.setState({ err: null, componentStack: '', copied: false })
     try { this.props.onReset && this.props.onReset() } catch (_) { /* ignore */ }
   }
 
@@ -255,6 +309,15 @@ export default class ErrorBoundary extends Component {
             )}
             <button type="button" style={soft ? s.btnGhost : s.btnPrimary} onClick={this.onReload}>
               {t.reload} · {TXT[lang === 'en' ? 'ar' : 'en'].reload}
+            </button>
+            {/* A screenshot of this card carries no diagnosis — every render
+                crash paints exactly the same words. One tap puts the message,
+                the stack and the component chain on the clipboard, which is
+                the difference between "it crashed" and knowing which component
+                did it. Reported to the monitor too, but a staff member who
+                cannot reach /platform/health can just paste this. */}
+            <button type="button" style={s.btnGhost} onClick={this.onCopy}>
+              {this.state.copied ? 'تم النسخ · Copied' : 'نسخ التفاصيل · Copy details'}
             </button>
           </div>
         </div>

@@ -115,6 +115,17 @@ export default function Issues() {
                       </div>
                     </div>
                   </div>
+                  {/* THE COMPONENT CHAIN COMES FIRST, and is open by default.
+                      For a render crash the JS stack below is minified React
+                      internals and names nothing useful; this one names the
+                      component that actually threw. Reading them in the wrong
+                      order is how an afternoon disappears. */}
+                  {e.componentStack ? (
+                    <details open>
+                      <summary className="xs faint" style={{ cursor: 'pointer' }}>المكوّن الذي انهار (component stack)</summary>
+                      <pre className="xs" dir="ltr" style={{ overflowX: 'auto', background: 'var(--surface-2, var(--bg))', padding: 8, borderRadius: 8, maxHeight: 200 }}>{e.componentStack}</pre>
+                    </details>
+                  ) : null}
                   {e.stack ? (
                     <details>
                       <summary className="xs faint" style={{ cursor: 'pointer' }}>تفاصيل الخطأ (stack)</summary>

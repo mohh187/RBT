@@ -974,8 +974,14 @@ service cloud.firestore {
         && request.resource.data.message is string
         && request.resource.data.message.size() > 0
         && request.resource.data.message.size() < 2000
-        && request.resource.data.keys().hasOnly(['message', 'stack', 'kind', 'url', 'ua', 'tenantId', 'tenantName', 'uid', 'status', 'at'])
-        && (!('stack' in request.resource.data) || request.resource.data.stack.size() < 5000);
+        // `componentStack` is React's owning-component chain for a render crash.
+        // It has to be listed here: hasOnly() is exact, so a client sending a
+        // field the allowlist does not name has its write REFUSED — which for
+        // this collection means the error monitor goes silent rather than noisy,
+        // the worse of the two failure modes.
+        && request.resource.data.keys().hasOnly(['message', 'stack', 'componentStack', 'kind', 'url', 'ua', 'tenantId', 'tenantName', 'uid', 'status', 'at'])
+        && (!('stack' in request.resource.data) || request.resource.data.stack.size() < 5000)
+        && (!('componentStack' in request.resource.data) || request.resource.data.componentStack.size() < 5000);
       allow read, update, delete: if isPlatformAdmin();
     }
 
