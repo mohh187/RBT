@@ -11,7 +11,7 @@ const { onSchedule } = require('firebase-functions/v2/scheduler')
 const { onDocumentCreated, onDocumentUpdated } = require('firebase-functions/v2/firestore')
 const { getFirestore, FieldValue } = require('firebase-admin/firestore')
 const { sendWhatsAppText, waCredsFor, sendEmail } = require('./messaging')
-const { shell, section, esc: eesc } = require('./emailTemplates.js')
+const { shell, section, money: emoney, esc: eesc } = require('./emailTemplates.js')
 const { platformBrand } = require('./emailBrand.js')
 const { takeSpend } = require('./spend')
 
@@ -583,7 +583,7 @@ const ownerDailyReport = onSchedule(
         if (reportTo && rep.email !== false) {
           const pb = platformBrand({})
           const cur = td.currency || 'SAR'
-          const n = (v) => `${Number(v) || 0} ${cur}`
+          const n = (v) => emoney(v, cur)
           const avg = paidCount ? Math.round(revenue / paidCount) : 0
           const body = [
             `<p style="margin:0 0 6px;">مرحباً,</p>`,

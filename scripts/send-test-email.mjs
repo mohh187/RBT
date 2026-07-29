@@ -15,7 +15,7 @@ import { createRequire } from 'node:module'
 import { readFileSync } from 'node:fs'
 
 const require_ = createRequire(new URL('../functions/', import.meta.url))
-const { shell, facts, lineTable, section } = require_('./emailTemplates.js')
+const { shell, facts, lineTable, section, money } = require_('./emailTemplates.js')
 const { venueBrand, platformBrand, orderTrackUrl } = require_('./emailBrand.js')
 
 const TO = process.argv[2]
@@ -57,9 +57,9 @@ const VENUE = {
   googleMapsUrl: 'https://maps.google.com/?cid=1234567890',
 }
 const LINES = [
-  { name: 'سبانش لاتيه', qty: 2, total: '30.00' },
-  { name: 'تشيز كيك', qty: 1, total: '22.00' },
-  { name: 'كرواسون', qty: 1, total: '12.00' },
+  { name: 'سبانش لاتيه', qty: 2, total: money(30) },
+  { name: 'تشيز كيك', qty: 1, total: money(22) },
+  { name: 'كرواسون', qty: 1, total: money(12) },
 ]
 
 const vb = venueBrand(VENUE)
@@ -76,7 +76,7 @@ const MAILS = {
       body: `<p style="margin:0 0 12px;">مرحباً محمد,</p>
         <p style="margin:0 0 10px;font-size:15px;">استلمنا طلبك وبدأنا تجهيزه.</p>
         ${facts([['رقم الطلب', '1296'], ['الطاولة', 'طاولة 7']])}
-        ${lineTable(LINES, 'الإجمالي', '64.00 ريال')}`,
+        ${lineTable(LINES, 'الإجمالي', money(64))}`,
       cta: track ? { label: 'متابعة الطلب', href: track } : null,
     }),
   },
@@ -88,8 +88,8 @@ const MAILS = {
       preheader: 'تم استلام دفعتك — فاتورتك بالداخل',
       body: `<p style="margin:0 0 12px;">مرحباً محمد,</p>
         <p style="margin:0 0 10px;font-size:15px;">تم استلام دفعتك. نتمنى أن تكون قد استمتعت.</p>
-        ${facts([['رقم الطلب', '1296'], ['المدفوع', '64.00 ريال']])}
-        ${lineTable(LINES, 'الإجمالي', '64.00 ريال')}`,
+        ${facts([['رقم الطلب', '1296'], ['المدفوع', money(64)]])}
+        ${lineTable(LINES, 'الإجمالي', money(64))}`,
       cta: { label: 'قيّمنا على خرائط جوجل', href: VENUE.googleMapsUrl },
       secondaryCta: track ? { label: 'متابعة الطلب', href: track } : null,
     }),
@@ -106,8 +106,8 @@ const MAILS = {
         section(pb, 'الحركة', [
           ['الطلبات المدفوعة', '86'],
           ['الطلبات الملغاة', '3'],
-          ['متوسط قيمة الطلب', '39 SAR'],
-          ['إجمالي الإيراد', '3420 SAR', 'strong'],
+          ['متوسط قيمة الطلب', money(39)],
+          ['إجمالي الإيراد', money(3420), 'strong'],
         ]),
         section(pb, 'الإيراد حسب طريقة الدفع', [
           ['نقداً', '31'], ['شبكة', '42'], ['أونلاين', '13'],

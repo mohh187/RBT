@@ -8,7 +8,7 @@ import { writeFileSync, mkdirSync } from 'node:fs'
 import { dirname } from 'node:path'
 
 const require_ = createRequire(new URL('../functions/', import.meta.url))
-const { shell, facts, lineTable, section } = require_('./emailTemplates.js')
+const { shell, facts, lineTable, section, money } = require_('./emailTemplates.js')
 const { venueBrand, platformBrand, orderTrackUrl } = require_('./emailBrand.js')
 
 process.env.PUBLIC_BASE_URL = process.env.PUBLIC_BASE_URL || 'https://rbt360sa.com'
@@ -27,9 +27,9 @@ const SQUARE_LOGO = 'data:image/svg+xml;base64,' + Buffer.from(
   + '</svg>', 'utf8').toString('base64')
 
 const LINES = [
-  { name: 'سبانش لاتيه', qty: 2, total: '30.00' },
-  { name: 'تشيز كيك', qty: 1, total: '22.00' },
-  { name: 'كرواسون', qty: 1, total: '12.00' },
+  { name: 'سبانش لاتيه', qty: 2, total: money(30) },
+  { name: 'تشيز كيك', qty: 1, total: money(22) },
+  { name: 'كرواسون', qty: 1, total: money(12) },
 ]
 
 const VENUES = [
@@ -56,15 +56,15 @@ for (const v of VENUES) {
     body: `<p style="margin:0 0 12px;">مرحباً محمد,</p>
       <p style="margin:0 0 10px;font-size:15px;">استلمنا طلبك وبدأنا تجهيزه.</p>
       ${facts([['رقم الطلب', '1296'], ['الطاولة', 'طاولة 7']])}
-      ${lineTable(LINES, 'الإجمالي', '64.00 ريال')}`,
+      ${lineTable(LINES, 'الإجمالي', money(64))}`,
     cta: orderTrackUrl(v.t, 'abc123') ? { label: 'متابعة الطلب', href: orderTrackUrl(v.t, 'abc123') } : null,
   }))
   add(`${v.t.name} — الفاتورة وطلب التقييم`, 'لحظة الدفع: الفاتورة وزر «قيّمنا» على خرائط جوجل. الزر لا يُرسم إلا إذا وضعت المنشأة رابطاً.', b.color, `venue-${v.key}-paid`, shell(b, {
     title: `${v.t.name} — شكراً لك`, preheader: `فاتورتك — ${v.t.name}`,
     body: `<p style="margin:0 0 12px;">مرحباً محمد,</p>
       <p style="margin:0 0 10px;font-size:15px;">تم استلام دفعتك. نتمنى أن تكون قد استمتعت.</p>
-      ${facts([['رقم الطلب', '1296'], ['المدفوع', '64.00 ريال']])}
-      ${lineTable(LINES, 'الإجمالي', '64.00 ريال')}`,
+      ${facts([['رقم الطلب', '1296'], ['المدفوع', money(64)]])}
+      ${lineTable(LINES, 'الإجمالي', money(64))}`,
     cta: b.mapsUrl ? { label: 'قيّمنا على خرائط جوجل', href: b.mapsUrl } : null,
     secondaryCta: orderTrackUrl(v.t, 'abc123') ? { label: 'متابعة الطلب', href: orderTrackUrl(v.t, 'abc123') } : null,
   }))
@@ -75,7 +75,7 @@ add('RBT 360 — فاتورة اشتراك', 'بريدٌ منّا إلى الم�
   title: 'فاتورة اشتراكك الشهري', preheader: 'فاتورة اشتراك RBT 360',
   body: `<p style="margin:0 0 12px;">مرحباً,</p>
     <p style="margin:0 0 10px;">صدرت فاتورة اشتراك «كافيه مزاج فال» عن الفترة الحالية.</p>
-    ${facts([['رقم الفاتورة', 'INV-2026-000413'], ['الباقة', 'متكامل'], ['المبلغ', '1033.85 ريال'], ['تستحق في', '2026-08-07']])}`,
+    ${facts([['رقم الفاتورة', 'INV-2026-000413'], ['الباقة', 'متكامل'], ['المبلغ', money(1033.85)], ['تستحق في', '2026-08-07']])}`,
   cta: { label: 'سداد الفاتورة', href: '#' },
 }))
 add('RBT 360 — التقرير اليومي', 'أقسامٌ معنونة ومجاميع مميّزة: المالك يدقّق أرقام أمس مقابل توقّعه، لا يتصفّحها. الأرقام كانت محسوبة أصلاً وتُرسل واتساب فقط.', pb.color, 'platform-daily', shell(pb, {
@@ -87,8 +87,8 @@ add('RBT 360 — التقرير اليومي', 'أقسامٌ معنونة ومج
     section(pb, 'الحركة', [
       ['الطلبات المدفوعة', '86'],
       ['الطلبات الملغاة', '3'],
-      ['متوسط قيمة الطلب', '39 SAR'],
-      ['إجمالي الإيراد', '3420 SAR', 'strong'],
+      ['متوسط قيمة الطلب', money(39)],
+      ['إجمالي الإيراد', money(3420), 'strong'],
     ]),
     section(pb, 'الإيراد حسب طريقة الدفع', [
       ['نقداً', '31'], ['شبكة', '42'], ['أونلاين', '13'],

@@ -66,13 +66,26 @@ function header(brand) {
   const plate = b.plate || '#ffffff'
   const ink = b.plateInk || INK
   const rule = b.color || '#1F2A37'
+  // ASPECT RATIO IS NEVER FORCED.
+  //
+  // A venue logo can be a square badge or a wide wordmark, and we cannot know
+  // which. An earlier version pinned the image to 76x76 with object-fit:cover —
+  // which crops a wide wordmark down to its middle slice. (That is exactly what
+  // made our own wide wordmark render as a fragment when it briefly went
+  // through this path.) object-fit is also ignored by most email clients, so
+  // the fallback there was a stretched, distorted logo.
+  //
+  // Bounding with max-width/max-height and letting width/height stay auto keeps
+  // the proportions in EVERY client, with no object-fit involved: a square logo
+  // fills the disc, a wide one letterboxes inside it. The disc itself is the
+  // fixed-size, white, round cell.
   const logo = b.logoUrl
     ? `
     <table role="presentation" cellpadding="0" cellspacing="0" border="0" align="center" style="margin:0 auto 12px;">
-      <tr><td width="76" height="76" align="center" valign="middle"
-              style="width:76px;height:76px;background:#ffffff;border-radius:50%;overflow:hidden;border:1px solid rgba(0,0,0,.06);">
-        <img src="${esc(b.logoUrl)}" alt="${esc(b.name)}" width="76" height="76"
-             style="display:block;width:76px;height:76px;border:0;border-radius:50%;object-fit:cover;">
+      <tr><td width="78" height="78" align="center" valign="middle"
+              style="width:78px;height:78px;background:#ffffff;border-radius:50%;border:1px solid rgba(0,0,0,.07);text-align:center;">
+        <img src="${esc(b.logoUrl)}" alt="${esc(b.name)}"
+             style="display:inline-block;max-width:60px;max-height:60px;width:auto;height:auto;border:0;vertical-align:middle;">
       </td></tr>
     </table>`
     : ''
@@ -97,13 +110,42 @@ function button(brand, label, href) {
   </table>`
 }
 
+// MONEY, WITH THE REAL RIYAL MARK.
+//
+// The app draws the mark as inline SVG and that is correct for a browser. An
+// inbox is not a browser: Gmail strips <svg> outright and blocks data: URIs in
+// img src, so neither of the app's approaches survives. A hosted PNG does —
+// see scripts/make-riyal-png.mjs, which rasterises the same path data so the
+// two can never drift.
+//
+// Arabic order puts the mark BEFORE the number, matching <Price> in the app.
+// Non-SAR currencies keep their code: there is no mark to draw.
+const RIYAL = (light) => {
+  const base = String(process.env.PUBLIC_BASE_URL || '').replace(/\/+$/, '')
+  if (!base) return 'ريال' // no absolute origin to serve it from — the word still reads
+  return `<img src="${base}/brand/riyal${light ? '-light' : ''}.png" alt="ريال" width="13" height="13" style="display:inline-block;width:13px;height:13px;vertical-align:-1px;border:0;margin-inline-end:3px;">`
+}
+// Latin digits always — an Arabic-Indic numeral is a hard project rule against.
+const digits = (v) => (Number(v) || 0).toLocaleString('en-US', { minimumFractionDigits: 0, maximumFractionDigits: 2 })
+function money(value, currency = 'SAR', { light = false } = {}) {
+  const cur = String(currency || 'SAR').toUpperCase()
+  if (cur !== 'SAR') return { html: `<span dir="ltr">${digits(value)} ${esc(cur)}</span>` }
+  return { html: `<span dir="ltr">${RIYAL(light)}${digits(value)}</span>` }
+}
+
+// A value may be a plain string (escaped, the safe default) or {html} — an
+// explicit opt-in used only by money() above. Making raw HTML opt-in by shape
+// means a venue name can never become markup by accident.
+const cell = (v) => (v && typeof v === 'object' && typeof v.html === 'string' ? v.html : esc(v))
+const isBlank = (v) => v === '' || v == null || (typeof v === 'object' && !v.html)
+
 // Label/value rows — order number, table, amount, period. Latin digits, and the
 // value side forced LTR so a number never reorders inside an Arabic line.
 function facts(rows) {
-  const body = (rows || []).filter((r) => r && r[1] !== '' && r[1] != null).map(([k, v]) => `
+  const body = (rows || []).filter((r) => r && !isBlank(r[1])).map(([k, v]) => `
     <tr>
       <td style="padding:7px 0;font-family:${FONT};font-size:13px;color:${MUTED};white-space:nowrap;">${esc(k)}</td>
-      <td style="padding:7px 0;font-family:${FONT};font-size:14px;color:${INK};font-weight:700;" align="left" dir="ltr">${esc(v)}</td>
+      <td style="padding:7px 0;font-family:${FONT};font-size:14px;color:${INK};font-weight:700;" align="left" dir="ltr">${cell(v)}</td>
     </tr>`).join('')
   return body ? `<table role="presentation" cellpadding="0" cellspacing="0" border="0" width="100%" style="margin:14px 0;">${body}</table>` : ''
 }
@@ -113,13 +155,13 @@ function lineTable(lines, totalLabel, totalValue) {
   const rows = (lines || []).map((l) => `
     <tr>
       <td style="padding:9px 0;border-bottom:1px solid ${LINE};font-family:${FONT};font-size:14px;color:${INK};">${esc(l.name)}${Number(l.qty) > 1 ? ` <span style="color:${MUTED};">&times;${esc(l.qty)}</span>` : ''}</td>
-      <td style="padding:9px 0;border-bottom:1px solid ${LINE};font-family:${FONT};font-size:14px;color:${INK};white-space:nowrap;" align="left" dir="ltr">${esc(l.total)}</td>
+      <td style="padding:9px 0;border-bottom:1px solid ${LINE};font-family:${FONT};font-size:14px;color:${INK};white-space:nowrap;" align="left" dir="ltr">${cell(l.total)}</td>
     </tr>`).join('')
   if (!rows) return ''
   const total = totalValue == null ? '' : `
     <tr>
       <td style="padding:12px 0 0;font-family:${FONT};font-size:15px;font-weight:700;color:${INK};">${esc(totalLabel || '')}</td>
-      <td style="padding:12px 0 0;font-family:${FONT};font-size:15px;font-weight:700;color:${INK};white-space:nowrap;" align="left" dir="ltr">${esc(totalValue)}</td>
+      <td style="padding:12px 0 0;font-family:${FONT};font-size:15px;font-weight:700;color:${INK};white-space:nowrap;" align="left" dir="ltr">${cell(totalValue)}</td>
     </tr>`
   return `<table role="presentation" cellpadding="0" cellspacing="0" border="0" width="100%" style="margin:16px 0;">${rows}${total}</table>`
 }
@@ -145,7 +187,7 @@ function section(brand, title, rows) {
     return `
     <tr>
       <td style="${bg}padding:9px 12px;border-bottom:1px solid ${LINE};font-family:${FONT};font-size:13px;font-weight:${weight};color:${color};">${esc(label)}</td>
-      <td style="${bg}padding:9px 12px;border-bottom:1px solid ${LINE};font-family:${FONT};font-size:13px;font-weight:${strong ? '700' : '600'};color:${color};white-space:nowrap;" align="left" dir="ltr">${esc(value)}</td>
+      <td style="${bg}padding:9px 12px;border-bottom:1px solid ${LINE};font-family:${FONT};font-size:13px;font-weight:${strong ? '700' : '600'};color:${color};white-space:nowrap;" align="left" dir="ltr">${cell(value)}</td>
     </tr>`
   }).join('')
   if (!body) return ''
@@ -219,4 +261,4 @@ function shell(brand, { title, preheader, body, cta, secondaryCta } = {}) {
 </body></html>`
 }
 
-module.exports = { shell, header, footer, button, facts, lineTable, section, esc }
+module.exports = { shell, header, footer, button, facts, lineTable, section, money, esc }
