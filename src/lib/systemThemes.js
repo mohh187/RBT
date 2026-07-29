@@ -330,7 +330,12 @@ export function useSystemThemeBody(tenant, section) {
     applyUiFx(document.body, tenant)
     // SYSTEM font (plan idea #3): the whole back-office re-types from one pick.
     // Body-level vars beat the :root defaults for every shell + portal.
-    if (tenant?.systemFont && tenant.systemFont !== 'tajawal') {
+    // A CHOSEN font is written even when it happens to be Tajawal. The old
+    // `!== 'tajawal'` exclusion treated picking the default as picking nothing.
+    // That is invisible only for as long as :root's default IS Tajawal — the
+    // day that changes, every venue that deliberately chose Tajawal silently
+    // gets the new default instead. An explicit choice is stated explicitly.
+    if (tenant?.systemFont) {
       loadFont(tenant.systemFont)
       const fs = fontStacks(tenant.systemFont)
       document.body.style.setProperty('--font-body', fs.body)

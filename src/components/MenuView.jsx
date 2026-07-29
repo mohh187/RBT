@@ -163,8 +163,17 @@ export default function MenuView({ tenant, tenantId, items, categories, offers =
   // Room mode derives from the RESOLVED wall — null for pattern 'none' and for
   // 'image' without a url — never from raw pattern truthiness, or data-room
   // would stamp fixed light hero ink with no room behind it.
-  const edtWall = useMemo(() => (menuLayout === 'editorial' ? resolveWall(tenant) : null), [menuLayout, edtWallKey]) // eslint-disable-line react-hooks/exhaustive-deps
-  const roomOn = !!(edtWall && edtWall.room)
+  // The WALL resolves on every layout, because the button face is painted from
+  // it (buttonSkinVars(btn, wall)) and the chips now wear that face everywhere.
+  // Gating the wall too would have handed every non-editorial venue the generic
+  // #8a4a2c fallback instead of its own clay.
+  const edtWall = useMemo(() => resolveWall(tenant), [edtWallKey]) // eslint-disable-line react-hooks/exhaustive-deps
+  // ROOM MODE STAYS EDITORIAL-ONLY, and this gate is load-bearing — not
+  // tidiness. `data-room` drives fixed light hero ink through rules that target
+  // .menu-hero-body / .menu-hero-title / .special-head strong, and those
+  // elements exist on EVERY layout. Stamping it without the dark room behind it
+  // would put pale text on a pale page.
+  const roomOn = menuLayout === 'editorial' && !!(edtWall && edtWall.room)
   const banner = resolveBanner(tenant)
   const featured = resolveFeatured(tenant)
   // The true-transparency banner melt: bannerMelt > 0 replaces the painted
@@ -183,11 +192,20 @@ export default function MenuView({ tenant, tenantId, items, categories, offers =
       : `linear-gradient(to ${dir}, #000 0%, #000 ${hold}%, ${edge} 100%)`
     return { WebkitMaskImage: mask, maskImage: mask }
   }, [banner.melt, banner.meltLen, tenant?.bannerFadeDir]) // eslint-disable-line react-hooks/exhaustive-deps
-  // The exp-bar wears the venue button skin — editorial-only, gated exactly
-  // like the theme switch below; buttonSkinVars is the theme's own painter so
-  // the two faces can never drift.
+  // The exp-bar wears the venue button skin ON EVERY LAYOUT.
+  //
+  // It used to be gated to `editorial`, which meant the whole menuButtons
+  // feature — normaliser, painter, and a full admin editor with a live preview —
+  // was unreachable for fifteen of the sixteen layouts. An owner styled the
+  // games button, saved, and saw nothing change.
+  //
+  // Safe to ungate because absence still means absence: BUTTON_DEFAULTS.skin is
+  // '' and resolveButtons returns null for it, so a venue that never opened the
+  // editor renders byte-identically. Only venues that deliberately chose a skin
+  // move. buttonSkinVars is the editorial theme's own painter, so the two faces
+  // cannot drift apart.
   const edtBtnKey = JSON.stringify(tenant?.menuButtons || null)
-  const edtBtn = useMemo(() => (menuLayout === 'editorial' ? resolveButtons(tenant) : null), [menuLayout, edtBtnKey]) // eslint-disable-line react-hooks/exhaustive-deps
+  const edtBtn = useMemo(() => resolveButtons(tenant), [edtBtnKey]) // eslint-disable-line react-hooks/exhaustive-deps
   const edtBtnVars = useMemo(() => (edtBtn ? buttonSkinVars(edtBtn, edtWall) : null), [edtBtn, edtWall])
   // Tenant-ordered home blocks (tenant.menuHome.order; absent = today's order).
   const homeKey = JSON.stringify(tenant?.menuHome || null)

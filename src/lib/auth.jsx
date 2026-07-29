@@ -38,6 +38,17 @@ export function AuthProvider({ children }) {
       setIsPlatformAdmin(false)
       setStaffCaps(null)
       setMonitorContext({ uid: null, tenantId: null, tenantName: '' })
+      // HAND THE PALETTE BACK. Signing out of a venue used to leave that
+      // venue's brand on the document, so the login screen wore the colours of
+      // the account that had just left — on a shared back-office device, the
+      // previous tenant's identity greeting the next person.
+      //
+      // Here, not in logout(): this branch is where EVERY way of becoming
+      // signed-out arrives — the logout button, an expired or revoked token,
+      // and a sign-out performed in another tab. logout() is only the first of
+      // those. resolveTenantTheme(null) is not a no-op; it returns the platform
+      // default explicitly, which is what we want painted.
+      applyBrand(null)
       return
     }
     // The platform-admin check and the profile fetch are independent — run them
@@ -148,13 +159,27 @@ export function AuthProvider({ children }) {
     if (user) await loadContext(user)
   }, [user, loadContext])
 
+  // A STATE UPDATER MUST BE PURE — it was painting the document from inside one.
+  //
+  // `setTenant(t => { applyBrand(next); return next })` runs during render, not
+  // after it. React may call an updater more than once for a single update
+  // (StrictMode does so deliberately) and may discard the result of a render it
+  // decides not to commit — so the DOM was being written for tenant states that
+  // never became real. Around thirty callers in Settings alone go through here.
+  //
+  // The patch is merged in the pure updater; the paint happens in the effect
+  // below, after the state it describes is actually committed.
   const updateTenantLocal = useCallback((patch) => {
-    setTenant((t) => {
-      const next = { ...t, ...patch }
-      applyBrand(next)
-      return next
-    })
+    setTenant((t) => ({ ...t, ...patch }))
   }, [])
+
+  // Keyed on the resolved palette rather than the tenant object, so the ~30
+  // unrelated local patches (opening hours, KDS stations, game toggles) do not
+  // each trigger a repaint and a contrast re-measure.
+  const brandKey = `${tenant?.themeColor || ''}|${tenant?.themeAccent || ''}|${tenant?.themePreset || ''}`
+  useEffect(() => {
+    if (tenant) applyBrand(tenant)
+  }, [brandKey])
 
   // A staffer edits their own display name / photo (auth + staff directory).
   const updateMyProfile = useCallback(async ({ displayName, photoUrl }) => {

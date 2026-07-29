@@ -28,7 +28,7 @@ import MenuPreview from '../../components/MenuPreview.jsx'
 import TablePaint from '../../components/menuThemes/TablePaint.jsx'
 import MediaLibrary from '../../components/MediaLibrary.jsx'
 import BgPanPad from '../../components/BgPanPad.jsx'
-import { THEMES, applyTheme } from '../../lib/themes.js'
+import { THEMES } from '../../lib/themes.js'
 import { SKINS, getSkin, fontLabel, FONT_OPTIONS, SHAPE_OPTIONS, LAYOUT_OPTIONS, HEADER_STYLES, BOTTOMNAV_STYLES, MOTION_OPTIONS, MOTION_SPEEDS, MOTION_REPEATS, TAP_OPTIONS } from '../../lib/skins.js'
 import { UpgradeNotice } from '../../components/PlanGate.jsx'
 import { SECTION_TEMPLATES, sectionTemplate } from '../../lib/systemTemplates.js'
@@ -1881,7 +1881,12 @@ export default function Settings() {
     } else {
       setPreset('custom')
     }
-    applyTheme({ brand: o.brand || a.themeColor || base.tokens.brand, accent: o.accent || a.themeAccent || base.tokens.accent })
+    // No applyTheme here. Loading a theme into the EDITOR is a draft; painting
+    // <html> with it repainted the whole admin panel for an unsaved choice, and
+    // left it that way if the manager navigated off without saving — nothing
+    // restored it until the next tenant snapshot. The live preview is already
+    // correct without it: previewOverride streams themeColor/themeAccent into
+    // the preview iframe, which is the surface the choice is actually about.
   }
   const removeCustomTheme = (id) => persistThemes(customThemes.filter((c) => c.id !== id))
 
@@ -2007,7 +2012,9 @@ export default function Settings() {
     setOvHeader(''); setOvBottomNav(''); setOvMotion(''); setOvMotionSpeed('normal'); setOvMotionRepeat('always')
     setOvTap('press'); setOvDetailLayout(''); setOvItemImageStyle(''); setOvSpotSize('md'); setPreset('custom')
     if (fade) setBannerFadeDir(fade)
-    applyTheme({ brand: s.tokens.brand, accent: s.tokens.accent })
+    // Draft, not committed — see the note in the theme loader above. The toast
+    // below says "press Save to keep it", which is exactly why the admin
+    // chrome must NOT already look as though it had been kept.
     toast.success(ar ? 'طُبّقت الحزمة — اضغط حفظ لتثبيتها' : 'Bundle applied — press Save to keep it')
   }
 
@@ -3167,7 +3174,7 @@ export default function Settings() {
                       return (
                         <button 
                           key={s.id} 
-                          onClick={() => { setSkinId(s.id); setColor(s.tokens.brand); setAccent(s.tokens.accent); setOvFont(s.tokens.font); setOvShape(s.tokens.shape); setOvLayout(s.layout.menuLayout); setOvHeader(''); setOvBottomNav(''); setOvMotion(''); setOvMotionSpeed('normal'); setOvMotionRepeat('always'); setOvTap('press'); setOvDetailLayout(''); setOvItemImageStyle(''); setOvSpotSize('md'); setPreset('custom'); applyTheme({ brand: s.tokens.brand, accent: s.tokens.accent }) }}
+                          onClick={() => { setSkinId(s.id); setColor(s.tokens.brand); setAccent(s.tokens.accent); setOvFont(s.tokens.font); setOvShape(s.tokens.shape); setOvLayout(s.layout.menuLayout); setOvHeader(''); setOvBottomNav(''); setOvMotion(''); setOvMotionSpeed('normal'); setOvMotionRepeat('always'); setOvTap('press'); setOvDetailLayout(''); setOvItemImageStyle(''); setOvSpotSize('md'); setPreset('custom') }}
                           className="stack" 
                           style={{
                             width: 'calc(50% - 8px)',
@@ -3566,15 +3573,15 @@ export default function Settings() {
                   <strong className="small"><Icon name="penLine" size={14} style={{ verticalAlign: 'middle' }} /> {ar ? 'لوحة ألوان الهوية البصرية الكلية' : 'Color Scheme Customization'}</strong>
                   <div className="row wrap" style={{ gap: 8 }}>
                     {THEMES.map((th) => (
-                      <button key={th.id} className={`chip ${preset === th.id ? 'active' : ''}`} style={{ borderRadius: 10 }} onClick={() => { setPreset(th.id); setColor(th.brand); setAccent(th.accent); applyTheme({ brand: th.brand, accent: th.accent }) }}>
+                      <button key={th.id} className={`chip ${preset === th.id ? 'active' : ''}`} style={{ borderRadius: 10 }} onClick={() => { setPreset(th.id); setColor(th.brand); setAccent(th.accent) }}>
                         <span style={{ width: 12, height: 12, borderRadius: '50%', background: th.brand, display: 'inline-block', marginInlineEnd: 6, border: '1px solid rgba(0,0,0,.1)' }} />
                         {th.name[lang] || th.name.ar}
                       </button>
                     ))}
                   </div>
                   <div className="row" style={{ gap: 14, marginTop: 4, alignItems: 'center', flexWrap: 'wrap' }}>
-                    <label className="row" style={{ gap: 6, cursor: 'pointer' }}><span className="xs faint">{ar ? 'أساسي (البراند):' : 'Brand Color:'}</span><input type="color" value={color} onChange={(e) => { setColor(e.target.value); setPreset('custom'); applyTheme({ brand: e.target.value }) }} style={{ width: 44, height: 34, border: '1px solid var(--border)', borderRadius: 8, background: 'none' }} /></label>
-                    <label className="row" style={{ gap: 6, cursor: 'pointer' }}><span className="xs faint">{ar ? 'ثانوي (الأكسنت):' : 'Accent Color:'}</span><input type="color" value={accent} onChange={(e) => { setAccent(e.target.value); setPreset('custom'); applyTheme({ accent: e.target.value }) }} style={{ width: 44, height: 34, border: '1px solid var(--border)', borderRadius: 8, background: 'none' }} /></label>
+                    <label className="row" style={{ gap: 6, cursor: 'pointer' }}><span className="xs faint">{ar ? 'أساسي (البراند):' : 'Brand Color:'}</span><input type="color" value={color} onChange={(e) => { setColor(e.target.value); setPreset('custom') }} style={{ width: 44, height: 34, border: '1px solid var(--border)', borderRadius: 8, background: 'none' }} /></label>
+                    <label className="row" style={{ gap: 6, cursor: 'pointer' }}><span className="xs faint">{ar ? 'ثانوي (الأكسنت):' : 'Accent Color:'}</span><input type="color" value={accent} onChange={(e) => { setAccent(e.target.value); setPreset('custom') }} style={{ width: 44, height: 34, border: '1px solid var(--border)', borderRadius: 8, background: 'none' }} /></label>
                   </div>
                 </div>
 
@@ -3621,9 +3628,16 @@ export default function Settings() {
                       ? 'الجدار الذي تُعرض عليه الأطباق في ثيم «المجلة الداكنة». اختر شكل رصف الطوب وحالة سطحه ولون الطين والمونة، أو ارفع صورة جدار غرفتك الحقيقي. كل تغيير هنا يُحفظ فوراً.'
                       : 'The wall the dishes are shown against in the “Dark Editorial” theme. Pick the bond, the surface condition, your own clay and mortar, or upload a photo of your real room. Everything here saves instantly.'}
                   </p>
+                  {/* THIS WARNING BECAME LOAD-BEARING, and telling an owner the
+                      wall does nothing on their layout is now actively costly:
+                      the button face is painted FROM the wall, so a venue that
+                      believes this card is irrelevant leaves the clay unset and
+                      its experience chips ship in the generic #8a4a2c fallback.
+                      The room canvas and the dish wall are still editorial-only;
+                      the colour is not. */}
                   {ovLayout !== 'editorial' && (
                     <p className="xs" style={{ margin: 0, color: 'var(--warning)' }}>
-                      {ar ? 'الجدار يظهر في ثيم «المجلة الداكنة» فقط، وتخطيط المنيو الحالي غيره. ' : 'The wall only shows in the “Dark Editorial” theme, and your menu layout is currently a different one. '}
+                      {ar ? 'جدار الغرفة نفسه يظهر في ثيم «المجلة الداكنة» فقط — لكن لون الطين واللحام هنا هو ما يُطلى به شريط التجربة في تخطيطك الحالي، فاختره كما تحب. ' : 'The room wall itself only shows in the “Dark Editorial” theme — but the clay and mortar you pick here are what paint the experience bar on your current layout, so it is still worth choosing. '}
                       <button type="button" className="btn-link" style={{ fontSize: 'inherit', fontWeight: 700 }} onClick={() => setASec('elements')}>{ar ? 'تغيير التخطيط' : 'Change the layout'}</button>
                     </p>
                   )}
@@ -4004,12 +4018,17 @@ export default function Settings() {
                   </div>
                   <p className="xs faint" style={{ margin: 0 }}>
                     {ar
-                      ? 'أزرار «اعرض الطبق» و«أضِف إلى السلة» والتصنيف النشط تلبس ما تختاره هنا: طوب الجدار نفسه بلونه ولحامه، أو صورة من عندك تحت طبقة تعتيم خفيفة ليبقى النص مقروءاً.'
-                      : 'The “View dish” / “Add to cart” buttons and the active category chip wear what you choose here: the wall’s own brick, or your own photo under a light veil so the label stays readable.'}
+                      ? 'شريط التجربة — زرّ الألعاب وإخوته — يلبس ما تختاره هنا في كل التخطيطات: طوب الجدار نفسه بلونه ولحامه، أو صورة من عندك تحت طبقة تعتيم خفيفة ليبقى النص مقروءاً.'
+                      : 'The experience bar — the games button and its siblings — wears what you choose here on every layout: the wall’s own brick, or your own photo under a light veil so the label stays readable.'}
                   </p>
+                  {/* The old warning said the skin was Dark-Editorial-only. It
+                      no longer is: the experience bar wears it on all sixteen
+                      layouts. What IS still editorial-only is the pair of
+                      in-page buttons, so the note narrows rather than dies —
+                      an inaccurate reassurance is worse than none. */}
                   {ovLayout !== 'editorial' && (
                     <p className="xs" style={{ margin: 0, color: 'var(--warning)' }}>
-                      {ar ? 'كساء الأزرار يظهر في ثيم «المجلة الداكنة» فقط، وتخطيط المنيو الحالي غيره. ' : 'The button skin shows in the “Dark Editorial” theme only, and your layout is currently different. '}
+                      {ar ? 'شريط التجربة يلبس الكساء في تخطيطك الحالي. أما زرّا «اعرض الطبق» و«أضِف إلى السلة» داخل الصفحة فيبقيان في ثيم «المجلة الداكنة» وحده. ' : 'The experience bar wears the skin on your current layout. The in-page “View dish” / “Add to cart” buttons remain Dark-Editorial-only. '}
                       <button type="button" className="btn-link" style={{ fontSize: 'inherit', fontWeight: 700 }} onClick={() => setASec('elements')}>{ar ? 'تغيير التخطيط' : 'Change the layout'}</button>
                     </p>
                   )}

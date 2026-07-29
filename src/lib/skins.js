@@ -212,6 +212,30 @@ export function loadFont(key) {
 
 // Apply a resolved skin's tokens to the document. `applyMode` controls whether
 // the skin's light/dark mode overrides the user toggle (true for the menu).
+//
+// THERE IS NO clearSkin, AND THAT IS DELIBERATE. Read this before adding one.
+//
+// What it looks like: this is the only applier in the repo with no teardown,
+// while systemThemes, ChromeSkin, useCompactUI and MenuView all tear down.
+//
+// Why a teardown would be a REGRESSION, not a fix: four diner routes have no
+// applier of their own and inherit what this leaves on <html> —
+// /order/:slug/:id (OrderStatus), /m/:slug/about, /reserve/:slug and /pass/*.
+// Clearing on the menu's unmount would strip a paying guest's order-tracking
+// screen of the venue's identity at the exact moment they are looking at it.
+// The persistence is the mechanism, not an oversight.
+//
+// And the leak it would "fix" is not reachable. A staff shell can only inherit
+// this if the document goes menu -> admin WITHOUT a reload, and nothing links
+// that way: the only menu link out of admin is <a target="_blank"> (Settings),
+// the studio preview is an <iframe>, and no diner surface links to a staff
+// route at all. Typing /admin is a fresh document, which starts clean.
+//
+// If a client-side menu -> staff link is ever added, the fix is a
+// DESTINATION-side assert (useSystemThemeBody claiming what it owns on mount),
+// never a source-side clear — because React renders the next tree before
+// running the previous tree's cleanup, so a source-side clear would wipe the
+// state the destination had just established.
 export function applySkin(resolved, { applyMode = true } = {}) {
   if (typeof document === 'undefined' || !resolved) return
   const r = document.documentElement

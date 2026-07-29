@@ -423,6 +423,17 @@ html {
 body {
   background: var(--bg);
   color: var(--text);
+  /* THE SYSTEM FONT HAD NEVER APPLIED TO BODY TEXT.
+     `font-family: var(--font-body)` was declared once, on `html` above — so it
+     resolved against HTML's value of the variable and body simply inherited the
+     computed result. systemThemes.js sets `--font-body` on `document.body` for
+     tenant.systemFont, and nothing read it there: only headings moved, because
+     they re-resolve --font-display per element. Declaring it here too makes
+     body resolve its OWN value.
+     No-op wherever the variable is not set on body: with no systemFont chosen
+     systemThemes removes it and body inherits html's, and on the menu there is
+     nothing on body at all — both identical to before. */
+  font-family: var(--font-body);
   font-size: var(--fs-base);
   line-height: var(--lh);
   -webkit-font-smoothing: antialiased;
@@ -10618,9 +10629,17 @@ button.edt-pair:active { transform: scale(.98); }
   border-color: color-mix(in srgb, var(--edt-amber, #f5b942) 60%, transparent);
 }
 .exp-bar[data-btnskin] .exp-chip.is-games::before { content: none; }
-/* shapes compose exactly like the wrap-level rules */
-.exp-bar[data-btnshape='pill'] { --edt-btn-r: 999px; }
-.exp-bar[data-btnshape='sharp'] { --edt-btn-r: 0px; }
+/* shapes compose exactly like the wrap-level rules — but on the CHIP, not the
+   bar. These two used to set --edt-btn-r on .exp-bar itself, which is the same
+   element that carries style={buttonSkinVars(...)}, and chromeFaceVars always
+   emits --edt-btn-r. An inline declaration beats any stylesheet rule, so «pill»
+   and «sharp» have never done anything: both rendered at the numeric radius.
+   The admin preview drew a capsule for «pill» the whole time, so what shipped
+   was the bug and this is the promise being kept. Scoping to the descendant
+   overrides the inherited inline value for the subtree that actually paints —
+   the same idiom the chamfer and slab rules below already use. */
+.exp-bar[data-btnshape='pill'] .exp-chip { --edt-btn-r: 999px; }
+.exp-bar[data-btnshape='sharp'] .exp-chip { --edt-btn-r: 0px; }
 .exp-bar[data-btnshape='chamfer'] .exp-chip {
   --edt-btn-r: 0px;
   clip-path: polygon(9px 0, calc(100% - 9px) 0, 100% 9px, 100% calc(100% - 9px), calc(100% - 9px) 100%, 9px 100%, 0 calc(100% - 9px), 0 9px);
@@ -10642,6 +10661,19 @@ button.edt-pair:active { transform: scale(.98); }
 /* the light theme's ochre accent for the games ring — guarded like the token
    block so a dark-locked venue keeps its lantern amber */
 [data-theme='light'] [data-menu-layout='editorial']:not([data-edt-dark]) .exp-bar[data-btnskin] { --edt-amber: #8a4a12; }
+
+/* LIGHT-THEME PARITY OFF EDITORIAL.
+   --edt-amber, --edt-bed-sh and --edt-cast-sh are declared on the editorial
+   token block and re-derived there for the light theme. On the other fifteen
+   layouts the token block never applies, so the chips fall back to the literals
+   baked into the box-shadows above — shadow strengths dialled for a dark room,
+   sitting on a light page. This restates the light values for those layouts
+   only; editorial is excluded so its own color-mix values survive untouched. */
+[data-theme='light'] [data-menu-layout]:not([data-menu-layout='editorial']) .exp-bar[data-btnskin] {
+  --edt-amber: #8a4a12;
+  --edt-bed-sh: rgba(46, 18, 8, .26);
+  --edt-cast-sh: rgba(46, 18, 8, .18);
+}
 
 /* ==== /experience-bar v1 ==== */
 
