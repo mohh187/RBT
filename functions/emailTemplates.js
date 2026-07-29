@@ -45,6 +45,24 @@ const PAGE = '#f2f3f5'
 // there because the plate behind it is light — which was the real problem.
 function header(brand) {
   const b = brand || {}
+  // OUR OWN MAIL KEEPS THE SOLID BAND.
+  //
+  // The light-plate treatment exists to solve a problem venues have and we do
+  // not: an arbitrary uploaded logo, often a coloured square, landing on a
+  // coloured band. Our wordmark is a known asset designed for exactly this
+  // band. Applying the venue fix to the platform header changed something that
+  // was not broken.
+  if (b.kind === 'platform') {
+    const mark = b.logoUrl
+      ? `<img src="${esc(b.logoUrl)}" alt="${esc(b.name)}" width="132" style="display:block;max-width:132px;height:auto;border:0;margin:0 auto 10px;">`
+      : ''
+    return `
+  <tr><td style="background:${esc(b.color || '#1F2A37')};padding:22px 28px;text-align:center;">
+    ${mark}
+    <div style="font-family:${FONT};font-size:17px;font-weight:700;color:${esc(b.ink || '#ffffff')};line-height:1.5;">${esc(b.name)}</div>
+  </td></tr>`
+  }
+
   const plate = b.plate || '#ffffff'
   const ink = b.plateInk || INK
   const rule = b.color || '#1F2A37'

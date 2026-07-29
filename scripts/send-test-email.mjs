@@ -49,7 +49,9 @@ const brandedFrom = (name) => {
 const VENUE = {
   name: 'كافيه مزاج فال',
   themeColor: '#7c2d2d', themeAccent: '#c8a15a',
-  logoUrl: '/brand/mark-256.png', slug: 'mazaj',
+  // Pass a REAL venue logo URL as argv[4] to see it. Defaults to none, which is
+  // the honest fallback path — our own mark here would just be a lie.
+  logoUrl: process.argv[4] || '', slug: 'mazaj',
   phone: '0555000111', address: 'طريق الملك فهد، الرياض',
   vatNumber: '311111111100003',
   googleMapsUrl: 'https://maps.google.com/?cid=1234567890',

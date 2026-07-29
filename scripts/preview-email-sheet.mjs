@@ -17,6 +17,15 @@ const OUT = process.argv[2] || 'email-proof.html'
 const esc = (s) => String(s == null ? '' : s).replace(/[&<>"']/g, (c) => (
   { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]))
 
+// A stand-in VENUE mark: an opaque coloured square, the exact shape the round
+// disc exists to rescue. Using our own /brand/mark-256.png here was misleading —
+// it proved an image renders, not that a venue logo does.
+const SQUARE_LOGO = 'data:image/svg+xml;base64,' + Buffer.from(
+  '<svg xmlns="http://www.w3.org/2000/svg" width="200" height="200">'
+  + '<rect width="200" height="200" fill="#C0262C"/>'
+  + '<text x="100" y="138" font-size="104" font-family="sans-serif" fill="#ffffff" text-anchor="middle">م</text>'
+  + '</svg>', 'utf8').toString('base64')
+
 const LINES = [
   { name: 'سبانش لاتيه', qty: 2, total: '30.00' },
   { name: 'تشيز كيك', qty: 1, total: '22.00' },
@@ -26,7 +35,7 @@ const LINES = [
 const VENUES = [
   { key: 'mazaj', tests: 'منشأة كاملة: لون داكن وشعار وعنوان ورابط خرائط.', t: {
     name: 'كافيه مزاج فال', themeColor: '#7c2d2d', themeAccent: '#c8a15a',
-    logoUrl: '/brand/mark-256.png', slug: 'mazaj', phone: '0555000111',
+    logoUrl: SQUARE_LOGO, slug: 'mazaj', phone: '0555000111',
     address: 'طريق الملك فهد، الرياض', vatNumber: '311111111100003',
     googleMapsUrl: 'https://maps.google.com/?cid=123' } },
   { key: 'lamsa', tests: 'لون فاتح. لو ظهر نصّ الترويسة أبيض هنا فاختيار الحبر مكسور — وهذا عطلٌ لا يُرى إلا داخل صندوق بريد.', t: {
