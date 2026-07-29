@@ -44,6 +44,19 @@ function onColor(bg) {
   return cd > cl ? INK_DARK : INK_LIGHT
 }
 
+// Mix a colour toward white. Email CSS has no color-mix() — every value has to
+// resolve to a literal hex before it is written into the markup.
+function tint(hex, ratio) {
+  const h = String(hex || '').replace('#', '')
+  const full = h.length === 3 ? h.split('').map((x) => x + x).join('') : h
+  if (!/^[0-9a-fA-F]{6}$/.test(full)) return '#ffffff'
+  const to = (i) => {
+    const c = parseInt(full.slice(i, i + 2), 16)
+    return Math.round(c + (255 - c) * (1 - ratio)).toString(16).padStart(2, '0')
+  }
+  return `#${to(0)}${to(2)}${to(4)}`
+}
+
 // Mirror of DEFAULT_THEME in src/lib/themes.js.
 const DEFAULT_BRAND = '#1F2A37'
 const DEFAULT_ACCENT = '#8A6A3F'
@@ -73,9 +86,22 @@ function venueBrand(tenant) {
     kind: 'venue',
     name: t.name || '',
     color,
-    ink: onColor(color),      // readable ON the brand band, whatever it is
+    ink: onColor(color),      // readable ON the brand colour, whatever it is
     accent,
     accentInk: onColor(accent),
+    // THE MASTHEAD IS LIGHT, NOT THE BRAND COLOUR.
+    //
+    // A venue logo is usually a coloured square with its own background. Put
+    // that on a band of the venue's own brand colour and you get colour on
+    // colour — a red mark on a maroon bar, with its edge dissolving into the
+    // bar. Every venue with a warm brand loses its logo exactly that way.
+    //
+    // So the masthead is a 14% tint of the brand mixed into white: a warm beige
+    // under a maroon, a cool grey under a blue. Derived, so it is right for
+    // every venue without anyone configuring anything — and the brand itself
+    // signs the header with a rule underneath instead of swallowing the logo.
+    plate: tint(color, 0.14),
+    plateInk: onColor(tint(color, 0.14)),
     logoUrl: absolute(t.logoUrl),
     // Contact block for the footer — only what the venue actually filled in.
     phone: t.phone || '',
@@ -101,6 +127,8 @@ function platformBrand(financeCfg) {
     ink: onColor(RBT_BRAND),
     accent: '#E0219E',
     accentInk: onColor('#E0219E'),
+    plate: tint(RBT_BRAND, 0.1),
+    plateInk: onColor(tint(RBT_BRAND, 0.1)),
     logoUrl: absolute(s.logoUrl),
     phone: s.contactPhone || '',
     address: s.addressAr || '',

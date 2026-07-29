@@ -28,17 +28,42 @@ const PAGE = '#f2f3f5'
 
 // The masthead. A logo when the venue uploaded one, otherwise its NAME set on
 // the brand colour — never a blank band and never someone else's mark.
+// THE MASTHEAD.
+//
+// Light plate, logo in a round white disc, and the brand colour as a rule
+// underneath. The previous version put the logo straight onto a band of the
+// venue's own colour, which is colour on colour: a red square mark on a maroon
+// bar, its edge dissolving into the bar.
+//
+// The disc does the work. A transparent logo sits in it perfectly; an opaque
+// square one gets CLIPPED to a circle, which is what a square logo needs. Since
+// we cannot know from a URL whether a logo has transparency, the disc is the
+// treatment that is right either way.
+//
+// HONEST LIMIT: border-radius does not render in desktop Outlook (Word engine),
+// where the disc shows as a light square. The logo stays perfectly legible
+// there because the plate behind it is light — which was the real problem.
 function header(brand) {
   const b = brand || {}
-  const ink = b.ink || '#ffffff'
+  const plate = b.plate || '#ffffff'
+  const ink = b.plateInk || INK
+  const rule = b.color || '#1F2A37'
   const logo = b.logoUrl
-    ? `<img src="${esc(b.logoUrl)}" alt="${esc(b.name)}" width="132" style="display:block;max-width:132px;height:auto;border:0;margin:0 auto 10px;">`
+    ? `
+    <table role="presentation" cellpadding="0" cellspacing="0" border="0" align="center" style="margin:0 auto 12px;">
+      <tr><td width="76" height="76" align="center" valign="middle"
+              style="width:76px;height:76px;background:#ffffff;border-radius:50%;overflow:hidden;border:1px solid rgba(0,0,0,.06);">
+        <img src="${esc(b.logoUrl)}" alt="${esc(b.name)}" width="76" height="76"
+             style="display:block;width:76px;height:76px;border:0;border-radius:50%;object-fit:cover;">
+      </td></tr>
+    </table>`
     : ''
   return `
-  <tr><td style="background:${esc(b.color || '#1F2A37')};padding:22px 28px;text-align:center;">
+  <tr><td style="background:${esc(plate)};padding:26px 28px 20px;text-align:center;">
     ${logo}
     <div style="font-family:${FONT};font-size:17px;font-weight:700;color:${esc(ink)};line-height:1.5;">${esc(b.name)}</div>
-  </td></tr>`
+  </td></tr>
+  <tr><td style="background:${esc(rule)};height:3px;font-size:0;line-height:0;">&nbsp;</td></tr>`
 }
 
 // A real button, built the only way that works everywhere: a padded anchor in
