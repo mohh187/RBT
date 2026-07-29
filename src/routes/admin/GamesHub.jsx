@@ -22,6 +22,7 @@ import { useAuth } from '../../lib/auth.jsx'
 import { useI18n } from '../../lib/i18n.jsx'
 import { CAP } from '../../lib/permissions.js'
 import { updateTenant } from '../../lib/db.js'
+import { GAMES } from '../../lib/games.js'
 import { firebaseReady } from '../../lib/firebase.js'
 
 import GamesCatalogue from '../../components/gamesadmin/GamesCatalogue.jsx'
@@ -103,12 +104,24 @@ export default function GamesHub() {
   }, [tenantId, canView, fromMs, toMs])
 
   // --- the only two writes this page makes ---------------------------------
-  const saveGames = useCallback(async (nextIds) => {
+  const saveGames = useCallback(async (nextIds, opts) => {
     if (!canEdit || busy) return
     setBusy(true)
     try {
-      await updateTenant(tenantId, { games: nextIds })
-      updateTenantLocal({ games: nextIds })
+      // `gamesSeen` records the catalogue AS IT WAS when this venue saved, which
+      // is the only thing that distinguishes "switched off" from "did not exist
+      // yet". Settings.jsx already wrote it; this second writer did not, so a
+      // venue that managed its games from here stayed on the ambiguous path and
+      // would go on missing every newly-shipped game. See unseenGames().
+      //
+      // `gamesOrdered` is set only by a drag (opts.ordered) — never by a toggle.
+      const patch = {
+        games: nextIds,
+        gamesSeen: GAMES.map((g) => g.id),
+        ...(opts && opts.ordered ? { gamesOrdered: true } : {}),
+      }
+      await updateTenant(tenantId, patch)
+      updateTenantLocal(patch)
     } catch (_) {
       toast.error(ar ? 'تعذّر الحفظ' : 'Could not save')
     } finally { setBusy(false) }

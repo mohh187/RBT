@@ -10,6 +10,7 @@ const logger = require('firebase-functions/logger')
 const { runPaidEffects } = require('./orderEffects.js')
 const { shell, facts } = require('./emailTemplates.js')
 const { venueBrand } = require('./emailBrand.js')
+const { normLang, L } = require('./emailLang.js')
 const { getFirestore, FieldValue } = require('firebase-admin/firestore')
 const { sendWhatsAppTemplate, sendWhatsAppText, sendEmail, emailShell, esc, waCredsFor } = require('./messaging')
 
@@ -118,7 +119,7 @@ async function receiptForSimple(db, tid, { kind, refId, buyerName, buyerPhone, l
 // Deliver the customer their invoice link — WhatsApp + email (when known), sent in
 // the VENUE's name (its own WA number if connected, branded email display name).
 // Extra options (email, tid) are optional so older call sites keep working.
-async function notifyReceipt(tenant, phone, { code, total, currency, link, email, tid }) {
+async function notifyReceipt(tenant, phone, { code, total, currency, link, email, tid, lang }) {
   const ch = tenant.customerNotify || {}
   const venueName = tenant.name || ''
   const amount = Number(total).toFixed(2)
@@ -150,16 +151,20 @@ async function notifyReceipt(tenant, phone, { code, total, currency, link, email
     // The VENUE's receipt, in the venue's own colours. The tax invoice becomes a
     // real button rather than a coloured word — handing it over is the only
     // reason this email exists.
-    const brand = venueBrand(tenant)
+    // Same source as the status mail: the language the guest was reading when
+    // they placed this order, carried on the order document.
+    const mailLang = normLang(lang || tenant.lang || 'ar')
+    const p = L(mailLang)
+    const brand = venueBrand(tenant, mailLang)
     await sendEmail({
-      to: email, fromName: venueName, replyTo: tenant.contactEmail || undefined, meter: mailMeter,
-      subject: `${venueName} — فاتورتك ${code ? '#' + code : ''}`.replace(/[\r\n]+/g, ' '),
+      to: email, fromName: venueName, lang: mailLang, replyTo: tenant.contactEmail || undefined, meter: mailMeter,
+      subject: `${venueName} — ${p('فاتورتك', 'your invoice')} ${code ? '#' + code : ''}`.replace(/[\r\n]+/g, ' '),
       html: shell(brand, {
-        title: `${venueName} — إيصال الدفع`,
-        preheader: `فاتورتك من ${venueName}`,
-        body: '<p style="margin:0 0 10px;">تم استلام دفعتك بنجاح.</p>'
-          + facts([['رقم الطلب', code || ''], ['المبلغ', `${amount} ${currency}`]]),
-        cta: { label: 'عرض الفاتورة الضريبية', href: link },
+        title: `${venueName} — ${p('إيصال الدفع', 'Payment receipt')}`,
+        preheader: p(`فاتورتك من ${venueName}`, `Your invoice from ${venueName}`),
+        body: `<p style="margin:0 0 10px;">${p('تم استلام دفعتك بنجاح.', 'Your payment was received.')}</p>`
+          + facts([[p('رقم الطلب', 'Order number'), code || ''], [p('المبلغ', 'Amount'), `${amount} ${currency}`]], { dir: brand.dir }),
+        cta: { label: p('عرض الفاتورة الضريبية', 'View tax invoice'), href: link },
       }),
     }).catch(() => {})
   }
@@ -209,7 +214,7 @@ const onOrderPaid = onDocumentUpdated('tenants/{tid}/orders/{oid}', async (event
 
   if (becamePaid && !after.receiptId) {
     const r = await receiptForOrder(db, tid, oid, after).catch(() => null)
-    if (r) await notifyReceipt(r.tenant, after.customerPhone, { code: after.code, total: r.total, currency: r.currency, link: invoiceLink(tid, r.id), email: after.customerEmail || '', tid })
+    if (r) await notifyReceipt(r.tenant, after.customerPhone, { code: after.code, total: r.total, currency: r.currency, link: invoiceLink(tid, r.id), email: after.customerEmail || '', tid, lang: after.lang })
   } else if (becameRefunded && after.receiptId) {
     await db.doc(`tenants/${tid}/receipts/${after.receiptId}`).set({
       status: 'refunded',

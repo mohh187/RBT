@@ -9,6 +9,7 @@ const { onDocumentUpdated, onDocumentCreated } = require('firebase-functions/v2/
 const { getFirestore } = require('firebase-admin/firestore')
 const { shell, facts, lineTable } = require('./emailTemplates.js')
 const { venueBrand, platformBrand, orderTrackUrl } = require('./emailBrand.js')
+const { normLang, L, pickName } = require('./emailLang.js')
 const { takeSpend } = require('./spend')
 
 // ------------------------- the meter, in one place -------------------------
@@ -46,14 +47,16 @@ async function claim(meter, kind) {
 // fromName brands the sender per venue: «مقهى مزاج عبر rbt360 <no-reply@rbt360sa.com>»
 // — the address stays the platform's verified domain (Resend requirement), only the
 // display name carries the venue identity. replyTo can be the venue's real inbox.
-function brandedFrom(fromName) {
+function brandedFrom(fromName, lang) {
   const base = process.env.EMAIL_FROM || 'RBT360 <onboarding@resend.dev>'
   if (!fromName) return base
   const addr = (base.match(/<([^>]+)>/) || [])[1] || base
   const clean = String(fromName).replace(/[\r\n<>"]/g, '').trim().slice(0, 60)
-  return clean ? `${clean} عبر rbt360 <${addr}>` : base
+  // The sender name sits in the inbox list next to the subject; an Arabic «عبر»
+  // in an otherwise English row is the first thing that looks wrong.
+  return clean ? `${clean} ${L(lang)('عبر', 'via')} rbt360 <${addr}>` : base
 }
-async function sendEmail({ to, subject, html, replyTo, fromName, meter }) {
+async function sendEmail({ to, subject, html, replyTo, fromName, lang, meter }) {
   const key = process.env.RESEND_API_KEY
   if (!key || !to || !subject) return { ok: false, skipped: true }
   if (!(await claim(meter, 'email'))) return { ok: false, skipped: true, limited: true }
@@ -63,7 +66,7 @@ async function sendEmail({ to, subject, html, replyTo, fromName, meter }) {
       // charset stated explicitly: Arabic subjects and bodies must not be left
       // to the receiver's guess.
       headers: { Authorization: 'Bearer ' + key, 'Content-Type': 'application/json; charset=utf-8' },
-      body: JSON.stringify({ from: brandedFrom(fromName), to: Array.isArray(to) ? to : [to], subject, html, reply_to: replyTo || undefined }),
+      body: JSON.stringify({ from: brandedFrom(fromName, lang), to: Array.isArray(to) ? to : [to], subject, html, reply_to: replyTo || undefined }),
     })
     return { ok: r.ok, status: r.status }
   } catch (e) {
@@ -200,6 +203,17 @@ const STATUS_AR = {
   accepted: 'تم قبول طلبك', preparing: 'جارٍ تحضير طلبك', ready: 'طلبك جاهز',
   served: 'تم تقديم طلبك', paid: 'تم استلام الدفع', cancelled: 'تم إلغاء طلبك', refunded: 'تم استرجاع مبلغ طلبك',
 }
+// KEPT SEPARATE FROM STATUS_AR ON PURPOSE.
+//
+// STATUS_AR feeds the WhatsApp template parameter as well as the email. A
+// WhatsApp template is APPROVED BY META IN ONE LANGUAGE; interpolating an
+// English word into a body approved in Arabic is how a venue's order
+// notifications start failing silently. So the WhatsApp path keeps using
+// STATUS_AR unconditionally, and only the email reads this.
+const STATUS_EN = {
+  accepted: 'Your order is accepted', preparing: 'Your order is being prepared', ready: 'Your order is ready',
+  served: 'Your order has been served', paid: 'Payment received', cancelled: 'Your order was cancelled', refunded: 'Your order has been refunded',
+}
 // 'paid' is the thank-you moment: the guest has finished and settled, so the
 // message that fires there says thank you, asks for a rating and hands them the
 // venue's Google Maps link (tenant.googleMapsUrl) — not just a status line.
@@ -255,11 +269,15 @@ function waParam(v, fallback = '-') {
 
 // Money the way a guest reads it: Latin digits, two decimals, currency named in
 // Arabic. (Arabic-Indic numerals are a hard project rule against.)
-function money(n, currency) {
+// PLAIN TEXT money — for WhatsApp, which cannot render the riyal mark image.
+// `lang` is optional and defaults to Arabic so the WhatsApp path, which is
+// always Arabic (its templates are approved that way), keeps its exact wording.
+function money(n, currency, lang) {
   const v = Number(n)
   const num = Number.isFinite(v) ? v.toFixed(2) : '0.00'
   const cur = String(currency || 'SAR').toUpperCase()
-  return cur === 'SAR' ? `${num} ريال` : `${num} ${cur}`
+  if (cur !== 'SAR') return `${num} ${cur}`
+  return normLang(lang) === 'en' ? `SAR ${num}` : `${num} ريال`
 }
 
 // The order, said briefly. Returns at most `max` lines plus a "+N more" line, so
@@ -381,17 +399,33 @@ const onOrderCustomerNotify = onDocumentUpdated('tenants/{tid}/orders/{oid}', as
   // stageAllows() is what stopped this from firing at every single status. A
   // guest ordering one coffee used to receive five of these.
   if (email && stageAllows(tenant, after.status, 'email')) {
-    const brand = venueBrand(tenant)
-    const rows = shown.map((l) => ({ name: l.name, qty: l.qty, total: l.total.toFixed(2) }))
-    if (hidden > 0) rows.push({ name: `و${hidden} صنفاً آخر`, qty: 1, total: '' })
+    // THE READER'S LANGUAGE, from the order that reader placed.
+    //
+    // `order.lang` is recorded by MenuView when the basket is submitted, so it
+    // is the language the guest was actually reading at that moment. That is
+    // deliberately not the same as "the guest's language": someone who browsed
+    // in English at nine should get THAT order's mail in English even if they
+    // order in Arabic later. The order is the record of one interaction.
+    // tenant.lang is the fallback for orders placed before this field existed.
+    const mailLang = normLang(after.lang || tenant.lang || 'ar')
+    const p = L(mailLang)
+    const brand = venueBrand(tenant, mailLang)
+    const mailStatus = (mailLang === 'en' ? STATUS_EN[after.status] : STATUS_AR[after.status]) || after.status
+    const mailName = after.customerName || p('عميلنا العزيز', 'there')
+    const rows = shown.map((l) => ({ name: pickName(l, mailLang, l.name), qty: l.qty, total: l.total.toFixed(2) }))
+    if (hidden > 0) rows.push({ name: p(`و${hidden} صنفاً آخر`, `and ${hidden} more`), qty: 1, total: '' })
     const bodyHtml = [
-      `<p style="margin:0 0 12px;">مرحباً ${esc(customerName)},</p>`,
-      `<p style="margin:0 0 10px;font-size:15px;">${esc(customText ? fillTpl(customText) : statusText)}</p>`,
+      `<p style="margin:0 0 12px;">${p('مرحباً', 'Hello')} ${esc(mailName)},</p>`,
+      // The venue's OWN words are never translated — a template the owner wrote
+      // in their language is theirs, and machine-flipping it is not our call.
+      `<p style="margin:0 0 10px;font-size:15px;">${esc(customText ? fillTpl(customText) : mailStatus)}</p>`,
       facts([
-        ['رقم الطلب', code || '-'],
-        [after.tableLabel ? 'الطاولة' : '', after.tableLabel || ''],
-      ]),
-      count > 0 ? lineTable(rows, 'الإجمالي', totalText) : '',
+        [p('رقم الطلب', 'Order number'), code || '-'],
+        [after.tableLabel ? p('الطاولة', 'Table') : '', after.tableLabel || ''],
+      ], { dir: brand.dir }),
+      // Its own total string: `totalText` above is shared with the WhatsApp
+      // body, which is always Arabic.
+      count > 0 ? lineTable(rows, p('الإجمالي', 'Total'), money(after.total, after.currency, mailLang), { dir: brand.dir }) : '',
       isPaid ? `<p style="margin:14px 0 0;font-size:14px;">${esc(thankText)}</p>` : '',
     ].filter(Boolean).join('')
     // WHICH BUTTON, AND WHEN.
@@ -409,19 +443,23 @@ const onOrderCustomerNotify = onDocumentUpdated('tenants/{tid}/orders/{oid}', as
     // Either button is omitted entirely when its destination is missing — a
     // venue with no Maps link, or no slug — rather than rendered dead.
     const trackUrl = orderTrackUrl(tenant, event.params.oid)
-    const track = trackUrl ? { label: 'متابعة الطلب', href: trackUrl } : null
-    const rate = mapsUrl ? { label: 'قيّمنا على خرائط جوجل', href: mapsUrl } : null
+    const track = trackUrl ? { label: p('متابعة الطلب', 'Track order'), href: trackUrl } : null
+    const rate = mapsUrl ? { label: p('قيّمنا على خرائط جوجل', 'Rate us on Google Maps'), href: mapsUrl } : null
     const cta = isPaid ? rate : track
     const secondaryCta = isPaid ? track : null
     await sendEmail({
       to: email,
-      subject: `${venueName} — ${statusText} ${code}`.replace(/[\r\n]+/g, ' '),
+      // The SUBJECT is the first thing seen and is built out here, outside
+      // shell() — an English body under an Arabic subject reads worse than an
+      // all-Arabic email, so it follows the same language.
+      subject: `${venueName} — ${mailStatus} ${code}`.replace(/[\r\n]+/g, ' '),
       fromName: venueName,
+      lang: mailLang,
       replyTo: tenant.contactEmail || undefined,
       meter: mailMeter,
       html: shell(brand, {
-        title: `${venueName} — ${statusText}`,
-        preheader: `${statusText} — ${venueName}`,
+        title: `${venueName} — ${mailStatus}`,
+        preheader: `${mailStatus} — ${venueName}`,
         body: bodyHtml,
         cta,
         secondaryCta,
@@ -439,21 +477,30 @@ const onVenueWelcomeEmail = onDocumentCreated('tenants/{tid}', async (event) => 
   const email = uSnap && uSnap.exists ? uSnap.data().email : null
   if (!email) return
   const menuUrl = (process.env.PUBLIC_BASE_URL || '') + '/m/' + encodeURIComponent(t.slug || '')
+  // This fires the instant the tenant document is written, so tenant.lang has to
+  // be SEEDED by createTenant (src/lib/db.js) — there is no later moment at
+  // which to read it. Absent still means Arabic.
+  const wl = normLang(t.lang)
+  const p = L(wl)
   await sendEmail({
     // Platform onboarding, not the venue's spend — one mail per venue, ever.
     meter: 'platform',
     to: email,
-    subject: `مرحباً بك في rbt360 — ${(t.name || '').replace(/[\r\n]+/g, ' ')}`,
+    lang: wl,
+    subject: p(`مرحباً بك في rbt360 — ${(t.name || '').replace(/[\r\n]+/g, ' ')}`, `Welcome to rbt360 — ${(t.name || '').replace(/[\r\n]+/g, ' ')}`),
     // OURS, not the venue's. This is RBT 360 introducing itself to a new owner,
     // so it wears the platform identity — the one email in the venue's life
     // where that is the right answer.
-    html: shell(platformBrand({}), {
-      title: `أهلاً ${t.name || ''}`,
-      preheader: 'منشأتك جاهزة — إليك رابط منيوك',
-      body: '<p style="margin:0 0 10px;">تم إنشاء منشأتك بنجاح. منيوك العام صار على الإنترنت وتستطيع مشاركته الآن.</p>'
-        + '<p style="margin:0;color:#5c6270;font-size:13.5px;">ابدأ بإضافة أصنافك وتخصيص مظهرك من لوحة الإدارة.</p>',
-      cta: { label: 'فتح منيوك', href: menuUrl },
-      secondaryCta: { label: 'لوحة الإدارة', href: (process.env.PUBLIC_BASE_URL || '').replace(/\/$/, '') + '/admin' },
+    html: shell(platformBrand({}, wl), {
+      title: p(`أهلاً ${t.name || ''}`, `Welcome, ${t.name || ''}`),
+      preheader: p('منشأتك جاهزة — إليك رابط منيوك', 'Your venue is ready — here is your menu link'),
+      body: p(
+        '<p style="margin:0 0 10px;">تم إنشاء منشأتك بنجاح. منيوك العام صار على الإنترنت وتستطيع مشاركته الآن.</p>',
+        '<p style="margin:0 0 10px;">Your venue is set up. Your public menu is live and ready to share.</p>',
+      )
+        + `<p style="margin:0;color:#5c6270;font-size:13.5px;">${p('ابدأ بإضافة أصنافك وتخصيص مظهرك من لوحة الإدارة.', 'Start by adding your items and styling your menu from the admin panel.')}</p>`,
+      cta: { label: p('فتح منيوك', 'Open your menu'), href: menuUrl },
+      secondaryCta: { label: p('لوحة الإدارة', 'Admin panel'), href: (process.env.PUBLIC_BASE_URL || '').replace(/\/$/, '') + '/admin' },
     }),
   }).catch(() => {})
 })
@@ -472,22 +519,34 @@ const onStaffInviteEmail = onDocumentCreated('staffInvites/{id}', async (event) 
   const tSnap = inv.tenantId ? await db.doc(`tenants/${inv.tenantId}`).get().catch(() => null) : null
   const venue = tSnap && tSnap.exists ? (tSnap.data().name || '') : ''
   const loginUrl = (process.env.PUBLIC_BASE_URL || '') + '/login'
-  const roleAr = { owner: 'مالك', manager: 'مدير', cashier: 'كاشير', waiter: 'نادل', kitchen: 'مطبخ' }[inv.role] || 'موظف'
+  const td = tSnap && tSnap.exists ? tSnap.data() : { name: venue }
+  // A staff invite is venue-facing: the invitee is joining that venue's team,
+  // so it follows the venue's own language.
+  const il = normLang(td.lang)
+  const p = L(il)
+  const role = (il === 'en'
+    ? { owner: 'owner', manager: 'manager', cashier: 'cashier', waiter: 'waiter', kitchen: 'kitchen' }
+    : { owner: 'مالك', manager: 'مدير', cashier: 'كاشير', waiter: 'نادل', kitchen: 'مطبخ' })[inv.role]
+    || p('موظف', 'staff member')
   await sendEmail({
     // A staff invite is the venue's own send — a manager triggers it, and a
     // scripted invite storm is exactly the abuse the meter is here to bound.
     meter: inv.tenantId ? { db, tid: inv.tenantId, channel: 'email' } : 'platform',
     to: email,
-    subject: `دعوة للانضمام إلى ${(venue || '').replace(/[\r\n]+/g, ' ')} على rbt360`,
+    lang: il,
+    subject: p(`دعوة للانضمام إلى ${(venue || '').replace(/[\r\n]+/g, ' ')} على rbt360`, `Invitation to join ${(venue || '').replace(/[\r\n]+/g, ' ')} on rbt360`),
     // The VENUE's identity: the invitee is joining that venue's team, not ours.
     // The tenant doc was already read above for the name — its theme fields
     // were being thrown away.
-    html: shell(venueBrand(tSnap && tSnap.exists ? tSnap.data() : { name: venue }), {
-      title: `دعوة للانضمام إلى ${venue}`,
-      preheader: `${venue} دعتك للانضمام إلى فريقها`,
-      body: `<p style="margin:0 0 10px;">تمت دعوتك للانضمام إلى فريق <strong>${esc(venue)}</strong> بصفة <strong>${esc(roleAr)}</strong>.</p>`
-        + '<p style="margin:0;color:#5c6270;font-size:13.5px;">سجّل الدخول بنفس البريد الذي وصلتك عليه هذه الرسالة، وستجد المنشأة في حسابك.</p>',
-      cta: { label: 'تسجيل الدخول', href: loginUrl },
+    html: shell(venueBrand(td, il), {
+      title: p(`دعوة للانضمام إلى ${venue}`, `Invitation to join ${venue}`),
+      preheader: p(`${venue} دعتك للانضمام إلى فريقها`, `${venue} invited you to join their team`),
+      body: p(
+        `<p style="margin:0 0 10px;">تمت دعوتك للانضمام إلى فريق <strong>${esc(venue)}</strong> بصفة <strong>${esc(role)}</strong>.</p>`,
+        `<p style="margin:0 0 10px;">You have been invited to join the <strong>${esc(venue)}</strong> team as <strong>${esc(role)}</strong>.</p>`,
+      )
+        + `<p style="margin:0;color:#5c6270;font-size:13.5px;">${p('سجّل الدخول بنفس البريد الذي وصلتك عليه هذه الرسالة، وستجد المنشأة في حسابك.', 'Sign in with the same address this message reached, and the venue will be in your account.')}</p>`,
+      cta: { label: p('تسجيل الدخول', 'Sign in'), href: loginUrl },
     }),
   }).catch(() => {})
 })

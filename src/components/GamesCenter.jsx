@@ -22,6 +22,7 @@ import { startPlay, saveProgress, finishPlay } from '../lib/gameMemory.js'
 import { registerCustomer } from '../lib/db.js'
 import { getLocalCustomer, setLocalCustomer } from '../lib/customer.js'
 import { useScrollLock } from '../lib/scrollLock.js'
+import { useDismiss } from '../lib/useDismiss.js'
 import { submitScore, watchTopScores, currentMonth, myRank } from '../lib/leaderboard.js'
 import { deviceKey } from '../lib/device.js'
 // startGame is aliased: this file already has a local startGame (the solo
@@ -1556,6 +1557,14 @@ export default function GamesCenter({
     if (earned) { setView('browse'); return }
     onClose?.()
   }, [commitRun, onClose])
+
+  // BACK AND ESCAPE, in the nesting the guest expects. Two entries, pushed in
+  // this order, so the innermost one answers first (useDismiss keeps a stack):
+  // Back inside a game returns to the game list, Back again closes the hub.
+  // Declaration order is what sets the stack order here — the hub's entry is
+  // pushed on open, the game's only once a game is actually running.
+  useDismiss(open, closeHub)
+  useDismiss(open && !!activeId, exitGame)
 
   const leavePromo = useCallback(() => {
     const next = { ...readStore(tenantId), promoSeen: true }

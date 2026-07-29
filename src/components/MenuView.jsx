@@ -2037,17 +2037,30 @@ export function ItemSheet({ item, tenant, currency, tenantId, onClose, onAdd, de
                 </div>
               )}
 
-              {groups.map((g, gi) => (
+              {groups.map((g, gi) => {
+                // A max:1 group already BEHAVES as a radio (toggle() replaces
+                // rather than appends), but it looked exactly like a
+                // multi-select one — so a guest tapped a second size, watched
+                // the first silently clear, and had no way to know why. Say it,
+                // and mark the chips with role=radio so it also reads correctly
+                // to a screen reader.
+                const single = Number(g.max) === 1
+                return (
                 <div key={gi} className="field">
-                  <label>{pickLang(g, 'name', lang)}{(g.required || Number(g.min) > 0) ? <span style={{ color: 'var(--danger)' }}> *</span> : <span className="faint xs"> ({t('optional')})</span>}</label>
-                  <div className="row wrap" style={{ gap: 8 }}>
+                  <label>
+                    {pickLang(g, 'name', lang)}
+                    {(g.required || Number(g.min) > 0) ? <span style={{ color: 'var(--danger)' }}> *</span> : <span className="faint xs"> ({t('optional')})</span>}
+                    {single && <span className="faint xs"> · {lang === 'ar' ? 'اختر واحداً' : 'choose one'}</span>}
+                  </label>
+                  <div className="row wrap" style={{ gap: 8 }} role={single ? 'radiogroup' : 'group'} aria-label={pickLang(g, 'name', lang)}>
                     {(g.options || []).map((o, oi) => {
                       const on = (selected[gi] || []).some((x) => x.nameAr === o.nameAr && x.nameEn === o.nameEn)
-                      return (<button key={oi} className={`chip ${on ? 'active' : ''}`} onClick={() => toggle(gi, o)}>{pickLang(o, 'name', lang)}{Number(o.price) ? <> +<Price value={o.price} currency={currency} lang={lang} /></> : ''}</button>)
+                      return (<button key={oi} className={`chip ${on ? 'active' : ''}`} role={single ? 'radio' : undefined} aria-checked={single ? on : undefined} aria-pressed={single ? undefined : on} onClick={() => toggle(gi, o)}>{pickLang(o, 'name', lang)}{Number(o.price) ? <> +<Price value={o.price} currency={currency} lang={lang} /></> : ''}</button>)
                     })}
                   </div>
                 </div>
-              ))}
+                )
+              })}
 
               {ingredients.length > 0 && (
                 <div className="field">
@@ -2480,6 +2493,15 @@ function CartSheet({ cart, subtotal, currency, offers, tenant, tenantId, table, 
         partySize: partySize || null,
         customerName: name || '', customerPhone: phone || '', customerEmail: (email || '').trim(), notes: notes || '',
         drinkUnits, loyaltyRedeemed: loyaltyDiscount > 0,
+        // THE LANGUAGE THIS GUEST WAS READING, recorded on the order itself.
+        //
+        // Nothing else persists it: `lang` lives in localStorage (i18n.jsx) and
+        // never reached Firestore, so every confirmation email went out in
+        // Arabic no matter which menu the guest had been using. Stamping it on
+        // the order — not on the customer — keeps it truthful per interaction:
+        // someone who browsed in English tonight gets THIS order's mail in
+        // English even if they order in Arabic next week.
+        lang,
         currency, ip: ip || '',
         source: table ? 'qr-table' : 'qr-public',
         // How the guest pays. Online must settle first; cash/terminal are collected

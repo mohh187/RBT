@@ -36,7 +36,6 @@
   --arc-ease: cubic-bezier(0.22, 1, 0.36, 1);
   --arc-spring: cubic-bezier(0.34, 1.42, 0.5, 1);
 
-  position: absolute;
   inset: 0;
   overflow: hidden;
   box-sizing: border-box;
@@ -47,6 +46,22 @@
   -webkit-user-select: none;
   -webkit-tap-highlight-color: transparent;
 }
+
+/* POSITIONING IS NOT SHARED — and this block is the reason the guest got stuck.
+   `.arc-root` is only ever mounted INSIDE the hub stage, so `absolute` is right
+   for it. The fishing overlay is different: it mounts standalone on the order
+   page too, where its only close button is `.arc-x`, itself absolutely placed
+   against this box. When `absolute` was in the shared block above, the overlay
+   anchored to the DOCUMENT instead of the viewport — so on a scrolled order
+   page it painted at the top and took the X off-screen with it, while
+   `touch-action: none` stopped the guest scrolling back up to reach it. The
+   only way out was to lose all three lives.
+   And the sharing bought nothing: `.gb-adapt` is already a containing block
+   (`transform: translateZ(0)`, index.css), so `fixed` was correct inside the
+   hub too. Leave `.wg-overlay.arc-fish` to inherit `fixed` from index.css;
+   `.gb-adapt .wg-overlay` (0,2,0) still wins over `.wg-overlay` (0,1,0) there. */
+.arc-root { position: absolute; }
+
 .arc-root *,
 .arc-root *::before,
 .arc-root *::after { box-sizing: border-box; }

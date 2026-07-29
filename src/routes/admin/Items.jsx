@@ -446,13 +446,23 @@ export default function Items() {
     return c ? pickLang(c, 'name', lang) : ''
   }
 
-  // Archived items stay out of every normal view — only the dedicated chip shows them.
+  // Hidden items stay out of every normal view — only the dedicated chip shows
+  // them. (The FIELD is still `archived`; only the words the owner reads
+  // changed. The button says «إخفاء», so the chip that brings it back has to
+  // say «المخفية» — it used to say «المؤرشفة» and owners went looking for a
+  // feature that was already there under a word they never used.)
   const archivedCount = useMemo(() => (items || []).filter((i) => i.archived).length, [items])
+  // SOLD OUT had no filter at all: those items just sat greyed-out in place,
+  // which on a long menu means nobody finds them again. They are a different
+  // state from hidden — still on the menu, just unorderable — so they get their
+  // own chip rather than being folded in.
+  const soldOutCount = useMemo(() => (items || []).filter((i) => !i.archived && i.available === false).length, [items])
 
   const shown = useMemo(() => {
     let list = items || []
     list = filter === 'archived' ? list.filter((i) => i.archived) : list.filter((i) => !i.archived)
-    if (filter !== 'all' && filter !== 'archived') list = list.filter((i) => i.categoryId === filter)
+    if (filter === 'soldout') list = list.filter((i) => i.available === false)
+    if (filter !== 'all' && filter !== 'archived' && filter !== 'soldout') list = list.filter((i) => i.categoryId === filter)
     if (search.trim()) {
       const q = search.trim().toLowerCase()
       list = list.filter((i) => `${i.nameAr} ${i.nameEn}`.toLowerCase().includes(q))
@@ -463,7 +473,7 @@ export default function Items() {
   // Reorder in table view — for the whole menu ('all') OR within one selected
   // category. Not while searching (the visible set isn't the real order then),
   // not in the archive view, and not while bulk-selecting.
-  const reorderable = !search.trim() && filter !== 'archived' && !selectMode
+  const reorderable = !search.trim() && filter !== 'archived' && filter !== 'soldout' && !selectMode
 
   // Reorder a visible list (whole view, one filtered category, or one catalog
   // section) and merge it back into the full items array before persisting.
@@ -684,9 +694,14 @@ export default function Items() {
         {cats.map((c) => (
           <button key={c.id} className={`chip ${filter === c.id ? 'active' : ''}`} onClick={() => setFilter(c.id)}>{pickLang(c, 'name', lang)}</button>
         ))}
+        {(soldOutCount > 0 || filter === 'soldout') && (
+          <button className={`chip ${filter === 'soldout' ? 'active' : ''}`} onClick={() => setFilter('soldout')}>
+            {lang === 'ar' ? `النافدة (${soldOutCount})` : `Sold out (${soldOutCount})`}
+          </button>
+        )}
         {(archivedCount > 0 || filter === 'archived') && (
           <button className={`chip ${filter === 'archived' ? 'active' : ''}`} onClick={() => setFilter('archived')}>
-            {lang === 'ar' ? `المؤرشفة (${archivedCount})` : `Archived (${archivedCount})`}
+            {lang === 'ar' ? `المخفية (${archivedCount})` : `Hidden (${archivedCount})`}
           </button>
         )}
       </div>
@@ -772,7 +787,7 @@ export default function Items() {
             <Icon name="eye" size={14} /> {lang === 'ar' ? 'تفعيل' : 'Enable'}
           </button>
           <button className="btn btn-sm btn-outline" disabled={bulkBusy || !selected.size} onClick={() => applyBulk({ archived: true, available: false })}>
-            <Icon name="package" size={14} /> {lang === 'ar' ? 'أرشفة' : 'Archive'}
+            <Icon name="package" size={14} /> {lang === 'ar' ? 'إخفاء' : 'Hide'}
           </button>
           <button className="btn btn-sm btn-outline" disabled={bulkBusy || !selected.size} onClick={() => applyBulk({ featured: true })} style={{ color: 'var(--gold)' }}>
             <Icon name="star" size={14} /> {lang === 'ar' ? 'نجمة المميزة' : 'Feature'}
@@ -1368,7 +1383,7 @@ function ItemEditor({ tenantId, cats, currency, value, onClose, onSaved, onDelet
     setBusy(true)
     try {
       await saveItem(tenantId, form.id, { archived: true, available: false })
-      toast.success(lang === 'ar' ? 'تمت أرشفة الصنف' : 'Item archived')
+      toast.success(lang === 'ar' ? 'أُخفي الصنف من المنيو' : 'Item archived')
       onClose()
     } catch (_) {
       toast.error(t('error'))
@@ -1395,7 +1410,7 @@ function ItemEditor({ tenantId, cats, currency, value, onClose, onSaved, onDelet
         delOpen && !isNew ? (
           <div className="stack" style={{ gap: 'var(--sp-2)' }}>
             <button className="btn btn-outline" onClick={archive} disabled={busy}>
-              <Icon name="package" size={16} /> {lang === 'ar' ? 'أرشفة (يُخفى ويحتفظ بتقاريره)' : 'Archive (hidden, keeps its reports)'}
+              <Icon name="package" size={16} /> {lang === 'ar' ? 'إخفاء من المنيو (تبقى بياناته وتقاريره)' : 'Hide from menu (keeps its data and reports)'}
             </button>
             <div className="row" style={{ gap: 'var(--sp-2)' }}>
               <button className="btn btn-danger grow" onClick={remove} disabled={busy}>
@@ -3060,6 +3075,36 @@ function ModifierGroupsEditor({ groups, onChange, currency, materials = [] }) {
             <input className="input" placeholder={lang === 'ar' ? 'اسم المجموعة (مثال: إضافات)' : 'Group name'} value={g.nameAr} onChange={(e) => setG(gi, { nameAr: e.target.value })} />
             <button className="icon-btn" style={{ color: 'var(--danger)' }} onClick={() => delGroup(gi)}><Icon name="delete" size={18} /></button>
           </div>
+          {/* SINGLE vs MULTIPLE, said in words.
+              `max: 1` already produced true radio behaviour on every ordering
+              surface — the guest's menu, the editorial layout and both cashier
+              sheets. What was missing was any way to KNOW that: the only control was a
+              bare number box hinted «(0=غير محدود)», which explains zero and
+              never mentions one. So venues left it at the default 0 and their
+              guests could tick every size at once.
+              The number box stays for genuine caps (pick any 3 of 8). */}
+          <div className="row wrap" style={{ gap: 8, alignItems: 'center' }}>
+            <div className="segmented" style={{ flex: 'none' }}>
+              <button type="button" className={Number(g.max) === 1 ? 'active' : ''}
+                onClick={() => setG(gi, { max: 1 })}>
+                {lang === 'ar' ? 'اختيار واحد فقط' : 'One choice only'}
+              </button>
+              <button type="button" className={Number(g.max) === 1 ? '' : 'active'}
+                onClick={() => setG(gi, { max: 0 })}>
+                {lang === 'ar' ? 'متعدد' : 'Multiple'}
+              </button>
+            </div>
+            <label className="row" style={{ gap: 6, cursor: 'pointer', flex: 'none' }}>
+              <input type="checkbox" checked={!!g.required} onChange={(e) => setG(gi, { required: e.target.checked })} style={{ width: 18, height: 18 }} />
+              <span className="xs">{t('required')}</span>
+            </label>
+          </div>
+          <p className="xs faint" style={{ margin: 0 }}>
+            {Number(g.max) === 1
+              ? (lang === 'ar' ? 'يختار الضيف خياراً واحداً — واختياره الجديد يستبدل السابق.' : 'The guest picks one — a new pick replaces the previous.')
+              : (lang === 'ar' ? 'يستطيع الضيف اختيار أكثر من خيار. حدّد «أقصى» أدناه إن أردت سقفاً.' : 'The guest can pick several. Set “Max” below for a cap.')}
+          </p>
+          {Number(g.max) !== 1 && (
           <div className="row" style={{ gap: 8 }}>
             <div className="field grow">
               <label className="xs">{lang === 'ar' ? 'أدنى' : 'Min'}</label>
@@ -3069,11 +3114,8 @@ function ModifierGroupsEditor({ groups, onChange, currency, materials = [] }) {
               <label className="xs">{lang === 'ar' ? 'أقصى (0=غير محدود)' : 'Max (0=∞)'}</label>
               <input className="input num" type="number" value={g.max} onChange={(e) => setG(gi, { max: e.target.value })} />
             </div>
-            <label className="row" style={{ gap: 6, alignSelf: 'flex-end', paddingBottom: 10, cursor: 'pointer' }}>
-              <input type="checkbox" checked={!!g.required} onChange={(e) => setG(gi, { required: e.target.checked })} style={{ width: 18, height: 18 }} />
-              <span className="xs">{t('required')}</span>
-            </label>
           </div>
+          )}
           {(g.options || []).map((o, oi) => (
             <div key={oi} className="stack" style={{ gap: 4 }}>
               <div className="row" style={{ gap: 6 }}>

@@ -59,7 +59,9 @@ export default function ImageCropper({ file, imageSrc, aspect, output, title, hi
       // Honour the caller's fixed output when it pinned one; otherwise size the
       // export to the ratio the venue picked, so a wide crop exports wide.
       const size = output || { width: ratio.w, height: ratio.h }
-      const blob = await getCroppedBlob(src, areaPixels, size)
+      // Pass the SHAPE the venue was shown. Omitting it is what made the round
+      // viewport a lie: the preview was a circle and the saved file a square.
+      const blob = await getCroppedBlob(src, areaPixels, size, { round: shape === 'round' })
       onCropped(blob)
     } catch (_) {
       setBusy(false)

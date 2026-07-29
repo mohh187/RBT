@@ -203,7 +203,12 @@ export default function GamesCatalogue({
     const from = ids.indexOf(active.id)
     const to = ids.indexOf(over.id)
     if (from < 0 || to < 0) return
-    onSaveGames?.(arrayMove(ids, from, to))
+    // `ordered: true` marks this sequence as the VENUE'S, deliberately chosen.
+    // Until a drag happens, `games` is only the order the on/off toggles were
+    // saved in — not an arrangement anyone intended — so gamesFor() sorts by
+    // the registry instead and a change there can still reach this venue.
+    // After a drag, their sequence is never re-sorted.
+    onSaveGames?.(arrayMove(ids, from, to), { ordered: true })
   }
 
   // --- the detail sheet -----------------------------------------------------

@@ -18,7 +18,7 @@ import { CAP } from '../../lib/permissions.js'
 import { listCustomers, updateTenant } from '../../lib/db.js'
 import { fmtNum } from '../../lib/format.js'
 import { PLAY_AI_GUARD_AR } from '../../lib/gameMemory.js'
-import { gamesFor } from '../../lib/games.js'
+import { gamesFor, resolveWaitGame } from '../../lib/games.js'
 import { useToast } from '../../components/Toast.jsx'
 
 import PlayOverview from '../../components/play/PlayOverview.jsx'
@@ -117,13 +117,13 @@ export default function GuestPlay({ onCreateCampaign }) {
   // updateTenant path every other tenant setting uses.
   const canSettings = isManager || can(CAP.MANAGE_SETTINGS)
   const enabledGames = useMemo(() => gamesFor(tenant), [tenant])
-  const [wg, setWg] = useState(() => ({
-    enabled: tenant?.waitGame?.enabled === true,
-    gameId: tenant?.waitGame?.gameId || 'auto',
-  }))
+  // resolveWaitGame, not a local read: an unset setting means ON + 'auto' on the
+  // guest's page, and this screen showing it as off was the mismatch that let a
+  // venue believe the feature was disabled while guests were being served a game.
+  const [wg, setWg] = useState(() => resolveWaitGame(tenant))
   useEffect(() => {
-    setWg({ enabled: tenant?.waitGame?.enabled === true, gameId: tenant?.waitGame?.gameId || 'auto' })
-  }, [tenant?.waitGame?.enabled, tenant?.waitGame?.gameId])
+    setWg(resolveWaitGame(tenant))
+  }, [tenant?.waitGame?.enabled, tenant?.waitGame?.gameId, tenant?.waitGameEnabled])
   const saveWait = async (patch) => {
     const next = { enabled: wg.enabled, gameId: wg.gameId || 'auto', ...patch }
     setWg(next)

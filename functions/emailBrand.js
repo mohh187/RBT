@@ -19,6 +19,7 @@
 // the ink is measured against the actual colour, exactly as the app does it in
 // src/lib/themes.js.
 const { PLATFORM_SELLER, sellerBlock } = require('./platformSeller.js')
+const { normLang, dirOf } = require('./emailLang.js')
 
 // --- contrast, ported from src/lib/contrast.js -------------------------------
 function srgb(c) { const v = c / 255; return v <= 0.03928 ? v / 12.92 : Math.pow((v + 0.055) / 1.055, 2.4) }
@@ -76,14 +77,23 @@ function absolute(url) {
 }
 
 // The venue's own identity, derived entirely from its tenant document.
-function venueBrand(tenant) {
+//
+// `lang` is the READER's language, not the venue's — for guest mail it comes off
+// the order (order.lang, recorded when the guest placed it), for venue-facing
+// mail off tenant.lang. It rides on the brand object because "who is this from"
+// and "which way does it read" are the same kind of fact, and carrying it here
+// means the shell() call shape at every builder stays unchanged.
+function venueBrand(tenant, lang) {
   const t = tenant || {}
   const color = isHex(t.themeColor) ? t.themeColor : DEFAULT_BRAND
   const accent = isHex(t.themeAccent) ? t.themeAccent : DEFAULT_ACCENT
   const slug = String(t.slug || '')
   const base = String(process.env.PUBLIC_BASE_URL || '').replace(/\/+$/, '')
+  const lg = normLang(lang)
   return {
     kind: 'venue',
+    lang: lg,
+    dir: dirOf(lg),
     name: t.name || '',
     color,
     ink: onColor(color),      // readable ON the brand colour, whatever it is
@@ -102,7 +112,14 @@ function venueBrand(tenant) {
     // signs the header with a rule underneath instead of swallowing the logo.
     plate: tint(color, 0.14),
     plateInk: onColor(tint(color, 0.14)),
-    logoUrl: absolute(t.logoUrl),
+    // PREFER THE MASKED COPY. logoMask.js writes logoRoundUrl: the same mark as
+    // a PNG with its corners cut to a circle and made transparent. It solves two
+    // things at once — a round logo cannot poke out of the round plate, and PNG
+    // renders in Outlook's Word engine where the uploaded .webp does not. When
+    // it is absent (not yet processed) we fall back to the original and the
+    // template caps the size so the corners still cannot protrude.
+    logoUrl: absolute(t.logoRoundUrl || t.logoUrl),
+    logoRound: !!t.logoRoundUrl,
     // Contact block for the footer — only what the venue actually filled in.
     phone: t.phone || '',
     address: t.address || '',
@@ -117,10 +134,13 @@ function venueBrand(tenant) {
 }
 
 // Ours.
-function platformBrand(financeCfg) {
+function platformBrand(financeCfg, lang) {
   const s = sellerBlock(financeCfg || {})
+  const lg = normLang(lang)
   return {
     kind: 'platform',
+    lang: lg,
+    dir: dirOf(lg),
     name: PLATFORM_SELLER.brand,
     legalName: PLATFORM_SELLER.legalNameAr,
     color: RBT_BRAND,

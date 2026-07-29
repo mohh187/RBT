@@ -85,7 +85,13 @@ export async function createTenant(ownerUid, { name, type, slug, currency, theme
           themeColor: themeColor || DEFAULT_THEME.brand,
           themeAccent: themeAccent || DEFAULT_THEME.accent,
           themePreset: themePreset || DEFAULT_THEME.id,
+          // `locale` is the WhatsApp TEMPLATE language code and must not be
+          // repurposed: Meta rejects a send whose code the template was not
+          // approved in, so flipping it to follow the UI would silently kill a
+          // venue's order notifications. `lang` is a separate field for the
+          // language of system mail we send the venue (reports, invoices).
           locale: 'ar',
+          lang: (() => { try { return localStorage.getItem('ml.lang') === 'en' ? 'en' : 'ar' } catch (_) { return 'ar' } })(),
           loyaltyEnabled: true,
           loyaltyThreshold: 5,
           orderSeq: 0,

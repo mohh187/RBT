@@ -12,6 +12,7 @@ const { getFirestore, FieldValue } = require('firebase-admin/firestore')
 const { sendEmail, emailShell, esc } = require('./messaging')
 const { shell, facts, section } = require('./emailTemplates.js')
 const { platformBrand } = require('./emailBrand.js')
+const { normLang, L } = require('./emailLang.js')
 const { receiptForSimple, notifyReceipt, invoiceLink } = require('./invoicing')
 const { takeSpend, readSpend, packPrice, extraField, CHANNEL_AR, limitsFor: spendLimitsFor } = require('./spend')
 const { plansConfig, resolvePlanPrice, yearlyAmount } = require('./platformPricing')
@@ -165,20 +166,27 @@ const generateMonthlyInvoices = onSchedule(
         const email = await ownerEmailOf(db, d.ownerUid)
         if (email && amount > 0) {
           const payUrl = (process.env.PUBLIC_BASE_URL || '') + '/admin'
+          const il = normLang(d.lang)
+          const p = L(il)
+          const ib = platformBrand({}, il)
           await sendEmail({
             // The platform billing the venue — one mail per venue per month,
             // and it must never be refused by the venue's own usage meter.
             meter: 'platform',
             to: email,
-            subject: `فاتورة اشتراك rbt360 — ${period}`,
+            lang: il,
+            subject: p(`فاتورة اشتراك rbt360 — ${period}`, `rbt360 subscription invoice — ${period}`),
             // OUR identity — we are billing them. The footer carries the legal
             // entity, which is the same one printed on the tax invoice itself.
-            html: shell(platformBrand({}), {
-              title: `فاتورة اشتراك — ${d.name || ''}`,
-              preheader: `فاتورة اشتراك ${period}`,
-              body: `<p style="margin:0 0 10px;">صدرت فاتورة اشتراك «${esc(d.name || '')}» عن فترة <strong>${esc(period)}</strong>.</p>`
-                + facts([['الباقة', plan], ['المبلغ', `${amount} ${currency}`]]),
-              cta: { label: 'سداد الفاتورة', href: payUrl },
+            html: shell(ib, {
+              title: p(`فاتورة اشتراك — ${d.name || ''}`, `Subscription invoice — ${d.name || ''}`),
+              preheader: p(`فاتورة اشتراك ${period}`, `Subscription invoice ${period}`),
+              body: p(
+                `<p style="margin:0 0 10px;">صدرت فاتورة اشتراك «${esc(d.name || '')}» عن فترة <strong>${esc(period)}</strong>.</p>`,
+                `<p style="margin:0 0 10px;">The subscription invoice for ${esc(d.name || '')} covering <strong>${esc(period)}</strong> has been issued.</p>`,
+              )
+                + facts([[p('الباقة', 'Plan'), plan], [p('المبلغ', 'Amount'), `${amount} ${currency}`]], { dir: ib.dir }),
+              cta: { label: p('سداد الفاتورة', 'Pay the invoice'), href: payUrl },
             }),
           }).catch(() => {})
         }
@@ -368,20 +376,27 @@ async function settleInvoiceFromPayment(db, payment) {
       // Email the venue owner a payment receipt (best-effort).
       const email = await ownerEmailOf(db, d.ownerUid)
       if (email) {
+        const rl = normLang(d.lang)
+        const p = L(rl)
+        const rb = platformBrand({}, rl)
         await sendEmail({
           // Payment receipt for the platform's own subscription — see above.
           meter: 'platform',
           to: email,
-          subject: `تم استلام دفعة اشتراك rbt360 — ${invoice.period || ''}`,
-          html: shell(platformBrand({}), {
-            title: 'تم استلام دفعتك',
-            preheader: `إيصال سداد اشتراك ${invoice.period || ''}`,
-            body: `<p style="margin:0 0 10px;">شكراً لك. تم استلام دفعة اشتراك «${esc(d.name || '')}» وتفعيل الباقة.</p>`
+          lang: rl,
+          subject: p(`تم استلام دفعة اشتراك rbt360 — ${invoice.period || ''}`, `rbt360 subscription payment received — ${invoice.period || ''}`),
+          html: shell(rb, {
+            title: p('تم استلام دفعتك', 'Payment received'),
+            preheader: p(`إيصال سداد اشتراك ${invoice.period || ''}`, `Subscription payment receipt ${invoice.period || ''}`),
+            body: p(
+              `<p style="margin:0 0 10px;">شكراً لك. تم استلام دفعة اشتراك «${esc(d.name || '')}» وتفعيل الباقة.</p>`,
+              `<p style="margin:0 0 10px;">Thank you. The subscription payment for ${esc(d.name || '')} was received and the plan is active.</p>`,
+            )
               + facts([
-                ['الفترة', invoice.period || ''],
-                ['المبلغ', `${Number(invoice.amount) || 0} ${invoice.currency || 'SAR'}`],
-                ['مفعّلة حتى', next.toISOString().slice(0, 10)],
-              ]),
+                [p('الفترة', 'Period'), invoice.period || ''],
+                [p('المبلغ', 'Amount'), `${Number(invoice.amount) || 0} ${invoice.currency || 'SAR'}`],
+                [p('مفعّلة حتى', 'Active until'), next.toISOString().slice(0, 10)],
+              ], { dir: rb.dir }),
           }),
         }).catch(() => {})
       }

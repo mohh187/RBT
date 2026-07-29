@@ -5,6 +5,9 @@ import { VENUE_TYPES, venueType, lex, LEX_KEYS, LEX_LABELS } from '../../lib/ven
 // The stage grid shows the SAME defaults the server enforces — guarded against
 // drift in scripts/guard.mjs.
 import { NOTIFY_STAGES, stageOn } from '../../lib/notifyStages.js'
+// The wait-game card needs the registry to name the games. GamesCatalogue below
+// still import()s this lazily; both resolve to the same chunk once loaded.
+import { gamesFor, resolveWaitGame } from '../../lib/games.js'
 
 // Map-based range picking (leaflet) — lazy so the heavy map bundle loads only on demand.
 const MapRangePicker = lazy(() => import('../../components/MapRangePicker.jsx'))
@@ -936,6 +939,22 @@ export default function Settings() {
     setLastSavedAt(new Date()) // feeds the tiny «آخر حفظ HH:MM» stamp next to Save
     return res
   }
+  // WAIT-GAME SETTING. resolveWaitGame is shared with the guest's order page and
+  // /admin/guest-play so all three agree on what "never configured" means — they
+  // did not, and the disagreement is why every unconfigured venue silently
+  // served one hard-coded game. The picker offers only games this venue has
+  // actually enabled, which is the same list the guest's «تلقائي» draws from.
+  const waitCfg = resolveWaitGame(tenant)
+  const waitGames = useMemo(() => (tenant ? gamesFor(tenant) : []), [tenant])
+  const saveWaitGame = async (patch) => {
+    const next = { enabled: waitCfg.enabled, gameId: waitCfg.gameId, ...patch }
+    try {
+      await saveNow({ waitGame: next })
+      updateTenantLocal({ waitGame: next })
+      toast.success(t('saved'))
+    } catch (_) { toast.error(t('error')) }
+  }
+
   // custom system theme editor (THEMES_HUB #21/#22) — draft kept local until save
   const [custEdit, setCustEdit] = useState(null)
 
@@ -1680,7 +1699,13 @@ export default function Settings() {
   const onCropped = async (blob, kind, meta) => {
     setCropState(null); setUploading(kind)
     try {
-      const fileObj = new File([blob], `${kind}.webp`, { type: 'image/webp' })
+      // Take the extension from what the CROPPER actually produced, not a
+      // hard-coded guess. A round crop comes back as PNG (transparent corners,
+      // and Outlook's Word engine cannot display WebP at all); everything else
+      // is still WebP. Naming a PNG `.webp` would have served it with the wrong
+      // content type and broken it in exactly the clients this fixes.
+      const ext = (blob.type || 'image/webp').split('/')[1] || 'webp'
+      const fileObj = new File([blob], `${kind}.${ext}`, { type: blob.type || 'image/webp' })
       const url = await uploadImage(tenantId, fileObj, kind === 'decor' ? 'decor' : 'branding')
       // the wall is a NESTED object on the tenant, not a top-level url field, and
       // the upload is also what switches the bond over to «صورتي»
@@ -1693,7 +1718,13 @@ export default function Settings() {
       // off a canvas keeps the alpha channel, so a trimmed lantern stays cut out.
       if (kind === 'decor') { if (meta?.decorId) patchDecor(meta.decorId, { url }); return }
       if (kind === 'logo') setLogoUrl(url); else setCoverUrl(url)
-      const patch = kind === 'logo' ? { logoUrl: url } : { coverUrl: url }
+      // A logo cropped round is ALREADY the masked copy, so record it as both.
+      // That means a venue that re-uploads never waits on the server-side
+      // backfill, and email can use it at full size immediately.
+      const isRound = kind === 'logo' && String(blob.type || '') === 'image/png'
+      const patch = kind === 'logo'
+        ? { logoUrl: url, ...(isRound ? { logoRoundUrl: url } : {}) }
+        : { coverUrl: url }
       await saveNow(patch); updateTenantLocal(patch)
       // Secrets go to the private, staff-only doc — never the public tenant doc.
       await setPrivateDoc(tenantId, 'integrations', {
@@ -2210,6 +2241,30 @@ export default function Settings() {
                 {langs.map((l) => <button key={l.id} className={lang === l.id ? 'active' : ''} onClick={() => setLang(l.id)}>{l.name}</button>)}
               </div>
             </div>
+            {/* THE LANGUAGE OF MAIL WE SEND YOU — deliberately a separate,
+                explicit control rather than following the switch above.
+                That one is per-DEVICE (localStorage): a cashier flipping their
+                own screen to English would otherwise flip the owner's daily
+                report and the venue's staff invites with it.
+                Guests are unaffected either way — their mail follows the
+                language they were reading when they placed the order, which is
+                recorded on the order itself. */}
+            <div className="row-between wrap" style={{ gap: 10 }}>
+              <div>
+                <span className="small">{ar ? 'لغة رسائل النظام' : 'System email language'}</span>
+                <p className="xs faint" style={{ margin: 0, maxWidth: '42ch' }}>
+                  {ar ? 'لغة التقرير اليومي والفواتير ودعوات الفريق التي تصلكم. ورسائل الضيوف تتبع لغة المنيو التي طلبوا بها.' : 'For the daily report, invoices and team invites sent to you. Guest emails follow the menu language they ordered in.'}
+                </p>
+              </div>
+              <div className="segmented">
+                {[['ar', 'العربية'], ['en', 'English']].map(([id, label]) => (
+                  <button key={id} className={(tenant?.lang === 'en' ? 'en' : 'ar') === id ? 'active' : ''}
+                    onClick={async () => { try { await saveNow({ lang: id }); updateTenantLocal({ lang: id }); toast.success(t('saved')) } catch (_) { toast.error(t('error')) } }}>
+                    {label}
+                  </button>
+                ))}
+              </div>
+            </div>
             <div className="row-between wrap" style={{ gap: 10 }}>
               <div>
                 <span className="small">{ar ? 'الجولات الإرشادية' : 'Guided tours'}</span>
@@ -2266,20 +2321,50 @@ export default function Settings() {
           </div>
           )}
 
-          {/* Waiting mini-game on the order-tracking page */}
+          {/* WAITING GAME — the switch AND the picker, together.
+              This card used to offer only a boolean named after one game
+              («صياد البحر»), while the control that chooses WHICH game lived on
+              a reports page (/admin/guest-play, behind VIEW_REPORTS). So an
+              owner looking here reasonably concluded the fishing game was the
+              only thing on offer. Both controls now sit where the owner looks;
+              /admin/guest-play writes the same tenant.waitGame field. */}
           {tab === 'experience' && (
           <div className="card card-pad stack" id="set-waitgame" style={{ gap: 10 }}>
             <div className="row" style={{ gap: 6, alignItems: 'center' }}>
               <Icon name="play" size={18} style={{ color: 'var(--brand)' }} />
-              <strong>{ar ? 'لعبة الانتظار «صياد البحر»' : 'Waiting game'}</strong>
+              <strong>{ar ? 'لعبة الانتظار بعد الطلب' : 'Post-order wait game'}</strong>
             </div>
             <div className="row-between wrap" style={{ gap: 10 }}>
               <p className="xs faint" style={{ margin: 0, maxWidth: '46ch' }}>
-                {ar ? 'أثناء تحضير الطلب تظهر للعميل دعوة للعب لعبة صيد ممتعة (45 ثانية، أفضل نتيجة تُحفظ على جهازه) — تجربة انتظار لا يملكها غيرك.' : 'While the kitchen works, guests can play a 45-second fishing game with a saved best score.'}
+                {ar ? 'أثناء تحضير الطلب تظهر للضيف دعوة للعب — تجربة انتظار لا يملكها غيرك.' : 'While the kitchen works, guests get an invitation to play — a waiting experience nobody else offers.'}
               </p>
-              <input type="checkbox" checked={tenant?.waitGameEnabled !== false} style={{ width: 22, height: 22 }}
-                onChange={async (e) => { try { await saveNow({ waitGameEnabled: e.target.checked }); updateTenantLocal({ waitGameEnabled: e.target.checked }); toast.success(t('saved')) } catch (_) { toast.error(t('error')) } }} />
+              <input type="checkbox" checked={waitCfg.enabled} style={{ width: 22, height: 22 }}
+                onChange={(e) => saveWaitGame({ enabled: e.target.checked })} />
             </div>
+            {waitCfg.enabled && (
+              waitGames.length ? (
+                <div className="stack" style={{ gap: 8, borderTop: '1px solid var(--border)', paddingTop: 10 }}>
+                  <span className="xs faint">{ar ? 'أي لعبة تظهر للضيف؟' : 'Which game does the guest get?'}</span>
+                  <div className="scroll-x">
+                    <button type="button" className={`chip ${waitCfg.gameId === 'auto' ? 'active' : ''}`}
+                      aria-pressed={waitCfg.gameId === 'auto'} onClick={() => saveWaitGame({ gameId: 'auto' })}>
+                      {ar ? 'تلقائي' : 'Auto'}
+                    </button>
+                    {waitGames.map((g) => (
+                      <button key={g.id} type="button" className={`chip ${waitCfg.gameId === g.id ? 'active' : ''}`}
+                        aria-pressed={waitCfg.gameId === g.id} onClick={() => saveWaitGame({ gameId: g.id })}>
+                        {ar ? g.ar : (g.en || g.ar)}
+                      </button>
+                    ))}
+                  </div>
+                  <span className="xs faint">
+                    {ar ? '«تلقائي» يوزّع ألعابك المفعّلة على الطلبات بالتناوب — واللعبة ثابتة داخل الطلب الواحد.' : '“Auto” rotates your enabled games across orders, and stays fixed within one order.'}
+                  </span>
+                </div>
+              ) : (
+                <p className="xs faint" style={{ margin: 0 }}>{ar ? 'لا توجد ألعاب مفعّلة بعد — فعّلها من «مركز الألعاب».' : 'No games enabled yet — turn them on in the games centre.'}</p>
+              )
+            )}
           </div>
           )}
 

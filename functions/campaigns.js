@@ -13,6 +13,7 @@ const { getFirestore, FieldValue } = require('firebase-admin/firestore')
 const { sendWhatsAppText, waCredsFor, sendEmail } = require('./messaging')
 const { shell, section, money: emoney, esc: eesc } = require('./emailTemplates.js')
 const { platformBrand } = require('./emailBrand.js')
+const { normLang, L } = require('./emailLang.js')
 const { takeSpend } = require('./spend')
 
 // Personalize a template: {name}/{الاسم} → customer name, {venue}/{المنشأة} → venue.
@@ -581,38 +582,44 @@ const ownerDailyReport = onSchedule(
           ? await db.doc(`users/${td.ownerUid}`).get().then((u) => (u.exists ? u.data().email : '')).catch(() => '')
           : '')
         if (reportTo && rep.email !== false) {
-          const pb = platformBrand({})
+          // Venue-facing mail follows the VENUE's language (tenant.lang), not a
+          // guest's. Absent means Arabic, so nothing changes for any existing
+          // venue and there is no migration.
+          const rl = normLang(td.lang)
+          const p = L(rl)
+          const pb = platformBrand({}, rl)
           const cur = td.currency || 'SAR'
-          const n = (v) => emoney(v, cur)
+          const n = (v) => emoney(v, cur, { lang: rl })
           const avg = paidCount ? Math.round(revenue / paidCount) : 0
           const body = [
-            `<p style="margin:0 0 6px;">مرحباً,</p>`,
-            `<p style="margin:0 0 16px;color:#5c6270;font-size:13.5px;">هذا تقرير مبيعات أمس لـ«${eesc(td.name || '')}»، مُجهَّز آلياً.</p>`,
-            section(pb, 'الحركة', [
-              ['الطلبات المدفوعة', String(paidCount)],
-              cancelledCount ? ['الطلبات الملغاة', String(cancelledCount)] : null,
-              ['متوسط قيمة الطلب', n(avg)],
-              ['إجمالي الإيراد', n(revenue), 'strong'],
+            `<p style="margin:0 0 6px;">${p('مرحباً,', 'Hello,')}</p>`,
+            `<p style="margin:0 0 16px;color:#5c6270;font-size:13.5px;">${p(`هذا تقرير مبيعات أمس لـ«${eesc(td.name || '')}»، مُجهَّز آلياً.`, `Yesterday's sales for ${eesc(td.name || '')}, prepared automatically.`)}</p>`,
+            section(pb, p('الحركة', 'Movement'), [
+              [p('الطلبات المدفوعة', 'Paid orders'), String(paidCount)],
+              cancelledCount ? [p('الطلبات الملغاة', 'Cancelled orders'), String(cancelledCount)] : null,
+              [p('متوسط قيمة الطلب', 'Average order value'), n(avg)],
+              [p('إجمالي الإيراد', 'Total revenue'), n(revenue), 'strong'],
             ]),
-            section(pb, 'الإيراد حسب طريقة الدفع', [
-              ['نقداً', String(cash)],
-              ['شبكة', String(card)],
-              ['أونلاين', String(online)],
-              ['مجموع الطلبات المسوّاة', String(cash + card + online), 'strong'],
+            section(pb, p('الإيراد حسب طريقة الدفع', 'Revenue by payment method'), [
+              [p('نقداً', 'Cash'), String(cash)],
+              [p('شبكة', 'Card'), String(card)],
+              [p('أونلاين', 'Online'), String(online)],
+              [p('مجموع الطلبات المسوّاة', 'Settled orders'), String(cash + card + online), 'strong'],
             ]),
-            top.length ? section(pb, 'الأكثر مبيعاً', top.map(([nm, q2]) => [nm, String(q2)])) : '',
-            slowLines.length ? section(pb, 'أصناف تحتاج انتباهك', slowLines.map((s) => [s, '', 'muted'])) : '',
+            top.length ? section(pb, p('الأكثر مبيعاً', 'Best sellers'), top.map(([nm, q2]) => [nm, String(q2)])) : '',
+            slowLines.length ? section(pb, p('أصناف تحتاج انتباهك', 'Items needing attention'), slowLines.map((s) => [s, '', 'muted'])) : '',
           ].filter(Boolean).join('')
           await sendEmail({
             // Platform reporting, not the venue's metered spend.
             meter: 'platform',
             to: reportTo,
-            subject: `تقرير مبيعات ${td.name || ''} — ${yDate}`,
+            lang: rl,
+            subject: p(`تقرير مبيعات ${td.name || ''} — ${yDate}`, `Sales report ${td.name || ''} — ${yDate}`),
             html: shell(pb, {
-              title: `تقرير مبيعات ${td.name || ''} — ${yDate}`,
-              preheader: `إيراد أمس ${revenue} ${cur} من ${paidCount} طلباً`,
+              title: p(`تقرير مبيعات ${td.name || ''} — ${yDate}`, `Sales report ${td.name || ''} — ${yDate}`),
+              preheader: p(`إيراد أمس ${revenue} ${cur} من ${paidCount} طلباً`, `Yesterday: ${revenue} ${cur} from ${paidCount} orders`),
               body,
-              cta: { label: 'فتح التقرير الكامل', href: (process.env.PUBLIC_BASE_URL || '').replace(/\/$/, '') + '/admin/daily-report' },
+              cta: { label: p('فتح التقرير الكامل', 'Open the full report'), href: (process.env.PUBLIC_BASE_URL || '').replace(/\/$/, '') + '/admin/daily-report' },
             }),
           }).catch(() => {})
         }

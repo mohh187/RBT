@@ -15,6 +15,7 @@
 import { useEffect, useRef, useState } from 'react'
 import Icon from './Icon.jsx'
 import { play } from '../lib/gameSounds.js'
+import { useDismiss } from '../lib/useDismiss.js'
 import '../styles/arcade-a.css'
 
 const START_LIVES = 3
@@ -112,12 +113,23 @@ function Heart({ lost, hit }) {
 
 // `onScore` lets a host (the games centre shell) mirror the live score in its
 // own chrome; the standalone order-page usage simply omits it.
-export default function WaitGame({ open, onClose, tenantId, brand = '#0e7490', lang = 'ar', onLeaderboard, onScore }) {
+export default function WaitGame({ open, onClose, tenantId, brand = '#0e7490', lang = 'ar', embedded = false, onLeaderboard, onScore }) {
   const L = TXT[lang] || TXT.ar
   const canvasRef = useRef(null)
   const gRef = useRef(null)
   const onScoreRef = useRef(onScore)
   const phaseRef = useRef('ready')
+
+  // Escape and the phone's Back gesture both close the game. Standalone on the
+  // order page the `wg-x` button is the guest's only other way out, and the
+  // canvas sets `touch-action: none`, so a guest who cannot see that button has
+  // no exit at all — Back is the one control every phone user already trusts.
+  //
+  // Not when EMBEDDED: inside the hub the shell already owns one history entry
+  // for "a game is running" (see GamesCenter). A second entry here would make
+  // the guest press Back twice to leave one game, since `.gb-adapt` hides this
+  // component's own close button anyway and the hub is the thing exiting.
+  useDismiss(open && !embedded, onClose)
 
   const [phase, setPhase] = useState('ready')
   const [score, setScore] = useState(0)

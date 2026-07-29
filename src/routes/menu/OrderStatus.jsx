@@ -23,9 +23,8 @@ import { createVenueReview } from '../../lib/reviewImport.js'
 // for a panel most diners never open. Loaded on first open instead; it stays
 // mounted afterwards so the sheet keeps its close animation.
 const NotificationSettings = lazy(() => import('../../components/NotificationSettings.jsx'))
-import WaitGame, { getBestScore } from '../../components/WaitGame.jsx'
 import { deviceKey } from '../../lib/device.js'
-import { gamesFor } from '../../lib/games.js'
+import { gamesFor, resolveWaitGame } from '../../lib/games.js'
 // heavy/rarely-opened guest overlays
 const Leaderboard = lazy(() => import('../../components/Leaderboard.jsx'))
 const KitchenTwin = lazy(() => import('../../components/KitchenTwin.jsx'))
@@ -64,7 +63,6 @@ export default function OrderStatus() {
   const [arrived, setArrived] = useState(() => isArrived(orderId))
   const [arriving, setArriving] = useState(false)
   const [paying, setPaying] = useState(false)
-  const [gameOpen, setGameOpen] = useState(false)
   // The configurable post-order wait game (tenant.waitGame). Opens the real
   // games hub on top of this screen; the strip below announces «طلبك جاهز» over
   // it without ever tearing the game down mid-round.
@@ -129,7 +127,14 @@ export default function OrderStatus() {
   // chosen game is 'auto' — or a game the venue has since disabled — a game is
   // picked deterministically from the enabled set by hashing the order id, so a
   // given order always offers the same game (no flicker across re-renders).
-  const waitCfg = venue?.waitGame
+  //
+  // ABSENCE MEANS "AUTO", NOT "THE FISHING GAME". This used to fall through to
+  // a second, older branch that mounted «صياد البحر» by name — so every venue
+  // that had not found the picker (it lived on a REPORTS page, /admin/guest-play,
+  // behind VIEW_REPORTS) served that one game and nothing else, forever. The
+  // resolver below was already correct; nothing reached it. resolveWaitGame is
+  // shared with both admin screens so none of the three can drift again.
+  const waitCfg = resolveWaitGame(venue)
   const waitOn = waitCfg?.enabled === true
   const waitEnabledGames = venue ? gamesFor(venue) : []
   const waitGameId = (() => {
@@ -411,24 +416,11 @@ export default function OrderStatus() {
           </button>
         )}
 
-        {/* «صياد البحر» — the legacy waiting mini-game. Shown only when the venue
-            has NOT configured the newer tenant.waitGame picker, so the two never
-            appear together. Venue-togglable via the older waitGameEnabled flag. */}
-        {!cancelled && !venue?.waitGame && currentIdx < STEPS.indexOf('ready') && venue?.waitGameEnabled !== false && (
-          <button type="button" className="wg-invite" onClick={() => setGameOpen(true)}>
-            <span className="wg-invite-ico"><Icon name="play" size={22} /></span>
-            <span className="wg-invite-txt">
-              <b>{lang === 'ar' ? 'العب «صياد البحر» أثناء التحضير' : 'Play the fishing game while you wait'}</b>
-              <span>{lang === 'ar' ? `اصطد الأسماك واجمع النقاط — أفضل نتيجتك: ${getBestScore(tid)}` : `Catch fish, beat your best: ${getBestScore(tid)}`}</span>
-            </span>
-          </button>
-        )}
-        {gameOpen && (
-          <WaitGame
-            open onClose={() => setGameOpen(false)} tenantId={tid} brand={venue?.brandColor || '#0e7490'}
-            onLeaderboard={(score) => { setLastScore(score); setGameOpen(false); setBoardOpen(true) }}
-          />
-        )}
+        {/* The legacy «صياد البحر» branch that used to sit here is gone. It was
+            the reason every unconfigured venue served exactly one game: it
+            mounted WaitGame by name whenever tenant.waitGame was unset, which
+            was almost always. Fishing is still fully available — it is one entry
+            in the catalogue above, reachable through the same hub as the rest. */}
         {/* The venue's «لوحة صدارة اللعبة» switch was a dead control: it was
             offered in Settings and nothing anywhere read it, so turning it off
             changed nothing a guest could see. It is honoured here. */}

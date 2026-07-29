@@ -1053,6 +1053,14 @@ exports.onStaffInviteEmail = messaging.onStaffInviteEmail
 // ---- invoicing (numbered receipts / tax invoices for every paid order) ----
 exports.onOrderPaid = require('./invoicing').onOrderPaid
 
+// ---- round logos: mask the corners away so a mark is a circle in the PIXELS ----
+// The cropper showed a circle and saved a square; CSS hid it everywhere except
+// email. New uploads are fixed at the source (src/lib/cropImage.js); this masks
+// the ones already stored, automatically, for every venue.
+const logoMask = require('./logoMask')
+exports.onLogoMask = logoMask.onLogoMask
+exports.backfillRoundLogos = logoMask.backfillRoundLogos
+
 // ---- per-venue share + install identity (crawler og tags + dynamic manifest) ----
 // Serves /m/** and /join/** (see firebase.json rewrites) with the VENUE's meta.
 exports.venueShell = require('./venueMeta').venueShell

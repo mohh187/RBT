@@ -54,6 +54,8 @@ function FishingAdapter({ onScore, onExit, brand = '#0e7490', tenantId = '' }) {
     createElement(fishingMod.default, {
       open: true,
       onClose: onExit,
+      // The hub owns the Escape/Back entry for a running game; see useDismiss.
+      embedded: true,
       tenantId,
       brand,
       onLeaderboard: (s) => onScoreRef.current?.(Number(s) || 0),
@@ -283,55 +285,6 @@ export const GAMES = [
   // `multiplayer` makes the hub open the room lobby instead of launching solo;
   // min/maxPlayers drive the seat count the lobby waits for.
   {
-    id: 'ludo',
-    cover: { motif: 'ludo', palette: ['#1d1a2e', '#3d3660', '#f7f4ee'], players: '2-4', vsCpu: true },
-    ar: 'الليدو',
-    en: 'Ludo',
-    desc: 'اللعبة الكلاسيكية بأربعة ألوان — أخرج قطعك بستة، كُل قطع الخصم، وأوصلها إلى المركز.',
-    descEn: 'The classic four-colour race: leave the yard on a six, capture rivals, get all four home.',
-    icon: 'shapes',
-    tags: ['all'],
-    kind: 'party',
-    multiplayer: true,
-    minPlayers: 2,
-    maxPlayers: 4,
-    // Online rooms only: gameRoom stamps turn.deadlineAt from this, and the
-    // board renders a countdown ring on the active seat. Local/solo rounds
-    // carry no deadline (the local room mirrors deadlineAt: null).
-    turnMs: 45000,
-    load: () => import('../components/games/Ludo.jsx'),
-  },
-  {
-    id: 'chess',
-    cover: { motif: 'chess', palette: ['#16232e', '#5b7182', '#e9eef3'], players: '2', vsCpu: true },
-    ar: 'الشطرنج',
-    en: 'Chess',
-    desc: 'شطرنج كامل القواعد — التبييت والأخذ بالمرور والترقية، وحركة غير قانونية مستحيلة.',
-    descEn: 'Full-rules chess: castling, en passant, promotion, draws.',
-    icon: 'grid',
-    tags: ['all'],
-    kind: 'party',
-    multiplayer: true,
-    minPlayers: 2,
-    maxPlayers: 2,
-    load: () => import('../components/games/Chess.jsx'),
-  },
-  {
-    id: 'dominoes',
-    cover: { motif: 'domino', palette: ['#0f2a22', '#1f6b53', '#f5f1e6', '#16202a'], players: '2-4', vsCpu: true },
-    ar: 'الدومينو',
-    en: 'Dominoes',
-    desc: 'دومينو الخليج — افتح بأعلى دبل، طابق الطرفين، واسحب حتى تلعب. أول من يبلغ 101 يفوز.',
-    descEn: 'Gulf-style block-and-draw dominoes to 101.',
-    icon: 'layers',
-    tags: ['all'],
-    kind: 'party',
-    multiplayer: true,
-    minPlayers: 2,
-    maxPlayers: 4,
-    load: () => import('../components/games/Dominoes.jsx'),
-  },
-  {
     id: 'wist',
     cover: { motif: 'fan', palette: ['#0e2a26', '#1d6b57', '#f2e6cf', '#d9455f'], players: '4', vsCpu: true },
     ar: 'الوِست',
@@ -352,19 +305,23 @@ export const GAMES = [
     load: () => import('../components/games/Wist.jsx'),
   },
   {
-    id: 'jackaroo',
-    cover: { motif: 'marbles', palette: ['#101f3a', '#3a63b8', '#ffd27a', '#f2e6cf'], players: '4', vsCpu: true },
-    ar: 'الجكارو',
-    en: 'Jackaroo',
-    desc: 'جكارو بالورق والبِلي — فريقان، أخرج بِلْيَك بالآص أو الشايب، والسبعة تنقسم.',
-    descEn: 'Cards-and-marbles partnership race.',
+    id: 'ludo',
+    cover: { motif: 'ludo', palette: ['#1d1a2e', '#3d3660', '#f7f4ee'], players: '2-4', vsCpu: true },
+    ar: 'الليدو',
+    en: 'Ludo',
+    desc: 'اللعبة الكلاسيكية بأربعة ألوان — أخرج قطعك بستة، كُل قطع الخصم، وأوصلها إلى المركز.',
+    descEn: 'The classic four-colour race: leave the yard on a six, capture rivals, get all four home.',
     icon: 'shapes',
     tags: ['all'],
     kind: 'party',
     multiplayer: true,
-    minPlayers: 4,
+    minPlayers: 2,
     maxPlayers: 4,
-    load: () => import('../components/games/Jackaroo.jsx'),
+    // Online rooms only: gameRoom stamps turn.deadlineAt from this, and the
+    // board renders a countdown ring on the active seat. Local/solo rounds
+    // carry no deadline (the local room mirrors deadlineAt: null).
+    turnMs: 45000,
+    load: () => import('../components/games/Ludo.jsx'),
   },
   {
     id: 'haree',
@@ -380,6 +337,51 @@ export const GAMES = [
     minPlayers: 2,
     maxPlayers: 4,
     load: () => import('../components/games/Haree.jsx'),
+  },
+  {
+    id: 'chess',
+    cover: { motif: 'chess', palette: ['#16232e', '#5b7182', '#e9eef3'], players: '2', vsCpu: true },
+    ar: 'الشطرنج',
+    en: 'Chess',
+    desc: 'شطرنج كامل القواعد — التبييت والأخذ بالمرور والترقية، وحركة غير قانونية مستحيلة.',
+    descEn: 'Full-rules chess: castling, en passant, promotion, draws.',
+    icon: 'grid',
+    tags: ['all'],
+    kind: 'party',
+    multiplayer: true,
+    minPlayers: 2,
+    maxPlayers: 2,
+    load: () => import('../components/games/Chess.jsx'),
+  },
+  {
+    id: 'jackaroo',
+    cover: { motif: 'marbles', palette: ['#101f3a', '#3a63b8', '#ffd27a', '#f2e6cf'], players: '4', vsCpu: true },
+    ar: 'الجكارو',
+    en: 'Jackaroo',
+    desc: 'جكارو بالورق والبِلي — فريقان، أخرج بِلْيَك بالآص أو الشايب، والسبعة تنقسم.',
+    descEn: 'Cards-and-marbles partnership race.',
+    icon: 'shapes',
+    tags: ['all'],
+    kind: 'party',
+    multiplayer: true,
+    minPlayers: 4,
+    maxPlayers: 4,
+    load: () => import('../components/games/Jackaroo.jsx'),
+  },
+  {
+    id: 'dominoes',
+    cover: { motif: 'domino', palette: ['#0f2a22', '#1f6b53', '#f5f1e6', '#16202a'], players: '2-4', vsCpu: true },
+    ar: 'الدومينو',
+    en: 'Dominoes',
+    desc: 'دومينو الخليج — افتح بأعلى دبل، طابق الطرفين، واسحب حتى تلعب. أول من يبلغ 101 يفوز.',
+    descEn: 'Gulf-style block-and-draw dominoes to 101.',
+    icon: 'layers',
+    tags: ['all'],
+    kind: 'party',
+    multiplayer: true,
+    minPlayers: 2,
+    maxPlayers: 4,
+    load: () => import('../components/games/Dominoes.jsx'),
   },
 ]
 
@@ -430,9 +432,70 @@ export function unseenGames(tenant, enabledIds) {
 export function gamesFor(tenant) {
   const ids = tenant && Array.isArray(tenant.games) ? tenant.games : null
   if (!ids) return GAMES.filter((g) => DEFAULT_GAME_IDS.includes(g.id))
-  // The venue's own order is preserved exactly; anything it has never been
-  // offered is appended rather than inserted, so nothing it arranged moves.
-  return ids.map(gameById).filter(Boolean).concat(unseenGames(tenant, ids))
+  const fresh = unseenGames(tenant, ids)
+
+  // WHOSE ORDER WINS.
+  //
+  // Toggling a game on or off writes `games`, and that array's ORDER used to be
+  // taken as the venue's arrangement even though the venue never arranged
+  // anything — it was just the order the toggles happened to be saved in. So a
+  // change to the registry order (say, putting «وست» and «لودو» and «الحريق»
+  // first) could never reach a venue that had merely switched one game off.
+  //
+  // `gamesOrdered` is set only by the DRAG handle. Without it, the venue's
+  // choices are honoured but the registry decides the sequence — which is what
+  // a venue that never touched the order expects. With it, their sequence is
+  // untouchable.
+  if (!tenant.gamesOrdered) {
+    const on = new Set(ids)
+    const show = new Set(fresh.map((g) => g.id))
+    return GAMES.filter((g) => on.has(g.id) || show.has(g.id))
+  }
+
+  // They arranged it themselves. Keep that order exactly — and slot anything
+  // new into its REGISTRY neighbourhood rather than dumping it at the end,
+  // which would drop «الحريق» to the bottom the moment we un-hid it.
+  //
+  // Placement rule: sit directly AFTER the game that is its nearest preceding
+  // neighbour in the registry and is actually present. In a list still close to
+  // registry order that puts it exactly where it belongs; in a heavily
+  // rearranged one it lands beside its most closely related sibling instead of
+  // jumping to the front — which is what "first game ranked after me" would do
+  // to a venue that had reversed its list.
+  const rankOf = (id) => GAMES.findIndex((x) => x.id === id)
+  const out = ids.map(gameById).filter(Boolean)
+  for (const g of fresh) {
+    const rank = rankOf(g.id)
+    let at = 0
+    let best = -1
+    for (let i = 0; i < out.length; i += 1) {
+      const r = rankOf(out[i].id)
+      if (r < rank && r > best) { best = r; at = i + 1 }
+    }
+    out.splice(at, 0, g)
+  }
+  return out
+}
+
+// THE WAIT-GAME SETTING, resolved in ONE place.
+//
+// Three screens read it — the guest's order page, /admin/guest-play and
+// Settings — and they must not disagree about what "unset" means. They did:
+// the admin screens treated absence as OFF while the order page fell through
+// to a hard-coded «صياد البحر», so a venue saw a switch that looked off while
+// its guests were served one fixed game.
+//
+// Absence now means ON + 'auto', because that is the behaviour a venue that
+// never touched the setting already had (a game did appear) — only now it is
+// drawn from the games that venue actually enabled instead of one name in the
+// source. `waitGameEnabled === false` is the older explicit OFF and still wins:
+// it is the only off anyone could have deliberately set.
+export function resolveWaitGame(tenant) {
+  const cfg = tenant && tenant.waitGame
+  if (cfg && typeof cfg === 'object') {
+    return { enabled: cfg.enabled === true, gameId: cfg.gameId || 'auto' }
+  }
+  return { enabled: tenant?.waitGameEnabled !== false, gameId: 'auto' }
 }
 
 // For the picker: every game that suits a venue type ('all' always matches).
