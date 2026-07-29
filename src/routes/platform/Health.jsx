@@ -16,6 +16,8 @@ import Icon from '../../components/Icon.jsx'
 import { Spinner, Empty } from '../../components/ui.jsx'
 import { useToast } from '../../components/Toast.jsx'
 import { useAuth } from '../../lib/auth.jsx'
+import { functions } from '../../lib/firebase.js'
+import { httpsCallable } from 'firebase/functions'
 import { watchHealth, watchJobs, watchAlerts, ackAlert, overallOf, isStale, SEVERITY_AR, SEVERITY_BADGE, SEVERITY_ORDER } from '../../lib/health.js'
 import { fmtWhen } from './shared.jsx'
 
@@ -34,6 +36,22 @@ export default function Health() {
   const [health, setHealth] = useState(undefined)
   const [jobs, setJobs] = useState(undefined)
   const [alerts, setAlerts] = useState(undefined)
+  const [masking, setMasking] = useState(false)
+  const [maskRes, setMaskRes] = useState(null)
+
+  const runMask = async () => {
+    if (masking) return
+    setMasking(true)
+    setMaskRes(null)
+    try {
+      const fn = httpsCallable(functions, 'backfillRoundLogos')
+      const res = await fn({ limit: 400 })
+      setMaskRes(res.data || null)
+      toast.success('تمّت المعالجة')
+    } catch (e) {
+      toast.error(e?.message || 'تعذّرت المعالجة')
+    } finally { setMasking(false) }
+  }
 
   useEffect(() => watchHealth(setHealth), [])
   useEffect(() => watchJobs(setJobs), [])
@@ -161,6 +179,40 @@ export default function Health() {
           </div>
         </section>
       )}
+
+      {/* MAINTENANCE: one-shot sweeps. The logo mask normally runs by itself —
+          onLogoMask fires whenever a tenant document is written, which for an
+          active venue is its next order. A venue that is dormant may never
+          write, so this forces the pass. Idempotent: maskFor() skips any logo
+          already current, so running it twice costs nothing. */}
+      <section className="stack" style={{ gap: 8 }}>
+        <h3 className="section-title">صيانة</h3>
+        <div className="card card-pad stack" style={{ gap: 10 }}>
+          <div className="row-between wrap" style={{ gap: 10 }}>
+            <div>
+              <strong>تفريغ شعارات المنشآت</strong>
+              <p className="xs faint" style={{ margin: 0, maxWidth: '58ch' }}>
+                يقصّ كل شعار مخزَّن دائرياً ويحفظ نسخة PNG بزوايا شفافة. يجري تلقائياً عند أول
+                كتابة لوثيقة أي منشأة — وهذا الزر لمن لم تُكتب وثيقتها منذ مدة.
+              </p>
+            </div>
+            <button className="btn btn-outline" disabled={masking} onClick={runMask}>
+              {masking ? <Spinner /> : 'تشغيل الآن'}
+            </button>
+          </div>
+          {maskRes && (
+            <div className="xs" style={{ borderTop: '1px solid var(--border)', paddingTop: 8 }}>
+              فُحصت <strong>{n2(maskRes.scanned)}</strong> منشأة · فُرِّغ <strong>{n2(maskRes.masked)}</strong> ·
+              بلا تغيير <strong>{n2(maskRes.skipped)}</strong>
+              {maskRes.failed?.length ? (
+                <div style={{ color: 'var(--danger)', marginTop: 4 }}>
+                  تعذّر {n2(maskRes.failed.length)}: {maskRes.failed.slice(0, 3).map((f) => f.id).join('، ')}
+                </div>
+              ) : null}
+            </div>
+          )}
+        </div>
+      </section>
 
       <div className="card card-pad">
         <span className="xs faint">
