@@ -403,10 +403,36 @@ export function gameById(id) {
 // The games this venue enabled. `tenant.games` is an array of ids; when it is
 // missing (never configured) the starter set is used. An explicitly EMPTY array
 // means the venue turned games off — that is respected and returns [].
+// Games this venue has never been OFFERED — as opposed to ones it turned off.
+//
+// The stored array holds enabled ids, so an id's absence is ambiguous: either
+// the owner switched it off, or the game did not exist when they last saved.
+// Nothing distinguished the two, and the consequence was severe — the FIRST
+// time a venue toggled any single game, Settings.jsx froze the whole registry
+// as it stood that day (`base = chosen || catalog.map(...)`), and every game
+// shipped afterwards was invisible to that venue forever. «الحريق» was the
+// symptom the owner noticed; six others were hidden by the same line.
+//
+// `gamesSeen` records the catalogue as it was at save time, which makes the
+// question answerable exactly. Venues that saved before that field existed get
+// NEW_GAME_IDS as a one-time bridge — it is already hand-kept for the «جديد»
+// badge and already names precisely the affected titles. Once a venue saves
+// again it is on the exact path and the bridge stops mattering.
+export function unseenGames(tenant, enabledIds) {
+  const seen = tenant && Array.isArray(tenant.gamesSeen) ? tenant.gamesSeen : null
+  const known = new Set(enabledIds || [])
+  return GAMES.filter((g) => {
+    if (known.has(g.id)) return false
+    return seen ? !seen.includes(g.id) : NEW_GAME_IDS.includes(g.id)
+  })
+}
+
 export function gamesFor(tenant) {
   const ids = tenant && Array.isArray(tenant.games) ? tenant.games : null
   if (!ids) return GAMES.filter((g) => DEFAULT_GAME_IDS.includes(g.id))
-  return ids.map(gameById).filter(Boolean)
+  // The venue's own order is preserved exactly; anything it has never been
+  // offered is appended rather than inserted, so nothing it arranged moves.
+  return ids.map(gameById).filter(Boolean).concat(unseenGames(tenant, ids))
 }
 
 // For the picker: every game that suits a venue type ('all' always matches).

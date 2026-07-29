@@ -222,21 +222,48 @@ export default function OrderStatus() {
     if (wrapBusy) return
     setWrapBusy(true)
     try {
-      const [{ customerYear }, { listOrdersSince, listItems }] = await Promise.all([
+      const [{ customerYear }, { getOrder, listItems }] = await Promise.all([
         import('../../lib/forecast.js'),
         import('../../lib/db.js'),
       ])
-      const since = new Date(new Date().getFullYear(), 0, 1)
-      const [orders, menu] = await Promise.all([listOrdersSince(tid, since), listItems(tid)])
+      // BUILT FROM THIS DEVICE'S OWN ORDERS, NOT FROM A QUERY.
+      //
+      // This used to call listOrdersSince(), which is a `list` on
+      // tenants/{tid}/orders — and firestore.rules:371 restricts that to staff,
+      // deliberately, so a diner cannot enumerate a venue's orders. So the
+      // feature asked for the one read it could never have: every guest got
+      // permission-denied, and the bare catch below turned it into «تعذّر».
+      //
+      // Loosening the rule is not the fix either. Firestore rules cannot see a
+      // query's where() clauses, so «list only the orders matching your own
+      // phone» is not expressible — opening it up would open ALL of them.
+      //
+      // getMyOrders() is the same source the BUTTON already gates on (three
+      // remembered orders), and each id it holds is readable through the `get`
+      // that rules:369 does allow. The story is now built from exactly what
+      // this guest is entitled to read.
+      const year = new Date().getFullYear()
+      const mine = (getMyOrders(tid) || []).slice(0, 40)
+      const [fetched, menu] = await Promise.all([
+        Promise.all(mine.map((m) => getOrder(tid, m.id).catch(() => null))),
+        listItems(tid).catch(() => []),
+      ])
+      const orders = fetched.filter(Boolean).filter((o) => {
+        const ms = o.paidAtMs || (o.createdAt?.toMillis?.() ?? 0)
+        return new Date(ms).getFullYear() === year
+      })
       const phone = order.customerPhone || getLocalCustomer()?.phone || ''
-      const stats = customerYear({ orders: orders || [], customer: { phone }, year: new Date().getFullYear() })
+      const stats = customerYear({ orders, customer: { phone }, year })
       if (!stats || !stats.hasData) {
         toast.info?.(lang === 'ar' ? 'لم نجد زيارات كافية بعد' : 'Not enough visits yet')
         return
       }
       setWrapItems(menu || [])
       setWrapStats(stats)
-    } catch (_) {
+    } catch (e) {
+      // The old catch was bare, so a permission denial and «no data yet» were
+      // the same message. They are different problems and only one is ours.
+      console.error('[wrapped]', e)
       toast.error(lang === 'ar' ? 'تعذّر تجهيز القصة' : 'Could not build your story')
     } finally { setWrapBusy(false) }
   }
@@ -402,7 +429,10 @@ export default function OrderStatus() {
             onLeaderboard={(score) => { setLastScore(score); setGameOpen(false); setBoardOpen(true) }}
           />
         )}
-        {boardOpen && (
+        {/* The venue's «لوحة صدارة اللعبة» switch was a dead control: it was
+            offered in Settings and nothing anywhere read it, so turning it off
+            changed nothing a guest could see. It is honoured here. */}
+        {boardOpen && venue?.leaderboardEnabled !== false && (
           <Suspense fallback={null}>
             <Leaderboard open onClose={() => setBoardOpen(false)} tenantId={tid} lang={lang} myScore={lastScore} deviceId={gameDeviceId} />
           </Suspense>

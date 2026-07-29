@@ -10,7 +10,7 @@
 //      thrown error and never to a spinner that hangs.
 import { collection, getDocs, query, where, orderBy, limit, startAfter } from 'firebase/firestore'
 import { db, firebaseReady } from '../../lib/firebase.js'
-import { GAMES } from '../../lib/games.js'
+import { GAMES, unseenGames } from '../../lib/games.js'
 import { isSoloPlay } from '../../lib/gameMemory.js'
 
 // Re-exported so a panel never re-invents "was this against the computer".
@@ -132,7 +132,11 @@ export function enabledIds(tenant) {
   const ids = configuredIds(tenant)
   if (!ids) return GAMES.map((g) => g.id)
   // Registry order is irrelevant here: the stored order IS the venue's order.
+  // Never-offered games are appended, matching gamesFor() in src/lib/games.js.
+  // These two MUST agree — when they did not, the catalogue listed a game as
+  // «disabled» while the menu was told to show it, or the reverse.
   return ids.filter((id) => GAMES.some((g) => g.id === id))
+    .concat(unseenGames(tenant, ids).map((g) => g.id))
 }
 
 export function splitCatalogue(tenant) {

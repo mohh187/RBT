@@ -115,7 +115,13 @@ export default function MenuView({ tenant, tenantId, items, categories, offers =
     const node = menuPortalRoot
     if (!node) return undefined
     // venue button style (gradient/glow) follows onto the diner menu's CTAs
-    applyUiFx(node, { btnFx: tenant?.btnFx })
+    // The TENANT, not a hand-picked slice of it.
+    //
+    // This used to pass a literal `{ btnFx: tenant?.btnFx }`, so applyUiFx never
+    // saw `selColor`, took its else branch, and REMOVED `--sel` from the menu
+    // root on every render. The Settings card promises that colour applies «في
+    // كل النظام» — it reached every surface except the one the guest sees.
+    applyUiFx(node, tenant)
     if (menuGlassLvl) {
       node.setAttribute('data-menuglass', menuGlassLvl)
       const vars = glassVars(tenant, 'menu')

@@ -6057,7 +6057,11 @@ function GamePicker({ ar, tenant, saveNow, updateTenantLocal, toast, t }) {
     const next = base.includes(id) ? base.filter((x) => x !== id) : [...base, id]
     setBusy(id)
     try {
-      await saveNow({ games: next })
+      // Record the catalogue AS IT WAS SHOWN. Without this, the absence of a
+      // game from `games` is ambiguous — switched off, or not yet invented? The
+      // first toggle used to freeze the registry as of that day, which hid every
+      // game released afterwards from this venue permanently. See unseenGames().
+      await saveNow({ games: next, gamesSeen: (catalog || []).map((g) => g.id) })
       updateTenantLocal({ games: next })
     } catch (_) { toast.error(t('error')) } finally { setBusy('') }
   }
