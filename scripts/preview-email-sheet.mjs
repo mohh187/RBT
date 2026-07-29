@@ -17,14 +17,45 @@ const OUT = process.argv[2] || 'email-proof.html'
 const esc = (s) => String(s == null ? '' : s).replace(/[&<>"']/g, (c) => (
   { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]))
 
-// A stand-in VENUE mark: an opaque coloured square, the exact shape the round
-// disc exists to rescue. Using our own /brand/mark-256.png here was misleading —
-// it proved an image renders, not that a venue logo does.
-const SQUARE_LOGO = 'data:image/svg+xml;base64,' + Buffer.from(
-  '<svg xmlns="http://www.w3.org/2000/svg" width="200" height="200">'
-  + '<rect width="200" height="200" fill="#C0262C"/>'
-  + '<text x="100" y="138" font-size="104" font-family="sans-serif" fill="#ffffff" text-anchor="middle">م</text>'
-  + '</svg>', 'utf8').toString('base64')
+// LOGO FIXTURES.
+//
+// Note these are data: URIs. They render inside an iframe srcdoc, so this sheet
+// proves GEOMETRY — never delivery. Gmail blocks data: URIs in img src; only
+// scripts/send-test-email.mjs with a hosted --logo can prove that half.
+//
+// Using our own /brand/mark-256.png here was misleading: it proved an image
+// renders, not that a VENUE logo does, and it produced a "why is RBT360's logo
+// on my venue's mail" report that was entirely the fixture's fault.
+const svg = (w, h, body) => 'data:image/svg+xml;base64,' + Buffer.from(
+  `<svg xmlns="http://www.w3.org/2000/svg" width="${w}" height="${h}">${body}</svg>`, 'utf8').toString('base64')
+
+// An opaque COLOURED square — corners visible against the plate.
+const SQUARE_LOGO = svg(200, 200,
+  '<rect width="200" height="200" fill="#C0262C"/>'
+  + '<text x="100" y="138" font-size="104" font-family="sans-serif" fill="#ffffff" text-anchor="middle">م</text>')
+
+// A WHITE-background square. THIS IS THE OWNER'S ACTUAL CASE and the only
+// fixture in which the reported symptom appears: its corners fuse with the
+// white disc, so an oversized image reads as a square bulging out of a circle
+// rather than as four coloured spurs. Without this fixture the fix cannot be
+// seen to work.
+const WHITE_SQUARE = svg(200, 200,
+  '<rect width="200" height="200" fill="#ffffff"/>'
+  + '<circle cx="100" cy="100" r="62" fill="none" stroke="#7c2d2d" stroke-width="9"/>'
+  + '<text x="100" y="132" font-size="76" font-family="sans-serif" fill="#7c2d2d" text-anchor="middle">م</text>')
+
+// A WIDE wordmark. Proves the size cap did not reintroduce centre-cropping —
+// it must letterbox inside the disc, never lose its ends.
+const WIDE_WORDMARK = svg(400, 100,
+  '<rect width="400" height="100" fill="#ffffff"/>'
+  + '<text x="200" y="68" font-size="46" font-family="sans-serif" fill="#7c2d2d" text-anchor="middle">مزاج فال</text>')
+
+// ALREADY MASKED: a circle on transparent, which is what logoMask.js and the
+// fixed cropper now produce. The target state — it may fill the disc.
+const ROUND_MASKED = svg(200, 200,
+  '<circle cx="100" cy="100" r="100" fill="#ffffff"/>'
+  + '<circle cx="100" cy="100" r="62" fill="none" stroke="#7c2d2d" stroke-width="9"/>'
+  + '<text x="100" y="132" font-size="76" font-family="sans-serif" fill="#7c2d2d" text-anchor="middle">م</text>')
 
 const LINES = [
   { name: 'سبانش لاتيه', qty: 2, total: money(30) },
@@ -78,6 +109,39 @@ add('RBT 360 — فاتورة اشتراك', 'بريدٌ منّا إلى الم�
     ${facts([['رقم الفاتورة', 'INV-2026-000413'], ['الباقة', 'متكامل'], ['المبلغ', money(1033.85)], ['تستحق في', '2026-08-07']])}`,
   cta: { label: 'سداد الفاتورة', href: '#' },
 }))
+// THE LANGUAGE PAIR, ADJACENT.
+//
+// The report is the densest template — the most labels, the most places a
+// string can be forgotten — so it is the one worth rendering twice. Adjacent is
+// the whole point: a missed string is obvious beside its twin and nearly
+// invisible when the two renders are read on separate pages.
+for (const lg of ['ar', 'en']) {
+  const p = (a, e) => (lg === 'en' ? e : a)
+  const lb = platformBrand({}, lg)
+  const m = (v) => money(v, 'SAR', { lang: lg })
+  add(p('RBT 360 — التقرير اليومي (عربي)', 'RBT 360 — daily report (English)'),
+    p('النسخة العربية. قارنها بجارتها: أي سطر بقي عربياً هناك هو سطرٌ نُسي.', 'The English render. Compare with its neighbour — any Arabic left there is a string nobody gave an English twin. Note the whole page also flips to LTR.'),
+    lb.color, `platform-daily-${lg}`, shell(lb, {
+      title: p('تقرير مبيعات كافيه مزاج فال — 2026-07-28', 'Sales report Mazaj Fal Cafe — 2026-07-28'),
+      preheader: p('إيراد أمس 3420 ريال من 86 طلباً', 'Yesterday: 3420 SAR from 86 orders'),
+      body: [
+        `<p style="margin:0 0 6px;">${p('مرحباً,', 'Hello,')}</p>`,
+        `<p style="margin:0 0 16px;color:#5c6270;font-size:13.5px;">${p('هذا تقرير مبيعات أمس لـ«كافيه مزاج فال»، مُجهَّز آلياً.', "Yesterday's sales for Mazaj Fal Cafe, prepared automatically.")}</p>`,
+        section(lb, p('الحركة', 'Movement'), [
+          [p('الطلبات المدفوعة', 'Paid orders'), '86'],
+          [p('الطلبات الملغاة', 'Cancelled orders'), '3'],
+          [p('متوسط قيمة الطلب', 'Average order value'), m(39)],
+          [p('إجمالي الإيراد', 'Total revenue'), m(3420), 'strong'],
+        ]),
+        section(lb, p('الإيراد حسب طريقة الدفع', 'Revenue by payment method'), [
+          [p('نقداً', 'Cash'), '31'], [p('شبكة', 'Card'), '42'], [p('أونلاين', 'Online'), '13'],
+          [p('مجموع الطلبات المسوّاة', 'Settled orders'), '86', 'strong'],
+        ]),
+      ].join(''),
+      cta: { label: p('فتح التقرير الكامل', 'Open the full report'), href: '#' },
+    }))
+}
+
 add('RBT 360 — التقرير اليومي', 'أقسامٌ معنونة ومجاميع مميّزة: المالك يدقّق أرقام أمس مقابل توقّعه، لا يتصفّحها. الأرقام كانت محسوبة أصلاً وتُرسل واتساب فقط.', pb.color, 'platform-daily', shell(pb, {
   title: 'تقرير مبيعات كافيه مزاج فال — 2026-07-28',
   preheader: 'إيراد أمس 3420 ريال من 86 طلباً',
@@ -99,6 +163,22 @@ add('RBT 360 — التقرير اليومي', 'أقسامٌ معنونة ومج
   ].join(''),
   cta: { label: 'فتح التقرير الكامل', href: '#' },
 }))
+
+// THE LOGO LAB — the same masthead at 4x, over a ring drawn at the disc's exact
+// edge. A 3.4px protrusion is a real defect and an unreliable human judgement at
+// 1x; magnified it is 14px and unmissable. The scale lives on the PROOF stage,
+// never in the email HTML.
+const { header } = require_('./emailTemplates.js')
+const LOGO_CASES = [
+  ['WHITE_SQUARE — حالة المالك', WHITE_SQUARE, 'خلفية بيضاء: زواياها تندمج مع القرص الأبيض، فالبروز يُقرأ مربعاً لا أربعة نتوءات. لا يجب أن يتجاوز شيءٌ الحلقة.', false],
+  ['SQUARE_LOGO — مربّع ملوّن', SQUARE_LOGO, 'نفس الهندسة بلون يفضح الزوايا مباشرة.', false],
+  ['WIDE_WORDMARK — شعار عريض', WIDE_WORDMARK, 'يجب أن يظهر كاملاً بنسبته: أي قصٍّ هنا يعني أن object-fit عاد.', false],
+  ['ROUND_MASKED — مفرّغ', ROUND_MASKED, 'الحالة الهدف: زوايا شفافة، فلا شيء يمكن أن يبرز — ويُسمح له بملء القرص.', true],
+]
+const logoLab = LOGO_CASES.map(([title, url, note, round]) => {
+  const b = venueBrand({ name: 'كافيه مزاج فال', themeColor: '#7c2d2d', ...(round ? { logoRoundUrl: url } : { logoUrl: url }) })
+  return { title, note, html: `<table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="background:#fff;">${header(b)}</table>` }
+})
 
 const page = `<style>
 /* A press proof. The page is a light table and must stay silent — every colour
@@ -137,6 +217,13 @@ hr{border:0;border-top:1px solid var(--rule);margin:28px 0;}
 iframe{width:100%;height:520px;border:0;border-radius:2px;background:#f2f3f5;display:block;}
 .hex{font-family:var(--mono);font-size:10.5px;color:var(--mark);}
 a:focus-visible,iframe:focus-visible{outline:2px solid var(--ink);outline-offset:2px;}
+/* logo lab: 4x, with a ring at the disc's true edge as a reference for the eye */
+.lab{display:grid;grid-template-columns:repeat(auto-fill,minmax(300px,1fr));gap:26px;}
+.lab .stage{padding:0;overflow:hidden;height:330px;position:relative;background:#fff;}
+.lab .zoom{position:absolute;inset:0;transform:scale(4);transform-origin:50% 22%;}
+.lab .ring{position:absolute;left:50%;top:22%;width:312px;height:312px;margin:-96px 0 0 -156px;
+  border:1px dashed rgba(220,38,38,.75);border-radius:50%;pointer-events:none;}
+.lab iframe{height:330px;}
 </style>
 <div class="wrap">
   <div class="brief">
@@ -156,6 +243,24 @@ a:focus-visible,iframe:focus-visible{outline:2px solid var(--ink);outline-offset
       </figcaption>
       <div class="note">${esc(c.note)}</div>
       <div class="stage"><iframe title="${esc(c.title)}" loading="lazy" srcdoc="${esc(c.html)}"></iframe></div>
+    </figure>`).join('')}
+  </div>
+
+  <hr>
+  <div class="brief">
+    <div class="kicker">logo lab &middot; 4&times;</div>
+    <h1>القرص، مكبَّراً</h1>
+    <p>الشعار عند 60px كان يضع زواياه على بُعد <strong>42.4</strong> من المركز والقرص نصف قطره <strong>38</strong> — فتبرز 3.4 بكسل. وهذا حكمٌ لا تصدر عنه عينٌ بثقة عند الحجم الطبيعي، فهو هنا بأربعة أضعاف. الحلقة المتقطّعة هي حافة القرص الحقيقية: لا يجب أن يعبرها شيء.</p>
+  </div>
+  <div class="lab" style="margin-top:24px">
+    ${logoLab.map((c) => `
+    <figure class="card" style="margin:0">
+      <figcaption class="cap"><b>${esc(c.title)}</b></figcaption>
+      <div class="note">${esc(c.note)}</div>
+      <div class="stage">
+        <div class="zoom"><iframe title="${esc(c.title)}" loading="lazy" srcdoc="${esc(c.html)}"></iframe></div>
+        <div class="ring"></div>
+      </div>
     </figure>`).join('')}
   </div>
 </div>`
