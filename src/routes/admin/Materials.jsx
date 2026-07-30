@@ -269,7 +269,7 @@ export default function Materials() {
                   <button className="btn btn-sm btn-outline grow" style={{ background: 'var(--success-soft)', color: 'var(--success)', borderColor: 'transparent', display: 'inline-flex', alignItems: 'center', justifyContent: 'center', gap: 4 }} onClick={() => setOp({ material: m, kind: 'receive' })}>
                     <Icon name="add" size={13} /> <span>{ar ? 'استلام' : 'Receive'}</span>
                   </button>
-                  <button className="btn btn-sm btn-outline grow" style={{ background: 'var(--info-soft)', color: 'var(--info)', borderColor: 'transparent', display: 'inline-flex', alignItems: 'center', justifyContent: 'center', gap: 4 }} onClick={() => setOp({ material: m, kind: 'tables' })}>
+                  <button className="btn btn-sm btn-outline grow" style={{ background: 'var(--info-soft)', color: 'var(--info)', borderColor: 'transparent', display: 'inline-flex', alignItems: 'center', justifyContent: 'center', gap: 4 }} onClick={() => setOp({ material: m, kind: 'count' })}>
                     <Icon name="check" size={13} /> <span>{ar ? 'جرد' : 'Count'}</span>
                   </button>
                   <button className="btn btn-sm btn-outline grow" style={{ background: 'var(--danger-soft)', color: 'var(--danger)', borderColor: 'transparent', display: 'inline-flex', alignItems: 'center', justifyContent: 'center', gap: 4 }} onClick={() => setOp({ material: m, kind: 'waste' })}>
@@ -367,8 +367,19 @@ function StockOpSheet({ op, onClose, tenantId, actor, currency, lang, suppliers 
         // rather than throwing — check it, or a failed batch reports "Done".
         const res = await produceMaterial(tenantId, m.id, { batches: Number(qty) || 1, actor })
         if (res && res.ok === false) { toast?.error?.(ar ? 'لا يكفي مخزون المكوّنات لهذا الإنتاج' : 'Not enough ingredient stock for this batch'); return }
-      } else {
+      } else if (op.kind === 'waste') {
         await wasteStock(tenantId, m.id, { qtyBase: Number(qty) || 0, reason: reason.trim(), actor })
+      } else {
+        // NAMED, NOT ASSUMED. This branch used to be a bare `else` that ran
+        // wasteStock for ANY unrecognised kind — and one existed: the Count
+        // button passed `kind: 'tables'` (an icon name pasted into the kind
+        // slot), so every physical count silently wrote a WASTE movement and
+        // reported «تم». Stock and waste reports have been wrong by exactly the
+        // counted quantity for as long as that button has existed. An unknown
+        // op must now refuse loudly instead of destroying stock quietly.
+        console.error('[stock] unknown operation kind', op.kind)
+        toast?.error?.(ar ? 'عملية غير معروفة — لم يُسجَّل شيء' : 'Unknown operation — nothing was recorded')
+        return
       }
       toast?.success?.(ar ? 'تم' : 'Done')
       onClose?.()

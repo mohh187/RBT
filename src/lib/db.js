@@ -682,22 +682,37 @@ export async function updateOrderStatus(tid, id, status, extra = {}) {
     return orderData
   })
 
-  if (result && status === 'paid' && result.status !== 'paid') {
-    const mergedOrder = { id, ...result, ...rest }
-    await triggerPostPaymentEffects(tid, id, mergedOrder, _actor || extra.paidByName || '')
-  }
-
+  // THE PAYMENT IS THE TRANSACTION ABOVE. NOTHING ELSE IS ON THE CRITICAL PATH.
+  //
+  // This used to `await triggerPostPaymentEffects(...)` here, and that call
+  // alone chained nine more round-trips — a second transaction on this very
+  // document to set a flag, a getTenant for a tenant the caller already had,
+  // two transactions on the SAME customer doc back to back, and five inventory
+  // operations. Ten to twelve sequential trips at 150-300ms each is the "several
+  // seconds" a cashier felt between tapping Pay and the sheet closing, with a
+  // guest waiting at the counter for every one of them.
+  //
+  // The effects now run SERVER-SIDE, on the onOrderStatusActivity trigger that
+  // already watches this document (functions/orderEffects.js). That is not just
+  // faster — it is the only correct home for them. The old client version wrote
+  // `sideEffectsTriggered: true` BEFORE doing the work, and the work was not
+  // transactional: a tab closed or a network dropped between the flag and the
+  // finish left every retry short-circuiting on the flag, and the loyalty points
+  // and stock depletion were lost permanently with nothing to show it. A server
+  // trigger retries on failure, so the flag finally means what it says.
+  //
   // Signage mirror: keep a PUBLIC doc of ready-order codes so paired TVs
-  // (anonymous readers) can flash "order ready" — non-critical, never throws.
-  try {
-    if (result) {
-      if (status === 'ready') {
-        await setDoc(subDoc(tid, 'public', 'readyOrders'), { [id]: { code: result.code || '', at: Date.now() } }, { merge: true })
-      } else if (['served', 'paid', 'cancelled', 'preparing'].includes(status)) {
-        await setDoc(subDoc(tid, 'public', 'readyOrders'), { [id]: deleteField() }, { merge: true })
-      }
-    }
-  } catch (_) { /* signage mirror is best-effort */ }
+  // (anonymous readers) can flash "order ready". Its own comment always said
+  // "non-critical, never throws" — and it was awaited anyway, so a cashier paid
+  // for it on every single status change. Detached to match what it claims.
+  if (result) {
+    const mirror = status === 'ready'
+      ? setDoc(subDoc(tid, 'public', 'readyOrders'), { [id]: { code: result.code || '', at: Date.now() } }, { merge: true })
+      : ['served', 'paid', 'cancelled', 'preparing'].includes(status)
+        ? setDoc(subDoc(tid, 'public', 'readyOrders'), { [id]: deleteField() }, { merge: true })
+        : null
+    if (mirror) mirror.catch(() => { /* signage mirror is best-effort */ })
+  }
   return result
 }
 
@@ -807,9 +822,16 @@ export async function updateStory(tid, id, patch) { return updateDoc(subDoc(tid,
 export async function addStoryReply(tid, storyId, data) {
   return addDoc(collection(subDoc(tid, 'stories', storyId), 'replies'), { text: '', deviceId: '', ...data, at: serverTimestamp() })
 }
+// The staff inbox. The error path used to be `() => cb([])`, which rendered a
+// permission failure as «لا ردود بعد» — so while the rule was misfiled the
+// inbox looked calmly empty rather than broken, on both ends at once. A denied
+// read is now logged; the empty array still keeps the screen alive.
 export function watchStoryReplies(tid, storyId, cb) {
   const q = query(collection(subDoc(tid, 'stories', storyId), 'replies'), orderBy('at', 'desc'), limit(80))
-  return onSnapshot(q, (s) => cb(s.docs.map((d) => ({ id: d.id, ...d.data() }))), () => cb([]))
+  return onSnapshot(q, (s) => cb(s.docs.map((d) => ({ id: d.id, ...d.data() }))), (e) => {
+    console.error('[stories] replies read failed', e?.code || e)
+    cb([])
+  })
 }
 export async function deleteStoryReply(tid, storyId, rid) {
   return deleteDoc(doc(collection(subDoc(tid, 'stories', storyId), 'replies'), rid))
@@ -824,53 +846,30 @@ export async function setOrderLineDone(tid, orderId, lineIdx, done) {
   return updateDoc(subDoc(tid, 'orders', orderId), { [`doneLines.${lineIdx}`]: !!done, updatedAt: serverTimestamp() })
 }
 
-// Helper to trigger CRM, loyalty, and inventory consumption on order payment settled.
-// Uses a sideEffectsTriggered flag to ensure idempotency.
-async function triggerPostPaymentEffects(tid, id, order, actor) {
-  const ref = subDoc(tid, 'orders', id)
-  let run = false
-  await runTransaction(db, async (tx) => {
-    const snap = await tx.get(ref)
-    if (!snap.exists()) return
-    const d = snap.data()
-    if (!d.sideEffectsTriggered) {
-      tx.update(ref, { sideEffectsTriggered: true })
-      run = true
-    }
-  })
-  if (!run) return
-
-  const tenant = await getTenant(tid).catch(() => null)
-  const policy = resolveMembershipPolicy(tenant)
-
-  if (order.customerPhone) {
-    const redeemReward = order.loyaltyRedeemed || order.loyaltyDiscount > 0
-    const threshold = tenant?.loyaltyThreshold || 5
-    const loyaltyEnabled = tenant?.loyaltyEnabled !== false
-    const drinkUnits = order.drinkUnits || 0
-
-    await upsertCustomerOnOrder(tid, {
-      name: order.customerName,
-      phone: order.customerPhone,
-      total: order.total,
-      drinks: drinkUnits,
-      threshold,
-      loyaltyEnabled,
-      redeemReward,
-      ip: order.ip || ''
-    }).catch(console.error)
-
-    await processMembershipOnPaid(tid, order.customerPhone, order, policy).catch(console.error)
-  }
-
-  await consumeForOrder(tid, id, { actor: actor || order.paidByName || '' }).catch(console.error)
-}
+// POST-PAYMENT EFFECTS LIVE ON THE SERVER, and only there.
+//
+// functions/invoicing.js:onOrderPaid already calls runPaidEffects() for both
+// settlement signals — a cash close and an online capture alike — with the same
+// sideEffectsTriggered claim. The client used to do the identical work here and
+// simply got there first, which cost the cashier nine extra sequential
+// round-trips for something that was going to happen regardless.
+//
+// It was also the cause of a silent data-loss bug. The client claimed the flag
+// BEFORE doing the work, and the work was not transactional: if the tab closed
+// or the network dropped in between, the server then found the claim already
+// taken and skipped — so the loyalty points and the stock depletion were lost
+// with nothing anywhere to say so. With one owner, the claim finally means what
+// it says, and a Cloud Function retries where a closed browser tab cannot.
 
 // Mark an order paid — records method, tip & actor (optionally serving it in one tap).
 // breakdown = { cash, card, transfer } for a mixed payment.
-export async function payOrder(tid, id, { method = 'cash', tip = 0, actor = '', markServed = false, breakdown = null } = {}) {
+export async function payOrder(tid, id, { method = 'cash', tip = 0, actor = '', markServed = false, breakdown = null, acceptedBy = '' } = {}) {
   const extra = { paymentMethod: method, tip: Number(tip) || 0, paidByName: actor, paidAtMs: Date.now(), _actor: actor }
   if (markServed) extra.servedByName = actor
+  // A counter sale is created and settled in one gesture; `acceptedBy` lets the
+  // caller stamp the acceptance here instead of paying for a separate
+  // transaction to record a state the order held for a few milliseconds.
+  if (acceptedBy) extra.acceptedByName = acceptedBy
   if (breakdown) extra.paymentBreakdown = breakdown
   return updateOrderStatus(tid, id, 'paid', extra)
 }
@@ -898,10 +897,9 @@ export async function payPartial(tid, id, { amount = 0, method = 'cash', actor =
     return { completed, order: d }
   })
 
-  if (res.completed && res.order) {
-    const mergedOrder = { ...res.order, status: 'paid', paymentMethod: method, paidByName: actor, paidAtMs: Date.now() }
-    await triggerPostPaymentEffects(tid, id, mergedOrder, actor)
-  }
+  // The final instalment writes status 'paid', which is the signal onOrderPaid
+  // watches — so the effects run server-side from here too, and this awaited
+  // chain (the same nine round-trips as the full-payment path) is gone.
   return { completed: res.completed }
 }
 
@@ -1109,19 +1107,94 @@ export async function closeCashierSession(tid, id, data = {}) {
 }
 
 // ---------- waiter calls ----------
-export async function callWaiter(tid, { tableId, tableLabel, reason }) {
+//
+// THE GUEST'S WORDS ARE THE POINT OF THIS CHANNEL. They were being written
+// correctly and never rendered anywhere — not on the cashier card, not in the
+// OS alert, not in the bell. A waiter learned that table 4 wanted *something*.
+//
+// `intent` is a STABLE CODE beside the human text. The quick chips used to
+// write their own label into `reason`, so «ماء من فضلك» and «Water please» were
+// two different requests for one need — unroutable, uncountable, and untranslatable
+// for a waiter reading in the other language. The code survives both.
+export const CALL_INTENTS = ['water', 'bill', 'cutlery', 'clean', 'call']
+
+export async function callWaiter(tid, { tableId, tableLabel, reason, intent, orderId, orderCode }) {
   return addDoc(sub(tid, 'waiterCalls'), {
     tableId: tableId || null,
     tableLabel: tableLabel || '',
     reason: reason || 'call',
+    intent: CALL_INTENTS.includes(intent) ? intent : 'call',
+    // What the table already has open, so the waiter acts without going to look.
+    orderId: orderId || null,
+    orderCode: orderCode || '',
     status: 'open',
     createdAt: serverTimestamp(),
   })
 }
+
+// ACKNOWLEDGE — the honest half of the loop.
+//
+// The guest's toast said «في الطريق إليك» the instant they tapped, which nobody
+// had yet seen. This is the state that makes it true: a staffer claims the call,
+// and the guest's own screen changes to say someone is coming.
+export async function ackWaiterCall(tid, id, { by } = {}) {
+  return updateDoc(subDoc(tid, 'waiterCalls', id), {
+    status: 'ack', ackAt: serverTimestamp(), ackByName: by || '',
+  })
+}
+
+// One table, one live call. A guest who taps twice — or adds a second request
+// while the first is still open — should not spawn a second row for a waiter to
+// triage; the need is appended to the call already on the floor.
+//
+// THE PREVIOUS CALL IS FOUND BY A HELD ID, NEVER BY A QUERY. A diner cannot
+// `list` waiterCalls (firestore.rules) and Firestore rules cannot inspect a
+// where() clause, so "find my table's open call" is not expressible — the same
+// wall that made «سنتك معنا» unbuildable as a query. The caller remembers the
+// id it was given and hands it back, which is a `get` on one unguessable
+// document and is allowed.
+export async function callOrAppend(tid, { callId, tableId, tableLabel, reason, intent, orderId, orderCode }) {
+  if (callId) {
+    const ref = subDoc(tid, 'waiterCalls', callId)
+    const snap = await getDoc(ref).catch(() => null)
+    const prev = snap && snap.exists() ? snap.data() : null
+    if (prev && (prev.status === 'open' || prev.status === 'ack')) {
+      const merged = [prev.reason, reason].filter((x) => x && x !== 'call').join(' · ').slice(0, 300)
+      await updateDoc(ref, {
+        reason: merged || 'call',
+        // A guest who has to ask twice has been waiting: the call goes back to
+        // the top of the pile and stops counting as claimed.
+        status: 'open',
+        repeats: (Number(prev.repeats) || 0) + 1,
+        createdAt: serverTimestamp(),
+      })
+      return callId
+    }
+  }
+  const ref = await callWaiter(tid, { tableId, tableLabel, reason, intent, orderId, orderCode })
+  return ref.id
+}
+
+// The guest's own call, by the id they were handed. One `get`, no `list`.
+export function watchMyWaiterCall(tid, callId, cb) {
+  if (!tid || !callId) { cb(null); return () => {} }
+  return onSnapshot(subDoc(tid, 'waiterCalls', callId), (d) => {
+    if (!d.exists()) { cb(null); return }
+    const data = { id: d.id, ...d.data() }
+    // A resolved call is no longer live — the button goes back to plain.
+    cb(data.status === 'open' || data.status === 'ack' ? data : null)
+  }, () => cb(null))
+}
+// 'ack' is LIVE, not finished — a claimed call stays on the floor until someone
+// says it is done, otherwise claiming it would make it vanish and the guest
+// would be waiting on a request no screen still shows. Same composite index
+// (status, createdAt) serves the `in`: Firestore runs it as a union of
+// equality queries, so no index change is needed.
 export function watchOpenWaiterCalls(tid, cb) {
-  const q = query(sub(tid, 'waiterCalls'), where('status', '==', 'open'), orderBy('createdAt', 'desc'))
+  const q = query(sub(tid, 'waiterCalls'), where('status', 'in', ['open', 'ack']), orderBy('createdAt', 'desc'))
   return onSnapshot(q, (s) => cb(s.docs.map((d) => ({ id: d.id, ...d.data() }))), () => cb([]))
 }
+
 // Curbside: the diner signals they've arrived (reuses the waiterCalls channel — no order write needed).
 export async function notifyArrival(tid, { orderId, code, car, tableLabel }) {
   return addDoc(sub(tid, 'waiterCalls'), {
@@ -1134,8 +1207,12 @@ export async function notifyArrival(tid, { orderId, code, car, tableLabel }) {
     createdAt: serverTimestamp(),
   })
 }
-export async function resolveWaiterCall(tid, id) {
-  return updateDoc(subDoc(tid, 'waiterCalls', id), { status: 'done', resolvedAt: serverTimestamp() })
+export async function resolveWaiterCall(tid, id, { by } = {}) {
+  // Stamped with WHO, like acceptedByName on an order — «تم» with no name is
+  // not an audit trail, and this is the one record of whether the floor answered.
+  return updateDoc(subDoc(tid, 'waiterCalls', id), {
+    status: 'done', resolvedAt: serverTimestamp(), resolvedByName: by || '',
+  })
 }
 
 // ---------- customers (CRM) + loyalty ----------

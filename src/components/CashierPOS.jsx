@@ -307,9 +307,17 @@ export default function CashierPOS({ open, onClose, tenantId, tenant, lang = 'ar
       }
       const res = await createOrder(tenantId, payload)
       // Finished-goods stock is decremented server-side by onNewOrder (single authority).
-      await updateOrderStatus(tenantId, res.id, 'accepted', { acceptedByName: actorName, _actor: actorName })
+      //
+      // PAY-NOW SETTLES IN ONE WRITE, not two. A counter sale used to chain
+      // create -> accepted -> paid, three sequential transactions on the same
+      // document with the cashier's screen frozen for all of them, to record a
+      // state ('accepted') the order occupied for a few milliseconds and that
+      // nobody ever saw. The acceptance is still stamped — it rides along on the
+      // settle — so the audit trail is unchanged and one round-trip is gone.
       if (payNow) {
-        await payOrder(tenantId, res.id, { method: payMethod, actor: actorName, markServed: true })
+        await payOrder(tenantId, res.id, { method: payMethod, actor: actorName, markServed: true, acceptedBy: actorName })
+      } else {
+        await updateOrderStatus(tenantId, res.id, 'accepted', { acceptedByName: actorName, _actor: actorName })
       }
       toast.success(ar ? 'تم إنشاء الطلب' : 'Order created')
       onCreated?.()

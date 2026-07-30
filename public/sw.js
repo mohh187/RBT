@@ -3,7 +3,7 @@
    offline fallback. */
 
 // Bump on deploy to drop stale/bad cached assets (activate purges old caches).
-const CACHE = 'rbt360-v5'
+const CACHE = 'rbt360-v6'
 const APP_SHELL = ['/', '/index.html', '/brand/favicon.png', '/manifest.webmanifest']
 
 self.addEventListener('install', (event) => {
@@ -76,13 +76,32 @@ self.addEventListener('message', (event) => {
   }
 })
 
+// TAPPING A NOTIFICATION GOES WHERE THE NOTIFICATION POINTS.
+//
+// This read `url` and then threw it away: with any window client open it called
+// focus() and stopped, so the staff tablet — which always has the app open —
+// surfaced whatever screen it was already on. The order id in the payload
+// travelled the whole way and was discarded at the last step, which is why
+// "tap the new-order alert and it opens that order" never worked while the
+// exact same link worked from the in-app bell.
+//
+// focus() AND navigate(). navigate() is only available to a client this worker
+// controls, so the openWindow fallback stays for a hard-reloaded or
+// uncontrolled page.
 self.addEventListener('notificationclick', (event) => {
   event.notification.close()
   const url = (event.notification.data && event.notification.data.url) || '/'
   event.waitUntil(
-    self.clients.matchAll({ type: 'window', includeUncontrolled: true }).then((list) => {
+    self.clients.matchAll({ type: 'window', includeUncontrolled: true }).then(async (list) => {
       for (const client of list) {
-        if ('focus' in client) return client.focus()
+        try {
+          if ('focus' in client) await client.focus()
+          if ('navigate' in client) { await client.navigate(url); return }
+          // Uncontrolled client: it cannot be navigated from here, but it can be
+          // told where to go. App code listens for this (src/lib/push.js).
+          if ('postMessage' in client) { client.postMessage({ type: 'navigate', url }); return }
+          return
+        } catch (_) { /* try the next client */ }
       }
       if (self.clients.openWindow) return self.clients.openWindow(url)
     }),

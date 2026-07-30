@@ -65,7 +65,7 @@ export async function requestNotifyPermission() {
 // can confuse with the previous one. A query string does not change the SW's
 // scope, so this is transparent to everything else.
 // BUMP THIS whenever public/sw.js's CACHE constant changes.
-export const SW_VERSION = 'v5'
+export const SW_VERSION = 'v6'
 export const SW_URL = `/sw.js?v=${SW_VERSION}`
 
 export async function registerSW() {

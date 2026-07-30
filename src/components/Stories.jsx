@@ -54,6 +54,8 @@ function StoryViewer({ stories, start, tenantId, ar, onClose }) {
   const [liked, setLiked] = useState(false)
   const [reply, setReply] = useState('')
   const [sent, setSent] = useState(false)
+  const [sending, setSending] = useState(false)
+  const [err, setErr] = useState('')
   const timer = useRef(null)
   const startX = useRef(null)
   const audioRef = useRef(null)
@@ -171,18 +173,31 @@ function StoryViewer({ stories, start, tenantId, ar, onClose }) {
             onFocus={() => setPaused(true)} onBlur={() => setPaused(false)}
             onChange={(e) => setReply(e.target.value)}
             onKeyDown={(e) => { if (e.key === 'Enter') e.currentTarget.blur() }} />
-          <button type="button" aria-label={ar ? 'إرسال' : 'Send'} disabled={!reply.trim()}
+          {/* THE FAILURE IS NEVER SILENT AGAIN.
+              This catch was empty, with a comment guessing "rules not deployed
+              yet" — and it was right, for months: the replies rule was filed
+              under /posts while this writes under /stories, so every reply was
+              refused. With no toast and no console line the outcome was
+              indistinguishable from an unwired button, which is exactly how it
+              was reported. A write that fails now says so. */}
+          <button type="button" aria-label={ar ? 'إرسال' : 'Send'} disabled={!reply.trim() || sending}
             onClick={async () => {
               const txt = reply.trim()
               if (!txt) return
+              setSending(true)
               try {
                 await addStoryReply(tenantId, s.id, { text: txt.slice(0, 280), deviceId: deviceId() })
                 setReply(''); setSent(true); setTimeout(() => setSent(false), 1800)
-              } catch (_) { /* rules not deployed yet */ }
+              } catch (e) {
+                console.error('[story] reply failed', e?.code || e)
+                setErr(ar ? 'تعذّر إرسال ردك — حاول مرة أخرى' : 'Could not send your reply — try again')
+                setTimeout(() => setErr(''), 2600)
+              } finally { setSending(false) }
             }}>
             <Icon name="next" size={16} style={{ transform: ar ? 'scaleX(-1)' : undefined }} />
           </button>
         </div>
+        {err && <p className="xs" style={{ margin: 0, color: '#ffb4b4', textAlign: 'center' }}>{err}</p>}
       </div>
     </div>
   )

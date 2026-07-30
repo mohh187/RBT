@@ -14,7 +14,8 @@ import { EventsSheet, ReserveSheet } from './BookSheets.jsx'
 import { Stepper, Empty, Spinner } from './ui.jsx'
 import { orderNumber, timeAgo } from '../lib/format.js'
 import { Price } from './Riyal.jsx'
-import { createOrder, upsertCustomerOnOrder, getCustomerByPhone, getMemberByToken, getMemberByPhone, watchItemReviews, watchOrder, watchDinerNotices, callWaiter, registerCustomer } from '../lib/db.js'
+import { createOrder, upsertCustomerOnOrder, getCustomerByPhone, getMemberByToken, getMemberByPhone, watchItemReviews, watchOrder, watchDinerNotices, callOrAppend, watchMyWaiterCall, registerCustomer } from '../lib/db.js'
+import { CALL_QUICK, intentLabel } from '../lib/waiterCalls.js'
 import { tierDiscountAmount, TIER_META, resolveMembershipPolicy } from '../lib/membership.js'
 import { evaluateOffers, activeAutoOffers, offerForItem, discountedPrice } from '../lib/offers.js'
 import { orderingState, orderingClosedMessage } from '../lib/ordering.js'
@@ -88,6 +89,32 @@ export default function MenuView({ tenant, tenantId, items, categories, offers =
   const [waiterOpen, setWaiterOpen] = useState(false)
   const [waiterNote, setWaiterNote] = useState('')
   const [waiterBusy, setWaiterBusy] = useState(false)
+  // Which quick chip was tapped — the STABLE code, not its label. Typing in the
+  // textarea clears it, because free text is its own intent.
+  const [waiterIntent, setWaiterIntent] = useState('')
+  // THE GUEST'S OWN CALL, held by id.
+  //
+  // Kept on the device rather than found by query: a diner cannot `list`
+  // waiterCalls, and a rule cannot inspect a where() clause, so "my table's open
+  // call" is not something the server can answer. The id we were handed is, and
+  // it survives a reload — a guest who refreshes still sees their call is live.
+  const callKey = tenantId && table?.id ? `rbt_call_${tenantId}_${table.id}` : ''
+  const [myCallId, setMyCallId] = useState(() => {
+    try { return callKey ? localStorage.getItem(callKey) || '' : '' } catch (_) { return '' }
+  })
+  const [myCall, setMyCall] = useState(null)
+  useEffect(() => {
+    if (!tenantId || !myCallId || !waiterEnabled) { setMyCall(null); return undefined }
+    return watchMyWaiterCall(tenantId, myCallId, setMyCall)
+  }, [tenantId, myCallId, waiterEnabled])
+  // Once the floor marks it done the watcher reports null — drop the id so the
+  // next call starts a fresh one instead of trying to append to a closed record.
+  useEffect(() => {
+    if (myCallId && myCall === null && callKey) {
+      try { localStorage.removeItem(callKey) } catch (_) { /* ignore */ }
+      setMyCallId('')
+    }
+  }, [myCall, myCallId, callKey])
   const motion = resolveSkin(tenant, 'menu')?.motion || 'fade-up' // item animation (data-motion)
   const motionSpeed = resolveSkin(tenant, 'menu')?.motionSpeed || 'normal'
   const motionRepeat = resolveSkin(tenant, 'menu')?.motionRepeat || 'always' // once | always | 2 | 3 …
@@ -1359,9 +1386,24 @@ export default function MenuView({ tenant, tenantId, items, categories, offers =
 
       {/* waiter call — table context + venue toggle; opens a note sheet so the
           guest can say WHAT they need ("ماء للطاولة 4"، "الحساب"، …) */}
+      {/* THE BUTTON REPORTS THE FLOOR, it does not just fire and forget.
+          The old confirmation toast claimed «في الطريق إليك» the instant the
+          guest tapped — before any human had seen it. Now the button itself
+          carries the live state of their call: waiting, then «النادل في الطريق»
+          once a staffer actually claims it. A guest who can see they were heard
+          does not tap four more times. */}
       {table && waiterEnabled && (
-        <button className="m-waiter-fab" onClick={() => setWaiterOpen(true)} aria-label={t('callWaiter')}>
+        <button className={`m-waiter-fab${myCall ? ' is-live' : ''}`} data-callstate={myCall ? (myCall.status === 'ack' ? 'ack' : 'open') : undefined}
+          onClick={() => setWaiterOpen(true)}
+          aria-label={myCall && myCall.status === 'ack' ? (lang === 'ar' ? 'النادل في الطريق' : 'Waiter on the way') : t('callWaiter')}>
           <Icon name="waiter" size={22} />
+          {myCall && (
+            <span className="m-waiter-tag">
+              {myCall.status === 'ack'
+                ? (lang === 'ar' ? 'في الطريق' : 'On the way')
+                : (lang === 'ar' ? 'وصل نداؤك' : 'Sent')}
+            </span>
+          )}
         </button>
       )}
 
@@ -1369,19 +1411,42 @@ export default function MenuView({ tenant, tenantId, items, categories, offers =
         footer={<button className="btn btn-primary btn-lg btn-block" disabled={waiterBusy} onClick={async () => {
           setWaiterBusy(true)
           try {
-            await callWaiter(tenantId, { tableId: table?.id || null, tableLabel: table?.label || '', reason: waiterNote.trim() || 'call' })
-            setWaiterOpen(false); setWaiterNote('')
-            toast.success(lang === 'ar' ? 'تم نداء النادل — في الطريق إليك' : 'Waiter called — on the way')
+            // callOrAppend, not callWaiter: a table that already has a live call
+            // gets this need appended to it instead of spawning a second row for
+            // the floor to triage. It also carries the table's open order, so the
+            // waiter reads the request and the context in one line.
+            const id = await callOrAppend(tenantId, {
+              callId: myCallId || '',
+              tableId: table?.id || null,
+              tableLabel: table?.label || '',
+              reason: waiterNote.trim() || (waiterIntent ? intentLabel(waiterIntent, lang) : 'call'),
+              intent: waiterIntent || 'call',
+              orderId: activeOrder?.id || null,
+              orderCode: activeOrder?.code || '',
+            })
+            if (id && callKey) {
+              try { localStorage.setItem(callKey, id) } catch (_) { /* ignore */ }
+              setMyCallId(id)
+            }
+            setWaiterOpen(false); setWaiterNote(''); setWaiterIntent('')
+            toast.success(lang === 'ar' ? 'وصل نداؤك' : 'Your call was sent')
           } catch (_) { toast.error(t('error')) }
           finally { setWaiterBusy(false) }
         }}>{waiterBusy ? t('saving') : (lang === 'ar' ? 'نداء النادل' : 'Call waiter')}</button>}>
         <div className="stack" style={{ gap: 'var(--sp-3)' }}>
           <div className="row" style={{ gap: 6, flexWrap: 'wrap' }}>
-            {(lang === 'ar' ? ['ماء من فضلك', 'الحساب لو سمحت', 'أدوات إضافية', 'تنظيف الطاولة'] : ['Water please', 'The bill please', 'Extra cutlery', 'Clean the table']).map((q) => (
-              <button key={q} type="button" className={`chip ${waiterNote === q ? 'active' : ''}`} onClick={() => setWaiterNote(q)}>{q}</button>
-            ))}
+            {CALL_QUICK.map((q) => {
+              const label = lang === 'en' ? q.en : q.ar
+              return (
+                <button key={q.intent} type="button" className={`chip ${waiterIntent === q.intent ? 'active' : ''}`}
+                  onClick={() => { setWaiterIntent(q.intent); setWaiterNote(label) }}>
+                  <Icon name={q.icon} size={14} /> {label}
+                </button>
+              )
+            })}
           </div>
-          <textarea className="textarea" rows={2} value={waiterNote} onChange={(e) => setWaiterNote(e.target.value)}
+          <textarea className="textarea" rows={2} value={waiterNote}
+            onChange={(e) => { setWaiterNote(e.target.value); setWaiterIntent('') }}
             placeholder={lang === 'ar' ? 'أو اكتب طلبك للنادل… (اختياري)' : 'Or write what you need… (optional)'} />
         </div>
       </Sheet>

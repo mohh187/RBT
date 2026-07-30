@@ -8,9 +8,11 @@ import Icon from '../../components/Icon.jsx'
 import FloorMap, { TableShape } from '../../components/FloorMap.jsx'
 import CashierPOS from '../../components/CashierPOS.jsx'
 import OrderDetail from '../../components/OrderDetail.jsx'
-import { watchTables, createTable, saveTable, deleteTable, watchOrdersSince, watchReservations, createReservation, setReservationStatus } from '../../lib/db.js'
+import PaymentSheet from '../../components/PaymentSheet.jsx'
+import { watchTables, createTable, saveTable, deleteTable, watchOrdersSince, watchReservations, createReservation, setReservationStatus, payOrder } from '../../lib/db.js'
 import { tableUrl, qrDataUrl, printQrCard, printAllTableQrs, publicBaseUrl } from '../../lib/qr.js'
 import { alertParty } from '../../lib/notify.js'
+import { CAP } from '../../lib/permissions.js'
 import { money } from '../../lib/format.js'
 
 const todayStr = () => { const d = new Date(); return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}` }
@@ -18,7 +20,7 @@ const startOfToday = () => { const d = new Date(); d.setHours(0, 0, 0, 0); retur
 
 export default function Tables() {
   const { t, lang } = useI18n()
-  const { tenantId, tenant, profile } = useAuth()
+  const { tenantId, tenant, profile, isManager, can } = useAuth()
   const ar = lang === 'ar'
   const actorName = profile?.displayName || profile?.email || ''
   const toast = useToast()
@@ -35,7 +37,15 @@ export default function Tables() {
   const [zone, setZone] = useState('all') // active zone tab
   const [sel, setSel] = useState(null) // tapped table (action sheet)
   const [posTable, setPosTable] = useState(null) // open POS for this table
+  // Same gate the cashier and OrderDetail use — a waiter who can take orders
+  // still cannot settle them.
+  const canPay = isManager || can?.(CAP.REFUND)
   const [detailId, setDetailId] = useState(null)
+  // COLLECTING FROM THE FLOOR PLAN. The tables sheet offered «تحصيل الدفع» and
+  // then opened a read-only detail — OrderDetail had no payment action at all
+  // for a dine-in order, so the cashier had to leave this screen for /cashier to
+  // actually take the money. The sheet is the same one the cashier uses.
+  const [payTarget, setPayTarget] = useState(null)
   const [qrFor, setQrFor] = useState(null)
   const [resFor, setResFor] = useState(null) // quick reserve form for a table
   const prevRes = useRef(0)
@@ -325,7 +335,20 @@ export default function Tables() {
 
       {resFor && <ReserveSheet table={resFor} tenantId={tenantId} lang={lang} onClose={() => setResFor(null)} onDone={() => { setResFor(null); toast.success(ar ? 'تم الحجز' : 'Reserved') }} />}
       {posTable && <CashierPOS open onClose={() => setPosTable(null)} tenantId={tenantId} tenant={tenant} lang={lang} actorName={actorName} initialTable={posTable} />}
-      {detailId && <OrderDetail tid={tenantId} orderId={detailId} currency={tenant?.currency || 'SAR'} staffActions onClose={() => setDetailId(null)} />}
+      {detailId && <OrderDetail tid={tenantId} orderId={detailId} currency={tenant?.currency || 'SAR'} staffActions
+        onCollect={canPay ? (o) => { setDetailId(null); setPayTarget(o) } : null}
+        onClose={() => setDetailId(null)} />}
+      {payTarget && (
+        <PaymentSheet open order={payTarget} currency={tenant?.currency || 'SAR'} lang={lang}
+          onClose={() => setPayTarget(null)}
+          onConfirm={async ({ method, tip, breakdown }) => {
+            try {
+              await payOrder(tenantId, payTarget.id, { method, tip, actor: actorName, markServed: true, breakdown })
+              setPayTarget(null)
+              toast.success(ar ? 'تم تحصيل الدفعة' : 'Payment recorded')
+            } catch (_) { toast.error(ar ? 'تعذّر تسجيل الدفع' : 'Payment failed') }
+          }} />
+      )}
       {qrFor && <QrSheet table={qrFor} slug={tenant?.slug} onClose={() => setQrFor(null)} />}
     </div>
   )

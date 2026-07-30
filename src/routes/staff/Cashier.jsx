@@ -5,11 +5,12 @@ import { useAuth } from '../../lib/auth.jsx'
 import { useI18n } from '../../lib/i18n.jsx'
 import { Spinner, Empty } from '../../components/ui.jsx'
 import {
-  watchActiveOrders, updateOrderStatus, watchOpenWaiterCalls, resolveWaiterCall, watchOrdersSince, watchCustomers,
-  payOrder, payPartial, cancelOrderWithReason, watchOpenCashierSession, processMembershipOnPaid, consumeForOrder,
+  watchActiveOrders, updateOrderStatus, watchOpenWaiterCalls, resolveWaiterCall, ackWaiterCall, watchOrdersSince, watchCustomers,
+  payOrder, payPartial, cancelOrderWithReason, watchOpenCashierSession,
 } from '../../lib/db.js'
 import { resolveMembershipPolicy } from '../../lib/membership.js'
 import { orderNumber, timeAgo, minutesSince } from '../../lib/format.js'
+import { callText, callState, callAgeMin, callSummary, CALL_LATE_MIN } from '../../lib/waiterCalls.js'
 import { Price } from '../../components/Riyal.jsx'
 import { alertParty } from '../../lib/notify.js'
 import { printReceipt } from '../../lib/print.js'
@@ -70,6 +71,9 @@ export default function Cashier() {
   const [cancelTarget, setCancelTarget] = useState(null)
   const [custTarget, setCustTarget] = useState(null) // { phone, name }
   const [posOpen, setPosOpen] = useState(false)
+  // One clock for the whole call list — a call that crosses the late threshold
+  // must turn red on its own, without waiting for an unrelated re-render.
+  const [callNow, setCallNow] = useState(() => Date.now())
   const prevPending = useRef(0)
   const prevCalls = useRef(0)
   const seeded = useRef(false)
@@ -121,18 +125,54 @@ export default function Cashier() {
 
   useEffect(() => {
     if (!orders) return
-    const pending = orders.filter((o) => o.status === 'pending').length
+    const waiting = orders.filter((o) => o.status === 'pending')
+    const pending = waiting.length
     if (seeded.current && pending > prevPending.current) {
-      alertParty({ title: lang === 'ar' ? 'طلب جديد' : 'New order', body: lang === 'ar' ? 'وصل طلب جديد' : 'New order', tag: 'order', url: '/cashier' })
+      // CARRY THE ORDER. This sent a bare '/cashier', and because all three
+      // new-order alerts share tag:'order' they collapse into one OS
+      // notification whose url is whichever fired last — so the bell's correct
+      // deep link was being overwritten by these id-less ones at random.
+      const fresh = waiting[0]
+      alertParty({
+        title: lang === 'ar' ? 'طلب جديد' : 'New order',
+        body: fresh ? `${orderNumber(fresh.code)} · ${fresh.tableLabel || (lang === 'ar' ? 'طلب' : 'Order')}` : (lang === 'ar' ? 'وصل طلب جديد' : 'New order'),
+        tag: 'order',
+        url: fresh ? `/cashier?order=${fresh.id}` : '/cashier',
+      })
     }
     prevPending.current = pending
     seeded.current = true
   }, [orders, lang])
 
+  // Tick only while a call is on the floor. An idle cashier runs no timer.
+  useEffect(() => {
+    if (!calls.length) return undefined
+    const iv = setInterval(() => setCallNow(Date.now()), 20000)
+    return () => clearInterval(iv)
+  }, [calls.length])
+
+  // RE-ALERT A FORGOTTEN CALL. The old effect fired only when the COUNT rose,
+  // so a call nobody answered went quiet forever after its first ring — the
+  // exact failure a guest experiences as being ignored. Anything past the late
+  // threshold and still unclaimed rings once more, per call, never in a loop.
+  useEffect(() => {
+    calls.forEach((c) => {
+      if (c.status === 'ack') return
+      if (callAgeMin(c, callNow) < CALL_LATE_MIN) return
+      const key = `late:${c.id}`
+      if (escalated.current.has(key)) return
+      escalated.current.add(key)
+      alertParty({
+        title: lang === 'ar' ? 'نداء لم يُجَب' : 'Unanswered call',
+        body: callSummary(c, lang), tag: 'call-late', url: '/cashier', requireInteraction: true,
+      })
+    })
+  }, [calls, callNow, lang])
+
   useEffect(() => {
     const n = calls.length
     if (seeded.current && n > prevCalls.current) {
-      alertParty({ title: lang === 'ar' ? 'نداء نادل' : 'Waiter call', body: calls[0]?.tableLabel || '', tag: 'call', url: '/cashier' })
+      alertParty({ title: lang === 'ar' ? 'نداء نادل' : 'Waiter call', body: callSummary(calls[0], lang), tag: 'call', url: '/cashier' })
     }
     prevCalls.current = n
   }, [calls, lang])
@@ -173,16 +213,17 @@ export default function Cashier() {
     const o = payTarget.order
     const markServed = payTarget.markServed
     const due = Math.max(0, (o.total || 0) - (o.amountPaid || 0))
-    const policy = resolveMembershipPolicy(tenant)
+    // LOYALTY AND STOCK ARE NOT CALLED HERE. They used to be — a third copy, on
+    // top of the one inside payOrder and the one on the server's onOrderPaid
+    // trigger. All three claim the same `sideEffectsTriggered` flag, so two of
+    // them could only ever lose the race and burn a read doing it. The server
+    // owns this now; the cashier's job is to record the money and get out of
+    // the way, which is one transaction.
     try {
       if (amountPaid != null && amountPaid < due) {
-        const r = await payPartial(tenantId, o.id, { amount: amountPaid, method, actor: actorName })
-        if (r?.completed && o.customerPhone) processMembershipOnPaid(tenantId, o.customerPhone, o, policy)
-        if (r?.completed) consumeForOrder(tenantId, o.id, { actor: actorName }).catch(() => {})
+        await payPartial(tenantId, o.id, { amount: amountPaid, method, actor: actorName })
       } else {
         await payOrder(tenantId, o.id, { method, tip, actor: actorName, markServed, breakdown })
-        if (o.customerPhone) processMembershipOnPaid(tenantId, o.customerPhone, o, policy)
-        consumeForOrder(tenantId, o.id, { actor: actorName }).catch(() => {})
       }
       setPayTarget(null)
       toast.success(lang === 'ar' ? 'تم تحصيل الدفعة' : 'Payment recorded')
@@ -251,15 +292,47 @@ export default function Cashier() {
 
         <button className="btn btn-primary btn-block" style={{ minHeight: 44, fontWeight: 800 }} onClick={() => setPosOpen(true)}><Icon name="add" size={17} /> {lang === 'ar' ? 'طلب جديد من الكاشير' : 'New order (POS)'}</button>
 
+        {/* WHAT THE GUEST ASKED FOR — the field this card used to omit entirely.
+            It printed the table and the time, so a waiter learned that table 4
+            wanted *something*. The request is now the largest thing in the row,
+            because it is the only part that decides what the waiter carries. */}
         {calls.length > 0 && view === 'active' && (
-          <div className="card card-pad stack" style={{ borderColor: 'var(--warning)', background: 'var(--warning-soft)' }}>
+          <div className="card card-pad stack" style={{ borderColor: 'var(--warning)' }}>
             <strong><Icon name="bellRing" size={14} style={{ verticalAlign: 'middle' }} /> {lang === 'ar' ? 'نداء النادل' : 'Waiter calls'}</strong>
-            {calls.map((c) => (
-              <div key={c.id} className="row-between">
-                <span className="small">{c.tableLabel || (lang === 'ar' ? 'طاولة' : 'Table')} · {timeAgo(c.createdAt, lang)}</span>
-                <button className="btn btn-sm btn-outline" onClick={() => resolveWaiterCall(tenantId, c.id)}>{lang === 'ar' ? 'تم' : 'Done'}</button>
-              </div>
-            ))}
+            {calls.map((c) => {
+              const st = callState(c, callNow)
+              const age = callAgeMin(c, callNow)
+              return (
+                <div key={c.id} className="row-between" style={{
+                  gap: 'var(--sp-3)', paddingBlock: 6,
+                  borderTop: '1px solid var(--border)',
+                  borderInlineStart: `3px solid ${st.color}`, paddingInlineStart: 8,
+                }}>
+                  <div className="stack" style={{ gap: 2, minWidth: 0 }}>
+                    <span className="bold" style={{ fontSize: 'var(--fs-base)' }}>{callText(c, lang)}</span>
+                    <span className="xs faint">
+                      {c.tableLabel || (lang === 'ar' ? 'طاولة' : 'Table')}
+                      {c.orderCode ? ` · ${orderNumber(c.orderCode)}` : ''}
+                      {' · '}{timeAgo(c.createdAt, lang)}
+                      {age > 0 ? ` · ${age}${lang === 'ar' ? ' د' : 'm'}` : ''}
+                      {c.repeats > 0 ? ` · ${lang === 'ar' ? 'كرّرها' : 'repeated'} ${c.repeats}` : ''}
+                      <span style={{ color: st.color, fontWeight: 700 }}> · {lang === 'ar' ? st.ar : st.en}</span>
+                      {c.ackByName ? ` · ${c.ackByName}` : ''}
+                    </span>
+                  </div>
+                  <div className="row" style={{ gap: 6, flex: 'none' }}>
+                    {c.status !== 'ack' && (
+                      <button className="btn btn-sm btn-outline" onClick={() => ackWaiterCall(tenantId, c.id, { by: actorName })}>
+                        {lang === 'ar' ? 'في الطريق' : 'On it'}
+                      </button>
+                    )}
+                    <button className="btn btn-sm btn-primary" onClick={() => resolveWaiterCall(tenantId, c.id, { by: actorName })}>
+                      {lang === 'ar' ? 'تم' : 'Done'}
+                    </button>
+                  </div>
+                </div>
+              )
+            })}
           </div>
         )}
 
@@ -314,7 +387,9 @@ export default function Cashier() {
         )}
       </div>
 
-      {detailId && <OrderDetail tid={tenantId} orderId={detailId} currency={currency} staffActions onClose={() => setDetailId(null)} />}
+      {detailId && <OrderDetail tid={tenantId} orderId={detailId} currency={currency} staffActions
+        onCollect={canPay ? (o) => { setDetailId(null); setPayTarget({ order: o, markServed: o.status === 'ready' }) } : null}
+        onClose={() => setDetailId(null)} />}
       <PaymentSheet open={!!payTarget} order={payTarget?.order} currency={currency} lang={lang} onConfirm={confirmPay} onClose={() => setPayTarget(null)} />
       <CancelReasonSheet open={!!cancelTarget} lang={lang} onConfirm={confirmCancel} onClose={() => setCancelTarget(null)} />
       {custTarget && <CustomerCard tid={tenantId} phone={custTarget.phone} name={custTarget.name} currency={currency} onClose={() => setCustTarget(null)} />}

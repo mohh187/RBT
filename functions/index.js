@@ -307,12 +307,19 @@ exports.onNewOrder = onDocumentCreated('tenants/{tid}/orders/{oid}', async (even
   const code = order.code ? `#${order.code}` : ''
   const table = order.tableLabel || (order.orderType === 'takeaway' ? 'سفري' : 'طلب')
 
+  // THE LINK CARRIES THE ORDER. This sent a bare '/cashier' while the order id
+  // sat in scope on the line above — so a staffer who tapped the push landed on
+  // the board and had to find the order that had just rung, which on a busy
+  // floor is the whole cost of the alert. The cashier already understands
+  // ?order=<id> (it opens that order's detail sheet); the push simply never
+  // used it.
+  const deep = `/cashier?order=${event.params.oid}`
   const res = await getMessaging().sendEachForMulticast({
     tokens,
     notification: { title: 'طلب جديد', body: `${table} ${code} · ${order.total || 0}` },
-    data: { url: '/cashier', tag: 'order' },
+    data: { url: deep, tag: 'order' },
     webpush: {
-      fcmOptions: { link: '/cashier' },
+      fcmOptions: { link: deep },
       notification: { icon: '/brand/favicon.png', requireInteraction: true },
     },
   })

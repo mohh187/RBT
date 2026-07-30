@@ -6,6 +6,15 @@ import Icon from './Icon.jsx'
 import { Price } from './Riyal.jsx'
 import { watchOrder, getCustomerByPhone, setCustomerFlag, refundOrder, compOrder, voidOrderItem, setOrderItemQty, setOrderTable, addOrderItems, watchTables, watchItems, watchStaff, assignDelivery, setDeliveryStatus, settleCod, updateOrderStatus } from '../lib/db.js'
 
+// THE STATUS LADDER — the same one the cashier's ticket button walks, so an
+// order advances identically whether you act from the list or from the detail.
+const NEXT_STEP = {
+  pending: { to: 'accepted', ar: 'قبول الطلب', en: 'Accept order', cls: 'btn-primary', icon: 'ok' },
+  accepted: { to: 'preparing', ar: 'بدء التحضير', en: 'Start preparing', cls: 'btn-primary', icon: 'kitchen' },
+  preparing: { to: 'ready', ar: 'جاهز', en: 'Mark ready', cls: 'btn-success', icon: 'bellRing' },
+  ready: { to: 'served', ar: 'تم التقديم', en: 'Mark served', cls: 'btn-success', icon: 'ok' },
+}
+
 // Delivery sub-status labels (mirrors the driver portal).
 const DSTAT = {
   pending: { ar: 'بانتظار مندوب', en: 'Waiting', cls: '' },
@@ -24,9 +33,9 @@ import { orderNumber, timeAgo } from '../lib/format.js'
 const STATUS_FLOW = ['pending', 'accepted', 'preparing', 'ready', 'served']
 
 // Reusable full order view — opens any order (live) by id with all its details.
-export default function OrderDetail({ tid, orderId, currency = 'SAR', onClose, staffActions = false }) {
+export default function OrderDetail({ tid, orderId, currency = 'SAR', onClose, staffActions = false, onCollect = null }) {
   const { t, lang } = useI18n()
-  const { profile, tenant, isManager, can } = useAuth()
+  const { profile, tenant, isManager, can, user } = useAuth()
   const ar = lang === 'ar'
   const [o, setO] = useState(undefined)
   const [cust, setCust] = useState(null)
@@ -264,6 +273,37 @@ export default function OrderDetail({ tid, orderId, currency = 'SAR', onClose, s
             <strong>{ar ? 'الإجمالي' : 'Total'}</strong>
             <span className="price bold" style={{ fontSize: 'var(--fs-md)' }}><Price value={o.total} currency={currency} lang={lang} /></span>
           </div>
+
+          {/* THE TWO ACTIONS THIS SHEET WAS MISSING — advance, and collect.
+              Without them the sheet was read-only for a dine-in order, so the
+              tables screen's «تحصيل الدفع» button opened a screen that could not
+              take payment and the cashier had to leave for /cashier to finish.
+              Accept had the same shape: it existed only on a list row and in the
+              KDS, so opening an order to look at it before accepting meant
+              closing it again to act. Both are the primary action when they
+              apply, so they sit above the utility row, full width. */}
+          {staffActions && NEXT_STEP[o.status] && (
+            <button className={`btn ${NEXT_STEP[o.status].cls} btn-block`} style={{ minHeight: 44, fontWeight: 800 }}
+              onClick={() => {
+                const n = NEXT_STEP[o.status]
+                const extra = { _actor: actor }
+                // The same stamps the cashier's own button applies. The kanban
+                // drag and the KDS accept do NOT set these, so who accepted an
+                // order used to depend on which control you reached for.
+                if (n.to === 'accepted') { extra.acceptedByName = actor; extra.acceptedByUid = user?.uid || '' }
+                if (n.to === 'served') { extra.servedByName = actor; extra.servedByUid = user?.uid || '' }
+                updateOrderStatus(tid, orderId, n.to, extra)
+              }}>
+              <Icon name={NEXT_STEP[o.status].icon} size={16} /> {ar ? NEXT_STEP[o.status].ar : NEXT_STEP[o.status].en}
+            </button>
+          )}
+          {staffActions && canPay && onCollect && !['paid', 'refunded', 'cancelled'].includes(o.status) && (
+            <button className="btn btn-primary btn-block" style={{ minHeight: 44, fontWeight: 800 }}
+              onClick={() => onCollect(o)}>
+              <Icon name="wallet" size={16} /> {ar ? 'تحصيل الدفع' : 'Collect payment'}
+              {' · '}<Price value={Math.max(0, (o.total || 0) - (o.amountPaid || 0))} currency={currency} lang={lang} />
+            </button>
+          )}
 
           {/* actions: print, digital receipt, manager refund / comp */}
           {staffActions && (

@@ -12,6 +12,7 @@ import { migrateStaffPins } from '../lib/pin.js'
 import { CAP } from '../lib/permissions.js'
 import { planAllows, planExpired, EXPIRED_GRACE_DAYS } from '../lib/plans.js'
 import { alertParty } from '../lib/notify.js'
+import { orderNumber } from '../lib/format.js'
 import { useCompactUI } from '../lib/useCompactUI.js'
 import { systemThemeAttr, useSystemThemeBody } from '../lib/systemThemes.js'
 import { applyVenueFavicon, restorePlatformFavicon } from '../lib/pwa.js'
@@ -193,12 +194,37 @@ export default function AdminLayout() {
   // i.e. anything reached through the «المزيد» sheet.
   const onMore = !visibleNav.some((n) => (n.exact ? loc.pathname === n.to : loc.pathname.startsWith(n.to)))
 
+  // A notification tapped on a page this worker does not control cannot be
+  // navigated by the worker, so it posts the destination instead. Routed here
+  // rather than reloaded, so the tap lands on the order without losing state.
+  useEffect(() => {
+    if (!('serviceWorker' in navigator)) return undefined
+    const onMsg = (e) => {
+      const d = e.data || {}
+      if (d.type === 'navigate' && typeof d.url === 'string' && d.url.startsWith('/')) navigate(d.url)
+    }
+    navigator.serviceWorker.addEventListener('message', onMsg)
+    return () => navigator.serviceWorker.removeEventListener('message', onMsg)
+  }, [navigate])
+
   useEffect(() => {
     if (!tenantId) return
     return watchActiveOrders(tenantId, (orders) => {
-      const pending = orders.filter((o) => o.status === 'pending').length
+      const waiting = orders.filter((o) => o.status === 'pending')
+      const pending = waiting.length
       if (seeded.current && pending > prevPending.current) {
-        alertParty({ title: lang === 'ar' ? 'طلب جديد' : 'New order', body: tenant?.name || '', tag: 'order', url: '/cashier' })
+        // CARRY THE ORDER ID. This sent a bare '/cashier' with the venue name as
+        // the body — no way to know WHICH order arrived, and because all three
+        // new-order alerts share tag:'order' they collapse into one OS
+        // notification whose url is whichever raiser fired last. So the bell's
+        // correct deep link was being replaced at random by this one.
+        const fresh = waiting[0]
+        alertParty({
+          title: lang === 'ar' ? 'طلب جديد' : 'New order',
+          body: fresh ? `${orderNumber(fresh.code)} · ${fresh.tableLabel || tenant?.name || ''}` : (tenant?.name || ''),
+          tag: 'order',
+          url: fresh ? `/cashier?order=${fresh.id}` : '/cashier',
+        })
       }
       prevPending.current = pending
       seeded.current = true

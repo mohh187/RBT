@@ -6,6 +6,7 @@
 // Every listener has an error callback: a denied/failed source contributes an
 // empty list instead of a stuck state (rules keep enforcing RBAC server-side).
 import { collection, query, where, orderBy, limit, onSnapshot } from 'firebase/firestore'
+import { callSummary } from './waiterCalls.js'
 import { orderNumber } from './format.js'
 
 const ms = (ts) => ts?.toMillis?.() ?? (typeof ts === 'number' ? ts : 0)
@@ -63,9 +64,13 @@ export function buildNotifyFeed(db, tenantId, cb) {
     (d) => {
       const c = d.data()
       const arrived = c.reason === 'arrived'
+      // The BODY is what the guest asked for, then where they are. It used to be
+      // the table alone, so this row told a waiter that somebody wanted
+      // something. callSummary is shared with the cashier card and the OS alert
+      // so the three cannot drift apart again.
       return { id: 'call_' + d.id, type: 'call', at: ms(c.createdAt), to: '/cashier',
         title: arrived ? 'وصل العميل' : 'نداء نادل',
-        body: c.tableLabel || (c.orderCode ? `#${c.orderCode}` : '') }
+        body: callSummary({ ...c, id: d.id }, 'ar') }
     })
 
   // Open complaints → the exact complaint (Complaints.jsx already handles ?focus=).

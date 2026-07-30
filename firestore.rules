@@ -423,6 +423,23 @@ service cloud.firestore {
               && request.resource.data.likes == resource.data.likes + 1)
           || (request.resource.data.diff(resource.data).affectedKeys().hasOnly(['views'])
               && request.resource.data.views == resource.data.views + 1);
+
+        // STORY REPLIES — anyone may send a short text; staff read & moderate.
+        //
+        // This block lived under /posts, one match block too far down, while the
+        // only writer in the app (addStoryReply, src/lib/db.js) targets
+        //   tenants/{tid}/stories/{sid}/replies/{rid}
+        // Rules are deny-by-default, so EVERY diner reply was refused, always —
+        // and an empty catch on the client plus an error-to-empty-array on the
+        // staff listener made it look like a dead button and an empty inbox
+        // rather than a permission failure. Its own comment already said
+        // "story replies"; it was simply nested under the wrong parent.
+        match /replies/{rid} {
+          allow read, delete: if isStaff(tid);
+          allow create: if request.resource.data.text is string
+            && request.resource.data.text.size() > 0
+            && request.resource.data.text.size() < 300;
+        }
       }
 
       // ---- venue profile posts: public read of published, staff manage,
@@ -436,7 +453,10 @@ service cloud.firestore {
           || (request.resource.data.diff(resource.data).affectedKeys().hasOnly(['views'])
               && request.resource.data.views == resource.data.views + 1);
 
-        // story replies: anyone may send a short text; staff read & moderate
+        // Post replies. Nothing in the client writes here today — the block that
+        // used to sit at this spot was the STORY reply rule, misfiled; it now
+        // lives under /stories where its only writer actually points. Kept so a
+        // future post-reply feature has the same contract, deliberately identical.
         match /replies/{rid} {
           allow read, delete: if isStaff(tid);
           allow create: if request.resource.data.text is string
@@ -445,11 +465,32 @@ service cloud.firestore {
         }
       }
 
-      // ---- waiter calls: diners create, staff resolve ----
+      // ---- waiter calls: diners create + follow their own, staff resolve ----
+      //
+      // GET vs LIST, split for the same reason orders are (see :369/:371).
+      // A guest must be able to watch the ONE call they placed, so that «النادل
+      // في الطريق» is a fact reported by the floor rather than a claim the
+      // button made on tap. That is a `get` on a document whose id they were
+      // handed and nobody else can guess. `list` stays staff-only: enumerating
+      // waiterCalls would hand any diner every table's requests, and a rule
+      // cannot inspect a where() clause to narrow it to their own.
       match /waiterCalls/{id} {
-        allow read: if isStaff(tid);
-        allow create: if true && request.resource.data.status == 'open';
-        allow update, delete: if isStaff(tid);
+        allow get: if true;
+        allow list: if isStaff(tid);
+        allow create: if request.resource.data.status == 'open';
+        allow delete: if isStaff(tid);
+        // Staff do anything. A guest may only APPEND to the call they hold:
+        // add words to the request, put it back in the queue, and bump the
+        // repeat counter. They cannot resolve it, re-table it, or claim it —
+        // status is pinned to 'open', so «تم» and «في الطريق» stay staff acts.
+        allow update: if isStaff(tid)
+          || (request.resource.data.diff(resource.data).affectedKeys()
+                .hasOnly(['reason', 'status', 'repeats', 'createdAt'])
+              && request.resource.data.status == 'open'
+              && request.resource.data.reason is string
+              && request.resource.data.reason.size() < 400
+              && request.resource.data.repeats is int
+              && request.resource.data.repeats == resource.data.get('repeats', 0) + 1);
       }
 
       // ---- shared table sessions («الطلب الجماعي»): every guest at the table
