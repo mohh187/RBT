@@ -195,13 +195,17 @@ export default function Cashier() {
     return () => window.removeEventListener('keydown', onKey)
   }, [orders, canPay])
 
+  // ONE definition of "who did this", used by the button AND the drag.
+  const stampFor = (status) => {
+    const extra = { _actor: actorName }
+    if (status === 'accepted') { extra.acceptedByName = actorName; extra.acceptedByUid = user?.uid || '' }
+    if (status === 'served') { extra.servedByName = actorName; extra.servedByUid = user?.uid || '' }
+    return extra
+  }
   const advance = (o) => {
     const n = NEXT[o.status]
     if (!n) return
-    const extra = {}
-    if (n.to === 'accepted') { extra.acceptedByName = actorName; extra.acceptedByUid = user?.uid || '' }
-    if (n.to === 'served') { extra.servedByName = actorName; extra.servedByUid = user?.uid || '' }
-    updateOrderStatus(tenantId, o.id, n.to, extra)
+    updateOrderStatus(tenantId, o.id, n.to, stampFor(n.to))
   }
   // Payment goes through the PaymentSheet (method + tip). markServed=true for a ready order.
   const askPay = (o, markServed) => setPayTarget({ order: o, markServed })
@@ -247,12 +251,17 @@ export default function Cashier() {
     const group = orders.filter((x) => x.tableId && x.tableId === o.tableId)
     printReceipt(group, { tenant, lang, title: o.tableLabel })
   }
+  // Dragging a card between columns is the SAME act as pressing its button, so
+  // it stamps the same way. It did not — `advance()` recorded acceptedByName and
+  // servedByName, the drag recorded nothing — which meant "who accepted this
+  // order" depended on which control the staffer happened to reach for. On a
+  // shared till that is the difference between an audit trail and a guess.
   const onDragEnd = ({ active, over }) => {
     if (!over) return
     const status = COL_STATUS[over.id]
     if (!status) return
     const o = orders.find((x) => x.id === active.id)
-    if (o && o.status !== status) updateOrderStatus(tenantId, active.id, status)
+    if (o && o.status !== status) updateOrderStatus(tenantId, active.id, status, stampFor(status))
   }
 
   if (orders === null) return <Spinner />

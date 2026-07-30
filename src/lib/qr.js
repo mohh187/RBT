@@ -27,9 +27,40 @@ export async function qrDataUrl(text, opts = {}) {
     width: opts.width || 512,
     margin: opts.margin ?? 2,
     color: { dark: opts.dark || '#211913', light: opts.light || '#ffffff' },
-    errorCorrectionLevel: 'M',
+    // 'M' tolerates ~15% damage, 'H' ~30%. Screens and receipts stay on 'M';
+    // anything laminated onto a table lives for months next to grease, water
+    // and a thumb resting on one corner, so those callers pass 'H'.
+    errorCorrectionLevel: opts.ec || 'M',
   })
 }
+
+// A table sticker outlives the browser tab it was printed from. publicBaseUrl()
+// falls back to window.location.origin, so printing while on a preview channel
+// or *.web.app URL bakes that throwaway host into ink for the life of the
+// sticker. These are the hosts worth offering, best first: the venue's own
+// active domain, then the platform apex, then whatever we're actually on.
+export function printBaseCandidates({ domains = [], slug = '' } = {}) {
+  const out = []
+  const push = (url, label, note) => {
+    const u = String(url || '').replace(/\/+$/, '')
+    if (u && !out.some((c) => c.url === u)) out.push({ url: u, label, note })
+  }
+  const active = (domains || []).filter((d) => d.status === 'active').map((d) => d.id)
+  active.forEach((h) => push(`https://${h}`, h, 'venue'))
+  const apex = (import.meta.env.VITE_PLATFORM_APEX || 'rbt360sa.com').trim().toLowerCase()
+  if (slug) push(`https://${slug}.${apex}`, `${slug}.${apex}`, 'subdomain')
+  push(`https://${apex}`, apex, 'platform')
+  const env = (import.meta.env.VITE_PUBLIC_BASE_URL || '').trim()
+  if (env) push(env, env.replace(/^https?:\/\//, ''), 'env')
+  if (typeof window !== 'undefined') push(window.location.origin, window.location.host, 'current')
+  return out
+}
+
+// Table labels are manager-entered free text and go straight into a print
+// document via innerHTML — a label with a quote or a bracket used to break (or
+// inject into) the print window.
+export const escapeHtml = (s) =>
+  String(s ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]))
 
 // Generates QR codes for all tables and opens a printable multi-card sheet.
 export async function printAllTableQrs(tables, slug, { venueName = '', lang = 'ar' } = {}) {
@@ -47,8 +78,8 @@ export async function printAllTableQrs(tables, slug, { venueName = '', lang = 'a
   const cardHtml = cards
     .map(
       (c) => `<div class="card">
-        <div class="venue">${venueName}</div>
-        <h2>${c.label}</h2>
+        <div class="venue">${escapeHtml(venueName)}</div>
+        <h2>${escapeHtml(c.label)}</h2>
         <img src="${c.dataUrl}" alt="QR"/>
         <div class="cta">${ar ? 'امسح للطلب · Scan to order' : 'Scan to order'}</div>
       </div>`,
@@ -92,11 +123,11 @@ export function printQrCard({ dataUrl, title, subtitle, url }) {
       @media print{.no-print{display:none}}
     </style></head><body>
       <div class="card">
-        <h1>${title}</h1>
-        <div class="sub">${subtitle || ''}</div>
+        <h1>${escapeHtml(title)}</h1>
+        <div class="sub">${escapeHtml(subtitle || '')}</div>
         <img src="${dataUrl}" alt="QR"/>
         <div class="cta">امسح للطلب · Scan to order</div>
-        <div class="url">${url}</div>
+        <div class="url">${escapeHtml(url)}</div>
       </div>
       <script>window.onload=()=>{window.print()}</script>
     </body></html>`)

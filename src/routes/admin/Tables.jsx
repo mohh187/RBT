@@ -5,6 +5,7 @@ import { useToast } from '../../components/Toast.jsx'
 import Sheet from '../../components/Sheet.jsx'
 import { Spinner, Empty } from '../../components/ui.jsx'
 import Icon from '../../components/Icon.jsx'
+import { Price } from '../../components/Riyal.jsx'
 import FloorMap, { TableShape } from '../../components/FloorMap.jsx'
 import CashierPOS from '../../components/CashierPOS.jsx'
 import OrderDetail from '../../components/OrderDetail.jsx'
@@ -252,15 +253,28 @@ export default function Tables() {
                 </div>
               )}
 
-              {/* Quick Actions */}
+              {/* COLLECT IS ITS OWN BUTTON, and it goes straight to the money.
+                  Both branches here used to do the identical thing — open the
+                  detail sheet — and one of them called itself «تحصيل الدفع»
+                  while the sheet it opened had no way to take payment at all.
+                  So the cashier read «تحصيل الدفع», tapped it, and had to leave
+                  the floor plan for /cashier to actually settle.
+
+                  Now: Collect opens the payment sheet directly, one tap, no
+                  detour. It appears whenever there is an unpaid order — not
+                  only when every order on the table is served, which is a
+                  condition the guest asking for their bill does not care about.
+                  Viewing the order is a separate, secondary action. */}
               <div className="row" style={{ gap: 6 }}>
                 {selOrder ? (
                   <>
-                    {statusOf(sel) === 'billed' ? (
-                      <button className="btn btn-primary grow" onClick={() => { setDetailId(selOrder.id); setSel(null) }}><Icon name="wallet" size={15} /> {ar ? 'تحصيل الدفع' : 'Collect payment'}</button>
-                    ) : (
-                      <button className="btn btn-primary grow" onClick={() => { setDetailId(selOrder.id); setSel(null) }}><Icon name="eye" size={15} /> {ar ? 'الطلب الحالي' : 'Current order'}</button>
+                    {canPay && (
+                      <button className="btn btn-primary grow" onClick={() => { setPayTarget(selOrder); setSel(null) }}>
+                        <Icon name="wallet" size={15} /> {ar ? 'تحصيل الدفع' : 'Collect payment'}
+                        {' · '}<Price value={Math.max(0, (selOrder.total || 0) - (selOrder.amountPaid || 0))} currency={tenant?.currency || 'SAR'} lang={lang} />
+                      </button>
                     )}
+                    <button className={`btn ${canPay ? 'btn-outline' : 'btn-primary'} grow`} onClick={() => { setDetailId(selOrder.id); setSel(null) }}><Icon name="eye" size={15} /> {ar ? 'الطلب الحالي' : 'Current order'}</button>
                     <button className="btn btn-outline grow" onClick={() => { setPosTable(sel); setSel(null) }}><Icon name="add" size={15} /> {ar ? 'إضافة صنف' : 'Add item'}</button>
                   </>
                 ) : (

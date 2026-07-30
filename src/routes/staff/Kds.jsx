@@ -14,7 +14,7 @@ import { useSectionTemplate } from '../../lib/useSectionTemplate.js'
 import { systemThemeAttr, useSystemThemeBody } from '../../lib/systemThemes.js'
 import PinLock from '../../components/PinLock.jsx'
 import AppBackground from '../../components/AppBackground.jsx'
-import { requestLock } from '../../lib/pin.js'
+import { requestLock, getPinActor } from '../../lib/pin.js'
 import '../../styles/venue-console.css'
 
 const startOfToday = () => { const d = new Date(); d.setHours(0, 0, 0, 0); return d }
@@ -35,7 +35,7 @@ function useTick(ms = 15000) {
 export default function Kds() {
   useCompactUI()
   const { t, lang, toggleTheme, theme } = useI18n()
-  const { tenantId, tenant } = useAuth()
+  const { tenantId, tenant, profile, user } = useAuth()
   const ar = lang === 'ar'
   useSystemThemeBody(tenant, 'kds')
   const [orders, setOrders] = useState(null) // active: pending/accepted/preparing/ready
@@ -143,9 +143,15 @@ export default function Kds() {
   const stations = Object.entries(loadByName).map(([name, n]) => ({ name, n })).sort((a, b) => b.n - a.n).slice(0, 5)
   const maxLoad = Math.max(...stations.map((s) => s.n), 1)
 
-  const accept = (o) => updateOrderStatus(tenantId, o.id, 'accepted')
-  const serve = (o) => updateOrderStatus(tenantId, o.id, 'served')
-  const recall = (o) => updateOrderStatus(tenantId, o.id, 'preparing')
+  // WHO DID IT, on the kitchen screen too. These three recorded nothing, so an
+  // order accepted from the KDS had no acceptedByName while the same act from
+  // the cashier did — one order history, two levels of detail, depending on
+  // which screen the staffer was standing at. PIN takes precedence on a shared
+  // device, exactly as the cashier resolves it.
+  const kdsActor = getPinActor(tenantId)?.name || profile?.displayName || profile?.email || (ar ? 'مطبخ' : 'kitchen')
+  const accept = (o) => updateOrderStatus(tenantId, o.id, 'accepted', { acceptedByName: kdsActor, acceptedByUid: user?.uid || '', _actor: kdsActor })
+  const serve = (o) => updateOrderStatus(tenantId, o.id, 'served', { servedByName: kdsActor, servedByUid: user?.uid || '', _actor: kdsActor })
+  const recall = (o) => updateOrderStatus(tenantId, o.id, 'preparing', { _actor: kdsActor })
 
   // One renderer for every template. In mixed views (rail/grid/display) the
   // tickets of both statuses share one surface, so a status chip is shown —
