@@ -15,6 +15,7 @@ import { systemThemeAttr, useSystemThemeBody } from '../../lib/systemThemes.js'
 import PinLock from '../../components/PinLock.jsx'
 import AppBackground from '../../components/AppBackground.jsx'
 import { requestLock } from '../../lib/pin.js'
+import '../../styles/venue-console.css'
 
 const startOfToday = () => { const d = new Date(); d.setHours(0, 0, 0, 0); return d }
 

@@ -22,7 +22,12 @@ export default function Inventory() {
   return (
     <div className="page stack">
       <h2 className="page-title row" style={{ gap: 8 }}><Icon name="inventory" size={22} /> {ar ? 'المخزون' : 'Inventory'}</h2>
-      <div className="row scroll-x" style={{ gap: 8, paddingBottom: 6, borderBottom: '1px solid var(--border)', width: '100%', overflowX: 'auto', WebkitOverflowScrolling: 'touch' }}>
+      {/* ONE TAB IDIOM PER SCREEN. This was a hand-rolled bar — an eleven
+          property inline style object per button, overriding .btn btn-sm to
+          rebuild a control the design system already ships — while the child
+          screen underneath it (SimpleStock) used .segmented correctly. Two
+          different-looking tab bars stacked on one page. */}
+      <div className="segmented scroll-x" style={{ width: '100%' }}>
         {[
           { id: 'materials', lbl: ar ? 'المواد الخام' : 'Materials', icon: 'inventory' },
           { id: 'simple', lbl: ar ? 'الأصناف الجاهزة' : 'Finished Stock', icon: 'coffee' },
@@ -31,26 +36,8 @@ export default function Inventory() {
           { id: 'suppliers', lbl: ar ? 'الموردون' : 'Suppliers', icon: 'staff' },
           { id: 'moves', lbl: ar ? 'الحركات' : 'Movements', icon: 'clock' }
         ].map((tItem) => (
-          <button
-            key={tItem.id}
-            className={`btn btn-sm`}
-            style={{
-              whiteSpace: 'nowrap',
-              flex: '0 0 auto',
-              borderRadius: 'var(--r-md)',
-              display: 'inline-flex',
-              alignItems: 'center',
-              gap: 6,
-              padding: '8px 14px',
-              border: '1px solid',
-              borderColor: tab === tItem.id ? 'var(--brand)' : 'var(--border)',
-              background: tab === tItem.id ? 'var(--brand)' : 'var(--surface)',
-              color: tab === tItem.id ? 'var(--on-brand)' : 'var(--text-muted)'
-            }}
-            onClick={() => setTab(tItem.id)}
-          >
-            <Icon name={tItem.icon} size={14} />
-            <span>{tItem.lbl}</span>
+          <button key={tItem.id} className={tab === tItem.id ? 'active' : ''} onClick={() => setTab(tItem.id)}>
+            <Icon name={tItem.icon} size={14} /> {tItem.lbl}
           </button>
         ))}
       </div>

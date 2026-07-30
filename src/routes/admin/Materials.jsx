@@ -86,37 +86,27 @@ export default function Materials() {
 
   return (
     <div className="stack" style={{ gap: 'var(--sp-4)' }}>
-      {/* Overview stats */}
-      <div className="stat-grid" style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))', gap: 'var(--sp-3)' }}>
-        <div className="stat card card-pad" style={{ display: 'flex', alignItems: 'center', gap: 'var(--sp-3)', borderInlineStart: '4px solid var(--brand)', boxShadow: 'var(--sh-1)' }}>
-          <div className="center" style={{ width: 40, height: 40, borderRadius: '50%', background: 'var(--brand-soft)', color: 'var(--brand)' }}>
-            <Icon name="inventory" size={20} />
+      {/* THREE FACTS, NOT THREE POSTERS.
+          This was three cards, each with a 4px coloured rail, its own shadow,
+          and a 40px coloured circle holding an icon — in three different hues.
+          Circle plus big number plus coloured rail is the canonical generated
+          dashboard tile, and it carried nothing the number did not.
+          One bordered strip, three columns, colour only where a number is
+          reporting that something is wrong. */}
+      <div className="card" style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(150px, 1fr))' }}>
+        {[
+          { label: ar ? 'إجمالي المواد' : 'Total materials', value: mats.length },
+          { label: ar ? 'نقص المخزون' : 'Low stock', value: lowCount, color: lowCount > 0 ? 'var(--danger)' : undefined },
+          { label: ar ? 'قيمة المستودع' : 'Stock value', value: <Price value={totalValue} currency={currency} lang={lang} /> },
+        ].map((s, i) => (
+          <div key={s.label} className="stack" style={{
+            gap: 2, padding: 'var(--sp-5) var(--sp-6)',
+            borderInlineStart: i ? '1px solid var(--border)' : undefined,
+          }}>
+            <span className="xs faint">{s.label}</span>
+            <span className="bold num" style={{ fontSize: 'var(--fs-xl)', lineHeight: 1.15, color: s.color }}>{s.value}</span>
           </div>
-          <div>
-            <div className="xs faint">{ar ? 'إجمالي المواد' : 'Total Materials'}</div>
-            <div className="value bold" style={{ fontSize: 'var(--fs-lg)', lineHeight: 1.2 }}>{mats.length}</div>
-          </div>
-        </div>
-        
-        <div className="stat card card-pad" style={{ display: 'flex', alignItems: 'center', gap: 'var(--sp-3)', borderInlineStart: `4px solid ${lowCount > 0 ? 'var(--danger)' : 'var(--success)'}`, boxShadow: 'var(--sh-1)' }}>
-          <div className="center" style={{ width: 40, height: 40, borderRadius: '50%', background: lowCount > 0 ? 'var(--danger-soft)' : 'var(--success-soft)', color: lowCount > 0 ? 'var(--danger)' : 'var(--success)' }}>
-            <Icon name="warning" size={20} />
-          </div>
-          <div>
-            <div className="xs faint">{ar ? 'نقص المخزون' : 'Low Stock Alert'}</div>
-            <div className="value bold" style={{ fontSize: 'var(--fs-lg)', lineHeight: 1.2, color: lowCount > 0 ? 'var(--danger)' : 'var(--success)' }}>{lowCount}</div>
-          </div>
-        </div>
-        
-        <div className="stat card card-pad" style={{ display: 'flex', alignItems: 'center', gap: 'var(--sp-3)', borderInlineStart: '4px solid var(--gold)', boxShadow: 'var(--sh-1)' }}>
-          <div className="center" style={{ width: 40, height: 40, borderRadius: '50%', background: 'var(--warning-soft)', color: 'var(--gold)' }}>
-            <Icon name="wallet" size={20} />
-          </div>
-          <div>
-            <div className="xs faint">{ar ? 'قيمة المستودع' : 'Stock Value'}</div>
-            <div className="value bold num" style={{ fontSize: 'var(--fs-lg)', lineHeight: 1.2 }}><Price value={totalValue} currency={currency} lang={lang} /></div>
-          </div>
-        </div>
+        ))}
       </div>
 
       <div className="row-between wrap" style={{ gap: 'var(--sp-3)' }}>
@@ -127,33 +117,18 @@ export default function Materials() {
             { id: 'stable', lbl: ar ? 'مستقر' : 'Stable', count: mats.filter(m => (m.stockQty || 0) > (Number(m.reorderLevel) || 0)).length, color: 'var(--success)' },
             { id: 'low', lbl: ar ? 'منخفض' : 'Low Stock', count: lowCount, color: 'var(--warning)' },
             { id: 'out', lbl: ar ? 'نفد' : 'Out of Stock', count: mats.filter(m => (m.stockQty || 0) <= 0).length, color: 'var(--danger)' }
+          /* PILL INSIDE A PILL, in four colours. A 999px chip containing a
+             999px count badge tinted per status, plus a hardcoded rgba white
+             belonging to no token. The count is data — it reads as a number
+             beside its label, not as a second capsule. */
           ].map((f) => (
             <button
               key={f.id}
-              className={`btn btn-sm ${statusFilter === f.id ? 'btn-primary' : 'btn-outline'}`}
-              style={{
-                borderRadius: 'var(--r-pill)',
-                display: 'inline-flex',
-                alignItems: 'center',
-                gap: 6,
-                padding: '4px 12px',
-                borderColor: statusFilter === f.id ? undefined : 'var(--border)'
-              }}
+              className={`chip ${statusFilter === f.id ? 'active' : ''}`}
               onClick={() => setStatusFilter(f.id)}
             >
-              <span>{f.lbl}</span>
-              <span
-                className="xs num"
-                style={{
-                  background: statusFilter === f.id ? 'rgba(255,255,255,0.22)' : 'var(--surface-2)',
-                  padding: '1px 6px',
-                  borderRadius: 'var(--r-pill)',
-                  color: statusFilter === f.id ? '#fff' : f.color,
-                  fontWeight: 700
-                }}
-              >
-                {f.count}
-              </span>
+              {f.lbl}
+              <span className="xs num" style={{ marginInlineStart: 6, opacity: statusFilter === f.id ? 0.75 : 0.55 }}>{f.count}</span>
             </button>
           ))}
         </div>
@@ -174,106 +149,65 @@ export default function Materials() {
       {shown.length === 0 ? (
         <Empty icon="inventory" title={ar ? 'لا مواد مطابقة' : 'No matching materials'} hint={ar ? 'جرّب تعديل البحث أو إضافة مادة جديدة' : 'Try adjusting the search or add a new material'} />
       ) : (
-        <div className="stack" style={{ gap: 'var(--sp-3)' }}>
+        /* ONE ROW PER MATERIAL, not one poster.
+           Each record was a .card with 20px corners, a shadow, a 4px coloured
+           rail, `transition: all`, a decorative gauge, a card nested inside it
+           for the average cost, and four action buttons in four different
+           tints — eight simultaneous hues in one row. A hundred materials was a
+           hundred floating blocks and no column the eye could run down.
+           This is the shape Costing.jsx and Variance.jsx already use, and
+           colour survives in exactly one place: the stock figure, when it is
+           the thing that is wrong. */
+        <div className="vc-rows">
           {shown.map((m) => {
             const low = (m.stockQty || 0) <= (Number(m.reorderLevel) || 0)
             const empty = (m.stockQty || 0) <= 0
-            const stateColor = empty ? 'var(--danger)' : low ? 'var(--warning)' : 'var(--success)'
-            const stateBg = empty ? 'var(--danger-soft)' : low ? 'var(--warning-soft)' : 'var(--success-soft)'
-            
+            const stateColor = empty ? 'var(--danger)' : low ? 'var(--warning)' : undefined
             return (
-              <div
-                key={m.id}
-                className="card card-pad stack"
-                style={{
-                  borderInlineStart: `4px solid ${stateColor}`,
-                  boxShadow: 'var(--sh-1)',
-                  gap: 'var(--sp-2)',
-                  position: 'relative',
-                  transition: 'all var(--dur-fast) var(--ease)'
-                }}
-              >
-                {/* Header info */}
-                <div className="row-between" style={{ alignItems: 'flex-start' }}>
-                  <div className="stack" style={{ gap: 4 }}>
-                    <div className="bold row" style={{ gap: 8, flexWrap: 'wrap' }}>
-                      <span style={{ fontSize: 'var(--fs-base)' }}>{ar ? m.nameAr : (m.nameEn || m.nameAr)}</span>
-                      {m.category && (
-                        <span className="badge" style={{ background: 'var(--surface-2)', color: 'var(--text-muted)', fontSize: 'var(--fs-xs)', padding: '2px 8px', borderRadius: 'var(--r-sm)' }}>
-                          {m.category}
-                        </span>
-                      )}
-                      {empty ? (
-                        <span className="badge badge-danger" style={{ fontSize: 'var(--fs-xs)' }}>{ar ? 'نفد' : 'Out'}</span>
-                      ) : low ? (
-                        <span className="badge badge-gold" style={{ fontSize: 'var(--fs-xs)' }}>{ar ? 'منخفض' : 'Low'}</span>
-                      ) : (
-                        <span className="badge" style={{ background: 'var(--success-soft)', color: 'var(--success)', fontSize: 'var(--fs-xs)' }}>{ar ? 'مستقر' : 'Stable'}</span>
-                      )}
-                    </div>
-                    <div className="xs faint row wrap" style={{ gap: 8 }}>
-                      <span>{ar ? 'الوحدة الأساسية:' : 'Base:'} <strong className="num">{unitLabel(m.baseUnit, lang)}</strong></span>
-                      {m.purchaseUnit && (
-                        <span>· {ar ? 'وحدة الشراء:' : 'Purchase:'} <strong className="num">{m.purchaseUnit === '__custom' ? (m.purchaseUnitName || (ar ? 'وحدة' : 'unit')) : unitLabel(m.purchaseUnit, lang)}</strong></span>
-                      )}
-                      {m.expiryDate && (
-                        <span style={{ color: 'var(--danger)' }}>· {ar ? 'انتهاء:' : 'Expiry:'} <strong className="num">{m.expiryDate}</strong></span>
-                      )}
-                    </div>
+              <div key={m.id} className="vc-row">
+                <div className="stack grow" style={{ gap: 2, minWidth: 150 }}>
+                  <div className="row" style={{ gap: 6, flexWrap: 'wrap', alignItems: 'baseline' }}>
+                    <strong style={{ fontSize: 'var(--fs-base)' }}>{ar ? m.nameAr : (m.nameEn || m.nameAr)}</strong>
+                    {m.category && <span className="xs faint">{m.category}</span>}
+                    {/* Only the two states that need acting on wear a badge.
+                        «مستقر» in green on every healthy row is a hundred green
+                        badges saying nothing. */}
+                    {empty ? <span className="badge badge-danger">{ar ? 'نفد' : 'Out'}</span>
+                      : low ? <span className="badge badge-gold">{ar ? 'منخفض' : 'Low'}</span> : null}
                   </div>
-                  
-                  <button className="icon-btn xs" style={{ opacity: 0.6 }} onClick={() => setForm({ ...blank(), ...m })} title={ar ? 'تعديل' : 'Edit'}>
-                    <Icon name="edit" size={15} />
-                  </button>
+                  <span className="xs faint">
+                    {unitLabel(m.baseUnit, lang)}
+                    {m.avgCost ? <> · <Price value={(m.avgCost || 0) * (m.baseUnit === 'pc' ? 1 : 1000)} currency={currency} lang={lang} />{' / '}{unitLabel(m.baseUnit === 'g' ? 'kg' : m.baseUnit === 'ml' ? 'l' : 'pc', lang)}</> : null}
+                    {m.expiryDate ? <> · {ar ? 'ينتهي' : 'Expires'} <span className="num">{m.expiryDate}</span></> : null}
+                  </span>
                 </div>
 
-                {/* Stock Gauge */}
-                <div className="stack" style={{ gap: 4 }}>
-                  <div className="row-between xs">
-                    <span>{ar ? 'الرصيد الفعلي:' : 'Physical Stock:'} <strong className="num" style={{ fontSize: 'var(--fs-md)', color: low ? 'var(--danger)' : 'var(--text)' }}>{fmtBaseQty(m.stockQty || 0, m.baseUnit, lang)}</strong></span>
-                    {m.parLevel > 0 && <span className="faint">{ar ? 'المستوى المستهدف (Par):' : 'Par Level:'} <span className="num">{fmtBaseQty(m.parLevel, m.baseUnit, lang)}</span></span>}
-                  </div>
-                  {m.parLevel > 0 && (
-                    <div style={{ width: '100%', height: 6, background: 'var(--bg-2)', borderRadius: 3, overflow: 'hidden' }}>
-                      <div
-                        style={{
-                          width: `${Math.min(100, ((m.stockQty || 0) / m.parLevel) * 100)}%`,
-                          height: '100%',
-                          background: stateColor,
-                          borderRadius: 3
-                        }}
-                      />
-                    </div>
-                  )}
+                <div className="stack" style={{ gap: 0, textAlign: 'end', flex: 'none', minWidth: 92 }}>
+                  <strong className="num" style={{ fontSize: 'var(--fs-md)', color: stateColor }}>{fmtBaseQty(m.stockQty || 0, m.baseUnit, lang)}</strong>
+                  {m.parLevel > 0 && <span className="xs faint num">{ar ? 'المستهدف' : 'Par'} {fmtBaseQty(m.parLevel, m.baseUnit, lang)}</span>}
                 </div>
 
-                {/* Avg Cost info */}
-                {m.avgCost ? (
-                  <div className="row-between xs rounded" style={{ background: 'var(--surface-2)', padding: '6px 10px', borderRadius: 'var(--r-sm)', border: '1px solid var(--border)' }}>
-                    <span className="faint">{ar ? 'متوسط تكلفة الوحدة:' : 'Avg Cost per unit:'}</span>
-                    <strong className="num">
-                      <Price value={(m.avgCost || 0) * (m.baseUnit === 'pc' ? 1 : 1000)} currency={currency} lang={lang} />
-                      {' / '}
-                      {unitLabel(m.baseUnit === 'g' ? 'kg' : m.baseUnit === 'ml' ? 'l' : 'pc', lang)}
-                    </strong>
-                  </div>
-                ) : null}
-
-                {/* Actions row */}
-                <div className="row wrap" style={{ gap: 6, borderTop: '1px solid var(--border)', paddingTop: 8, marginTop: 4 }}>
+                {/* Four operations of equal rank, in one weight. They were four
+                    filled tints — the single largest source of colour in the
+                    old row. Waste keeps red because it is the destructive one,
+                    and it sits last. */}
+                <div className="row" style={{ gap: 4, flex: 'none' }}>
                   {m.subRecipe?.length > 0 && (
-                    <button className="btn btn-sm btn-outline grow" style={{ background: 'var(--brand-soft)', color: 'var(--brand)', borderColor: 'transparent', display: 'inline-flex', alignItems: 'center', justifyContent: 'center', gap: 4 }} onClick={() => setOp({ material: m, kind: 'produce' })}>
-                      <Icon name="store" size={13} /> <span>{ar ? 'إنتاج' : 'Produce'}</span>
+                    <button className="btn btn-xs btn-outline" onClick={() => setOp({ material: m, kind: 'produce' })}>
+                      <Icon name="store" size={13} /> {ar ? 'إنتاج' : 'Produce'}
                     </button>
                   )}
-                  <button className="btn btn-sm btn-outline grow" style={{ background: 'var(--success-soft)', color: 'var(--success)', borderColor: 'transparent', display: 'inline-flex', alignItems: 'center', justifyContent: 'center', gap: 4 }} onClick={() => setOp({ material: m, kind: 'receive' })}>
-                    <Icon name="add" size={13} /> <span>{ar ? 'استلام' : 'Receive'}</span>
+                  <button className="btn btn-xs btn-outline" onClick={() => setOp({ material: m, kind: 'receive' })}>
+                    <Icon name="add" size={13} /> {ar ? 'استلام' : 'Receive'}
                   </button>
-                  <button className="btn btn-sm btn-outline grow" style={{ background: 'var(--info-soft)', color: 'var(--info)', borderColor: 'transparent', display: 'inline-flex', alignItems: 'center', justifyContent: 'center', gap: 4 }} onClick={() => setOp({ material: m, kind: 'count' })}>
-                    <Icon name="check" size={13} /> <span>{ar ? 'جرد' : 'Count'}</span>
+                  <button className="btn btn-xs btn-outline" onClick={() => setOp({ material: m, kind: 'count' })}>
+                    <Icon name="check" size={13} /> {ar ? 'جرد' : 'Count'}
                   </button>
-                  <button className="btn btn-sm btn-outline grow" style={{ background: 'var(--danger-soft)', color: 'var(--danger)', borderColor: 'transparent', display: 'inline-flex', alignItems: 'center', justifyContent: 'center', gap: 4 }} onClick={() => setOp({ material: m, kind: 'waste' })}>
-                    <Icon name="close" size={13} /> <span>{ar ? 'هدر' : 'Waste'}</span>
+                  <button className="btn btn-xs btn-outline" style={{ color: 'var(--danger)' }} onClick={() => setOp({ material: m, kind: 'waste' })}>
+                    <Icon name="close" size={13} /> {ar ? 'هدر' : 'Waste'}
+                  </button>
+                  <button className="icon-btn xs" onClick={() => setForm({ ...blank(), ...m })} title={ar ? 'تعديل' : 'Edit'}>
+                    <Icon name="edit" size={14} />
                   </button>
                 </div>
               </div>

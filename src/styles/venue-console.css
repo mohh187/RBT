@@ -1,0 +1,333 @@
+/* ============================================================================
+   venue-console.css — the VENUE back office, as a system of record
+   ============================================================================
+
+   WHAT THIS IS. The sibling of platform-console.css, aimed at the other
+   console: the venue's own admin, cashier and KDS. Same technique, same
+   reasoning, and for the same reason — this audience uses the product all day
+   and already knows it. That audience is served by DENSITY, not by breathing
+   room: more rows on screen, less travel between them, and a shape language
+   that says «system of record» rather than «app».
+
+   WHY IT WAS NEEDED. The owner's words were that screens «look designed by
+   AI», and an audit named the causes precisely. They were not gradients (the
+   whole admin has eleven, ten of them legitimate colour swatches) and not
+   emojis (there are none — everything goes through Icon.jsx). They were four
+   things, and all four are geometry:
+
+     1. --r-lg: 20px on every .card, --r-pill: 999px on every chip and badge
+     2. --sh-1 shadow under every card, so nothing sits flat
+     3. 40px coloured circles holding icons, and 4px coloured rails on rows
+     4. .page { animation: fade-up } on every navigation
+
+   The first two are tokens, which is why almost all of this file is a token
+   block. platform-console.css proved the approach: about thirty declarations
+   changed the read of nine screens with zero JSX touched.
+
+   SCOPE — read this before adding a selector.
+
+     .admin-shell             venue dashboards      ← target
+     .admin-shell.platform-scope  platform console  ← EXCLUDED, has its own file
+     .cashier-shell           the till              ← target
+     .kds-shell               the kitchen           ← target
+     .venue-above / [data-menu-layout]   the DINER MENU   ← never, see below
+
+   The diner menu is a different visual register on purpose: expressive,
+   brand-led, per-venue. It renders under its own root and never inside
+   .admin-shell — except as a LIVE PREVIEW inside Settings, which is exactly a
+   venue's real interface and must look like the venue's, not like ours. That
+   case is handled in section 8, and it is the one thing in this file that must
+   not be forgotten.
+   ========================================================================= */
+
+/* ============================================================
+   1 · GEOMETRY — the whole feel, in about thirty declarations
+   ============================================================
+   index.css sets these at :root, so there is nothing to fight: (0,1,0) at
+   :root cannot beat (0,1,0) here plus a later import — but we do not rely on
+   order alone. Every screen also sits inside one of these shells, so the
+   declaration is inherited rather than matched, which is stable regardless of
+   which stylesheet loaded last. */
+.admin-shell:not(.platform-scope),
+.cashier-shell,
+.kds-shell {
+  /* type — one scale, one step down. The old --fs-lg was 22px, which is a
+     marketing headline; a record header is 16. */
+  --fs-xs: 0.6875rem;    /* 11 — table headers, meta */
+  --fs-sm: 0.75rem;      /* 12 — tables, nav, buttons */
+  --fs-base: 0.8125rem;  /* 13 — body */
+  --fs-md: 0.9375rem;    /* 15 */
+  --fs-lg: 1.0625rem;    /* 17 — page title */
+  --fs-xl: 1.25rem;      /* 20 */
+  --fs-2xl: 1.5rem;      /* 24 — the one big number on a stat tile */
+
+  /* space — the 4px grid, halved */
+  --sp-1: 2px;  --sp-2: 4px;  --sp-3: 6px;  --sp-4: 8px;
+  --sp-5: 10px; --sp-6: 12px; --sp-8: 16px; --sp-10: 20px; --sp-12: 24px;
+
+  /* RADIUS — the single loudest lever on the page.
+     A 20px-radius card is a phone-app card; no ERP ships one on a data row.
+     --r-pill is louder still: rounded pills on badges and chips are the
+     strongest «consumer app» signal the console carries, and squaring them
+     changes the read more than any colour choice does. */
+  --r-sm: 3px; --r-md: 4px; --r-lg: 5px; --r-xl: 8px; --r-pill: 4px;
+
+  /* elevation — an ERP separates with LINES, not with shadows. Every card in
+     the admin carries --sh-1 by default, so a list of records reads as a stack
+     of floating objects instead of a column to scan. */
+  --sh-1: none;
+  --sh-2: 0 1px 3px rgba(33, 25, 19, 0.12);
+  --sh-3: 0 6px 20px rgba(33, 25, 19, 0.16);
+
+  --tap: 36px;
+  --appbar-h: 48px;
+
+  /* private to this file */
+  --vc-gut: 14px;      /* page gutter */
+  --vc-row-y: 6px;     /* the vertical rhythm of one record row */
+  --vc-cell: 6px 9px;  /* one table cell */
+}
+
+/* Controls shrink only where there is a mouse. Below 980px the admin is a
+   phone app (the sidebar hides and .bottom-nav navigates), so --tap stays
+   touch-safe there. The cashier and KDS are touch surfaces at EVERY size —
+   they run on tills and tablets — so they are deliberately not included. */
+@media (min-width: 980px) {
+  .admin-shell:not(.platform-scope) { --tap: 32px; --appbar-h: 44px; }
+}
+@media (min-width: 980px) and (pointer: coarse) {
+  .admin-shell:not(.platform-scope) { --tap: 38px; }
+}
+
+/* ============================================================
+   2 · NAVIGATION IS NOT AN EVENT
+   ============================================================
+   `.page { animation: fade-up var(--dur) var(--ease) }` (index.css) runs on
+   EVERY admin route, because every admin route root is `.page`. A 200ms fade
+   and rise on each screen change is the loudest «this is a website» signal in
+   the product — Odoo, Foodics and Jira all swap panes instantly.
+
+   Motion is kept for things the user DID (press, hover, open a sheet); it is
+   removed from things that merely happened (arriving somewhere). */
+.admin-shell:not(.platform-scope) .page,
+.cashier-shell .page,
+.kds-shell .page { animation: none; }
+
+/* `transition: all` animates layout properties by accident — a width or a
+   padding that changes for an unrelated reason gets a 120ms slide. Name the
+   properties that should move. */
+.admin-shell:not(.platform-scope) .chip,
+.cashier-shell .chip,
+.kds-shell .chip {
+  transition: background-color var(--dur-fast) var(--ease),
+              border-color var(--dur-fast) var(--ease),
+              color var(--dur-fast) var(--ease);
+}
+
+/* ============================================================
+   3 · CHROME
+   ============================================================ */
+
+/* Solid bar, one hairline. No blur, no gradient underline — a frosted bar over
+   a data table is decoration competing with content. */
+.admin-shell:not(.platform-scope) .app-bar {
+  background: var(--surface);
+  -webkit-backdrop-filter: none; backdrop-filter: none;
+  border-bottom: 1px solid var(--border);
+  box-shadow: none;
+  padding-inline: var(--vc-gut);
+}
+.admin-shell:not(.platform-scope) .app-bar::after { display: none; }
+
+/* index.css declares this hover with !important inside an @media (hover:hover)
+   block, so specificity alone cannot reach it. A control that swells when the
+   pointer passes belongs in a consumer app. */
+@media (hover: hover) {
+  .admin-shell:not(.platform-scope) .app-bar .icon-btn:hover {
+    transform: none !important;
+    background: var(--surface-2) !important;
+  }
+}
+
+/* The focus ring stays — it is the keyboard user's only cue — but 3px of glow
+   around a 4px-radius control reads as a halo. Two, tight. */
+.admin-shell:not(.platform-scope) :focus-visible,
+.cashier-shell :focus-visible,
+.kds-shell :focus-visible {
+  outline: 2px solid var(--ring);
+  outline-offset: 1px;
+}
+
+/* ============================================================
+   4 · SURFACES
+   ============================================================ */
+
+.admin-shell:not(.platform-scope) .card {
+  border-radius: var(--r-md);
+  box-shadow: none;
+  border: 1px solid var(--border);
+}
+.admin-shell:not(.platform-scope) .card-pad { padding: var(--sp-6); }
+
+/* A card inside a card is a nesting the eye cannot parse: two borders, two
+   radii, two backgrounds, for one piece of information. The inner one becomes
+   a plain framed strip. */
+.admin-shell:not(.platform-scope) .card .card {
+  border-radius: var(--r-sm);
+  background: var(--surface-2);
+}
+
+/* ============================================================
+   5 · CONTROLS
+   ============================================================ */
+
+.admin-shell:not(.platform-scope) .btn,
+.cashier-shell .btn { border-radius: var(--r-sm); }
+
+.admin-shell:not(.platform-scope) .badge {
+  padding: 1px 6px;
+  font-weight: 600;
+  border-radius: 3px;
+}
+.admin-shell:not(.platform-scope) .chip {
+  min-height: 26px;
+  padding: 2px var(--sp-4);
+  border-radius: var(--r-sm);
+}
+
+.admin-shell:not(.platform-scope) .input,
+.admin-shell:not(.platform-scope) .select,
+.admin-shell:not(.platform-scope) .textarea { border-radius: var(--r-sm); }
+
+.admin-shell:not(.platform-scope) .stack { gap: var(--sp-3); }
+.admin-shell:not(.platform-scope) .row,
+.admin-shell:not(.platform-scope) .row-between { gap: var(--sp-3); }
+
+/* ============================================================
+   6 · FULL BLEED
+   ============================================================
+   index.css clamps every console screen to --maxw (1080px) and centres it, so
+   a 27-inch monitor shows a narrow column of cards between two empty gutters.
+   A back office runs edge to edge; the tables need the columns.
+
+   Overriding the RULE rather than the --maxw token, because --maxw is a global
+   token read elsewhere and repurposing it inside one subtree to mean something
+   different is how a token stops meaning anything. */
+@media (min-width: 980px) {
+  .admin-shell:not(.platform-scope) .admin-main > .container { padding-block: 0; }
+  .admin-shell:not(.platform-scope) .admin-main > .container > * {
+    max-width: none;
+    padding-inline: var(--vc-gut);
+  }
+}
+
+/* ============================================================
+   7 · TABLES
+   ============================================================
+   index.css contains ZERO bare table/th/td styling — every table in the app is
+   namespaced (.acc-table, .bhv-table, .pdoc-table) — so element selectors here
+   are safe, and they pay off without a line of JSX changing.
+
+   Sticky headers are the point: a report you have to scroll loses its column
+   names exactly when you need them. */
+.admin-shell:not(.platform-scope) table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: var(--fs-sm);
+}
+.admin-shell:not(.platform-scope) th,
+.admin-shell:not(.platform-scope) td {
+  padding: var(--vc-cell);
+  text-align: start;
+  vertical-align: middle;
+}
+.admin-shell:not(.platform-scope) thead th {
+  position: sticky; top: 0; z-index: 1;
+  background: var(--surface-2);
+  font-size: var(--fs-xs);
+  font-weight: 700;
+  color: var(--text-muted);
+  white-space: nowrap;
+  /* border-collapse drops borders on sticky cells in Blink and WebKit — the
+     header's underline has to be an inset shadow or it vanishes the moment the
+     body scrolls under it. */
+  box-shadow: inset 0 -1px 0 var(--border-strong);
+}
+.admin-shell:not(.platform-scope) tbody td { border-bottom: 1px solid var(--border); }
+.admin-shell:not(.platform-scope) tbody tr:last-child td { border-bottom: 0; }
+@media (hover: hover) {
+  .admin-shell:not(.platform-scope) tbody tr:hover { background: color-mix(in srgb, var(--brand) 5%, var(--surface)); }
+}
+.admin-shell:not(.platform-scope) tfoot td {
+  border-top: 1px solid var(--border-strong);
+  border-bottom: 0;
+  font-weight: 700;
+  background: var(--surface-2);
+}
+
+/* Numbers line up in a column or they are not a column. */
+.admin-shell:not(.platform-scope) .vc-num,
+.admin-shell:not(.platform-scope) .num,
+.admin-shell:not(.platform-scope) .price { font-variant-numeric: tabular-nums; }
+
+/* ============================================================
+   8 · RECORD LISTS
+   ============================================================
+   `.vc-rows` wraps, `.vc-row` is one record. Both are stated in the JSX, on
+   purpose: a rule that restyles a list because of what its children happen to
+   be is invisible to whoever reads the component next. (platform-console.css
+   shipped exactly that heuristic for one commit and removed it for this
+   reason — the note is preserved there.) */
+.admin-shell:not(.platform-scope) .vc-rows {
+  display: flex;
+  flex-direction: column;
+  border: 1px solid var(--border);
+  border-radius: var(--r-md);
+  background: var(--surface);
+  overflow: hidden;
+}
+.admin-shell:not(.platform-scope) .vc-row {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: var(--sp-3);
+  border-bottom: 1px solid var(--border);
+  padding: var(--vc-row-y) var(--sp-5);
+}
+.admin-shell:not(.platform-scope) .vc-row:last-child { border-bottom: 0; }
+@media (hover: hover) {
+  .admin-shell:not(.platform-scope) .vc-row:hover { background: color-mix(in srgb, var(--brand) 5%, transparent); }
+}
+
+/* ============================================================
+   9 · ESCAPE HATCHES — the part that must not be forgotten
+   ============================================================
+   Three things render INSIDE the venue console and are NOT console UI. Each
+   would be wrecked by the scale above, and each is someone else's register.
+
+   1. [data-menu-layout] — a LIVE PREVIEW of the venue's own diner menu, shown
+      in Settings while the owner designs it. Squaring its corners and halving
+      its spacing would show them a menu their guests will never see, which
+      makes the preview a lie.
+   2. .pdoc / .pdoc-page — an A4 tax invoice or quotation. It is paper.
+   3. .pos-preview / .kds-preview — the same argument as (1) for the till and
+      kitchen mockups in Settings.
+
+   Restores the :root values verbatim. */
+.admin-shell:not(.platform-scope) [data-menu-layout],
+.admin-shell:not(.platform-scope) .venue-above,
+.admin-shell:not(.platform-scope) .pdoc,
+.admin-shell:not(.platform-scope) .pdoc-page,
+.admin-shell:not(.platform-scope) .pos-preview,
+.admin-shell:not(.platform-scope) .kds-preview {
+  --fs-xs: 0.75rem; --fs-sm: 0.8125rem; --fs-base: 0.9375rem;
+  --fs-md: 1.0625rem; --fs-lg: 1.375rem; --fs-xl: 1.75rem; --fs-2xl: 2.25rem;
+  --sp-1: 4px; --sp-2: 8px; --sp-3: 12px; --sp-4: 16px;
+  --sp-5: 20px; --sp-6: 24px; --sp-8: 32px; --sp-10: 40px; --sp-12: 56px;
+  --r-sm: 8px; --r-md: 14px; --r-lg: 20px; --r-xl: 28px; --r-pill: 999px;
+  --sh-1: 0 1px 2px rgba(33, 25, 19, .06), 0 2px 8px rgba(33, 25, 19, .05);
+  --tap: 44px;
+}
+/* …and the preview's own page animation is part of what is being previewed. */
+.admin-shell:not(.platform-scope) [data-menu-layout] .page,
+.admin-shell:not(.platform-scope) .venue-above .page { animation: fade-up var(--dur) var(--ease); }

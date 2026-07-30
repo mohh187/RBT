@@ -112,8 +112,15 @@ export default function Performance() {
 
       {/* leader / employee of the month */}
       {leader && (
-        <div className="card card-pad row" style={{ gap: 12, cursor: 'pointer', background: 'linear-gradient(135deg, color-mix(in srgb, var(--gold) 24%, var(--surface)), var(--surface))', border: '1px solid var(--gold)' }} onClick={() => setProfileFor(leader)}>
-          <span className="center" style={{ width: 52, height: 52, borderRadius: '50%', background: 'var(--gold)', color: '#1a1205', fontWeight: 900, flex: 'none', display: 'grid', placeItems: 'center' }}><Icon name="award" size={26} /></span>
+        /* A GOLD GRADIENT HERO WAS THE LOUDEST LINE IN THE ADMIN.
+           «Top performer» set on a 135deg gold wash behind a 52px gold circle
+           is stock dashboard vocabulary — the thing the owner meant by screens
+           that look generated. The fact being reported is a name and two
+           numbers; it needs a hairline and a gold rule, not a wash. The award
+           mark stays because it IS the recognition, at a size that reads as a
+           mark rather than a badge. */
+        <div className="card card-pad row" style={{ gap: 12, cursor: 'pointer', borderInlineStart: '3px solid var(--gold)' }} onClick={() => setProfileFor(leader)}>
+          <Icon name="award" size={20} style={{ color: 'var(--gold)', flex: 'none' }} />
           <div className="grow">
             <div className="xs faint">{period === 'month' ? (ar ? 'موظف الشهر' : 'Employee of the month') : (ar ? 'المتصدّر' : 'Top performer')}</div>
             <div className="bold" style={{ fontSize: 'var(--fs-md)' }}>{leader.name || leader.email}</div>

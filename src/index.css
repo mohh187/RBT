@@ -1228,7 +1228,26 @@ ul {
 .admin-side-nav a:hover { background: var(--surface-2); color: var(--text); }
 .admin-side-nav a.active { background: color-mix(in srgb, var(--sel, var(--brand)) 14%, var(--surface)); color: var(--sel, var(--brand)); }
 .admin-side-group { margin-top: var(--sp-3); }
-.admin-side-title { font-size: var(--fs-xs); color: var(--text-faint); font-weight: 800; padding: 0 11px 4px; }
+/* The group title is a BUTTON now (it collapses its section), so it needs the
+   button reset the plain div never did — and a hit area, since a 4px-tall label
+   is not something a finger can aim at. `disabled` marks the group holding the
+   current page: still readable, just not closable, so nobody can collapse
+   themselves into not knowing where they are. */
+.admin-side-title {
+  font-size: var(--fs-xs); color: var(--text-faint); font-weight: 800;
+  padding: 6px 11px 5px; width: 100%;
+  display: flex; align-items: center; justify-content: space-between; gap: 6px;
+  background: none; border: 0; font-family: inherit; text-align: start;
+  cursor: pointer; border-radius: var(--r-sm);
+  transition: background-color var(--dur-fast) var(--ease), color var(--dur-fast) var(--ease);
+}
+@media (hover: hover) {
+  .admin-side-title:not(:disabled):hover { background: var(--surface-2); color: var(--text-muted); }
+}
+.admin-side-title:disabled { cursor: default; opacity: 1; }
+.admin-side-title:disabled svg { opacity: .35; }
+/* A closed group keeps its title but loses the gap its links used to occupy. */
+.admin-side-group[data-open='false'] { margin-top: var(--sp-1); }
 .admin-side-foot { margin-top: auto; padding-top: var(--sp-3); border-top: 1px solid var(--border); display: flex; flex-direction: column; gap: 6px; }
 .admin-side-foot .list-row { font-size: var(--fs-sm); white-space: nowrap; }
 .admin-side-resize { position: absolute; inset-block: 0; inset-inline-end: -3px; width: 8px; cursor: ew-resize; z-index: 3; }

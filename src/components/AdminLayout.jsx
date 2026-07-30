@@ -28,6 +28,7 @@ import { initScrollAffordance } from '../lib/scrollAffordance.js'
 import '../styles/scrollfix.css'
 import { getDocs, collection, doc, updateDoc } from 'firebase/firestore'
 import { db } from '../lib/firebase.js'
+import '../styles/venue-console.css'
 
 // Primary sections (bottom nav / sidebar) — each is a hub with its own sub-tabs.
 const navItems = [
@@ -158,6 +159,21 @@ export default function AdminLayout() {
   // «المزيد» is the ONLY route to 33 destinations and was one undifferentiated
   // scroll — reaching «تسجيل الخروج» or «الدعم» meant ~3 screens of dragging.
   const [moreQ, setMoreQ] = useState('')
+  // WHICH GROUPS ARE CLOSED, remembered per device.
+  //
+  // Stored as the CLOSED set rather than the open one, so the default for a
+  // group that did not exist when the staffer last chose is "open". A new
+  // section must never arrive already hidden — that is how a shipped feature
+  // goes unnoticed for a month.
+  const [closedGroups, setClosedGroups] = useState(() => {
+    try { return JSON.parse(localStorage.getItem('rbt_nav_closed') || '{}') || {} } catch (_) { return {} }
+  })
+  const toggleGroup = (key) => setClosedGroups((prev) => {
+    const next = { ...prev, [key]: !prev[key] }
+    if (!next[key]) delete next[key]
+    try { localStorage.setItem('rbt_nav_closed', JSON.stringify(next)) } catch (_) { /* ignore */ }
+    return next
+  })
   // Global search (everything in the system): topbar button or Ctrl/Cmd+K.
   const [searchOpen, setSearchOpen] = useState(false)
   useEffect(() => {
@@ -370,15 +386,37 @@ export default function AdminLayout() {
               <Icon name={n.icon} size={18} /> <span>{lang === 'ar' ? n.label.ar : n.label.en}</span>
             </NavLink>
           ))}
+          {/* COLLAPSIBLE GROUPS. Five groups, thirty-three destinations, all
+              expanded at once — the sidebar was a wall a staffer scrolled past
+              rather than read. The title is now the control.
+
+              Three rules keep it from ever hiding what you need:
+                · the group holding the CURRENT page is always open, so you can
+                  never collapse yourself into not knowing where you are;
+                · a search match forces its group open, because a filtered
+                  sidebar exists precisely to show you the hit;
+                · the state is per-group and persists, so the shape a staffer
+                  arranges is the shape they come back to. */}
           {moreGroups.map((g) => {
             const q = moreQ.trim().toLowerCase()
             const items = g.items.filter(allowed).filter((l) => !q
               || l.label.ar.toLowerCase().includes(q) || l.label.en.toLowerCase().includes(q))
             if (!items.length) return null
+            const key = g.title.en
+            const hasActive = items.some((l) => (l.exact ? loc.pathname === l.to : loc.pathname.startsWith(l.to)))
+            const open = !!q || hasActive || !closedGroups[key]
             return (
-              <div key={g.title.en} className="admin-side-group">
-                <div className="admin-side-title">{lang === 'ar' ? g.title.ar : g.title.en}</div>
-                {items.map((l) => (
+              <div key={key} className="admin-side-group" data-open={open ? 'true' : 'false'}>
+                <button type="button" className="admin-side-title" aria-expanded={open}
+                  onClick={() => toggleGroup(key)}
+                  // A group you cannot close because you are standing in it
+                  // should say so rather than swallow the tap.
+                  disabled={!!q || hasActive}
+                  title={hasActive ? (lang === 'ar' ? 'يحتوي الصفحة الحالية' : 'Contains the current page') : undefined}>
+                  <span>{lang === 'ar' ? g.title.ar : g.title.en}</span>
+                  <Icon name={open ? 'chevronUp' : 'chevronDown'} size={14} />
+                </button>
+                {open && items.map((l) => (
                   <NavLink key={l.to} to={l.to} className={({ isActive }) => (isActive ? 'active' : '')}>
                     <Icon name={l.icon} size={18} /> <span>{lang === 'ar' ? l.label.ar : l.label.en}</span>
                   </NavLink>

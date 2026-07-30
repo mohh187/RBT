@@ -32,6 +32,7 @@ import AppBackground from '../../components/AppBackground.jsx'
 import LandscapeGate from '../../components/LandscapeGate.jsx'
 import Tour from '../../components/Tour.jsx'
 import { TOURS } from '../../lib/tours.js'
+import '../../styles/venue-console.css'
 
 const NEXT = {
   pending: { to: 'accepted', key: 'accept', cls: 'btn-primary' },
