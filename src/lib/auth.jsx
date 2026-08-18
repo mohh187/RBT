@@ -114,8 +114,21 @@ export function AuthProvider({ children }) {
       // to the CREATION page mid-login. loading=true until the profile is known.
       setLoading(true)
       setUser(fbUser)
-      await loadContext(fbUser)
-      setLoading(false)
+      // NEVER LEAVE THE APP ON A SPINNER. loadContext awaits several reads with
+      // no guard of their own (the platform-admin check, the profile, the tenant
+      // doc). If ANY of them rejects, e.g. one denied rule, the throw escaped
+      // this listener and setLoading(false) never ran, so the whole app sat on a
+      // full-screen spinner forever with nothing on screen to say why. That is
+      // how a single permission error became a total outage on the staff sign-in
+      // path. A failure here must degrade to a signed-in-but-thin context that
+      // the route guards can still reason about, not to a dead screen.
+      try {
+        await loadContext(fbUser)
+      } catch (e) {
+        console.error('[auth] context load failed', e?.code || e?.message || e)
+      } finally {
+        setLoading(false)
+      }
     })
     return unsub
   }, [loadContext])
