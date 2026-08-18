@@ -3527,6 +3527,7 @@ body[data-theme='dark'] .pos-fullscreen[data-systheme='glass'] { background: var
    otherwise neutral app — and since colour, logo and display font all come from
    the tenant's skin, every venue gets a different door from one stylesheet. */
 .staff-entry {
+  position: relative;
   min-height: 100dvh;
   display: flex;
   flex-direction: column;
@@ -3534,6 +3535,17 @@ body[data-theme='dark'] .pos-fullscreen[data-systheme='glass'] { background: var
   background: var(--bg);
   animation: se-in 260ms ease both;
 }
+/* LIGHT SPILLING OFF THE BOARD. Without it the board ends at a hard horizontal
+   line and reads as a colour block glued to the page, which is exactly the flat
+   look a generated layout has. The spill makes it read as a lit object sitting
+   above the working surface, and it costs one gradient. */
+.staff-entry::before {
+  content: '';
+  position: absolute; inset-inline: 0; top: 0; height: 62%;
+  background: radial-gradient(125% 58% at 50% 0%, color-mix(in srgb, var(--brand) 20%, transparent), transparent 72%);
+  pointer-events: none;
+}
+.staff-entry-body, .staff-entry-plate { position: relative; z-index: 1; }
 @keyframes se-in { from { opacity: 0; } to { opacity: 1; } }
 
 /* the board. Mixed against a near-black base rather than lightened, so ANY
@@ -3562,50 +3574,49 @@ body[data-theme='dark'] .pos-fullscreen[data-systheme='glass'] { background: var
 }
 /* the drawn counter, white and faint, bleeding off both edges. `slice` keeps the
    line weight honest at every width instead of stretching the drawing. */
-/* THE 360 CONSTELLATION fills the board and is never cropped: `meet` in the SVG
-   keeps the whole closed ring on screen at every width, which is why the header
-   moved from a frieze (which had to be sliced) to a ring.
-   MOTION BUDGET: only `opacity` and `stroke-dashoffset` move. The node bloom is a
-   pre-blurred circle whose OPACITY animates, never the blur itself, because
-   animating `filter` costs a repaint every frame and Safari especially so. */
+/* THE BOARD spans the header edge to edge. Its viewBox is about 3:1, between a
+   phone board and a desktop one, so `slice` never zooms hard either way, and the
+   circuit lives inside y 120..250 so a wide screen's vertical crop misses it.
+   NO FRAMES: the wire itself draws each icon, so `.se-trace` is both. */
 .staff-entry-scene { position: absolute; inset: 0; width: 100%; height: 100%; pointer-events: none; }
-/* the ring and its chords at rest: the mark's link vocabulary, quiet */
-.se-orbit { fill: none; stroke: rgba(255, 255, 255, 0.24); stroke-width: 1.6; }
-.se-chord { stroke: rgba(255, 255, 255, 0.13); stroke-width: 1.4; stroke-linecap: round; }
-/* the signal going round. dasharray and the keyframe distance BOTH derive from
-   the ellipse circumference (~1042 user units) declared in StaffEntry.jsx: one
-   bright 96-unit arc, the rest of the ring transparent. 9s reads as ambient. */
+.se-trace { stroke: rgba(255, 255, 255, 0.34); stroke-width: 1.9; fill: none; stroke-linejoin: round; stroke-linecap: round; }
+.se-return { stroke: rgba(255, 255, 255, 0.12); stroke-width: 1.1; stroke-dasharray: 5 5; fill: none; }
+.se-rung { stroke: rgba(255, 255, 255, 0.1); stroke-width: 1; fill: none; }
+.se-via { fill: rgba(255, 255, 255, 0.28); }
+.se-chip-detail { fill: none; stroke: rgba(255, 255, 255, 0.4); stroke-width: 1.5; stroke-linecap: round; stroke-linejoin: round; }
+/* the signal. pathLength=1000 normalises the geometry, so these dash numbers
+   hold even when the board is redrawn. 13s: the six wraps add a lot of line, and
+   a slower run keeps each wrap readable instead of a smear. */
 .se-comet {
-  fill: none; stroke: url(#seGrad); stroke-width: 3; stroke-linecap: round;
-  stroke-dasharray: 96 946;
-  animation: se-orbit-run 9s linear infinite;
+  fill: none; stroke: url(#seGrad); stroke-linecap: round; stroke-linejoin: round;
+  stroke-dasharray: 55 945;
+  animation: se-run 13s linear infinite;
 }
-@keyframes se-orbit-run { to { stroke-dashoffset: -1042; } }
-/* a white core with the brand gradient bleeding out of it, the way the mark's
-   nodes carry the gradient */
-.se-node-core { fill: rgba(255, 255, 255, 0.9); }
-.se-node-bloom {
-  fill: url(#seGrad); opacity: 0.16;
-  animation: se-node-bloom 9s ease-in-out infinite;
-  animation-delay: calc(var(--i, 0) * 1.125s);
+/* THREE STACKED STROKES, NOT A BLUR. A filter on a moving path re-renders every
+   frame; stacked strokes are free and give the same soft edge the logo's own
+   links carry: a wide faint halo, a mid glow, a thin bright core. */
+.se-comet-halo { stroke-width: 10; opacity: 0.16; }
+.se-comet-mid { stroke-width: 5; opacity: 0.34; }
+.se-comet-core { stroke-width: 1.9; opacity: 1; }
+@keyframes se-run { to { stroke-dashoffset: -1000; } }
+/* EACH STATION GLOWS WHILE THE SIGNAL IS GOING ROUND IT.
+   --lit is where THIS station's wrap begins as a fraction of the whole circuit,
+   computed in StaffEntry.jsx. Subtracting half the dash length (27/1000) makes
+   the signal's CENTRE, not its tail, the thing that arrives. */
+.se-chip-bloom { fill: url(#seGrad); }
+.se-chip-bloom, .se-chip-detail {
+  animation: se-lit 13s linear infinite;
+  animation-delay: calc((var(--lit, 0) - 0.027) * 13s);
 }
-/* eight nodes, one eighth of the ring apart, so each blooms as the signal
-   reaches it: 9s / 8 = 1.125s of delay per node */
-@keyframes se-node-bloom {
-  0%, 100% { opacity: 0.16; }
-  5% { opacity: 0.85; }
-  24% { opacity: 0.16; }
+@keyframes se-lit {
+  0% { opacity: var(--rest); }
+  2% { opacity: 1; }
+  9% { opacity: 1; }
+  18% { opacity: var(--rest); }
+  100% { opacity: var(--rest); }
 }
-.se-node-core {
-  animation: se-node-core 9s ease-in-out infinite;
-  animation-delay: calc(var(--i, 0) * 1.125s);
-}
-@keyframes se-node-core {
-  0%, 100% { opacity: 0.55; }
-  5% { opacity: 1; }
-  24% { opacity: 0.55; }
-}
-.se-dot { fill: url(#seGrad); opacity: 0.5; }
+.se-chip-bloom { --rest: 0.08; }
+.se-chip-detail { --rest: 0.4; }
 
 /* a real edge, not a colour change: the hairline is what makes the board read as
    a physical fascia the sign is mounted on */
@@ -3777,17 +3788,74 @@ body[data-theme='dark'] .pos-fullscreen[data-systheme='glass'] { background: var
 }
 .staff-entry-switch:hover { color: var(--text-muted); }
 
+/* ===== DARK. The identity does not change, the LIGHTING does.
+   In dark the surface below the board is near black, so the same board that
+   looked lit on white read as a bright slab bolted onto a hole. Four moves fix
+   it, and every one of them is a lighting decision rather than a new colour:
+   the board is mixed deeper so it sits IN the dark instead of on top of it, the
+   spill from it is stronger and reaches further, a single hairline of the brand
+   sits on the seam so the two planes meet on an edge rather than a cut, and the
+   plate gets a rim light so it reads as a physical object again. ===== */
+:root[data-theme='dark'] .staff-entry-board {
+  background:
+    radial-gradient(120% 88% at 50% -10%, color-mix(in srgb, var(--brand) 46%, transparent), transparent 66%),
+    linear-gradient(168deg,
+      color-mix(in srgb, var(--brand) 46%, #07070c) 0%,
+      color-mix(in srgb, var(--brand) 22%, #07070c) 62%,
+      color-mix(in srgb, var(--brand) 32%, #07070c) 100%);
+}
+:root[data-theme='dark'] .staff-entry::before {
+  height: 72%;
+  background: radial-gradient(130% 62% at 50% 0%, color-mix(in srgb, var(--brand) 26%, transparent), transparent 74%);
+}
+/* the seam: a lit edge, not a cut */
+:root[data-theme='dark'] .staff-entry-board::after {
+  height: 1px;
+  background: linear-gradient(90deg, transparent, color-mix(in srgb, var(--brand) 85%, #fff) 18%, color-mix(in srgb, var(--brand) 70%, #fff) 82%, transparent);
+  opacity: 0.55;
+}
+/* the plate stops being a grey square and becomes a lit object */
+:root[data-theme='dark'] .staff-entry-plate {
+  background: #14121c;
+  border-color: rgba(255, 255, 255, 0.09);
+  box-shadow:
+    0 0 0 1px rgba(255, 255, 255, 0.05) inset,
+    0 1px 0 rgba(255, 255, 255, 0.14) inset,
+    0 22px 46px -16px #000,
+    0 0 34px -6px color-mix(in srgb, var(--brand) 55%, transparent);
+}
+/* the key: in dark a mid-tone gradient goes muddy, so it is lifted and given a
+   real brand-coloured cast instead of a black one */
+:root[data-theme='dark'] .staff-entry .staff-entry-form .rlauth-submit,
+:root[data-theme='dark'] .staff-entry .staff-entry-form .rlauth-submit:hover:not(:disabled),
+:root[data-theme='dark'] .staff-entry .staff-entry-form .rlauth-submit:focus:not(:disabled) {
+  background: linear-gradient(180deg, color-mix(in srgb, var(--brand) 72%, #fff) 0%, var(--brand) 58%, color-mix(in srgb, var(--brand) 86%, #1a1030) 100%);
+  box-shadow:
+    0 1px 0 rgba(255, 255, 255, 0.34) inset,
+    0 12px 30px -12px color-mix(in srgb, var(--brand) 92%, transparent),
+    0 0 0 1px color-mix(in srgb, var(--brand) 40%, transparent);
+}
+:root[data-theme='dark'] .staff-entry .staff-entry-form .input {
+  background: rgba(255, 255, 255, 0.04);
+  border-color: rgba(255, 255, 255, 0.13);
+  box-shadow: 0 1px 0 rgba(255, 255, 255, 0.05) inset;
+}
+:root[data-theme='dark'] .staff-entry .staff-entry-form .input:focus {
+  background: rgba(255, 255, 255, 0.06);
+  border-color: color-mix(in srgb, var(--brand) 70%, #fff);
+}
+
 @media (prefers-reduced-motion: reduce) {
   .staff-entry, .staff-entry-board, .staff-entry-plate,
   .staff-entry-name, .staff-entry-sub, .staff-entry-form { animation: none; }
   /* the ring stays, the light stops: the drawing still says 360, it just
      no longer moves for anyone who asked for less motion */
-  .se-comet, .se-node-bloom, .se-node-core { animation: none; }
-  /* the constellation stays, the signal stops: the drawing still says 360, it
-     just no longer travels for anyone who asked for less motion */
-  .se-comet { stroke-dasharray: none; opacity: 0.45; }
-  .se-node-bloom { opacity: 0.3; }
-  .se-node-core { opacity: 0.85; }
+  /* the board stays fully drawn, the signal stops travelling */
+  .se-comet, .se-chip-bloom, .se-chip-detail { animation: none; }
+  .se-comet { stroke-dasharray: none; opacity: 0.4; }
+  .se-chip-bloom { opacity: 0.16; }
+  
+  .se-chip-detail { opacity: 0.5; }
 }
 
 /* ===== Stat cards (dashboard) ===== */

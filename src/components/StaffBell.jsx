@@ -164,9 +164,23 @@ export default function StaffBell({ tenantId, onUnread = null }) {
     if (next && uid) {
       panelSeen.current = lastSeen
       markAll()
+    } else if (!next && uid) {
+      // CLOSING COUNTS AS READING TOO. Anything that landed while the panel was
+      // open was on screen in front of the staffer, so it must not be waiting as
+      // unread the next time they glance at the bell.
+      markAll()
     }
     setOpen(next)
   }
+  // OPENED BEFORE AUTH RESOLVED. markAll is skipped without a uid (writing the
+  // device-wide key would corrupt every user's marker on a shared tablet), so a
+  // staffer who taps the bell in the first moments after a PIN sign-in used to
+  // get a badge that never cleared. Catch up the instant the uid arrives.
+  useEffect(() => {
+    if (!open || !uid) return
+    panelSeen.current = lastSeen
+    markAll()
+  }, [uid]) // eslint-disable-line react-hooks/exhaustive-deps
   const onRow = (n) => {
     if (!n.to) return
     setOpen(false)

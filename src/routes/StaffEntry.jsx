@@ -26,80 +26,174 @@ import { isPlatformHost, resolveHostVenue } from '../lib/domains.js'
 import { applySkin, resolveSkin } from '../lib/skins.js'
 import { RbtMark } from '../components/BrandMark.jsx'
 
-// THE 360 CONSTELLATION, drawn in the brand's own vocabulary.
+// THE BOARD. One unbroken line crosses the whole header, and the six stations a
+// venue runs on are not objects sitting ON that line: they ARE the line. It
+// arrives at a station, draws that station's own outline all the way round,
+// comes back over the top and leaves, on to the next. No frames, no boxes; the
+// icon and the wire are the same stroke.
 //
-// The RBT mark is a network: filled nodes of varying radius joined by rounded
-// links, carrying one gradient from vivid blue through violet to magenta
-// (see BrandMark.jsx). This header is that same grammar opened out to a band and
-// closed into a ring, so the platform's identity and the promise in its name are
-// one drawing: nodes on a full circle, chords across it, and a signal that
-// travels the loop without end, blooming each node as it arrives.
+// HOW THE WRAP IS BUILT. Each station is a closed polygon written as a left
+// gate, the vertices over the top to a right gate, and the vertices back under.
+// The traversal is L over the top to R, under and back to L, then over the top
+// to R again and out. The second pass over the top retraces a line already
+// drawn, so it is invisible, and it is what lets the signal complete a FULL
+// circuit of the shape and still leave on the far side without a chord cutting
+// across the icon.
 //
-// It replaced line-art restaurant icons, which read as clip art and had to be
-// cropped to fit. A closed ring has no meaningful crop, so it is drawn with
-// `meet` and is complete at every width.
+// WHY IT IS COMPUTED. The stations are not equally spaced along the line (the
+// diagonals between rows and the wraps themselves add length), so splitting the
+// lap evenly across six lit them in the wrong places. The builder walks the
+// polyline, sums real arc length, and hands each station the fraction of the lap
+// where ITS OWN wrap begins; the CSS turns that into an animation-delay. Move a
+// station, redraw an icon, and the timing follows by itself.
 //
-// MOTION BUDGET: only `opacity` and `stroke-dashoffset` animate. No `filter` is
-// animated (blur is expensive and Safari especially so), so the bloom is a
-// second static-blur circle whose opacity is what moves. One slow 9s loop, which
-// at this frequency reads as ambient rather than busy, and it stops completely
-// under prefers-reduced-motion.
+// FITTING: the viewBox is about 3:1, deliberately between a phone board (~1.4:1)
+// and a desktop one (~6:1), so `slice` never zooms hard either way. Everything
+// lives inside y 120..250, clear of the crop a wide screen takes and clear of
+// the logo plate below.
 //
-// GEOMETRY CONTRACT: ring rx 228 / ry 88 about (280,130), circumference about
-// 1042 user units. The comet's dasharray and the distance in the se-orbit-run
-// keyframe both derive from that number, and the node delays are the period
-// divided by the node count. Changing the ellipse means changing all three
-// (see the .se-* block in index.css).
-const RING = { cx: 280, cy: 130, rx: 228, ry: 88 }
-// [angle°, radius] — radii vary the way the mark's do rather than sitting uniform
-const ORBIT_NODES = [
-  [270, 11], [315, 7], [0, 9], [45, 5.5],
-  [90, 10.5], [135, 6.5], [180, 8], [225, 5],
+// MOTION BUDGET: only `stroke-dashoffset` and `opacity` animate, never `filter`
+// (a repaint per frame, worst on Safari), so a station's glow is a pre-blurred
+// circle whose opacity moves. `pathLength="1000"` normalises the line so the
+// dash numbers survive any edit. All of it stops under prefers-reduced-motion.
+const ROW_HI = 150
+const ROW_LO = 208
+const RETURN_DY = 14
+
+// Each station: `top` runs from the left gate over to the right gate, `bot` runs
+// back underneath. Gates sit on the station's own centre line so the wire meets
+// the shape head on. `detail` is drawn separately and is never part of the wire.
+const STATIONS = [
+  {
+    k: 'cup', x: 74, row: ROW_LO, gate: [-16, 19],
+    top: [[-14, -12], [10, -12], [17, -7]],
+    bot: [[14, 6], [9, 8], [7, 14], [-11, 14], [-15, 7]],
+    detail: 'M-19 18 h30 M-6 -19 c5 -5 -4 -9 0 -15',
+  },
+  {
+    k: 'pos', x: 286, row: ROW_HI, gate: [-16, 16],
+    top: [[-16, -14], [16, -14]],
+    bot: [[5, 1], [4, 9], [13, 9], [15, 15], [-15, 15], [-13, 9], [-4, 9], [-5, 1]],
+    detail: 'M-9 -9 h11 M-9 -4 h16',
+  },
+  {
+    k: 'kitchen', x: 498, row: ROW_LO, gate: [-15, 15],
+    top: [[-13, -9], [-7, -16], [0, -18], [7, -16], [13, -9]],
+    bot: [[13, 5], [13, 14], [-13, 14], [-13, 5]],
+    detail: 'M-13 5 h26',
+  },
+  {
+    k: 'phone', x: 710, row: ROW_HI, gate: [-11, 11],
+    top: [[-11, -16], [-8, -19], [8, -19], [11, -16]],
+    bot: [[11, 16], [8, 19], [-8, 19], [-11, 16]],
+    detail: 'M-4 -15 h8 M-5 15 h10',
+  },
+  {
+    k: 'bill', x: 922, row: ROW_LO, gate: [-11, 11],
+    top: [[-11, -15], [11, -15]],
+    bot: [[11, 15], [6, 11], [2, 15], [-2, 11], [-6, 15], [-11, 11]],
+    detail: 'M-5 -8 h11 M-5 -2 h7',
+  },
+  {
+    k: 'bell', x: 1092, row: ROW_HI, gate: [-16, 16],
+    top: [[-13, -6], [-8, -13], [0, -16], [8, -13], [13, -6]],
+    bot: [[13, 6], [-13, 6]],
+    detail: 'M0 -16 v-6 M-8 12 h16',
+  },
 ]
-const at = (deg) => [
-  RING.cx + RING.rx * Math.cos((deg * Math.PI) / 180),
-  RING.cy + RING.ry * Math.sin((deg * Math.PI) / 180),
-]
-// two chords, the mark's dumbbell gesture, so the ring reads as a network and
-// not as a plain circle
-const CHORDS = [[225, 45], [315, 135]]
+
+function buildBoard() {
+  const pts = [[-80, STATIONS[0].row]]
+  const wrapStart = []
+  STATIONS.forEach((s, i) => {
+    const [gl, gr] = s.gate
+    const L = [s.x + gl, s.row]
+    const R = [s.x + gr, s.row]
+    const top = s.top.map(([dx, dy]) => [s.x + dx, s.row + dy])
+    const bot = s.bot.map(([dx, dy]) => [s.x + dx, s.row + dy])
+    pts.push(L)
+    wrapStart.push(pts.length - 1)
+    // L over the top to R, back under to L, then over the top again and out:
+    // the repeat retraces a drawn line, so the wrap reads as one full circuit.
+    top.forEach((p) => pts.push(p))
+    pts.push(R)
+    bot.forEach((p) => pts.push(p))
+    pts.push(L)
+    top.forEach((p) => pts.push(p))
+    pts.push(R)
+    const n = STATIONS[i + 1]
+    if (!n) return
+    const dh = Math.abs(n.row - s.row) / 2
+    const mid = (s.x + n.x) / 2
+    pts.push([mid - dh, s.row])
+    pts.push([mid + dh, n.row])
+  })
+  const last = STATIONS[STATIONS.length - 1]
+  pts.push([last.x + 110, last.row])
+
+  const cum = [0]
+  for (let i = 1; i < pts.length; i += 1) {
+    cum.push(cum[i - 1] + Math.hypot(pts[i][0] - pts[i - 1][0], pts[i][1] - pts[i - 1][1]))
+  }
+  const total = cum[cum.length - 1] || 1
+  const d = pts.map(([x, y], i) => `${i ? 'L' : 'M'}${x} ${y}`).join(' ')
+
+  // the dashed return line and its rungs decorate ONLY the straight runs between
+  // stations, never a wrap, or the icons would sit in a thicket
+  const near = (x) => STATIONS.some((s) => x > s.x + s.gate[0] - 3 && x < s.x + s.gate[1] + 3)
+  const segs = []
+  const rungs = []
+  const vias = []
+  for (let i = 1; i < pts.length; i += 1) {
+    const [ax, ay] = pts[i - 1]
+    const [bx, by] = pts[i]
+    if (near(ax) || near(bx)) continue
+    segs.push(`M${ax} ${ay + RETURN_DY} L${bx} ${by + RETURN_DY}`)
+    if (ay !== by) { vias.push(pts[i - 1], pts[i]); continue }
+    for (let x = Math.min(ax, bx) + 20; x < Math.max(ax, bx) - 14; x += 28) rungs.push(`M${x} ${ay} l5 ${RETURN_DY}`)
+  }
+
+  return { d, dReturn: segs.join(' '), rungs: rungs.join(' '), vias, fracs: wrapStart.map((i) => cum[i] / total) }
+}
+
+const BOARD = buildBoard()
 
 function OrbitScene() {
   return (
-    <svg className="staff-entry-scene" viewBox="0 0 560 260" fill="none" preserveAspectRatio="xMidYMid meet" aria-hidden="true">
+    <svg className="staff-entry-scene" viewBox="0 0 1120 360" fill="none" preserveAspectRatio="xMidYMid slice" aria-hidden="true">
       <defs>
-        <linearGradient id="seGrad" x1="0" y1="0" x2="1" y2="1">
+        <linearGradient id="seGrad" x1="0" y1="0" x2="1" y2="0">
           <stop offset="0%" stopColor="#2E62F6" />
           <stop offset="52%" stopColor="#7A3BEC" />
           <stop offset="100%" stopColor="#E0219E" />
         </linearGradient>
-        <filter id="seBloom" x="-120%" y="-120%" width="340%" height="340%">
-          <feGaussianBlur stdDeviation="7" />
+        <filter id="seBloom" x="-160%" y="-160%" width="420%" height="420%">
+          <feGaussianBlur stdDeviation="10" />
         </filter>
       </defs>
 
-      {CHORDS.map(([a, b]) => {
-        const [x1, y1] = at(a)
-        const [x2, y2] = at(b)
-        return <line key={`${a}-${b}`} className="se-chord" x1={x1} y1={y1} x2={x2} y2={y2} />
-      })}
+      {STATIONS.map((s, i) => (
+        <circle key={`b${s.k}`} className="se-chip-bloom" cx={s.x} cy={s.row} r="21"
+          filter="url(#seBloom)" style={{ '--lit': BOARD.fracs[i] }} />
+      ))}
 
-      <ellipse className="se-orbit" cx={RING.cx} cy={RING.cy} rx={RING.rx} ry={RING.ry} />
-      <ellipse className="se-comet" cx={RING.cx} cy={RING.cy} rx={RING.rx} ry={RING.ry} />
+      <path className="se-return" d={BOARD.dReturn} />
+      <path className="se-rung" d={BOARD.rungs} />
+      {BOARD.vias.map(([x, y], i) => <circle key={`v${i}`} className="se-via" cx={x} cy={y} r="2.8" />)}
 
-      {ORBIT_NODES.map(([deg, r], i) => {
-        const [x, y] = at(deg)
-        return (
-          <g key={deg} className="se-node" style={{ '--i': i }}>
-            <circle className="se-node-bloom" cx={x} cy={y} r={r * 2.1} filter="url(#seBloom)" />
-            <circle className="se-node-core" cx={x} cy={y} r={r} />
-          </g>
-        )
-      })}
-
-      {/* two free satellites, the mark's own loose dots */}
-      <circle className="se-dot" cx="24" cy="54" r="4" />
-      <circle className="se-dot" cx="538" cy="206" r="3.5" />
+      {/* the wire IS the icons */}
+      <path className="se-trace" d={BOARD.d} />
+      {STATIONS.map((s, i) => (
+        <path key={`d${s.k}`} className="se-chip-detail" d={s.detail}
+          style={{ '--lit': BOARD.fracs[i] }} transform={`translate(${s.x} ${s.row})`} />
+      ))}
+      {/* the signal, built as three stacked strokes rather than a blur:
+          a wide faint halo, a mid glow, and a thin bright core. A filter would
+          have to re-render every frame; stacked strokes cost nothing and give
+          the same soft edge the logo's own links have. */}
+      <path className="se-comet se-comet-halo" d={BOARD.d} pathLength="1000" />
+      <path className="se-comet se-comet-mid" d={BOARD.d} pathLength="1000" />
+      <path className="se-comet se-comet-core" d={BOARD.d} pathLength="1000" />
     </svg>
   )
 }
