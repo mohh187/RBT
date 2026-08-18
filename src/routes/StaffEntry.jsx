@@ -26,51 +26,80 @@ import { isPlatformHost, resolveHostVenue } from '../lib/domains.js'
 import { applySkin, resolveSkin } from '../lib/skins.js'
 import { RbtMark } from '../components/BrandMark.jsx'
 
-// THE 360 ORBIT. One closed ring threading the six stations a venue actually
-// runs on: the cup it serves, the till, the kitchen, the guest's phone, the bill,
-// the service bell. A light runs the ring without stopping and each station
-// brightens as it passes, so the loop reads as a single signal going all the way
-// round. RBT 360 drawn rather than asserted, with the venue's own mark sitting at
-// the centre of its own circuit.
+// THE 360 CONSTELLATION, drawn in the brand's own vocabulary.
 //
-// It replaced a counter frieze because that composition had to be cropped to fit
-// the board and the owner saw severed shapes. A CLOSED ring has no meaningful
-// crop, so this is drawn with `meet`: the whole figure is present at every width
-// and is never sliced.
+// The RBT mark is a network: filled nodes of varying radius joined by rounded
+// links, carrying one gradient from vivid blue through violet to magenta
+// (see BrandMark.jsx). This header is that same grammar opened out to a band and
+// closed into a ring, so the platform's identity and the promise in its name are
+// one drawing: nodes on a full circle, chords across it, and a signal that
+// travels the loop without end, blooming each node as it arrives.
 //
-// GEOMETRY CONTRACT: the ring is rx 228 / ry 88 about (280,130), circumference
-// about 1042 user units. The comet's stroke-dasharray and the distance in the
-// se-orbit-run keyframe are both derived from that number, so changing the
-// ellipse means changing both (see index.css).
+// It replaced line-art restaurant icons, which read as clip art and had to be
+// cropped to fit. A closed ring has no meaningful crop, so it is drawn with
+// `meet` and is complete at every width.
 //
-// Inline SVG: no request, no bitmap, crisp at any density, and it takes the
-// board's own colour. Every animation stops under prefers-reduced-motion.
+// MOTION BUDGET: only `opacity` and `stroke-dashoffset` animate. No `filter` is
+// animated (blur is expensive and Safari especially so), so the bloom is a
+// second static-blur circle whose opacity is what moves. One slow 9s loop, which
+// at this frequency reads as ambient rather than busy, and it stops completely
+// under prefers-reduced-motion.
+//
+// GEOMETRY CONTRACT: ring rx 228 / ry 88 about (280,130), circumference about
+// 1042 user units. The comet's dasharray and the distance in the se-orbit-run
+// keyframe both derive from that number, and the node delays are the period
+// divided by the node count. Changing the ellipse means changing all three
+// (see the .se-* block in index.css).
+const RING = { cx: 280, cy: 130, rx: 228, ry: 88 }
+// [angle°, radius] — radii vary the way the mark's do rather than sitting uniform
 const ORBIT_NODES = [
-  // 180deg, the cup: what the guest actually came for
-  { k: 'cup', x: 52, y: 130, d: 'M-14 -6 h22 v8 a11 11 0 0 1 -11 11 a11 11 0 0 1 -11 -11 z M8 -2 h5 a6 6 0 0 1 0 12 h-1 M-18 16 h30' },
-  // 240deg, the till
-  { k: 'pos', x: 166, y: 54, d: 'M-15 -16 h30 a4 4 0 0 1 4 4 v13 a4 4 0 0 1 -4 4 h-30 a4 4 0 0 1 -4 -4 v-13 a4 4 0 0 1 4 -4 z M-9 -10 h12 M-9 -4 h16 M0 5 v7 M-11 16 h22 a5 5 0 0 0 -5 -4 h-12 a5 5 0 0 0 -5 4 z' },
-  // 300deg, the kitchen
-  { k: 'kitchen', x: 394, y: 54, d: 'M-14 3 a9 9 0 0 1 4 -16 a10 10 0 0 1 20 0 a9 9 0 0 1 4 16 z M-14 3 h28 v11 h-28 z' },
-  // 0deg, the guest's phone
-  { k: 'phone', x: 508, y: 130, d: 'M-11 -17 h22 a4 4 0 0 1 4 4 v26 a4 4 0 0 1 -4 4 h-22 a4 4 0 0 1 -4 -4 v-26 a4 4 0 0 1 4 -4 z M-4 -13 h8 M-6 12 h12' },
-  // 60deg, the bill
-  { k: 'bill', x: 394, y: 206, d: 'M-11 -16 h22 v30 l-4 -3 -4 3 -3 -3 -4 3 -4 -3 -3 3 z M-5 -8 h11 M-5 -1 h7' },
-  // 120deg, the service bell
-  { k: 'bell', x: 166, y: 206, d: 'M-15 9 a15 15 0 0 1 30 0 z M-19 9 h38 a3 3 0 0 1 0 6 h-38 a3 3 0 0 1 0 -6 z M0 -6 v-7' },
+  [270, 11], [315, 7], [0, 9], [45, 5.5],
+  [90, 10.5], [135, 6.5], [180, 8], [225, 5],
 ]
+const at = (deg) => [
+  RING.cx + RING.rx * Math.cos((deg * Math.PI) / 180),
+  RING.cy + RING.ry * Math.sin((deg * Math.PI) / 180),
+]
+// two chords, the mark's dumbbell gesture, so the ring reads as a network and
+// not as a plain circle
+const CHORDS = [[225, 45], [315, 135]]
 
 function OrbitScene() {
   return (
     <svg className="staff-entry-scene" viewBox="0 0 560 260" fill="none" preserveAspectRatio="xMidYMid meet" aria-hidden="true">
-      <ellipse className="se-orbit" cx="280" cy="130" rx="228" ry="88" />
-      <ellipse className="se-comet" cx="280" cy="130" rx="228" ry="88" />
-      {ORBIT_NODES.map((n, i) => (
-        <g key={n.k} className="se-node" style={{ '--i': i }} transform={`translate(${n.x} ${n.y})`}>
-          <circle className="se-node-halo" r="25" />
-          <path d={n.d} />
-        </g>
-      ))}
+      <defs>
+        <linearGradient id="seGrad" x1="0" y1="0" x2="1" y2="1">
+          <stop offset="0%" stopColor="#2E62F6" />
+          <stop offset="52%" stopColor="#7A3BEC" />
+          <stop offset="100%" stopColor="#E0219E" />
+        </linearGradient>
+        <filter id="seBloom" x="-120%" y="-120%" width="340%" height="340%">
+          <feGaussianBlur stdDeviation="7" />
+        </filter>
+      </defs>
+
+      {CHORDS.map(([a, b]) => {
+        const [x1, y1] = at(a)
+        const [x2, y2] = at(b)
+        return <line key={`${a}-${b}`} className="se-chord" x1={x1} y1={y1} x2={x2} y2={y2} />
+      })}
+
+      <ellipse className="se-orbit" cx={RING.cx} cy={RING.cy} rx={RING.rx} ry={RING.ry} />
+      <ellipse className="se-comet" cx={RING.cx} cy={RING.cy} rx={RING.rx} ry={RING.ry} />
+
+      {ORBIT_NODES.map(([deg, r], i) => {
+        const [x, y] = at(deg)
+        return (
+          <g key={deg} className="se-node" style={{ '--i': i }}>
+            <circle className="se-node-bloom" cx={x} cy={y} r={r * 2.1} filter="url(#seBloom)" />
+            <circle className="se-node-core" cx={x} cy={y} r={r} />
+          </g>
+        )
+      })}
+
+      {/* two free satellites, the mark's own loose dots */}
+      <circle className="se-dot" cx="24" cy="54" r="4" />
+      <circle className="se-dot" cx="538" cy="206" r="3.5" />
     </svg>
   )
 }
