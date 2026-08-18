@@ -8,6 +8,8 @@ import { FullSpinner } from './components/ui.jsx'
 import { isPlatformHost, resolveHostVenue } from './lib/domains.js'
 import FirebaseSetup from './components/FirebaseSetup.jsx'
 import OfflineBanner from './components/OfflineBanner.jsx'
+import PinLock from './components/PinLock.jsx'
+import { getDeviceVenue } from './lib/pin.js'
 import UploadProgress from './components/UploadProgress.jsx'
 import LiquidFilters from './components/LiquidFilters.jsx'
 import PlanGate from './components/PlanGate.jsx'
@@ -15,7 +17,11 @@ import PlanGate from './components/PlanGate.jsx'
 // The public menu is THE first paint for diners (QR scan -> /m/:slug or a venue
 // domain root), so it stays in the entry chunk: making it lazy would add a
 // second round trip to the single most common load in the product.
+// The TABLE menu is the same scan-to-first-paint path (/t/:slug/:token on every
+// table sticker) and shares MenuView/db/ui with the entry chunk anyway — lazy
+// only added a chunk round trip on weak café Wi-Fi, so it rides eager too.
 import PublicMenu from './routes/menu/PublicMenu.jsx'
+import TableMenu from './routes/menu/TableMenu.jsx'
 
 // Every OTHER public route is code-split. They share MenuView/db/ui with the
 // entry chunk already, so their own chunks are small, and a diner reading a
@@ -23,10 +29,10 @@ import PublicMenu from './routes/menu/PublicMenu.jsx'
 // passes or the order-status screen (which drags in firebase/messaging).
 const Landing = lazyRoute(() => import('./routes/Landing.jsx'))
 const Login = lazyRoute(() => import('./routes/Login.jsx'))
+const StaffEntry = lazyRoute(() => import('./routes/StaffEntry.jsx'))
 const Signup = lazyRoute(() => import('./routes/Signup.jsx'))
 const Onboarding = lazyRoute(() => import('./routes/Onboarding.jsx'))
 const PreviewMenu = lazyRoute(() => import('./routes/menu/PreviewMenu.jsx'))
-const TableMenu = lazyRoute(() => import('./routes/menu/TableMenu.jsx'))
 const OrderStatus = lazyRoute(() => import('./routes/menu/OrderStatus.jsx'))
 const PublicEvents = lazyRoute(() => import('./routes/events/PublicEvents.jsx'))
 const BookReservation = lazyRoute(() => import('./routes/events/BookReservation.jsx'))
@@ -85,6 +91,7 @@ const CustomersHub = lazyRoute(() => import('./routes/admin/CustomersHub.jsx'))
 const Campaigns = lazyRoute(() => import('./routes/admin/Campaigns.jsx'))
 const PrintMenu = lazyRoute(() => import('./routes/admin/PrintMenu.jsx'))
 const PrintStudio = lazyRoute(() => import('./routes/admin/PrintStudio.jsx'))
+const TableStickers = lazyRoute(() => import('./routes/admin/TableStickers.jsx'))
 const Cashier = lazyRoute(() => import('./routes/staff/Cashier.jsx'))
 const Kds = lazyRoute(() => import('./routes/staff/Kds.jsx'))
 const Scanner = lazyRoute(() => import('./routes/staff/Scanner.jsx'))
@@ -252,23 +259,79 @@ function RequireActive({ children }) {
   return children
 }
 
-// Managers/owners see the admin dashboard. Other staff land on the FIRST admin
-// section their caps allow (so e.g. a marketing hire stays in the shell on
-// Campaigns), falling back to their personal portal if they have none.
+// Managers/owners see the admin dashboard. ADMIN-class roles (supervisor,
+// marketing) land on the first admin section their caps allow. OPERATIONAL
+// roles (cashier/waiter/barista/kitchen/cleaner/staff) get their OWN world —
+// the staff portal shell — never "admin with fewer items" (owner decision:
+// staff screens are a distinct experience).
+const ADMIN_ROLES = ['owner', 'manager', 'supervisor', 'marketing', 'accountant']
 const ADMIN_HOME_ORDER = [
   [CAP.MANAGE_CAMPAIGNS, '/admin/campaigns'],
   [CAP.TAKE_ORDERS, '/admin/orders'],
   [CAP.MANAGE_MENU, '/admin/menu'],
   [CAP.MANAGE_TABLES, '/admin/operations'],
   [CAP.MANAGE_STORIES, '/admin/stories'],
+  // accountant's landing — AFTER the floor caps so a supervisor (who also
+  // holds view_revenue) still lands on orders, not the ledgers
+  [CAP.VIEW_REVENUE, '/admin/accounting'],
   [CAP.VIEW_CUSTOMERS, '/admin/customers'],
   [CAP.VIEW_REPORTS, '/admin/reports'],
 ]
 function AdminHome() {
-  const { isManager, can } = useAuth()
+  const { isManager, role, can } = useAuth()
   if (isManager) return <InsightsHub />
+  if (!ADMIN_ROLES.includes(role)) {
+    // Operational roles live in the portal BY DESIGN — but an owner can grant
+    // one an ADMIN-ONLY cap (per-staffer override, e.g. a cashier who manages
+    // the menu). Those caps have no portal surface, so bouncing every /admin
+    // visit to /portal left the deliberate grant with zero navigation to it.
+    // Orders/tables stay portal-served for these roles; the rest route in.
+    const PORTAL_SERVED = new Set([CAP.TAKE_ORDERS, CAP.MANAGE_TABLES])
+    const grant = ADMIN_HOME_ORDER.find(([c]) => !PORTAL_SERVED.has(c) && can(c))
+    return <Navigate to={grant ? grant[1] : '/portal'} replace />
+  }
   const hit = ADMIN_HOME_ORDER.find(([c]) => can(c))
   return <Navigate to={hit ? hit[1] : '/portal'} replace />
+}
+
+// PIN entry = shift start on the floor (owner decision 2026-08-18): each role
+// lands on ITS working screen — waiter → tables/operations (falls back to the
+// POS when the venue hasn't granted manage_tables), cashier → POS, kitchen and
+// barista → KDS, driver → driver portal. Everyone else takes the /admin funnel
+// (managers → dashboard, admin-class → first permitted section, rest → portal).
+// EMAIL entry deliberately keeps funnelling through /admin, which lands
+// operational staff on the PORTAL — that's the asked-for split. This only
+// picks the FIRST screen; everyone can still navigate anywhere their caps allow.
+function PinHome() {
+  const { role, can, loading } = useAuth()
+  if (loading) return <FullSpinner />
+  if (role === 'cashier') return <Navigate to="/cashier" replace />
+  if (role === 'kitchen' || role === 'barista') return <Navigate to="/kds" replace />
+  if (role === 'waiter') return <Navigate to={can(CAP.MANAGE_TABLES) ? '/admin/operations' : '/cashier'} replace />
+  if (role === 'driver') return <Navigate to="/driver" replace />
+  return <Navigate to="/admin" replace />
+}
+
+// Cold-start lock screen (/lock): the tablet remembers its venue (device cache,
+// written on every staff login) but nobody holds a Firebase session — the PIN
+// alone signs the staffer in (pinSignIn custom token). Deliberately NO
+// RequireAuth: this IS the login. A live session skips straight to /admin,
+// where the in-shell PinLock overlay takes over.
+function LockRoute() {
+  const { user, tenantId, loading } = useAuth()
+  const navigate = useNavigate()
+  const cached = getDeviceVenue()
+  if (loading) return <FullSpinner />
+  if (user && tenantId) return <Navigate to="/admin" replace />
+  if (!cached?.tid) return <Navigate to="/login" replace />
+  return (
+    <PinLock
+      standalone
+      tenant={cached}
+      tenantId={cached.tid}
+      onSuccess={() => navigate('/go/pin', { replace: true })}
+    />
+  )
 }
 
 // The "/" route: on the platform host it's the marketing landing; on a venue's
@@ -312,6 +375,12 @@ export default function App() {
       {/* public marketing + auth (venue menu at root on a custom domain) */}
       <Route path="/" element={<RootRoute />} />
       <Route path="/login" element={<Login />} />
+      <Route path="/lock" element={<LockRoute />} />
+      {/* post-PIN role router — PinLock navigates here after every real entry */}
+      <Route path="/go/pin" element={<PinHome />} />
+      {/* the venue's own front door — never the marketing landing (staff PWA start_url) */}
+      <Route path="/app" element={<StaffEntry />} />
+      <Route path="/app/:slug" element={<StaffEntry />} />
       <Route path="/signup" element={<Signup />} />
       <Route
         path="/onboarding"
@@ -417,8 +486,10 @@ export default function App() {
           </RequireAuth>
         }
       />
+      {/* staff portal — its own shell (sidebar + bottom nav + PIN lock), tabs
+          are URL-driven so back-navigation and deep links behave like real pages */}
       <Route
-        path="/portal"
+        path="/portal/:ptab?"
         element={
           <RequireAuth>
             <RequireTenant>
@@ -477,7 +548,7 @@ export default function App() {
             direct-URL hole: lower roles only reach what their caps permit. */}
         <Route path="menu" element={<RequireCap cap={CAP.MANAGE_MENU}><MenuHub /></RequireCap>} />
         <Route path="print-menu" element={<RequireCap cap={CAP.MANAGE_MENU}><PrintMenu /></RequireCap>} />
-        <Route path="print-studio" element={<RequireCap cap={CAP.MANAGE_MENU}><PrintStudio /></RequireCap>} />
+        <Route path="print-studio" element={<RequireCap anyOf={[CAP.MANAGE_MENU, CAP.MANAGE_APPEARANCE]}><PrintStudio /></RequireCap>} />
         <Route path="orders" element={<RequireCap cap={CAP.TAKE_ORDERS}><PlanGate feature="orders"><Orders /></PlanGate></RequireCap>} />
         <Route path="operations" element={<RequireCap cap={CAP.MANAGE_TABLES}><PlanGate feature="tables"><OpsHub /></PlanGate></RequireCap>} />
         <Route path="inventory" element={<RequireCap cap={CAP.MANAGE_INVENTORY}><Inventory /></RequireCap>} />
@@ -490,6 +561,9 @@ export default function App() {
         <Route path="items" element={<RequireCap cap={CAP.MANAGE_MENU}><Items /></RequireCap>} />
         <Route path="categories" element={<RequireCap cap={CAP.MANAGE_MENU}><Categories /></RequireCap>} />
         <Route path="tables" element={<RequireCap cap={CAP.MANAGE_TABLES}><PlanGate feature="tables"><Tables /></PlanGate></RequireCap>} />
+        {/* sticker studio is a DESIGN tool, not floor control — its own cap, so a
+            waiter granted manage_tables to seat guests doesn't get the print studio */}
+        <Route path="table-stickers" element={<RequireCap cap={CAP.MANAGE_STICKERS}><PlanGate feature="tables"><TableStickers /></PlanGate></RequireCap>} />
         <Route path="offers" element={<RequireCap cap={CAP.MANAGE_OFFERS}><Offers /></RequireCap>} />
         <Route path="events" element={<RequireCap cap={CAP.MANAGE_EVENTS}><Events /></RequireCap>} />
         <Route path="reservations" element={<RequireCap cap={CAP.MANAGE_EVENTS}><PlanGate feature="reservations"><Reservations /></PlanGate></RequireCap>} />

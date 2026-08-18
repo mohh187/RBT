@@ -48,12 +48,36 @@ export async function createInvoice({ tenantId, tenantName, plan, amount, curren
   return ref.id
 }
 
+// Manual settlement must do what the payment webhook does: EXTEND the venue.
+// It used to flip the invoice alone — a yearly invoice marked paid by hand
+// left planExpiresAt untouched, so the monthly cron kept billing the venue
+// (the «دفعنا سنوياً وما زالت تظهر فاتورة شهرية» incident).
 export async function markInvoicePaid(id) {
-  await updateDoc(doc(db, 'platformInvoices', id), {
+  const invRef = doc(db, 'platformInvoices', id)
+  await updateDoc(invRef, {
     status: 'paid',
     paidAt: serverTimestamp(),
     updatedAt: serverTimestamp(),
   })
+  try {
+    const { getDoc } = await import('firebase/firestore')
+    const snap = await getDoc(invRef)
+    const inv = snap.exists() ? snap.data() : null
+    if (inv?.tenantId) {
+      const tRef = doc(db, 'tenants', inv.tenantId)
+      const tSnap = await getDoc(tRef)
+      const d = tSnap.exists() ? tSnap.data() : {}
+      const cur = d.planExpiresAt?.toDate ? d.planExpiresAt.toDate() : (d.planExpiresAt ? new Date(d.planExpiresAt) : null)
+      const base = cur && cur > new Date() ? cur : new Date()
+      const days = String(inv.billing || '').includes('year') ? 365 : 30
+      await setDoc(tRef, {
+        planStatus: 'active',
+        planExpiresAt: new Date(base.getTime() + days * 86400000),
+        ...(inv.billing ? { billing: inv.billing } : {}),
+        ...(inv.plan ? { plan: inv.plan } : {}),
+      }, { merge: true })
+    }
+  } catch (_) { /* invoice settled; extension is best-effort and visible in the console */ }
 }
 
 // A payment that happened cannot un-happen. `markUnpaid` used to null `paidAt`

@@ -120,6 +120,15 @@ const generateMonthlyInvoices = onSchedule(
           : (d.planExpiresAt ? new Date(d.planExpiresAt) : null)
         if (exp && exp < now) return
 
+        // COVERAGE RULE — the root fix for «دفعنا سنوياً وما زالت تصلنا فاتورة
+        // شهرية»: a venue whose paid coverage (planExpiresAt) extends past the
+        // END of the month being billed owes nothing this month. A yearly
+        // subscriber's expiry sits ~a year out, so the cron skips them for
+        // eleven months and resumes exactly when coverage lapses. Monthly
+        // payers (expiry ≤ month end) keep getting billed as before.
+        const monthEnd = new Date(now.getFullYear(), now.getMonth() + 1, 1)
+        if (exp && exp > monthEnd) return
+
         // Resolve the default mismatch: the app grants an UNSET plan full
         // (enterprise) features as a trial, so a venue with no plan assigned is
         // not a billable subscription — don't auto-invoice it at the lowest tier.
@@ -371,7 +380,9 @@ async function settleInvoiceFromPayment(db, payment) {
       const base = cur && cur > new Date() ? cur : new Date()
       const days = String(invoice.billing || '').includes('year') ? 365 : 30
       const next = new Date(base.getTime() + days * 86400000)
-      await tRef.set({ planStatus: 'active', planExpiresAt: next, ...(invoice.plan ? { plan: invoice.plan } : {}) }, { merge: true }).catch(() => {})
+      // billing is stamped on the tenant so the console and the coverage rule
+      // in generateMonthlyInvoices can both see the cycle at a glance.
+      await tRef.set({ planStatus: 'active', planExpiresAt: next, ...(invoice.billing ? { billing: invoice.billing } : {}), ...(invoice.plan ? { plan: invoice.plan } : {}) }, { merge: true }).catch(() => {})
 
       // Email the venue owner a payment receipt (best-effort).
       const email = await ownerEmailOf(db, d.ownerUid)
@@ -1283,6 +1294,19 @@ const TABLE_WALL_WORDS = {
   running: 'red-brown brick', stack: 'stack-bond brick', herringbone: 'herringbone brick',
   basket: 'basketweave brick', roman: 'long roman brick', stone: 'rustic stone',
   plaster: 'warm plaster', wood: 'wood-panelled',
+  // pattern 'image' = the venue's own wall photo (sent as an inlineData
+  // reference in top mode); 'none' still deserves a warm room in the words
+  image: 'photographed venue', none: 'warm plaster',
+}
+// sharp, lazily — the logoMask.js pattern: required only when a top-mode table
+// actually needs its gray sky trimmed, so no other function's cold start pays.
+function loadTableSharp() {
+  try {
+    // eslint-disable-next-line global-require
+    return require('sharp')
+  } catch (_) {
+    return null
+  }
 }
 const generateTableImage = onCall({ timeoutSeconds: 120, memory: '512MiB' }, async (request) => {
   const key = process.env.GEMINI_API_KEY || process.env.VITE_GEMINI_API_KEY
@@ -1290,7 +1314,7 @@ const generateTableImage = onCall({ timeoutSeconds: 120, memory: '512MiB' }, asy
     throw new HttpsError('failed-precondition',
       'توليد صور الطاولات يحتاج GEMINI_API_KEY في functions/.env ثم إعادة نشر الدوال.')
   }
-  const { tenantId, hint, wall } = request.data || {}
+  const { tenantId, hint, wall, mode, surfaceEn, venueName } = request.data || {}
   if (!tenantId) throw new HttpsError('invalid-argument', 'tenantId required')
   const uid = request.auth && request.auth.uid
   if (!uid) throw new HttpsError('unauthenticated', 'sign in')
@@ -1308,7 +1332,52 @@ const generateTableImage = onCall({ timeoutSeconds: 120, memory: '512MiB' }, asy
   const w = wall && typeof wall === 'object' ? wall : {}
   const clean = (s, n) => String(s || '').replace(/[\r\n"]+/g, ' ').trim().slice(0, n)
   const roomWord = TABLE_WALL_WORDS[String(w.pattern || '')] || ''
-  const prompt = [
+  // mode 'top' = «سطح الطبق»: a PERSPECTIVE tabletop band (near edge at the
+  // frame bottom, planks receding to the venue's wall) that the menu paints
+  // inside the photo box under the dish cutouts. Default 'panel' keeps the
+  // original flat straight-on prompt byte-identical for existing callers.
+  const top = mode === 'top'
+  // In top mode the venue's own wall photo steers the far edge: fetched here
+  // (the browser cannot inline it past bucket CORS), size-capped, and any
+  // failure silently falls back to the words below.
+  let wallPart = null
+  // SSRF guard: only fetch from the project's own storage hosts — a bare
+  // https:// check let any tenant member point this server-side fetch at
+  // internal HTTPS services.
+  const wallHostOk = (() => {
+    try {
+      const h = new URL(String(w.url || '')).hostname
+      return h === 'firebasestorage.googleapis.com' || h === 'storage.googleapis.com'
+    } catch (_) { return false }
+  })()
+  if (top && String(w.pattern) === 'image' && /^https:\/\//.test(String(w.url || '')) && wallHostOk) {
+    try {
+      const r = await fetch(String(w.url))
+      const ab = r.ok ? await r.arrayBuffer() : null
+      if (ab && ab.byteLength > 0 && ab.byteLength <= 4 * 1024 * 1024) {
+        wallPart = { inlineData: {
+          mimeType: r.headers.get('content-type') || 'image/jpeg',
+          data: Buffer.from(ab).toString('base64'),
+        } }
+      }
+    } catch (_) { /* the words still describe the room */ }
+  }
+  const surfWord = clean(hint, 120) || clean(surfaceEn, 60) || 'dark walnut wood with warm natural grain'
+  const prompt = top ? [
+    "A photorealistic photograph of a COMPLETE EMPTY wooden restaurant table, shot from a seated diner's eye level looking slightly down at about a 30 degree angle.",
+    'Composition from top to bottom: the TOP of the frame above the table is a flat, solid, evenly lit light-gray background (#f0f0f0) with absolutely nothing in it;',
+    'below it the TABLETOP SURFACE recedes in clear perspective — wood planks running toward the viewer, the FAR edge of the surface meeting the gray area in one clean straight horizontal line;',
+    'then the NEAR front edge of the tabletop closest to the camera, with visible thickness and a soft highlight along the lip;',
+    "and below the near edge the table's FRONT FACE of vertical wood panels fills the frame all the way down to the very bottom edge.",
+    'The table spans the FULL width of the frame edge to edge — the gray background appears ONLY above the far edge, never at the sides and never at the bottom.',
+    wallPart ? 'The attached photograph is the actual wall of this venue — borrow its colour temperature and lighting for the light falling on the wood (the gray area itself must stay plain flat gray).' : '',
+    `wood style for the whole table: ${surfWord},`,
+    clean(venueName, 60) ? `the room belongs to the venue "${clean(venueName, 60)}" — mood only; never write any name in the image,` : '',
+    'warm amber lantern light pooling on the surface, soft highlights along the plank grain, gentle falloff toward the sides,',
+    'strictly empty: no plates, no food, no cutlery, no glasses, no napkins, no people, no hands, no text, no lettering, no logo, no watermark,',
+    'portrait orientation about 9:16 (around 900 by 1600 pixels), sharp focus on the near edge,',
+    'usable as the table a cut-out food photograph will be seated on inside a digital menu.',
+  ].filter(Boolean).join(' ') : [
     'A photorealistic photograph of an EMPTY restaurant tabletop surface filling the whole frame edge to edge,',
     'seen straight-on and slightly from the front, like a dining table directly in front of the camera,',
     clean(hint, 120) ? `surface style: ${clean(hint, 120)},` : 'surface style: dark walnut wood with warm natural grain,',
@@ -1324,7 +1393,7 @@ const generateTableImage = onCall({ timeoutSeconds: 120, memory: '512MiB' }, asy
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({
-      contents: [{ parts: [{ text: prompt }] }],
+      contents: [{ parts: [...(wallPart ? [wallPart] : []), { text: prompt }] }],
       generationConfig: { responseModalities: ['TEXT', 'IMAGE'] },
     }),
   })
@@ -1339,19 +1408,34 @@ const generateTableImage = onCall({ timeoutSeconds: 120, memory: '512MiB' }, asy
   const imgPart = parts.find((p) => (p.inlineData && p.inlineData.data) || (p.inline_data && p.inline_data.data))
   const inline = imgPart ? (imgPart.inlineData || imgPart.inline_data) : null
   if (!inline || !inline.data) throw new HttpsError('internal', 'النموذج لم يرجع صورة — جرّب وصفاً أوضح للخامة.')
-  const mime = inline.mimeType || inline.mime_type || 'image/png'
+  let mime = inline.mimeType || inline.mime_type || 'image/png'
+  let buf = Buffer.from(inline.data, 'base64')
+  // Top mode: crop the flat gray sky above the table's far edge — the model
+  // never lands the far edge pixel-flush on the frame top, and the menu wants
+  // the image to START at the surface so its feather melts into the REAL wall.
+  // sharp.trim removes uniform borders matching the background; the sides and
+  // bottom are wood, so only the gray top actually trims. Any failure keeps
+  // the raw photograph — the band's own mask still hides most of the gray.
+  if (top) {
+    const sharp = loadTableSharp()
+    if (sharp) {
+      try {
+        buf = await sharp(buf).trim({ background: '#f0f0f0', threshold: 40 }).png().toBuffer()
+        mime = 'image/png'
+      } catch (_) { /* raw image stands */ }
+    }
+  }
   const ext = mime.includes('jpeg') ? 'jpg' : mime.includes('webp') ? 'webp' : 'png'
-  const buf = Buffer.from(inline.data, 'base64')
   const bucket = getStorage().bucket()
   const stamp = Date.now()
-  const path = `tenants/${tenantId}/library/tables/ai-${stamp}.${ext}`
+  const path = `tenants/${tenantId}/library/tables/ai-${top ? 'top-' : ''}${stamp}.${ext}`
   const token = nodeCrypto.randomUUID()
   await bucket.file(path).save(buf, {
     metadata: { contentType: mime, metadata: { firebaseStorageDownloadTokens: token } },
   })
   const url = `https://firebasestorage.googleapis.com/v0/b/${bucket.name}/o/${encodeURIComponent(path)}?alt=media&token=${token}`
   await db.collection(`tenants/${tenantId}/aiImageJobs`).add({
-    kind: 'table', by: uid, url, hint: clean(hint, 120), createdAt: FieldValue.serverTimestamp(),
+    kind: top ? 'tableTop' : 'table', by: uid, url, hint: clean(hint, 120), createdAt: FieldValue.serverTimestamp(),
   }).catch(() => {})
   // The meter is the source of truth for what is left, so this read-out cannot
   // drift from what the next call will actually allow. -1 means unlimited.

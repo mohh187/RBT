@@ -6,6 +6,7 @@ import { useToast } from '../../components/Toast.jsx'
 import { FullSpinner, Empty, Stepper } from '../../components/ui.jsx'
 import DinerBar from '../../components/DinerBar.jsx'
 import MenuView from '../../components/MenuView.jsx'
+import VenueBackground from '../../components/VenueBackground.jsx'
 import Sheet from '../../components/Sheet.jsx'
 import { resolveTableByToken, callWaiter } from '../../lib/db.js'
 import Icon from '../../components/Icon.jsx'
@@ -17,7 +18,16 @@ export default function TableMenu() {
   const toast = useToast()
   const venue = usePublicVenue(slug)
 
-  const [table, setTable] = useState(undefined) // undefined=loading, null=not found
+  // undefined=loading, null=not found. The cached table is read SYNCHRONOUSLY
+  // (venue.tenantId is itself cache-seeded), so a repeat scan paints the full
+  // menu on the very first render — no spinner frame, no network wait.
+  const [table, setTable] = useState(() => {
+    if (!venue.tenantId) return undefined
+    try {
+      const cached = localStorage.getItem(`table_${venue.tenantId}_${token}`)
+      return cached ? JSON.parse(cached) : undefined
+    } catch (_) { return undefined }
+  })
   const [partySize, setPartySize] = useState(2)
   const [gateOpen, setGateOpen] = useState(true)
   const [calling, setCalling] = useState(false)
@@ -25,6 +35,8 @@ export default function TableMenu() {
   useEffect(() => {
     if (!venue.tenantId) return
     const cacheKey = `table_${venue.tenantId}_${token}`
+    // seed from cache (first-render read above already covered the warm case;
+    // this covers the cold-tenantId case where the slug resolved async)
     const cached = localStorage.getItem(cacheKey)
     if (cached) {
       try {
@@ -34,7 +46,7 @@ export default function TableMenu() {
     resolveTableByToken(venue.tenantId, token).then((t) => {
       setTable(t)
       if (t) {
-        localStorage.setItem(cacheKey, JSON.stringify(t))
+        try { localStorage.setItem(cacheKey, JSON.stringify(t)) } catch (_) { /* quota */ }
       }
     })
   }, [venue.tenantId, token])
@@ -45,7 +57,8 @@ export default function TableMenu() {
   if (isMenuLoading || isTableLoading) {
     if (venue.tenant) {
       return (
-        <div style={{ minHeight: '100dvh' }}>
+        <div className="venue-above" style={{ minHeight: '100dvh' }}>
+          <VenueBackground tenant={venue.tenant} />
           <DinerBar
             tenant={venue.tenant}
             right={table ? <span className="badge" style={{ marginInlineEnd: 4, display: 'inline-flex', alignItems: 'center', gap: 4 }}><Icon name="tables" size={13} /> {table.label}</span> : null}
@@ -74,7 +87,8 @@ export default function TableMenu() {
   }
 
   return (
-    <div style={{ minHeight: '100dvh' }}>
+    <div className="venue-above" style={{ minHeight: '100dvh' }}>
+      <VenueBackground tenant={venue.tenant} />
       <DinerBar
         tenant={venue.tenant}
         right={<span className="badge" style={{ marginInlineEnd: 4, display: 'inline-flex', alignItems: 'center', gap: 4 }}><Icon name="tables" size={13} /> {table.label}</span>}

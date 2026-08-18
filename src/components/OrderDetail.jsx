@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { useI18n, pickLang } from '../lib/i18n.jsx'
 import { useAuth } from '../lib/auth.jsx'
 import Sheet from './Sheet.jsx'
@@ -6,14 +6,12 @@ import Icon from './Icon.jsx'
 import { Price } from './Riyal.jsx'
 import { watchOrder, getCustomerByPhone, setCustomerFlag, refundOrder, compOrder, voidOrderItem, setOrderItemQty, setOrderTable, addOrderItems, watchTables, watchItems, watchStaff, assignDelivery, setDeliveryStatus, settleCod, updateOrderStatus } from '../lib/db.js'
 
-// THE STATUS LADDER — the same one the cashier's ticket button walks, so an
-// order advances identically whether you act from the list or from the detail.
-const NEXT_STEP = {
-  pending: { to: 'accepted', ar: 'قبول الطلب', en: 'Accept order', cls: 'btn-primary', icon: 'ok' },
-  accepted: { to: 'preparing', ar: 'بدء التحضير', en: 'Start preparing', cls: 'btn-primary', icon: 'kitchen' },
-  preparing: { to: 'ready', ar: 'جاهز', en: 'Mark ready', cls: 'btn-success', icon: 'bellRing' },
-  ready: { to: 'served', ar: 'تم التقديم', en: 'Mark served', cls: 'btn-success', icon: 'ok' },
-}
+// THE STATUS LADDER lives in lib/orderStatus.js — the same vocabulary and the
+// same NEXT_STEP the cashier's ticket button walks, so an order advances (and
+// reads) identically no matter which surface the staffer is on.
+import { STATUS_FLOW, NEXT_STEP, statusShort } from '../lib/orderStatus.js'
+import { useToast } from './Toast.jsx'
+import '../styles/order-detail.css'
 
 // Delivery sub-status labels (mirrors the driver portal).
 const DSTAT = {
@@ -30,12 +28,11 @@ import { CAP } from '../lib/permissions.js'
 import { resolveMembershipPolicy } from '../lib/membership.js'
 import { orderNumber, timeAgo } from '../lib/format.js'
 
-const STATUS_FLOW = ['pending', 'accepted', 'preparing', 'ready', 'served']
-
 // Reusable full order view — opens any order (live) by id with all its details.
 export default function OrderDetail({ tid, orderId, currency = 'SAR', onClose, staffActions = false, onCollect = null }) {
   const { t, lang } = useI18n()
   const { profile, tenant, isManager, can, user } = useAuth()
+  const toast = useToast()
   const ar = lang === 'ar'
   const [o, setO] = useState(undefined)
   const [cust, setCust] = useState(null)
@@ -77,6 +74,9 @@ export default function OrderDetail({ tid, orderId, currency = 'SAR', onClose, s
   }
   const doComp = () => { if (!o) return; compOrder(tid, orderId, { amount: Number(compAmt) || 0, reason: compReason.trim(), actor }); setCompOpen(false); setCompAmt(''); setCompReason('') }
   const canEditOrder = staffActions && ['pending', 'accepted', 'preparing', 'ready'].includes(o?.status)
+  // item photos for the lines — the live menu is already subscribed on staff
+  // surfaces (watchItems above powers the add-items sheet); reuse it here
+  const imgById = useMemo(() => { const m = {}; menuItems.forEach((it) => { if (it.imageUrl) m[it.id] = it.imageUrl }); return m }, [menuItems])
   const changeTable = (tb) => setOrderTable(tid, orderId, tb ? { tableId: tb.id, tableLabel: tb.label, orderType: 'dine_in' } : { tableId: null, tableLabel: '', orderType: 'takeaway' })
   const appendItem = (it) => {
     const useVar = !Number(it.price) && it.variants?.[0] ? it.variants[0] : null
@@ -85,10 +85,7 @@ export default function OrderDetail({ tid, orderId, currency = 'SAR', onClose, s
     addOrderItems(tid, orderId, [line], { actor })
   }
 
-  const statusLabel = (s) => {
-    const map = { pending: ar ? 'بانتظار' : 'Pending', accepted: ar ? 'مقبول' : 'Accepted', preparing: ar ? 'تحضير' : 'Preparing', ready: ar ? 'جاهز' : 'Ready', served: ar ? 'مُقدّم' : 'Served', paid: ar ? 'مدفوع' : 'Paid', cancelled: ar ? 'ملغى' : 'Cancelled' }
-    return map[s] || s
-  }
+  const statusLabel = (s) => statusShort(lang, s)
   const timelineStatus = o?.status === 'paid' ? 'served' : o?.status
   const typeLabel = (ty) => ty === 'curbside' ? (ar ? 'استلام بالسيارة' : 'Curbside') : ty === 'delivery' ? (ar ? 'توصيل' : 'Delivery') : ty === 'pickup' ? (ar ? 'استلام' : 'Pickup') : (ar ? 'داخل المقهى' : 'Dine-in')
 
@@ -142,40 +139,87 @@ export default function OrderDetail({ tid, orderId, currency = 'SAR', onClose, s
   }
   const timing = buildTiming()
 
+  // ADVANCE + COLLECT are the primary actions whenever they apply, so they are
+  // PINNED in the sheet's footer — always reachable, no scrolling past a long
+  // items list to act. Same stamps as the cashier's own button (acceptedBy /
+  // servedBy), so the audit trail is identical from every surface.
+  const advanceStep = () => {
+    const n = o && NEXT_STEP[o.status]
+    if (!n) return
+    const extra = { _actor: actor, _code: o.code || '' }
+    if (n.to === 'accepted') { extra.acceptedByName = actor; extra.acceptedByUid = user?.uid || '' }
+    if (n.to === 'served') { extra.servedByName = actor; extra.servedByUid = user?.uid || '' }
+    // toast on rejection: offline-queued writes replayed against a terminal
+    // order are DENIED by rules — the optimistic card snaps back, and without
+    // a toast that read as "the button does nothing"
+    updateOrderStatus(tid, orderId, n.to, extra).catch(() => {
+      toast.error(ar ? 'تعذّر تحديث الحالة — تحقق من حالة الطلب' : 'Status update failed — check the order')
+    })
+  }
+  const showCollect = !!(o && staffActions && canPay && onCollect && !['paid', 'refunded', 'cancelled'].includes(o.status))
+  const footerNode = o && staffActions && (NEXT_STEP[o.status] || showCollect) ? (
+    <div className="od-foot">
+      {NEXT_STEP[o.status] && (
+        <button className={`btn ${NEXT_STEP[o.status].cls} btn-block`} onClick={advanceStep}>
+          <Icon name={NEXT_STEP[o.status].icon} size={16} /> {t(NEXT_STEP[o.status].key)}
+        </button>
+      )}
+      {showCollect && (
+        <button className="btn btn-primary btn-block" onClick={() => onCollect(o)}>
+          <Icon name="wallet" size={16} /> {ar ? 'تحصيل الدفع' : 'Collect payment'}
+          {' · '}<Price value={Math.max(0, (o.total || 0) - (o.amountPaid || 0))} currency={currency} lang={lang} />
+        </button>
+      )}
+    </div>
+  ) : null
+
   return (
     <>
-      <Sheet open={!!orderId} onClose={onClose} title={o ? `${ar ? 'الطلب' : 'Order'} ${orderNumber(o.code)}` : (ar ? 'الطلب' : 'Order')}>
+      <Sheet open={!!orderId} onClose={onClose} footer={footerNode} title={o ? `${ar ? 'الطلب' : 'Order'} ${orderNumber(o.code)}` : (ar ? 'الطلب' : 'Order')}>
       {o === undefined ? (
         <p className="muted small">{t('loading') || '…'}</p>
       ) : o === null ? (
         <p className="muted small">{ar ? 'الطلب غير موجود' : 'Order not found'}</p>
       ) : (
         <div className="stack" style={{ gap: 'var(--sp-3)' }}>
-          <div className="row-between">
-            <span className={`badge ${o.status === 'served' || o.status === 'paid' ? 'badge-success' : o.status === 'cancelled' ? 'badge-danger' : 'badge-gold'}`}>{statusLabel(o.status)}{o.status === 'served' && !o.paidOnline && o.paymentStatus !== 'paid' ? ` · ${ar ? 'غير مدفوع' : 'Unpaid'}` : ''}</span>
+          <div className="od-head">
+            <div className="od-chips">
+              <span className={`badge ${o.status === 'served' || o.status === 'paid' ? 'badge-success' : o.status === 'cancelled' ? 'badge-danger' : 'badge-gold'}`}>{statusLabel(o.status)}{o.status === 'served' && !o.paidOnline && o.paymentStatus !== 'paid' ? ` · ${ar ? 'غير مدفوع' : 'Unpaid'}` : ''}</span>
+              <span className="od-chip">
+                <Icon name={(o.orderType === 'curbside' || o.orderType === 'delivery') ? 'car' : o.orderType === 'pickup' ? 'bag' : 'tables'} size={13} />
+                {o.tableLabel || typeLabel(o.orderType)}
+              </span>
+              {o.partySize ? <span className="od-chip"><Icon name="user" size={12} /> <span className="num">{o.partySize}</span></span> : null}
+              {o.rush ? <span className="badge badge-danger"><Icon name="flame" size={11} style={{ verticalAlign: 'middle' }} /> {ar ? 'عاجل' : 'Rush'}</span> : null}
+            </div>
             <span className="xs faint">{timeAgo(o.createdAt, lang)}</span>
           </div>
 
-          {/* status timeline — duration to reach each stage shown above its bar */}
+          {/* the order's journey — icon stages, brand-filled connector, elapsed
+              per stage (from buildTiming, unchanged maths), pulse on the live one */}
           {o.status !== 'cancelled' && (
-            <div className="stack" style={{ gap: 6 }}>
-              <div className="row" style={{ gap: 4, alignItems: 'flex-end' }}>
+            <div className="od-journey">
+              <div className="od-journey-track">
+                <div className="od-journey-line" aria-hidden>
+                  <div className="od-journey-fill" style={{ width: `${(Math.max(0, STATUS_FLOW.indexOf(timelineStatus)) / (STATUS_FLOW.length - 1)) * 100}%` }} />
+                </div>
                 {STATUS_FLOW.map((s, i) => {
-                  const reached = STATUS_FLOW.indexOf(timelineStatus) >= i
+                  const nowIdx = STATUS_FLOW.indexOf(timelineStatus)
                   const d = timing?.seg?.[s]
+                  const ICONS = { pending: 'clock', accepted: 'ok', preparing: 'kitchen', ready: 'bellRing', served: 'check' }
                   return (
-                    <div key={s} className="grow stack center" style={{ gap: 3 }}>
-                      <span style={{ fontSize: 'var(--fs-xs)', lineHeight: 1.1, minHeight: 13, fontWeight: 700, textAlign: 'center', color: d ? (d.live ? 'var(--gold, #e0a82e)' : 'var(--brand)') : 'transparent' }}>{d ? fmtDur(d.ms) : '·'}</span>
-                      <div style={{ width: '100%', height: 4, borderRadius: 99, background: reached ? 'var(--brand)' : 'var(--surface-2)' }} />
-                      <span className="xs" style={{ color: reached ? 'var(--brand)' : 'var(--text-faint)' }}>{statusLabel(s)}</span>
+                    <div key={s} className={`od-stage ${nowIdx >= i ? 'is-done' : ''} ${nowIdx === i ? 'is-now' : ''} ${d?.live ? 'is-live' : ''} ${i === STATUS_FLOW.length - 1 ? 'is-final' : ''}`}>
+                      <span className="od-stage-time num">{d ? fmtDur(d.ms) : ''}</span>
+                      <span className="od-stage-dot"><Icon name={ICONS[s]} size={15} /></span>
+                      <span className="od-stage-label">{statusLabel(s)}</span>
                     </div>
                   )
                 })}
               </div>
               {timing?.totalMs != null && (
-                <div className="row-between" style={{ borderTop: '1px solid var(--border)', paddingTop: 6 }}>
-                  <span className="xs faint">{ar ? 'من القبول للتسليم' : 'Accept → handover'}{timing.totalLive ? ` · ${ar ? 'جارٍ' : 'live'}` : ''}</span>
-                  <span className="small bold" style={{ color: 'var(--brand)' }}>{fmtDur(timing.totalMs)}</span>
+                <div className="od-journey-total">
+                  <span className="faint">{ar ? 'من القبول للتسليم' : 'Accept → handover'}{timing.totalLive ? ` · ${ar ? 'جارٍ' : 'live'}` : ''}</span>
+                  <span className="bold num" style={{ color: 'var(--brand)' }}>{fmtDur(timing.totalMs)}</span>
                 </div>
               )}
             </div>
@@ -188,13 +232,14 @@ export default function OrderDetail({ tid, orderId, currency = 'SAR', onClose, s
             {(o.servedByName || o.acceptedByName) && <div className="xs" style={{ color: 'var(--brand)' }}><Icon name="staff" size={12} /> {ar ? 'الموظف' : 'Staff'}: {o.servedByName || o.acceptedByName}</div>}
             {o.status === 'paid' && <div className="xs" style={{ color: 'var(--success)' }}><Icon name="wallet" size={12} /> {ar ? 'مدفوع' : 'Paid'}: {payMethodLabel(o.paymentMethod)}{o.tip ? ` · ${ar ? 'إكرامية' : 'tip'} ${o.tip}` : ''}{o.paidByName ? ` · ${o.paidByName}` : ''}</div>}
             {o.status !== 'paid' && (o.paidOnline || o.paymentStatus === 'paid') && <div className="xs bold" style={{ color: 'var(--success)' }}><Icon name="wallet" size={12} /> {ar ? 'مدفوع أونلاين — لا تُحصّل نقداً' : 'Paid online — do not collect cash'}</div>}
-            {o.status !== 'paid' && !o.paidOnline && o.paymentStatus !== 'paid' && o.amountPaid > 0 && o.amountPaid < (o.total || 0) && <div className="xs" style={{ color: 'var(--gold, #e0a82e)' }}><Icon name="wallet" size={12} /> {ar ? 'مدفوع جزئياً' : 'Partial'}: <Price value={o.amountPaid} currency={currency} lang={lang} /> · {ar ? 'متبقّي' : 'left'} <Price value={(o.total || 0) - (o.amountPaid || 0)} currency={currency} lang={lang} /></div>}
+            {/* 0.005 epsilon: float sums (8.2+0.1) sit a hair under total — without it this showed «متبقّي 0.00» forever */}
+            {o.status !== 'paid' && !o.paidOnline && o.paymentStatus !== 'paid' && o.amountPaid > 0 && o.amountPaid < (o.total || 0) - 0.005 && <div className="xs" style={{ color: 'var(--gold, #e0a82e)' }}><Icon name="wallet" size={12} /> {ar ? 'مدفوع جزئياً' : 'Partial'}: <Price value={o.amountPaid} currency={currency} lang={lang} /> · {ar ? 'متبقّي' : 'left'} <Price value={(o.total || 0) - (o.amountPaid || 0)} currency={currency} lang={lang} /></div>}
             {o.refund && <div className="xs" style={{ color: 'var(--danger)' }}><Icon name="repeat" size={12} /> {ar ? 'استرجاع' : 'Refund'}: <Price value={o.refund.amount} currency={currency} lang={lang} />{o.refund.reason ? ` — ${o.refund.reason}` : ''}{o.refund.by ? ` · ${o.refund.by}` : ''}</div>}
             {o.cancelReason && <div className="xs" style={{ color: 'var(--danger)' }}><Icon name="close" size={12} /> {ar ? 'سبب الإلغاء' : 'Cancel reason'}: {o.cancelReason}</div>}
           </div>
 
-          {/* items */}
-          <div className="stack" style={{ gap: 'var(--sp-2)' }}>
+          {/* items — thumbnail + qty badge, name/options, line price */}
+          <div className="od-items">
             <strong className="small">{ar ? 'الأصناف' : 'Items'}</strong>
             {(o.items || []).map((it, i) => {
               const nm = (lang === 'en' && it.nameEn ? it.nameEn : it.nameAr) || it.name || it.title || ''
@@ -202,25 +247,28 @@ export default function OrderDetail({ tid, orderId, currency = 'SAR', onClose, s
               const line = it.lineTotal != null ? it.lineTotal : (it.unitPrice != null ? it.unitPrice : it.price || 0) * (it.qty || 1)
               const editable = staffActions && ['pending', 'accepted', 'preparing', 'ready'].includes(o.status)
               const canVoid = editable && (o.items || []).length > 1
+              const img = it.itemId ? imgById[it.itemId] : ''
               return (
-                <div key={i} className="row-between" style={{ alignItems: 'flex-start', gap: 6 }}>
-                  <div className="grow">
-                    {editable ? (
-                      <span className="row" style={{ gap: 4, alignItems: 'center', display: 'inline-flex' }}>
+                <div key={i} className="od-item">
+                  <span className="od-item-thumb">
+                    {img ? <img src={img} alt="" loading="lazy" decoding="async" /> : <Icon name="coffee" size={18} />}
+                    <span className="od-item-qty num">{it.qty || 1}×</span>
+                  </span>
+                  <div className="od-item-main">
+                    <div className="od-item-name">{nm}{it.variantLabel ? ` · ${it.variantLabel}` : ''}</div>
+                    {mods && <div className="od-item-sub">{mods}</div>}
+                    {it.note && <div className="od-item-sub">{ar ? 'ملاحظة' : 'Note'}: {it.note}</div>}
+                    {editable && (
+                      <span className="row" style={{ gap: 4, alignItems: 'center', display: 'inline-flex', marginTop: 4 }}>
                         {/* staff tablet: 40px minimum tap targets for order edits */}
                         <button className="icon-btn" style={{ width: 40, height: 40 }} onClick={() => setOrderItemQty(tid, orderId, i, (it.qty || 1) - 1, { actor })} disabled={(it.qty || 1) <= 1}><Icon name="minus" size={15} /></button>
-                        <span className="small bold" style={{ minWidth: 16, textAlign: 'center' }}>{it.qty || 1}</span>
+                        <span className="small bold num" style={{ minWidth: 16, textAlign: 'center' }}>{it.qty || 1}</span>
                         <button className="icon-btn" style={{ width: 40, height: 40 }} onClick={() => setOrderItemQty(tid, orderId, i, (it.qty || 1) + 1, { actor })}><Icon name="add" size={15} /></button>
-                        <span className="small">× {nm}{it.variantLabel ? ` · ${it.variantLabel}` : ''}</span>
                       </span>
-                    ) : (
-                      <><span className="small bold">{it.qty || 1}× </span><span className="small">{nm}{it.variantLabel ? ` · ${it.variantLabel}` : ''}</span></>
                     )}
-                    {mods && <div className="xs faint">{mods}</div>}
-                    {it.note && <div className="xs faint">{ar ? 'ملاحظة' : 'Note'}: {it.note}</div>}
                   </div>
-                  <span className="price small"><Price value={line} currency={currency} lang={lang} /></span>
-                  {canVoid && <button className="icon-btn" style={{ width: 40, height: 40, color: 'var(--danger)', marginInlineStart: 4 }} title={ar ? 'حذف الصنف' : 'Void item'} onClick={() => { if (window.confirm(ar ? 'حذف هذا الصنف من الطلب؟' : 'Remove this item?')) voidOrderItem(tid, orderId, i, { actor }) }}><Icon name="delete" size={15} /></button>}
+                  <span className="od-item-price price small num"><Price value={line} currency={currency} lang={lang} /></span>
+                  {canVoid && <button className="icon-btn" style={{ width: 40, height: 40, color: 'var(--danger)', flex: 'none' }} title={ar ? 'حذف الصنف' : 'Void item'} onClick={() => { if (window.confirm(ar ? 'حذف هذا الصنف من الطلب؟' : 'Remove this item?')) voidOrderItem(tid, orderId, i, { actor }) }}><Icon name="delete" size={15} /></button>}
                 </div>
               )
             })}
@@ -263,53 +311,51 @@ export default function OrderDetail({ tid, orderId, currency = 'SAR', onClose, s
 
           {o.note && <div className="card card-pad"><span className="xs faint">{ar ? 'ملاحظة' : 'Note'}: </span><span className="small">{o.note}</span></div>}
 
-          {o.compDiscount > 0 && (
-            <div className="row-between xs" style={{ color: 'var(--success)' }}>
-              <span>{ar ? 'مجاملة/خصم' : 'Comp/discount'}{o.compReason ? ` — ${o.compReason}` : ''}{o.compByName ? ` · ${o.compByName}` : ''}</span>
-              <span>−<Price value={o.compDiscount} currency={currency} lang={lang} /></span>
+          {/* money — one block, the total dominant */}
+          <div className="od-money">
+            {(o.discount > 0 || o.loyaltyDiscount > 0 || o.memberDiscount > 0 || o.compDiscount > 0) && o.subtotal != null && (
+              <div className="od-money-row faint">
+                <span>{ar ? 'المجموع قبل الخصم' : 'Subtotal'}</span>
+                <span className="num"><Price value={o.subtotal} currency={currency} lang={lang} /></span>
+              </div>
+            )}
+            {o.discount > 0 && (
+              <div className="od-money-row" style={{ color: 'var(--success)' }}>
+                <span>{ar ? 'خصم' : 'Discount'}</span>
+                <span className="num">−<Price value={o.discount} currency={currency} lang={lang} /></span>
+              </div>
+            )}
+            {o.loyaltyDiscount > 0 && (
+              <div className="od-money-row" style={{ color: 'var(--success)' }}>
+                <span>{ar ? 'خصم الولاء' : 'Loyalty'}</span>
+                <span className="num">−<Price value={o.loyaltyDiscount} currency={currency} lang={lang} /></span>
+              </div>
+            )}
+            {o.memberDiscount > 0 && (
+              <div className="od-money-row" style={{ color: 'var(--success)' }}>
+                <span>{ar ? 'خصم العضوية' : 'Membership'}</span>
+                <span className="num">−<Price value={o.memberDiscount} currency={currency} lang={lang} /></span>
+              </div>
+            )}
+            {o.compDiscount > 0 && (
+              <div className="od-money-row" style={{ color: 'var(--success)' }}>
+                <span>{ar ? 'مجاملة/خصم' : 'Comp'}{o.compReason ? ` — ${o.compReason}` : ''}{o.compByName ? ` · ${o.compByName}` : ''}</span>
+                <span className="num">−<Price value={o.compDiscount} currency={currency} lang={lang} /></span>
+              </div>
+            )}
+            <div className="od-money-row od-money-total">
+              <span>{ar ? 'الإجمالي' : 'Total'}</span>
+              <span className="price num"><Price value={o.total} currency={currency} lang={lang} /></span>
             </div>
-          )}
-          <div className="row-between" style={{ borderTop: '1px solid var(--border)', paddingTop: 'var(--sp-2)' }}>
-            <strong>{ar ? 'الإجمالي' : 'Total'}</strong>
-            <span className="price bold" style={{ fontSize: 'var(--fs-md)' }}><Price value={o.total} currency={currency} lang={lang} /></span>
           </div>
 
-          {/* THE TWO ACTIONS THIS SHEET WAS MISSING — advance, and collect.
-              Without them the sheet was read-only for a dine-in order, so the
-              tables screen's «تحصيل الدفع» button opened a screen that could not
-              take payment and the cashier had to leave for /cashier to finish.
-              Accept had the same shape: it existed only on a list row and in the
-              KDS, so opening an order to look at it before accepting meant
-              closing it again to act. Both are the primary action when they
-              apply, so they sit above the utility row, full width. */}
-          {staffActions && NEXT_STEP[o.status] && (
-            <button className={`btn ${NEXT_STEP[o.status].cls} btn-block`} style={{ minHeight: 44, fontWeight: 800 }}
-              onClick={() => {
-                const n = NEXT_STEP[o.status]
-                const extra = { _actor: actor }
-                // The same stamps the cashier's own button applies. The kanban
-                // drag and the KDS accept do NOT set these, so who accepted an
-                // order used to depend on which control you reached for.
-                if (n.to === 'accepted') { extra.acceptedByName = actor; extra.acceptedByUid = user?.uid || '' }
-                if (n.to === 'served') { extra.servedByName = actor; extra.servedByUid = user?.uid || '' }
-                updateOrderStatus(tid, orderId, n.to, extra)
-              }}>
-              <Icon name={NEXT_STEP[o.status].icon} size={16} /> {ar ? NEXT_STEP[o.status].ar : NEXT_STEP[o.status].en}
-            </button>
-          )}
-          {staffActions && canPay && onCollect && !['paid', 'refunded', 'cancelled'].includes(o.status) && (
-            <button className="btn btn-primary btn-block" style={{ minHeight: 44, fontWeight: 800 }}
-              onClick={() => onCollect(o)}>
-              <Icon name="wallet" size={16} /> {ar ? 'تحصيل الدفع' : 'Collect payment'}
-              {' · '}<Price value={Math.max(0, (o.total || 0) - (o.amountPaid || 0))} currency={currency} lang={lang} />
-            </button>
-          )}
-
-          {/* actions: print, digital receipt, manager refund / comp */}
+          {/* actions: print, digital receipt, manager refund / comp.
+              printReceipt resolves false when the popup was blocked (TWA/strict
+              browsers) — surface it, the old silent no-op read as a dead printer. */}
           {staffActions && (
             <div className="row" style={{ gap: 6, flexWrap: 'wrap' }}>
-              <button className="btn btn-sm btn-outline grow" onClick={() => printReceipt(o, { tenant, lang })}><Icon name="print" size={15} /> {ar ? 'طباعة' : 'Print'}</button>
-              {o.status !== 'paid' && o.status !== 'cancelled' && o.status !== 'refunded' && <button className="btn btn-sm btn-outline grow" onClick={() => printReceipt(o, { tenant, lang, proforma: true })}><Icon name="print" size={15} /> {ar ? 'حساب مبدئي' : 'Bill'}</button>}
+              <button className="btn btn-sm btn-outline grow" onClick={async () => { if (!(await printReceipt(o, { tenant, lang }))) toast.error(ar ? 'اسمح بالنوافذ المنبثقة لهذا الموقع لتعمل الطباعة' : 'Allow popups for this site so printing works') }}><Icon name="print" size={15} /> {ar ? 'طباعة' : 'Print'}</button>
+              {o.status !== 'paid' && o.status !== 'cancelled' && o.status !== 'refunded' && <button className="btn btn-sm btn-outline grow" onClick={async () => { if (!(await printReceipt(o, { tenant, lang, proforma: true }))) toast.error(ar ? 'اسمح بالنوافذ المنبثقة لهذا الموقع لتعمل الطباعة' : 'Allow popups for this site so printing works') }}><Icon name="print" size={15} /> {ar ? 'حساب مبدئي' : 'Bill'}</button>}
               <button className="btn btn-sm btn-outline grow" onClick={genReceipt}><Icon name="qr" size={15} /> {ar ? 'إيصال رقمي' : 'Digital'}</button>
               {canPay && o.status === 'paid' && !o.refund && <button className="btn btn-sm btn-outline grow" style={{ color: 'var(--danger)' }} onClick={() => setRefundOpen(true)}><Icon name="repeat" size={15} /> {ar ? 'استرجاع' : 'Refund'}</button>}
               {canPay && ['pending', 'accepted', 'preparing', 'ready'].includes(o.status) && <button className="btn btn-sm btn-outline grow" onClick={() => setCompOpen(true)}><Icon name="offers" size={15} /> {ar ? 'مجاملة/خصم' : 'Comp'}</button>}
@@ -341,8 +387,13 @@ export default function OrderDetail({ tid, orderId, currency = 'SAR', onClose, s
                     <button className="btn btn-sm btn-primary" onClick={async () => {
                       try {
                         await settleCod(tid, orderId)
-                        if (!['paid', 'refunded'].includes(o.status)) await updateOrderStatus(tid, orderId, 'paid', { payMethod: 'cash', _actor: actor })
-                      } catch { /* ignore */ }
+                        // 'cancelled' is terminal too (rules deny cancelled→paid) — attempting
+                        // it marked the drawer settled while the write silently died.
+                        // paymentMethod, not payMethod: the field every reader uses.
+                        if (!['paid', 'refunded', 'cancelled'].includes(o.status)) await updateOrderStatus(tid, orderId, 'paid', { paymentMethod: 'cash', _actor: actor })
+                      } catch {
+                        toast.error(ar ? 'تعذّرت التسوية — تحقق من حالة الطلب' : 'Settle failed — check the order status')
+                      }
                     }}><Icon name="wallet" size={14} /> {ar ? 'تسوية العهدة (نقد)' : 'Settle (cash)'}</button>
                   )}
                 </div>

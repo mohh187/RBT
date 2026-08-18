@@ -8,6 +8,15 @@ import { randomToken } from './format.js'
 // (model = 3D .glb/.usdz files, allowed only under tenants/{tid}/library/.)
 export const UPLOAD_LIMITS_MB = { image: 10, video: 100, audio: 30, model: 60 }
 
+// Digital signage (tenants/{tid}/signage/…) is the one surface that plays on a
+// venue-owned TV over the venue's own network instead of a diner's phone, so a
+// full-length promo master is the point rather than a mistake. Only the folders
+// listed here get the bigger ceilings (storage.rules mirrors this exactly).
+const BIG_FOLDERS = ['signage']
+// audio 40 matches the signage storage.rules ceiling — 100 here let a 60MB
+// upload pass the client guard and die with PERMISSION_DENIED at 100% transfer
+const BIG_LIMITS_MB = { video: 1024, audio: 40 }
+
 // Some audio/video files arrive with an EMPTY file.type (browser couldn't sniff
 // it), which previously mis-classified them as images (10MB) and uploaded them
 // as octet-stream (rejected by the audio/* storage rule). Fall back to the
@@ -44,9 +53,9 @@ function bestContentType(file) {
   return VIDEO_CT[ext] || AUDIO_CT[ext] || MODEL_CT[ext] || t || 'application/octet-stream'
 }
 
-function guardSize(file) {
+function guardSize(file, folder = '') {
   const kind = fileKind(file)
-  const limit = UPLOAD_LIMITS_MB[kind]
+  const limit = (BIG_FOLDERS.includes(folder) && BIG_LIMITS_MB[kind]) || UPLOAD_LIMITS_MB[kind]
   if (file.size > limit * 1024 * 1024) {
     const mb = Math.round(file.size / 1024 / 1024)
     throw new Error(`الملف كبير جداً (${mb}MB) — الحد الأقصى ${limit}MB${kind === 'video' ? '. اضغط الفيديو أو قصّر مدته' : kind === 'audio' ? '. اختر أغنية أصغر' : ''}`)
@@ -62,7 +71,11 @@ async function put(r, file, contentType, onProgress) {
   fire({ ...meta, progress: 0, state: 'start' })
   try {
     await new Promise((resolve, reject) => {
-      const task = uploadBytesResumable(r, file, { contentType })
+      // Every upload gets a UNIQUE timestamped path, so the served bytes can
+      // never change under their URL — immutable caching is safe and it is
+      // what lets a repeat menu open paint photos from the browser's HTTP
+      // cache instantly instead of re-fetching each one («تظهر فارغة ثم تحمل»).
+      const task = uploadBytesResumable(r, file, { contentType, cacheControl: 'public, max-age=31536000, immutable' })
       task.on('state_changed', (s) => {
         const p = s.totalBytes ? Math.round((s.bytesTransferred / s.totalBytes) * 100) : 0
         if (onProgress) onProgress(p)
@@ -100,7 +113,7 @@ export async function uploadImage(tid, file, folder = 'items', onProgress) {
 // Uploads any file (e.g. a background video) as-is and returns its public URL.
 export async function uploadFile(tid, file, folder = 'media', onProgress) {
   if (!file) return ''
-  guardSize(file)
+  guardSize(file, folder)
   const ext = (file.name.split('.').pop() || 'bin').toLowerCase()
   const path = `tenants/${tid}/${folder}/${Date.now()}-${randomToken(6)}.${ext}`
   const url = await put(ref(storage, path), file, bestContentType(file), onProgress)

@@ -6,6 +6,11 @@
 
 :root {
   /* ===== Color (Light) — clean neutral white ===== */
+  /* NOTE: the admin/cashier/KDS consoles get a cooler, slightly darker ground
+     (#f3f4f6) so cards read as raised planes — but that lives in
+     venue-console.css, scoped to the console shells. It must NOT live here:
+     :root --bg also paints the CUSTOMER MENU body and feeds the diner PWA's
+     manifest background_color, and the menu's look is frozen by decision. */
   --bg: #fafafa;
   --bg-2: #f1f1f3;
   --surface: #ffffff;
@@ -621,10 +626,14 @@ ul {
 .app-bar .nfy-wrap,
 .app-bar > button { flex: none; }
 /* Six 46px controls + gaps need 332px, which leaves nothing for the venue name
-   on a 360px phone. The three that already have a home in «المزيد» (preview as
+   on a 360px PHONE. The three that already have a home in «المزيد» (preview as
    customer, language, dark mode) leave the bar there; search, the page guide
-   and the notification bell stay, because they have no other entry point. */
-@media (max-width: 979.98px) {
+   and the notification bell stay, because they have no other entry point.
+   But a TABLET has the width to spare (at 760px those 332px still leave 428px
+   for the name), and burying the dark-mode toggle in a menu is exactly why it
+   felt like "there is no dark mode". So the controls hide on phones only and
+   ride the bar from 760px up — the toggle is a tap away on every tablet. */
+@media (max-width: 759.98px) {
   .app-bar .ab-wide { display: none; }
 }
 /* KITCHEN screen header. Its row has more controls than the admin bar and no
@@ -719,6 +728,52 @@ ul {
   /* SOLID chrome (was 88% surface + blur — page content bled through it). */
   background: var(--chrome-bg, var(--surface));
   border-top: 1px solid var(--chrome-border, var(--border));
+}
+/* ---- «رقم مضيء» — live notification badge on the nav row of the section the
+   notification belongs to (pending orders on the cashier, kitchen tickets on
+   the KDS, open complaints on complaints). The count sits in a glowing circle
+   and simply grows as notifications grow. Latin digits, no motion for
+   reduced-motion users. */
+.nav-badge {
+  flex: none;
+  margin-inline-start: auto;
+  min-width: 19px;
+  height: 19px;
+  padding: 0 5px;
+  border-radius: 999px;
+  background: var(--danger, #dc2626);
+  color: #fff;
+  font-size: 11px;
+  font-weight: 800;
+  line-height: 1;
+  display: inline-grid;
+  place-items: center;
+  animation: nav-badge-glow 2s ease-out infinite;
+}
+@keyframes nav-badge-glow {
+  0% { box-shadow: 0 0 0 0 rgba(220, 38, 38, 0.55); }
+  70% { box-shadow: 0 0 0 7px rgba(220, 38, 38, 0); }
+  100% { box-shadow: 0 0 0 0 rgba(220, 38, 38, 0); }
+}
+@media (prefers-reduced-motion: reduce) {
+  .nav-badge { animation: none; box-shadow: 0 0 8px rgba(220, 38, 38, 0.45); }
+}
+/* bottom nav: the row is a centred column — the badge floats over the icon's
+   shoulder instead of pushing the label */
+.bottom-nav a { position: relative; }
+.bottom-nav .nav-badge {
+  position: absolute;
+  top: 3px;
+  inset-inline-end: calc(50% - 26px);
+  margin-inline-start: 0;
+}
+/* collapsed icon-rail sidebar: no text row to sit in — ride the icon corner */
+.admin-shell[data-collapsed] .admin-side-nav a { position: relative; }
+.admin-shell[data-collapsed] .admin-side-nav .nav-badge {
+  position: absolute;
+  top: 3px;
+  inset-inline-end: 4px;
+  margin-inline-start: 0;
 }
 .bottom-nav a,
 .bottom-nav > button {
@@ -1102,6 +1157,12 @@ ul {
 .admin-shell { min-height: 100dvh; }
 .admin-main { min-height: 100dvh; padding-bottom: calc(var(--bottomnav-h) + var(--safe-b)); }
 .admin-sidebar { display: none; }
+/* app-bar sidebar toggle: only where the sidebar exists (≥980px), 44px so a
+   finger can hit it — the in-sidebar 28px toggle and 8px rail are for a mouse */
+.ab-side-toggle { display: none; }
+@media (min-width: 980px) {
+  .ab-side-toggle { display: grid; place-items: center; width: 44px; height: 44px; flex: none; }
+}
 @media (min-width: 980px) {
   body:has(.admin-shell),
   body:has(.cashier-shell),
@@ -1252,12 +1313,20 @@ ul {
 .admin-side-foot .list-row { font-size: var(--fs-sm); white-space: nowrap; }
 .admin-side-resize { position: absolute; inset-block: 0; inset-inline-end: -3px; width: 8px; cursor: ew-resize; z-index: 3; }
 .admin-side-resize:hover { background: color-mix(in srgb, var(--brand) 28%, transparent); }
+/* the app-bar carries the ONE sidebar toggle now (.ab-side-toggle, 44px, finger-
+   sized) — the tiny 28px in-sidebar toggle beside the brand was the redundant
+   "second collapse button". Hidden at every desktop width where the app-bar
+   toggle exists. */
+@media (min-width: 980px) { .admin-side-toggle { display: none; } }
 /* collapsed icon-rail */
 [data-collapsed='true'] .admin-brand strong,
 [data-collapsed='true'] .admin-side-nav a span,
 [data-collapsed='true'] .admin-side-title,
 [data-collapsed='true'] .admin-side-foot .list-row span,
-[data-collapsed='true'] .admin-side-foot p { display: none; }
+[data-collapsed='true'] .admin-side-foot p,
+/* the full-width "install app" button can't fit a 66px rail — hide it collapsed
+   (it's still in the app-bar «تثبيت التطبيق على الجهاز» card and Settings) */
+[data-collapsed='true'] .admin-side-foot .btn-block { display: none; }
 [data-collapsed='true'] .admin-brand-row { flex-direction: column; gap: 8px; padding-bottom: 10px; } /* logo on top, arrow below */
 [data-collapsed='true'] .admin-brand { flex: none; justify-content: center; }
 [data-collapsed='true'] .admin-side-nav a, [data-collapsed='true'] .admin-side-foot .list-row { justify-content: center; padding-inline: 0; }
@@ -1540,8 +1609,16 @@ select option,
       on EVERY tap; other devices flash grey. Never wanted in an app shell.
    2) Suppress the long-press callout + accidental text selection on controls.
    3) `touch-action: manipulation` drops the ~300ms double-tap-zoom delay so
-      taps register instantly on slow tablets (keeps scroll + pinch-zoom).
+      taps register instantly on slow tablets.
    Real text stays selectable in inputs / editable / .allow-select. */
+/* APP-LIKE, NO NATIVE ZOOM (user 2026-08-18): pinch-zoom and double-tap-zoom
+   are off EVERYWHERE — menu, table menu, staff screens. touch-action composes
+   by intersection down the tree, so scrolling keeps working while zoom can't
+   come back on any descendant. Every in-app zoom surface (GalleryZoom, Viewer,
+   GenImageZoom, model-viewer) is custom pointer-gesture code and unaffected.
+   Pairs with the gesturestart/gesturechange kill switch in index.html (iOS
+   Safari ignores both the viewport meta AND touch-action for pinch). */
+html { touch-action: pan-x pan-y; }
 * { -webkit-tap-highlight-color: transparent; }
 button, a, label, .btn, .icon-btn, .chip, [role='button'], .segmented button,
 .list-row, .food-card, .showcase-card, .store-card, .special-card, .pos-opt,
@@ -1625,19 +1702,33 @@ body[data-custheme] .setup-shell {
   --text: var(--cust-text);
   --border: var(--cust-border);
   --brand: var(--cust-brand);
+  /* The SECONDARY half of the palette is DERIVED from the five custom tokens,
+     never inherited: the venue only edits 5 values, and inheriting the other 5
+     from whatever systheme (or dark bridge) sits underneath split the palette
+     in half — e.g. a light custom --surface beside a dark inherited
+     --surface-2 made inputs unreadable. Deriving keeps any custom palette
+     internally consistent in BOTH modes. */
+  --bg-2: color-mix(in srgb, var(--cust-bg) 94%, var(--cust-text));
+  --surface-2: color-mix(in srgb, var(--cust-surface) 93%, var(--cust-text));
+  --text-muted: color-mix(in srgb, var(--cust-text) 64%, var(--cust-bg));
+  --text-faint: color-mix(in srgb, var(--cust-text) 46%, var(--cust-bg));
+  --border-strong: color-mix(in srgb, var(--cust-border) 70%, var(--cust-text));
 }
 
 /* ===== 'options' POS template: reference-style cards — sizes/add-ons as chips
    on the card, live-price Add button, no sheets. Equal-height rows, no masonry
    (speed surface); required-group misses glow + shake. ===== */
+/* CSS owns this grid — CashierPOS.jsx no longer carries the inline duplicate
+   that used to shadow every edit made here. */
 .pos-items[data-template='options'] {
   display: grid;
   grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
-  gap: var(--sp-3);
+  gap: 12px;
   align-items: stretch;
+  align-content: start;
 }
 .pos-opt-card { display: flex; flex-direction: column; gap: 10px; padding: 12px; }
-.pos-opt-img { width: 56px; height: 56px; border-radius: 14px; object-fit: cover; background: var(--surface-2); flex: none; }
+.pos-opt-img { width: 64px; height: 64px; border-radius: 14px; object-fit: cover; background: var(--surface-2); flex: none; }
 .pos-opt-group { display: flex; flex-direction: column; gap: 6px; border-radius: var(--r-md); }
 .pos-opt-group .chip { min-height: 34px; }
 .pos-opt-warn { outline: 2px solid var(--danger); outline-offset: 3px; animation: pos-warn-shake 300ms var(--ease); }
@@ -1694,14 +1785,13 @@ body[data-custheme] .setup-shell {
 .upload-bar span { display: block; height: 100%; border-radius: var(--r-pill); transition: width 200ms ease; }
 
 /* ===== staff PIN lock overlay ===== */
-.pinlock { position: fixed; inset: 0; z-index: 900; background: color-mix(in srgb, var(--bg) 86%, #000); backdrop-filter: blur(14px); display: grid; place-items: center; isolation: isolate; overflow: hidden auto; }
-/* short viewports: shrink the clock + pad so the whole pad always fits */
-@media (max-height: 760px) {
-  .pinlock-time { font-size: clamp(34px, 7vh, 56px) !important; }
-  .pinlock .pinlock-pad button { width: clamp(52px, 8.5vh, 74px) !important; height: clamp(52px, 8.5vh, 74px) !important; }
-  .pinlock-box { gap: 8px; padding-block: 12px; }
-  .pinlock-logo { width: 44px; height: 44px; }
-}
+/* FIXED, NEVER SCROLLS (user 2026-08-18): overflow is hidden — every element
+   clamps against vh below so the whole screen always fits one viewport, which
+   is what actually fixes the «الخلفية ليست كاملة» scroll-past-the-photo bug.
+   The bglayer stays ABSOLUTE on purpose: .pinlock's backdrop-filter makes it
+   the containing block, so `fixed` here degrades to absolute anyway AND trips
+   a Chromium compositing bug that freezes the background <video> solid. */
+.pinlock { position: fixed; inset: 0; z-index: 900; background: color-mix(in srgb, var(--bg) 86%, #000); backdrop-filter: blur(14px); display: grid; place-items: center; isolation: isolate; overflow: hidden; }
 /* venue background media behind the lock UI */
 .pinlock-bglayer { position: absolute; inset: 0; z-index: -1; pointer-events: none; overflow: hidden; }
 .pinlock-bglayer video,
@@ -1746,7 +1836,7 @@ body[data-custheme] .setup-shell {
 .pinlock[data-hasbg]:not([data-tone='light']) .pinlock-dots span { border-color: rgba(255, 255, 255, 0.55); }
 .pinlock[data-hasbg]:not([data-tone='light']) .pinlock-dots span.on { background: #fff; border-color: #fff; }
 /* pad button shapes */
-.pinlock[data-shape='circle'] .pinlock-pad button { border-radius: 50%; height: 76px; }
+.pinlock[data-shape='circle'] .pinlock-pad button { border-radius: 50%; height: var(--pinkey); }
 .pinlock[data-shape='square'] .pinlock-pad button { border-radius: 8px; }
 .pinlock[data-shape='pill'] .pinlock-pad button { border-radius: 999px; }
 /* ambience & motion pack */
@@ -1756,10 +1846,13 @@ body[data-custheme] .setup-shell {
 @keyframes pin-out { to { opacity: 0; transform: scale(1.02); } }
 .pinlock-bglayer::after { content: ''; position: absolute; inset: 0; background: radial-gradient(ellipse at center, transparent 34%, rgba(0, 0, 0, 0.45)); }
 .pinlock-clock { display: flex; flex-direction: column; align-items: center; gap: 2px; margin-bottom: 4px; }
-.pinlock-time { font-size: 44px; font-weight: 900; line-height: 1; letter-spacing: 1px; }
+/* every size below clamps against vh so clock+logo+dots+pad+roster ALWAYS fit
+   one viewport — this is what retired the old max-height media query AND the
+   scrolling lock screen */
+.pinlock-time { font-size: clamp(28px, 6vh, 44px); font-weight: 900; line-height: 1; letter-spacing: 1px; }
 /* Apple-style clock customization (font / size) */
-.pinlock-time[data-size='sm'] { font-size: 30px; }
-.pinlock-time[data-size='lg'] { font-size: 64px; }
+.pinlock-time[data-size='sm'] { font-size: clamp(22px, 4.2vh, 30px); }
+.pinlock-time[data-size='lg'] { font-size: clamp(34px, 8vh, 64px); }
 .pinlock-time[data-font='thin'] { font-weight: 250; letter-spacing: 3px; }
 .pinlock-time[data-font='serif'] { font-family: 'Amiri', 'Times New Roman', serif; font-weight: 700; }
 .pinlock-time[data-font='mono'] { font-family: ui-monospace, 'Cascadia Mono', Consolas, monospace; font-weight: 800; letter-spacing: 0; }
@@ -1776,22 +1869,46 @@ body[data-custheme] .setup-shell {
   .pinlock, .pinlock.ok, .pinlock-pad button { animation: none; }
   .pinlock-dots.checking span.on { animation: none; }
 }
-.pinlock-box { display: flex; flex-direction: column; align-items: center; gap: 14px; padding: 28px; text-align: center; max-width: 420px; width: 100%; }
-.pinlock-logo { width: 64px; height: 64px; border-radius: 50%; object-fit: cover; }
+.pinlock-box { display: flex; flex-direction: column; align-items: center; gap: clamp(6px, 1.5vh, 14px); padding: clamp(10px, 2.2vh, 28px) 28px; text-align: center; max-width: 420px; width: 100%; max-height: 100dvh; }
+.pinlock-logo { width: clamp(40px, 7vh, 64px); height: clamp(40px, 7vh, 64px); border-radius: 50%; object-fit: cover; }
 .pinlock-staff { display: flex; gap: 12px; flex-wrap: wrap; justify-content: center; }
+/* informational roster strip under the PIN pad (PIN-only entry: names are a
+   greeting, not a selection) — smaller avatars, muted presence */
+.pinlock-staff-strip { gap: 10px; opacity: 0.85; margin-top: 4px; }
+.pinlock-staff-strip .pinlock-avatar { width: clamp(32px, 4.5vh, 40px); height: clamp(32px, 4.5vh, 40px); font-size: 16px; border-width: 1.5px; }
 .pinlock-person { display: flex; flex-direction: column; align-items: center; gap: 6px; background: none; border: none; cursor: pointer; color: var(--text); }
 .pinlock-person:active .pinlock-avatar { transform: scale(0.92); }
-.pinlock-avatar { width: 62px; height: 62px; border-radius: 50%; display: grid; place-items: center; background: var(--brand-soft); color: var(--brand); font-weight: 900; font-size: 24px; border: 2px solid var(--border-strong); transition: transform var(--dur-fast) var(--ease-out-strong); }
+.pinlock-avatar { width: clamp(48px, 7vh, 62px); height: clamp(48px, 7vh, 62px); border-radius: 50%; display: grid; place-items: center; background: var(--brand-soft); color: var(--brand); font-weight: 900; font-size: 24px; border: 2px solid var(--border-strong); transition: transform var(--dur-fast) var(--ease-out-strong); }
 .pinlock-dots { display: flex; gap: 14px; padding: 8px 0; }
 .pinlock-dots span { width: 16px; height: 16px; border-radius: 50%; border: 2px solid var(--border-strong); }
 .pinlock-dots span.on { background: var(--brand); border-color: var(--brand); }
 .pinlock-dots.err { animation: pin-shake 0.4s ease; }
 .pinlock-dots.err span.on { background: var(--danger); border-color: var(--danger); }
 @keyframes pin-shake { 0%, 100% { transform: translateX(0); } 25% { transform: translateX(-8px); } 75% { transform: translateX(8px); } }
-.pinlock-pad { display: grid; grid-template-columns: repeat(3, 76px); gap: 10px; }
-.pinlock-pad button { height: 64px; border-radius: 18px; border: 1px solid var(--border); background: var(--surface); color: var(--text); font-size: 24px; font-weight: 800; cursor: pointer; transition: transform var(--dur-fast) var(--ease-out-strong), background var(--dur-fast); }
+.pinlock-pad { --pinkey: clamp(54px, 8.5vh, 76px); display: grid; grid-template-columns: repeat(3, var(--pinkey)); gap: clamp(8px, 1.4vh, 10px); }
+.pinlock-pad button { position: relative; overflow: hidden; height: clamp(46px, 7vh, 64px); border-radius: 18px; border: 1px solid var(--border); background: var(--surface); color: var(--text); font-size: clamp(20px, 3vh, 24px); font-weight: 800; cursor: pointer; transition: transform var(--dur-fast) var(--ease-out-strong), background var(--dur-fast); }
 .pinlock-pad button:active { transform: scale(0.92); background: var(--surface-2); }
+/* key-press FX (user 2026-08-18): Apple-keypad highlight — lights up the
+   instant the finger lands (transition 0s on :active) and fades out slowly on
+   release — plus a soft centered ripple for the glass/photo themes. Both draw
+   from currentColor so every tone (light/dark/brand/photo) stays in contrast. */
+.pinlock-pad button::after { content: ''; position: absolute; inset: 0; border-radius: inherit; background: color-mix(in srgb, currentColor 20%, transparent); opacity: 0; transition: opacity 480ms ease; pointer-events: none; }
+.pinlock-pad button:active::after { opacity: 1; transition-duration: 0s; }
+.pinlock-pad button::before { content: ''; position: absolute; inset: 0; border-radius: inherit; background: radial-gradient(circle, color-mix(in srgb, currentColor 28%, transparent) 0%, transparent 65%); transform: scale(0); opacity: 0; pointer-events: none; }
+.pinlock-pad button.rip::before { animation: pin-ripple 480ms var(--ease-out-strong); }
+@keyframes pin-ripple { from { transform: scale(0); opacity: 1; } to { transform: scale(2.4); opacity: 0; } }
+@media (prefers-reduced-motion: reduce) {
+  .pinlock-pad button.rip::before { animation: none; }
+  .pinlock-pad button::after { transition: none; }
+}
 .pinlock-alt { color: var(--text-muted) !important; }
+/* bottom links (email sign-in / sign-out): the bare faint text vanished over
+   bright background photos — a translucent dark pill keeps them readable on
+   every tone and any photo/video behind them */
+.pinlock-link { margin-top: 6px; font-weight: 700; color: var(--text-muted); background: none; border: none; cursor: pointer; text-decoration: none; padding: 7px 16px; border-radius: 999px; }
+.pinlock[data-hasbg] .pinlock-link, .pinlock[data-tone='brand'] .pinlock-link, .pinlock[data-tone='dark'] .pinlock-link {
+  color: #fff; background: rgba(0, 0, 0, 0.35); backdrop-filter: blur(6px);
+}
 
 /* signed-in banner on the landing page */
 .lp-session {
@@ -1963,6 +2080,9 @@ body[data-custheme] .setup-shell {
    ============================================================ */
 
 /* ---- NOIR: elevated dark, pill actions, night-shift luxe ---- */
+/* NIGHT THEME — dark-COMMITTED by identity. No light variant exists or is
+   wanted; the light/dark toggle intentionally has no effect here (a venue that
+   wants to switch modes picks a neutral theme). Hence no dark bridge needed. */
 [data-systheme='noir'] {
   color-scheme: dark;
   --bg: #0e0e11;
@@ -2319,6 +2439,8 @@ body[data-glass-ripple='3'] [data-systheme='glass'] :is(.card, .pos-tile, .kds-t
 [data-systheme='sharp'] .board-col { border: 1px solid var(--border); background: var(--surface); }
 
 /* ---- NEON: deep night + cyan glow accents — youthful late-shift energy ---- */
+/* NIGHT THEME — dark-COMMITTED by identity (a light neon is a contradiction).
+   No light variant, no dark bridge; the toggle intentionally does nothing. */
 [data-systheme='neon'] {
   color-scheme: dark;
   --bg: #0b0e14;
@@ -2404,6 +2526,87 @@ body[data-glass-ripple='3'] [data-systheme='glass'] :is(.card, .pos-tile, .kds-t
 [data-systheme='wood'] .kds-lane,
 [data-systheme='wood'] .ord-lane,
 [data-systheme='wood'] .board-col { background: color-mix(in srgb, var(--surface) 55%, transparent); border-radius: var(--r-lg); }
+
+/* ============================================================================
+   DARK BRIDGES for the neutral systhemes — THE ROOT FIX for "no dark theme".
+   ----------------------------------------------------------------------------
+   INVARIANT (keep it, forever): a systheme block re-declares the ground/ink
+   tokens (--bg/--surface/--text/--border…) with hardcoded LIGHT values, which
+   shadow the base [data-theme='dark'] palette (index.css ~122). So EVERY
+   neutral systheme MUST also ship a `[data-theme='dark'] [data-systheme='X']`
+   bridge that re-declares those same tokens dark. Because every descendant rule
+   (.card/.app-bar/.board-col/.input…) reads them through var(), the bridge only
+   needs the tokens (+ a dark background where the light block hardcoded a
+   gradient) — the rest cascades. Both selector forms are included: the relative
+   form (toggle writes data-theme on <html>) and the compound form (glassdark /
+   skins put both attrs on <body>). Specificity (0,2,0) beats the light block
+   (0,1,0), so these win regardless of source order.
+   glass already has its bridge above (~2257). noir/neon are dark-COMMITTED by
+   identity (night themes) and intentionally have no light variant.
+   ============================================================================ */
+[data-theme='dark'] [data-systheme='airy'],
+[data-systheme='airy'][data-theme='dark'] {
+  --bg: #141210; --bg-2: #0f0d0c; --surface: #1e1a17; --surface-2: #282320;
+  --text: #f4efe9; --text-muted: #b0a498; --text-faint: #847a70;
+  --border: #332c26; --border-strong: #473d34;
+  --sh-1: 0 3px 18px rgba(0, 0, 0, 0.42);
+  --sh-2: 0 12px 34px rgba(0, 0, 0, 0.5);
+  --sh-3: 0 20px 52px rgba(0, 0, 0, 0.55);
+  background: var(--bg);
+}
+[data-theme='dark'] [data-systheme='sharp'],
+[data-systheme='sharp'][data-theme='dark'] {
+  --bg: #0e0e10; --bg-2: #16161a; --surface: #17171a; --surface-2: #202024;
+  --text: #f5f5f7; --text-muted: #a6a6b0; --text-faint: #77777f;
+  --border: #2c2c31; --border-strong: #46464e;
+  --sh-2: 0 2px 10px rgba(0, 0, 0, 0.5);
+  --sh-3: 0 6px 22px rgba(0, 0, 0, 0.6);
+  background: var(--bg);
+}
+[data-theme='dark'] [data-systheme='paper'],
+[data-systheme='paper'][data-theme='dark'] {
+  --bg: #1a1613; --bg-2: #141110; --surface: #231e19; --surface-2: #2b251f;
+  --text: #efe7da; --text-muted: #ab9f8d; --text-faint: #7d7263;
+  --border: #352d24; --border-strong: #4a4033;
+  --sh-2: 0 2px 10px rgba(0, 0, 0, 0.4);
+  --sh-3: 0 8px 22px rgba(0, 0, 0, 0.5);
+  background: var(--bg);
+}
+[data-theme='dark'] [data-systheme='wood'],
+[data-systheme='wood'][data-theme='dark'] {
+  --bg: #1c1611; --bg-2: #15100c; --surface: #241c15; --surface-2: #2d241b;
+  --text: #f0e4d4; --text-muted: #b4a48d; --text-faint: #877a66;
+  --border: #3a2f22; --border-strong: #51422f;
+  --brand: #b3773d; --brand-soft: rgba(179, 119, 61, 0.18); --on-brand: #fff7ec;
+  --sh-1: 0 2px 12px rgba(0, 0, 0, 0.45);
+  --sh-2: 0 10px 30px rgba(0, 0, 0, 0.5);
+  --sh-3: 0 16px 44px rgba(0, 0, 0, 0.55);
+  background: linear-gradient(160deg, #231b13, #1a140e 60%, #1c1611);
+}
+/* The light wood block tints the stat number toward #000 (a deep espresso on
+   cream); on the dark wood ground that same mix falls to the large-text
+   contrast floor, so tint toward the surface's light ink instead. */
+[data-theme='dark'] [data-systheme='wood'] .stat .value,
+[data-systheme='wood'][data-theme='dark'] .stat .value {
+  color: color-mix(in srgb, var(--brand) 76%, #ffffff);
+}
+/* Wood's heritage buttons hardcode LIGHT ingredients (a 45%-white gradient
+   top, 0.55-white inset lips) that the token-only bridge cannot reach — on the
+   dark timber they rendered as glaring half-lit slabs. Re-mix them from the
+   dark tokens with a whisper of the same light for the grain read. */
+[data-theme='dark'] [data-systheme='wood'] .btn:where(:not(.btn-primary):not(.btn-success):not(.btn-danger):not(.btn-ghost):not(.btn-link):not(.btn-outline)),
+[data-systheme='wood'][data-theme='dark'] .btn:where(:not(.btn-primary):not(.btn-success):not(.btn-danger):not(.btn-ghost):not(.btn-link):not(.btn-outline)) {
+  background: linear-gradient(180deg, color-mix(in srgb, #fff 7%, var(--surface-2)), var(--surface-2));
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.08), var(--sh-1);
+}
+[data-theme='dark'] [data-systheme='wood'] .btn-primary,
+[data-systheme='wood'][data-theme='dark'] .btn-primary {
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.12), var(--sh-1);
+}
+[data-theme='dark'] [data-systheme='wood'] .admin-side-nav a.active,
+[data-systheme='wood'][data-theme='dark'] .admin-side-nav a.active {
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.1), var(--sh-1);
+}
 
 /* ===== KDS pro shell: KPI pulse + board + side rail (queue / load / activity) ===== */
 .kds-shell { background: var(--bg); color: var(--text); min-height: 100dvh; }
@@ -2895,26 +3098,100 @@ body[data-theme='dark'] .pos-fullscreen[data-systheme='glass'] { background: var
   min-height: 0;
   max-height: none !important;
 }
-/* item surface per template — CSS-driven so every screen size gets sane columns */
+/* item surface per template — sized by the CATALOG'S REAL WIDTH (container
+   queries), never by pointer type. The old sizing gated the roomy tablet cards
+   behind `pointer: coarse`, so a Windows tablet / keyboard-case tablet reported
+   a fine pointer and fell into the 120px desktop minimum — the exact
+   "squeezed unreadable cards" complaint. Media-query fallbacks below keep
+   pre-container-query browsers on the previous behavior. */
+.pos-catalog { container-type: inline-size; }
 .pos-items { overflow-y: auto; }
 .pos-items[data-template='grid'],
-.pos-items[data-template='touch'] { display: grid; gap: 10px; align-content: start; }
-.pos-items[data-template='grid'] { grid-template-columns: repeat(auto-fill, minmax(120px, 1fr)); }
-.pos-items[data-template='touch'] { grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); }
+.pos-items[data-template='touch'] { display: grid; gap: 12px; align-content: start; }
+.pos-items[data-template='grid'] { grid-template-columns: repeat(auto-fill, minmax(158px, 1fr)); }
+.pos-items[data-template='touch'] { grid-template-columns: repeat(auto-fill, minmax(180px, 1fr)); }
 .pos-items[data-template='compact'],
 .pos-items[data-template='lite'] { display: flex; flex-direction: column; gap: 6px; }
-/* stable media box: aspect-ratio instead of a fixed pixel height, so tiles
-   never collapse or stretch on narrow screens */
+@container (min-width: 560px) {
+  .pos-items[data-template='grid'] { grid-template-columns: repeat(auto-fill, minmax(175px, 1fr)); gap: 14px; }
+  .pos-items[data-template='touch'] { grid-template-columns: repeat(auto-fill, minmax(200px, 1fr)); gap: 14px; }
+}
+@container (min-width: 820px) {
+  .pos-items[data-template='grid'] { grid-template-columns: repeat(auto-fill, minmax(195px, 1fr)); gap: 16px; }
+  .pos-items[data-template='touch'] { grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); gap: 16px; }
+}
+/* card anatomy: photo on top, 2-line name, bold brand price. FIXED media
+   HEIGHT, not aspect-ratio, and NO content-visibility — that combo collapsed
+   every tile to a thin image sliver on tablet WebViews (the browser skipped
+   the subtree and the aspect-ratio box computed a near-zero height). A fixed
+   height + a card min-height can never collapse, on any engine. */
+.pos-tile {
+  display: flex;
+  flex-direction: column;
+  overflow: hidden; /* clean rounded card — the price tag lives INSIDE, on the photo */
+  padding: 0;
+  text-align: start;
+  cursor: pointer;
+  min-height: 208px;
+}
+.pos-tile .stack { flex: none; }
+/* photo is the positioning context for the price tag that floats on it — fixed
+   height, never shrinks (the card can't collapse because this holds it open) */
+.pos-tile-photo { position: relative; flex: none; }
 .pos-tile-media {
   width: 100%;
-  aspect-ratio: 16 / 10;
+  height: 140px;
   object-fit: cover;
   display: block;
   background: var(--surface-2);
 }
+.pos-items[data-template='touch'] .pos-tile-media { height: 160px; }
+.pos-tile-media-empty { display: grid; place-items: center; }
+/* PRICE TAG — a brand-coloured tab welded to the photo's bottom-left corner: it
+   reads as part of the card (not a floating pill), never collides with the name
+   below, and a soft top gradient on the photo keeps it legible over any dish. */
+.pos-tile-photo::after {
+  content: ''; position: absolute; inset-inline: 0; bottom: 0; height: 42px;
+  background: linear-gradient(to top, rgba(0,0,0,0.28), transparent);
+  pointer-events: none;
+}
+.pos-tile-price {
+  position: absolute;
+  left: 0; bottom: 10px;             /* welded to the photo's LEFT edge, floating up a touch */
+  display: inline-flex; align-items: center; gap: 3px;
+  padding: 5px 13px;
+  border-radius: 0 999px 999px 0;    /* flush-square on the card edge, rounded toward the interior */
+  background: var(--brand);
+  color: var(--on-brand, #fff);
+  font-weight: 800;
+  font-size: 14.5px;
+  line-height: 1.1;
+  box-shadow: 2px 2px 8px rgba(0, 0, 0, 0.28);
+  z-index: 2;
+}
+/* the riyal glyph + digits inside the tag inherit the white ink, not brand */
+.pos-tile-price svg,
+.pos-tile-price .num,
+.pos-tile-price [class*='riyal'] { color: inherit; fill: currentColor; }
+.pos-tile-from { font-size: 10.5px; font-weight: 700; opacity: 0.85; }
+.pos-items[data-template='touch'] .pos-tile-price { font-size: 16px; }
+/* name gets the whole body row now — the price is up on the photo */
+.pos-tile-body { display: flex; flex-direction: column; justify-content: center; flex: 1; padding: 10px 12px 12px; }
+.pos-tile-name {
+  font-weight: 700;
+  font-size: 14.5px;
+  line-height: 1.3;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+  min-height: calc(2 * 1.3em); /* steady rows: 1-line names don't shrink the card */
+}
+.pos-items[data-template='touch'] .pos-tile-name { font-size: 15.5px; }
 @media (max-width: 560px) {
-  .pos-items[data-template='grid'] { grid-template-columns: repeat(auto-fill, minmax(104px, 1fr)); gap: 8px; }
-  .pos-items[data-template='touch'] { grid-template-columns: repeat(auto-fill, minmax(128px, 1fr)); gap: 8px; }
+  .pos-tile-media { height: 112px; }
+  .pos-items[data-template='grid'] { grid-template-columns: repeat(auto-fill, minmax(140px, 1fr)); gap: 8px; }
+  .pos-items[data-template='touch'] { grid-template-columns: repeat(auto-fill, minmax(132px, 1fr)); gap: 8px; }
 }
 .pos-order {
   min-height: 0;
@@ -2969,6 +3246,16 @@ body[data-theme='dark'] .pos-fullscreen[data-systheme='glass'] { background: var
 /* steppers & top-bar controls: crisp physical press */
 .pos-fullscreen .icon-btn { transition: transform var(--dur-fast) var(--ease-out-strong), background var(--dur-fast); }
 .pos-fullscreen .icon-btn:active { transform: scale(0.9); }
+/* every button on an operational surface answers the finger in <100ms — the
+   visual press must NEVER wait for the network the way the old awaited
+   transactions made it feel like it did */
+.cashier-shell .btn:active,
+.kds-shell .btn:active,
+.pos-fullscreen .btn:active { transform: scale(0.97); transition-duration: 60ms; }
+/* wide tills: the bill can afford more room without starving the catalog */
+@media (min-width: 1280px) {
+  .pos-body { grid-template-columns: 1fr minmax(360px, 440px); }
+}
 /* tablets keep the 2-pane POS — just a narrower bill */
 @media (max-width: 1000px) {
   .pos-body { grid-template-columns: 1fr minmax(280px, 330px); }
@@ -2977,7 +3264,7 @@ body[data-theme='dark'] .pos-fullscreen[data-systheme='glass'] { background: var
    narrower bill — the old code dropped these into the cramped phone strip, which
    is exactly the "order details squeezed" complaint. Full-height beats a 46dvh strip. */
 @media (min-width: 561px) and (max-width: 860px) {
-  .pos-body { grid-template-columns: 1fr minmax(228px, 300px); }
+  .pos-body { grid-template-columns: 1fr minmax(240px, 310px); }
   .pos-catalog { padding: var(--sp-2); }
   .pos-order-lines, .pos-order-foot { padding: var(--sp-2); }
 }
@@ -3007,22 +3294,10 @@ body[data-theme='dark'] .pos-fullscreen[data-systheme='glass'] { background: var
   .pos-order-foot .btn-lg,
   .pos-order-foot .btn-primary { min-height: 54px; font-size: var(--fs-md); }
   .pos-topbar .segmented button { min-height: 40px; }
-  /* On touch, the item image uses a FIXED (shorter) height instead of aspect-ratio:
-     aspect-ratio can misbehave on some tablet browsers, stretching the image and
-     CLIPPING the name+price row. A flex column with a fixed-height image guarantees
-     the price always shows (2026-07 tablet fix). */
-  .pos-tile { display: flex; flex-direction: column; }
-  .pos-tile-media { aspect-ratio: auto; height: 78px; flex: none; }
-  .pos-items[data-template='touch'] .pos-tile-media { height: 94px; }
-  .pos-tile .stack { flex: none; }
-}
-/* tablets (touch, wider than a phone): roomier tiles + a slightly taller image,
-   but still fixed-height so the price is never clipped */
-@media (min-width: 561px) and (pointer: coarse) {
-  .pos-items[data-template='grid'] { grid-template-columns: repeat(auto-fill, minmax(146px, 1fr)); gap: 12px; }
-  .pos-items[data-template='touch'] { grid-template-columns: repeat(auto-fill, minmax(172px, 1fr)); gap: 12px; }
-  .pos-tile-media { height: 90px; }
-  .pos-items[data-template='touch'] .pos-tile-media { height: 108px; }
+  /* media HEIGHT is now the single fixed base above (140/160px) for EVERY
+     pointer — the old coarse-pointer overrides here shrank it back to 96-124px
+     on the real tablet, which is exactly the "cards too small, image cut" the
+     owner saw. Pointer type only bumps tap targets now, never the tile size. */
 }
 
 /* ===== Dashboard templates (exec / ops / min) ===== */
@@ -3115,17 +3390,69 @@ body[data-theme='dark'] .pos-fullscreen[data-systheme='glass'] { background: var
     overflow-y: auto;
     overscroll-behavior: contain;
   }
-  /* Sticky lane header MUST match its lane's material in every theme —
-     `inherit` copies the column bg (opaque classic, translucent glass…) and
-     the backdrop blur masks tickets scrolling underneath. An opaque token
-     here renders as a solid black bar over glass (2026-07 incident). */
+  /* Sticky lane header: `inherit` copied the column bg, which is TRANSPARENT
+     under paper/wood/neon system themes — tickets scrolled straight through
+     the header. A fully opaque token is also wrong (solid black bar over
+     glass, 2026-07 incident). A theme-adaptive tint + blur satisfies both:
+     --bg-2 tracks every theme, the blur covers the translucent remainder. */
   .cashier-shell > .container.page:has(.board) .board-col h3 {
     position: sticky;
     top: calc(var(--sp-2) * -1);
-    background: inherit;
+    background: color-mix(in srgb, var(--bg-2) 88%, transparent);
     backdrop-filter: blur(12px) saturate(1.3);
     -webkit-backdrop-filter: blur(12px) saturate(1.3);
     border-radius: var(--r-md);
+    margin-inline: calc(var(--sp-2) * -1);
+    padding-inline: var(--sp-3);
+    box-shadow: 0 1px 0 var(--border);
+    z-index: 1;
+  }
+}
+/* PORTRAIT TABLET (760–979): pin the frame here too. Below 980 the cashier
+   shell was a normal scrolling page, so on a portrait tablet the whole page
+   scrolled and the lane tabs slid out of reach mid-service. This makes the
+   shell a 100vh flex column and lets each lane scroll on its own — the exact
+   desktop behaviour, one band earlier. Scoped with :has(.board) so ONLY the
+   board view pins (the completed-orders list keeps normal scroll); kds-shell
+   and the diner menu preview (venue-above) are deliberately left untouched. */
+@media (min-width: 760px) and (max-width: 979.98px) {
+  .cashier-shell:has(.board) {
+    /* dvh with a vh fallback: this band is portrait-tablet Safari/Chrome with
+       COLLAPSING browser chrome — 100vh is the large viewport there, which
+       pushed the lanes' bottom under the toolbar (the exact bug this pins). */
+    height: 100vh !important;
+    height: 100dvh !important;
+    max-height: 100vh !important;
+    max-height: 100dvh !important;
+    overflow: hidden !important;
+    display: flex !important;
+    flex-direction: column !important;
+  }
+  .cashier-shell:has(.board) > .app-bar { flex: none !important; }
+  .cashier-shell > .container.page:has(.board) {
+    flex: 1;
+    min-height: 0;
+    overflow-y: hidden !important;
+  }
+  .cashier-shell > .container.page:has(.board) .board {
+    flex: 1;
+    min-height: 0;
+  }
+  .cashier-shell > .container.page:has(.board) .board-col {
+    min-height: 0;
+    overflow-y: auto;
+    overscroll-behavior: contain;
+  }
+  .cashier-shell > .container.page:has(.board) .board-col h3 {
+    position: sticky;
+    top: calc(var(--sp-2) * -1);
+    background: color-mix(in srgb, var(--bg-2) 88%, transparent);
+    backdrop-filter: blur(12px) saturate(1.3);
+    -webkit-backdrop-filter: blur(12px) saturate(1.3);
+    border-radius: var(--r-md);
+    margin-inline: calc(var(--sp-2) * -1);
+    padding-inline: var(--sp-3);
+    box-shadow: 0 1px 0 var(--border);
     z-index: 1;
   }
 }
@@ -3150,9 +3477,55 @@ body[data-theme='dark'] .pos-fullscreen[data-systheme='glass'] { background: var
   padding: var(--sp-3);
   margin-bottom: var(--sp-2);
   box-shadow: var(--sh-1);
+  /* the whole card opens the detail sheet (drag lives on the header row).
+     border-color ONLY — transitioning transform also animated dnd-kit's drag
+     translate, so a dragged ticket smeared 80ms behind the finger. */
+  cursor: pointer;
+  transition: border-color 120ms ease;
+}
+.order-ticket:active { transform: scale(0.985); }
+@media (hover: hover) {
+  .order-ticket:hover { border-color: var(--brand); }
 }
 .order-ticket.age-warn { border-inline-start-color: var(--warning); }
 .order-ticket.age-late { border-inline-start-color: var(--danger); }
+
+/* ===== Staff entry (/app) — the venue's own front door, zero marketing ===== */
+.staff-entry {
+  min-height: 100dvh;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 18px;
+  padding: 24px;
+  background: var(--bg);
+  position: relative;
+}
+.staff-entry-theme { position: absolute; top: calc(var(--safe-t, 0px) + 14px); inset-inline-end: 14px; }
+.staff-entry-card {
+  width: min(400px, 100%);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 6px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 20px;
+  padding: 28px 24px;
+  box-shadow: var(--sh-2, 0 10px 32px rgba(0, 0, 0, 0.1));
+}
+.staff-entry-card .rlauth-body { width: 100%; display: flex; flex-direction: column; gap: 12px; margin-top: 14px; }
+.staff-entry-card .rlauth-submit {
+  min-height: 48px; border: none; border-radius: 12px;
+  background: var(--brand); color: var(--on-brand);
+  font-weight: 800; font-size: 15px; cursor: pointer;
+}
+.staff-entry-logo { width: 74px; height: 74px; border-radius: 22px; object-fit: cover; }
+.staff-entry-logo-ph { display: grid; place-items: center; background: var(--brand-soft); color: var(--brand); }
+.staff-entry-name { font-size: 21px; font-weight: 800; margin: 4px 0 0; text-align: center; }
+.staff-entry-sub { font-size: 13px; color: var(--text-muted); margin: 0; }
+.staff-entry-powered { font-size: 11px; color: var(--text-faint); letter-spacing: 0.06em; }
 
 /* ===== Stat cards (dashboard) ===== */
 .stat-grid {
@@ -3190,6 +3563,12 @@ body[data-theme='dark'] .pos-fullscreen[data-systheme='glass'] { background: var
   border: 1px solid var(--border);
   border-radius: var(--r-md);
 }
+/* cart line: 44px thumb + tappable body (reopens the item's detail view).
+   The button is an unstyled flex clone of the row's own layout, so with or
+   without it the thumb/text geometry is identical; the Stepper stays outside. */
+.cart-thumb { width: 44px; height: 44px; border-radius: var(--r-md); object-fit: cover; flex: none; background: var(--surface-2); }
+.cart-thumb-ph { display: grid; place-items: center; color: var(--text-faint); }
+.cart-line-open { display: flex; align-items: center; gap: var(--sp-3); flex: 1; min-width: 0; background: none; border: 0; padding: 0; text-align: start; color: inherit; font: inherit; cursor: pointer; }
 .divide > * + * {
   margin-top: var(--sp-2);
 }
@@ -3811,6 +4190,14 @@ body[data-theme='dark'] .pos-fullscreen[data-systheme='glass'] { background: var
 /* --feat-scale («تكبير وتصغير الأصناف المميزة», tenant.featuredScale): ONE
    multiplier over the tile width and its photo — var absent = 1 = today. */
 .special-card { position: relative; flex: 0 0 calc(118px * var(--feat-scale, 1)); background: transparent; border: 0; border-radius: 0; padding: 6px 2px 4px; text-align: center; box-shadow: none; transition: transform var(--dur-fast); }
+/* quick-add badge on the featured strip — role=button span (root is a <button>) */
+.special-add {
+  display: inline-grid; place-items: center;
+  width: 26px; height: 26px; flex: none;
+  border-radius: 50%; background: var(--brand); color: var(--on-brand);
+  cursor: pointer; transition: transform 100ms ease;
+}
+.special-add:active { transform: scale(0.9); }
 .special-card:active { transform: scale(.96); }
 /* FEATURED DISHES — never cropped. These were object-fit: cover inside a square,
    so any dish photo that is not square lost its edges: a wide plate came out
@@ -7700,6 +8087,8 @@ body:has(.edt-roombg) .venue-bg { display: none; }
   font-weight: 800; font-size: 14px; cursor: pointer;
   transition: transform .15s ease, box-shadow .2s ease;
 }
+/* quick add-to-cart beside «اعرض الطبق» — same brickwork, amber-accented */
+.edt-add-btn { background: var(--edt-amber, #d8b26a); color: #221405; }
 .edt-open-btn:hover {
   transform: translateY(-1px);
   box-shadow:
@@ -7810,6 +8199,22 @@ body:has(.edt-roombg) .venue-bg { display: none; }
     0 2px 0 var(--edt-bed-sh, var(--edt-brick-bed, rgba(46, 18, 8, .34)));
 }
 
+/* the list's quick-add, compacted to an icon-only SQUARE BRICK beside «اعرض
+   الطبق» — the owner's call: the button IS a brick (same 5px masonry radius as
+   .edt-brick and the «يُطلب معه» chips), so a circle read as foreign.
+   Deliberately AFTER the skin/shape blocks above: their radius override
+   (.edt-wrap[data-btnskin] .edt-open-btn) and the chamfer clip tie this
+   selector at (0,3,0), so source order here is what keeps the brick a brick
+   under every venue skin and shape. Keeps .edt-open-btn for the skin's face. */
+.edt-wrap .edt-open-btn.edt-add-mini {
+  width: 46px; min-width: 46px; height: 46px; padding: 0;
+  justify-content: center;
+  border-radius: 5px;
+  clip-path: none;
+  margin-inline-start: 10px;
+  vertical-align: middle;
+}
+
 /* The photo now LEADS the section, still melting into the canvas at its foot so
    the table recedes into the plaster the words sit on. The box HUGS the picture
    instead of letterboxing it into one fixed frame: cutouts here range from
@@ -7830,7 +8235,11 @@ body:has(.edt-roombg) .venue-bg { display: none; }
   display: block;
   width: 100%;
   height: auto;
-  max-height: min(38dvh, 360px);
+  /* svh, NOT dvh: dvh follows the collapsing mobile URL bar, so the photo box
+     resized on every scroll and the dish, the table and the wall behind them
+     all visibly drifted on iOS («الجوال يحرك الاصناف والطاولة مع التمرير»).
+     svh is a constant. Same doctrine as --edt-hero-cap below. */
+  max-height: min(38svh, 360px);
   object-fit: contain;
   object-position: bottom center;
 }
@@ -7847,7 +8256,7 @@ body:has(.edt-roombg) .venue-bg { display: none; }
 .edt-noimg {
   position: relative;
   display: grid; place-items: center;
-  width: 100%; min-height: min(26dvh, 210px);
+  width: 100%; min-height: min(26svh, 210px);
   color: var(--edt-soft-2);
 }
 /* warm ground light so a transparent cutout does not float in the void */
@@ -8155,6 +8564,13 @@ video.edt-backdrop { width: 100%; height: 100%; display: block; }
   height: auto;
   background: radial-gradient(56% 62% at 50% 56%, rgba(201, 119, 58, .18), transparent 72%);
 }
+/* tap-to-zoom cover over the hero photo. z 2 sits above the dish img and the
+   decor layers (z auto/0) but below .dish-hotspots and .dp-front (both z 3 —
+   dp-front is pointer-events: none anyway), so hotspot dots stay tappable. */
+.edt-stg-zoom {
+  position: absolute; inset: 0; z-index: 2;
+  background: none; border: 0; cursor: zoom-in;
+}
 .edt-thumbs {
   display: flex; gap: 8px;
   width: fit-content; max-width: 100%;
@@ -8394,6 +8810,258 @@ button.edt-pair:active { transform: scale(.98); }
    and flipping min-size to 0px there is a real layout change. */
 .edt-stg-body[data-table] { min-height: var(--edt-stg-bodymin, auto); }
 
+/* ---- ONE TABLE, EVERY DISH (list pager) ------------------------------------
+   The venue reported a different wooden table on every item. Measured against
+   the real component, three independent things moved it:
+
+     plank top   20px → 354px
+     plank height 208px → 341px
+
+   1. `data-fit` shrank the SECTION. A wide photo triggers
+      `min-height: calc(var(--edt-h) * 0.85)` and centres the panel, so a platter
+      section was 594px where a bowl was 699px.
+   2. The PHOTO BOX is the photo. `.edt-photo` has no height, so its height is
+      whatever the picture's aspect ratio produces — 289px for a square bowl,
+      334px for a tall basket. The panel starts directly under it, so the plank's
+      top edge inherited every photo's proportions.
+   3. The PANEL hugs. `.edt-table` is absolutely positioned against `.edt-main`
+      (`inset: -8px -14px -18px`), and `.edt-main` is `align-self: start` with no
+      height — so the plank's height was literally the copy inside it, and a dish
+      with add-ons drew a taller table than one without.
+
+   Fixing all three pins the top edge (fixed photo box), the bottom edge
+   (stretched panel) and the frame (unshrunk section). Scoped to [data-table]:
+   editorial without a table keeps its existing art direction exactly. */
+.edt-sec[data-table][data-fit='wide'] { min-height: var(--edt-h, 92svh); }
+.edt-sec[data-table][data-fit='wide'] .edt-main { align-self: stretch; }
+
+.edt-sec[data-table] .edt-photo {
+  /* A fixed box, with the picture contained inside it and resting on the
+     bottom edge — so the dish still sits ON the table, but the table always
+     starts at the same height. */
+  height: var(--edt-dish-box, min(34svh, 320px));
+  align-items: flex-end;
+}
+/* The SAME absolute value, not `100%`. EdtDish wraps the picture, so the image
+   is not a direct child of the flex box and a percentage max-height resolves
+   against an auto-height wrapper — i.e. against nothing. Measured: the box held
+   at 258px while the picture rendered 550px and spilled over the panel. */
+.edt-sec[data-table] .edt-photo img,
+.edt-sec[data-table] .edt-photo[data-fit='wide'] img,
+.edt-sec[data-table] .edt-photo[data-fit='tall'] img {
+  max-height: var(--edt-dish-box, min(34svh, 320px));
+}
+
+/* ---- «سطح الطبق» — the photographed dish SURFACE BAND (menuTable.topUrl).
+   A horizontal tabletop shot in perspective (near edge at the frame bottom,
+   planks receding to the wall) painted INSIDE the photo box, so the
+   bottom-anchored cutout sits ON a real surface with an apron of wood showing
+   in front of the plate. The band is a FLAT span of a perspective photograph —
+   no CSS 3D, and nothing lands on .edt-photo itself (stacking contract above).
+   Every rule is gated on [data-top], which exists only when the venue saved a
+   topUrl: every other venue's paint stays byte-identical. */
+.edt-sec[data-top] {
+  --edt-seat: calc(var(--edt-dish-box, min(34svh, 320px)) * var(--edt-topseat, 0));
+}
+/* seat: flex-end + padding-bottom raises the dish, opening the apron */
+.edt-sec[data-top] .edt-photo { padding-bottom: var(--edt-seat, 0px); }
+/* the box height is FIXED under [data-table]; the img cap must give the seat
+   back or a full-height photo overflows the box top (no overflow clip here) */
+.edt-sec[data-table][data-top] .edt-photo img,
+.edt-sec[data-table][data-top] .edt-photo[data-fit='wide'] img,
+.edt-sec[data-table][data-top] .edt-photo[data-fit='tall'] img {
+  max-height: calc(var(--edt-dish-box, min(34svh, 320px)) - var(--edt-seat, 0px));
+}
+.edt-top {
+  position: absolute;
+  /* «مقفلة الفراغين»: the table touches BOTH screen edges. Viewport-anchored
+     insets (center minus half the viewport) beat padding math on every
+     breakpoint, and the section/photo boxes are horizontally centred. */
+  left: calc(50% - 50vw);
+  right: calc(50% - 50vw);
+  bottom: 0;
+  height: calc(100% * var(--edt-toph, 0.44));
+  pointer-events: none;
+  /* band-only photographs: the whole image is the surface. topEdge maps older
+     partial-table shots; the COMPLETE-table mode paints via .edt-topfull and
+     leaves this span as the bare contact-shadow carrier (.edt-top-bare). */
+  background-size: 100% calc(100% * 100 / var(--edt-topedge, 100));
+  background-position: top center;
+  background-repeat: no-repeat;
+  /* far-edge melt into the wall + the optional bottom fade-out (topFade);
+     at 0 both ends are opaque — the same paint as no mask */
+  -webkit-mask-image: linear-gradient(180deg,
+    rgb(0 0 0 / calc(1 - var(--edt-topfeather, 0.35))) 0,
+    #000 calc(var(--edt-topfeather, 0.35) * 60%),
+    #000 calc(100% - var(--edt-topfade, 0) * 45%),
+    rgb(0 0 0 / calc(1 - var(--edt-topfade, 0))) 100%);
+  mask-image: linear-gradient(180deg,
+    rgb(0 0 0 / calc(1 - var(--edt-topfeather, 0.35))) 0,
+    #000 calc(var(--edt-topfeather, 0.35) * 60%),
+    #000 calc(100% - var(--edt-topfade, 0) * 45%),
+    rgb(0 0 0 / calc(1 - var(--edt-topfade, 0))) 100%);
+}
+/* seat the near edge into the panel's shadow so band and panel read as one
+   piece of furniture; the vignette's canvas melt finishes the join above it */
+.edt-top::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(180deg, transparent 70%, rgba(0, 0, 0, 0.34) 100%);
+}
+/* filters wait for WHOLE pixels: a progressively decoding photo is a growing
+   rectangle, and drop-shadowing it painted a square shadow that vanished on
+   load. data-ld is stamped by EdtDish the moment decode completes; !important
+   out-cascades the inline composition filter until then. */
+img.edt-dish:not([data-ld]) { filter: none !important; }
+
+/* the pool where china meets wood — the .dp-contact recipe under the tenant
+   shadow master (--edt-sh-dish), centred on the seat line. left+translateX is
+   the symmetric RTL-safe pattern .dp-contact already uses. */
+.edt-top-contact {
+  position: absolute;
+  left: 50%;
+  bottom: calc(var(--edt-seat, 0px) - 12px);
+  width: 56%;
+  height: 24px;
+  transform: translateX(-50%);
+  border-radius: 50%;
+  background: radial-gradient(50% 50% at 50% 50%, rgba(0, 0, 0, 0.66), rgba(0, 0, 0, 0.32) 46%, transparent 72%);
+  background: radial-gradient(50% 50% at 50% 50%,
+    color-mix(in srgb, rgb(0 0 0) calc(66% * var(--edt-sh-dish, 1)), transparent),
+    color-mix(in srgb, rgb(0 0 0) calc(32% * var(--edt-sh-dish, 1)), transparent) 46%,
+    transparent 72%);
+  filter: blur(5px);
+}
+/* one contact per plate AND one ground: with the band on, the dish no longer
+   rests on the panel's top edge (.edt-table-contact) nor on the dishProps
+   ground (.dp-contact — bottom:1% of the padding box would paint BELOW the
+   raised dish). The tilt ellipse (.edt-tilt-contact) resolves its lift
+   percentage against its OWN 9% height, so beside the surface it landed on
+   the plate face as a second, misplaced pool. And the dishProps material
+   plane (.dp-plane) — an opaque band mounted AFTER the surface in the tree —
+   painted over the photographed wood and buried the contact ellipse for any
+   item with a hand-picked surface. The band owns the seat and the ground;
+   the garnish props stay. */
+.edt-sec[data-top] .edt-table-contact,
+.edt-sec[data-top] .dp-contact,
+.edt-sec[data-top] .edt-tilt-contact,
+.edt-sec[data-top] .dp-plane,
+.edt-stg[data-top] .edt-table-contact,
+.edt-stg[data-top] .dp-contact,
+.edt-stg[data-top] .edt-tilt-contact,
+.edt-stg[data-top] .dp-plane { display: none; }
+
+/* ---- COMPLETE-table mode (menuTable.topUrl === url, kind:'image') --------
+   The generator writes ONE photograph of the whole table — surface in
+   perspective + near edge + front face. Splitting it across the band and the
+   panel background broke it (the panel repeated or cropped the wood), so
+   .edt-topfull paints it as ONE continuous element: it lives in .edt-main at
+   z:-1 — under the dish (the photo row is z2), under the panel's text and its
+   readability layers, over the room wall — and reaches UP into the photo box
+   by the band height, full screen width. */
+.edt-top-bare {
+  background: none;
+  -webkit-mask-image: none;
+  mask-image: none;
+}
+/* the bare carrier must paint NOTHING but the contact ellipse: its ::after
+   near-edge darkening kept painting over the full table's surface — the
+   reported «ظل في السطح» band floating across the seam */
+.edt-top-bare::after { content: none; }
+.edt-topfull {
+  position: absolute;
+  z-index: -1;
+  left: calc(50% - 50vw);
+  right: calc(50% - 50vw);
+  top: calc(-1 * var(--edt-dish-box, min(34svh, 320px)) * var(--edt-toph, 0.44));
+  bottom: -18px;
+  pointer-events: none;
+  background-size: cover;
+  background-position: top center;
+  background-repeat: no-repeat;
+  /* the far edge still melts into the REAL wall above it; topFade dissolves
+     the table's bottom instead of a hard dark stop («تدرج من الأسفل») */
+  -webkit-mask-image: linear-gradient(180deg,
+    rgb(0 0 0 / calc(1 - var(--edt-topfeather, 0.35))) 0,
+    #000 calc(var(--edt-topfeather, 0.35) * 18%),
+    #000 calc(100% - var(--edt-topfade, 0) * 45%),
+    rgb(0 0 0 / calc(1 - var(--edt-topfade, 0))) 100%);
+  mask-image: linear-gradient(180deg,
+    rgb(0 0 0 / calc(1 - var(--edt-topfeather, 0.35))) 0,
+    #000 calc(var(--edt-topfeather, 0.35) * 18%),
+    #000 calc(100% - var(--edt-topfade, 0) * 45%),
+    rgb(0 0 0 / calc(1 - var(--edt-topfade, 0))) 100%);
+}
+/* stage: the hero cap var lives on the hero element (not inherited here) —
+   an approximation the per-place topH override tunes precisely */
+.edt-stg[data-topfull] .edt-stg-body .edt-topfull {
+  top: calc(-1 * min(38svh, 380px) * var(--edt-toph, 0.44));
+  bottom: 0;
+}
+/* the whole-furniture dials paint INSIDE .edt-topfull (tint/dim/shade
+   children — they inherit the parent's far-edge mask) */
+.edt-topfull-lay {
+  position: absolute;
+  inset: 0;
+}
+/* the panel's readability layers (melt/veil) span the same full width with
+   square corners — a rounded floating box over a full-bleed table read as a
+   second piece of furniture; the lit lip would draw a false edge under the
+   photographed one; and the panel's OWN tint/dim layers step aside — in this
+   mode those dials act on .edt-topfull, the whole table, so painting them
+   twice over the panel region would double the darkening. */
+.edt-sec[data-topfull] .edt-main .edt-table,
+.edt-stg[data-topfull] .edt-stg-body .edt-table {
+  left: calc(50% - 50vw);
+  right: calc(50% - 50vw);
+  border-radius: 0;
+}
+.edt-sec[data-topfull] .edt-table-edge,
+.edt-stg[data-topfull] .edt-table-edge,
+.edt-sec[data-topfull] .edt-table-tint,
+.edt-stg[data-topfull] .edt-table-tint,
+.edt-sec[data-topfull] .edt-table-dim,
+.edt-stg[data-topfull] .edt-table-dim { display: none; }
+/* the readability melt is a BAND behind the text, not a floor paint: it used
+   to hold solid canvas ink to the panel's very bottom, which over a full-bleed
+   table read as a black slab standing on the table's foot («ظل في الأسفل»).
+   Under the full table the ink is slightly translucent (wood grain breathes
+   through the text zone) and releases COMPLETELY before the foot — the only
+   remaining bottom darkening is the venue's own «تعتيم نحو الأسفل» dial,
+   which can be zeroed. */
+.edt-sec[data-topfull] .edt-table-melt,
+.edt-stg[data-topfull] .edt-table-melt {
+  background: linear-gradient(180deg,
+    transparent var(--tbl-a, 16%),
+    color-mix(in srgb, var(--edt-bg, #100c0a) 88%, transparent) var(--tbl-b, 52%),
+    color-mix(in srgb, var(--edt-bg, #100c0a) 88%, transparent) 76%,
+    transparent 95%);
+}
+/* stage: the hero centres its dish and its height is a MIN-height, so
+   padding-bottom simply grows the box — no img cap subtraction needed.
+   --edt-hero-cap is defined on the hero itself and follows data-fit='tall'. */
+.edt-stg[data-top] .edt-stg-hero {
+  --edt-seat: calc(var(--edt-hero-cap) * var(--edt-topseat, 0));
+  padding-bottom: var(--edt-seat, 0px);
+}
+
+/* The floor the stage measured. Without it the panel is only as tall as its own
+   copy, because the venue's «ارتفاع الصنف» dial (53svh on the live menu) sits
+   BELOW what a dish actually needs, so the section's min-height never binds and
+   every item falls back to content height. See the measuring effect in
+   EditorialLayout — it publishes the tallest panel in the menu here. */
+.edt-sec[data-table] .edt-main {
+  align-self: stretch;
+  min-height: var(--edt-main-min, 0px);
+  /* CLEAR THE LIP. The walnut texture opens with a band of horizontal grain —
+     the table's front edge seen at an angle — and the panel's first line landed
+     8px from the top, i.e. printed across it. Names read as floating on the edge
+     rather than lying on the surface. This pushes every dish's text below the
+     band, so all of them start at the same place on the wood. */
+  padding-top: var(--edt-table-lip, 44px);
+}
+
 /* ---- extend-to-bottom («مدّ الطاولة حتى أسفل النافذة»، menuTable.stage.extend)
    The stage stamps data-tbl-extend: the scroller becomes a flex column, the
    body grows to the scroller's full height, and the table's bottom inset and
@@ -8403,6 +9071,42 @@ button.edt-pair:active { transform: scale(.98); }
 .edt-stg[data-tbl-extend] .edt-stg-scroll { display: flex; flex-direction: column; }
 .edt-stg[data-tbl-extend] .edt-stg-media { flex: none; }
 .edt-stg[data-tbl-extend] .edt-stg-body { flex: 1 0 auto; }
+
+/* THE SAME FILL, WITHOUT WAITING FOR THE DIAL.
+   The opened dish had the list's old disease: the body hugged its content, so a
+   bare item drew a stub of table and a rich one drew a full slab. Measured on
+   the live menu — 394px of room below the photo, a 211px body, and the venue's
+   «شكل ثابت للطاولة» floor sitting at 8svh (67px), far too low to bind.
+   `extend` already expresses exactly the right behaviour; it was simply inert
+   until someone found the switch. A table that stops halfway down the window is
+   not a design choice anyone makes deliberately, so filling is the sane default
+   whenever a table exists, and the dial now only controls whether the material
+   runs flush into the bottom bar (the inset/corner rules above). */
+.edt-stg[data-table] .edt-stg-scroll { display: flex; flex-direction: column; }
+.edt-stg[data-table] .edt-stg-media { flex: none; }
+.edt-stg[data-table] .edt-stg-body {
+  flex: 1 0 auto;
+  /* width:100% is NOT redundant. As a block the body filled the scroller and its
+     `margin-inline: auto` did nothing; as a flex item that auto margin takes
+     precedence over stretch and shrink-wraps it to its text — measured at 95px
+     inside a 390px scroller, a black ribbon down the middle of the screen. The
+     explicit width restores the fill and leaves max-width/auto-margin to do the
+     centring they were written for. */
+  width: 100%;
+}
+/* AND THE WOOD MUST COVER WHAT THE PANEL NOW FILLS.
+   Making the body fill exposed the readability veil beneath it: the venue's
+   stage dials were tuned when the body was ~211px, so the wood is scaled to 52%
+   of its box and the melt dissolves it at 30% — fine over a short panel, a large
+   black field over a 394px one. The art is stretched back over the whole box and
+   the melt is switched off, so the table reads as a table for its full height,
+   exactly as it now does in the list. Scoped to the stage and to [data-table]:
+   the venue's dials still govern the list and every other surface. */
+/* !important is load-bearing here, not laziness: tableFreeStyle() writes the
+   scale as an INLINE style on this element, and an inline declaration outranks
+   every stylesheet rule regardless of specificity. */
+.edt-stg[data-table] .edt-stg-body .edt-table-free { transform: none !important; }
+.edt-stg[data-table] .edt-stg-body .edt-table-melt { opacity: 0; }
 .edt-stg[data-tbl-extend] .edt-stg-body .edt-table {
   inset: -8px -14px 0;
   border-end-start-radius: 0;
@@ -8424,29 +9128,47 @@ button.edt-pair:active { transform: scale(.98); }
    shifts, never transforms — RTL-safe by construction, and a shifted block
    pushes its neighbours instead of stacking glyphs. Attributes exist only on
    configured blocks, so untouched venues carry zero of this. ---- */
-.edt-stg [data-blk] {
-  margin-inline-start: var(--sblk-dx, 0%);
+.edt-stg [data-blk],
+.edt-sec [data-blk] {
+  /* NEGATED on purpose: the dial promises «موجبها جهة بداية القراءة», and a
+     raw positive inline-START margin pushes the box toward the END — the
+     slider read backwards (the reported bug). Positive dx now pulls the block
+     toward the reading start, exactly as labelled. */
+  margin-inline-start: calc(-1 * var(--sblk-dx, 0%));
   margin-block-start: var(--sblk-dy, 0px);
 }
-.edt-stg [data-blk-align='start'] { text-align: start; }
-.edt-stg [data-blk-align='center'] { text-align: center; }
-.edt-stg [data-blk-align='end'] { text-align: end; }
+.edt-stg [data-blk-align='start'],
+.edt-sec [data-blk-align='start'] { text-align: start; }
+.edt-stg [data-blk-align='center'],
+.edt-sec [data-blk-align='center'] { text-align: center; }
+.edt-stg [data-blk-align='end'],
+.edt-sec [data-blk-align='end'] { text-align: end; }
 .edt-stg [data-blk-align='center'].edt-stg-tags,
 .edt-stg [data-blk-align='center'].edt-stg-price,
-.edt-stg [data-blk-align='center'].edt-facts { justify-content: center; }
+.edt-stg [data-blk-align='center'].edt-facts,
+.edt-sec [data-blk-align='center'].edt-price,
+.edt-sec [data-blk-align='center'].edt-facts { justify-content: center; }
 .edt-stg [data-blk-align='end'].edt-stg-tags,
 .edt-stg [data-blk-align='end'].edt-stg-price,
-.edt-stg [data-blk-align='end'].edt-facts { justify-content: flex-end; }
+.edt-stg [data-blk-align='end'].edt-facts,
+.edt-sec [data-blk-align='end'].edt-price,
+.edt-sec [data-blk-align='end'].edt-facts { justify-content: flex-end; }
 .edt-stg [data-blk-align='center'] .edt-opts,
-.edt-stg [data-blk-align='center'] .edt-pair-row { justify-content: center; }
+.edt-stg [data-blk-align='center'] .edt-pair-row,
+.edt-sec [data-blk-align='center'] .edt-lpair-row { justify-content: center; }
 .edt-stg [data-blk-align='end'] .edt-opts,
-.edt-stg [data-blk-align='end'] .edt-pair-row { justify-content: flex-end; }
+.edt-stg [data-blk-align='end'] .edt-pair-row,
+.edt-sec [data-blk-align='end'] .edt-lpair-row { justify-content: flex-end; }
 /* the capped-width paragraph carries its box with the alignment (out-cascades
    the dx margin by source order at equal specificity — stated in the card) */
 .edt-stg [data-blk-align='center'].edt-stg-desc { margin-inline: auto; }
 .edt-stg [data-blk-align='end'].edt-stg-desc { margin-inline-start: auto; }
+/* the list's view-dish button: a box narrower than the panel — align moves
+   the BOX, not just glyphs */
+.edt-sec [data-blk-align='center'].edt-open-btn { display: flex; width: fit-content; margin-inline: auto; }
+.edt-sec [data-blk-align='end'].edt-open-btn { display: flex; width: fit-content; margin-inline-start: auto; margin-inline-end: 0; }
 /* the AR button centres via margin auto today; release it per align */
-.edt-stg [data-blk-align='start'].edt-stg-ar { margin-inline-start: var(--sblk-dx, 0%); margin-inline-end: auto; }
+.edt-stg [data-blk-align='start'].edt-stg-ar { margin-inline-start: calc(-1 * var(--sblk-dx, 0%)); margin-inline-end: auto; }
 .edt-stg [data-blk-align='end'].edt-stg-ar { margin-inline-start: auto; margin-inline-end: 0; }
 /* «ارفع فوق يكون في النص في الجدار»: pos 'wall' lifts the 3D button out of the
    flow onto the brick ABOVE the dish — centred on the media box top, dy still
@@ -8887,6 +9609,16 @@ button.edt-pair:active { transform: scale(.98); }
 .oa-desc { font-size: 13px; line-height: 1.7; color: rgba(255, 255, 255, .8); max-width: 46ch; margin: 4px auto 6px; }
 .oa-meta { display: inline-flex; gap: 14px; color: rgba(255, 255, 255, .78); font-size: 12px; font-weight: 700; }
 .oa-meta span { display: inline-flex; align-items: center; gap: 4px; }
+/* quick add-to-cart under the painted plate (owner request: one tap, no stage) */
+.oa-add {
+  display: inline-flex; align-items: center; gap: 6px;
+  margin-top: 10px; padding: 9px 18px; min-height: 40px;
+  background: var(--oa-accent, #d8b26a); color: #10222e;
+  border: none; border-radius: 999px;
+  font-weight: 800; font-size: 13px; cursor: pointer;
+  transition: transform 100ms ease;
+}
+.oa-add:active { transform: scale(0.96); }
 
 /* portaled item sheet re-skin when the menu is oceanart (tone mirrored on portal root) */
 [data-oa-tone] .sheet, [data-oa-tone] .sheet-immersive { --brand: var(--oa-accent); }
@@ -12291,3 +13023,87 @@ body[data-mch-sheet] .backdrop {
 .pdoc-preview .pdoc-page { padding: 12px; min-height: 0; }
 .pdoc-preview .pdoc { max-width: none; box-shadow: none; }
 .pdoc-preview .pdoc-actions { display: none; }
+
+/* ==== quick assistant (FAB + sheet chat) v1 ==== */
+/* Floating assistant button: fixed to the trailing edge, lifted above the
+   bottom nav + safe area on phones (both vars are 0 on desktop, where the
+   sidebar layout has no bottom bar). z-index 250 is deliberate: above all
+   page content, BELOW backdrop (300) and sheet (310) — any open sheet,
+   including the quick-assistant sheet itself, must cover the button. */
+.ai-fab {
+  position: fixed;
+  inset-inline-end: 18px;
+  bottom: calc(var(--bottomnav-h, 0px) + var(--safe-b, 0px) + 18px);
+  width: 50px;
+  height: 50px;
+  border-radius: 50%;
+  display: grid;
+  place-items: center;
+  background: linear-gradient(135deg, var(--brand), var(--brand-strong));
+  color: var(--on-brand);
+  box-shadow: var(--sh-2);
+  z-index: 250;
+  border: 0;
+  cursor: pointer;
+}
+@media (hover: hover) {
+  .ai-fab:hover { transform: translateY(-1px); }
+}
+/* The quick chat inside the sheet: the message column takes the free height
+   (the sheet body is a flex column), scrolls invisibly per the global
+   no-scrollbar rule, and the ask bar stays pinned below it. */
+.aiq-chat {
+  flex: 1;
+  min-height: 180px;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 2px;
+}
+.aiq-msg {
+  max-width: 88%;
+  padding: 9px 12px;
+  border-radius: var(--r-lg);
+  font-size: var(--fs-sm);
+  line-height: 1.6;
+  white-space: pre-wrap;
+  overflow-wrap: break-word;
+}
+.aiq-msg.is-user {
+  align-self: flex-start; /* RTL: flex-start is the writing side */
+  background: var(--brand);
+  color: var(--on-brand);
+  border-end-start-radius: 4px;
+}
+.aiq-msg.is-assistant {
+  align-self: flex-end;
+  background: var(--surface-2);
+  border: 1px solid var(--border);
+  border-end-end-radius: 4px;
+}
+.aiq-msg.is-error {
+  align-self: stretch;
+  background: color-mix(in srgb, var(--danger) 10%, transparent);
+  border: 1px solid color-mix(in srgb, var(--danger) 35%, transparent);
+  color: var(--danger);
+}
+.aiq-msg.is-status {
+  align-self: flex-end;
+  background: transparent;
+  color: var(--text-faint);
+  font-size: var(--fs-xs);
+  padding-block: 2px;
+}
+.aiq-chips { display: flex; flex-wrap: wrap; gap: 8px; }
+.aiq-ask { display: flex; gap: 8px; align-items: center; }
+.aiq-ask .input { flex: 1; min-width: 0; }
+/* ==== /quick assistant v1 ==== */
+
+/* The device-check header button is a tablet/desktop affordance — on a narrow
+   phone the KDS/cashier bars are already at their width budget (the exact
+   overflow the flex:none header hardening fixed), and the same self-test stays
+   reachable from Settings. Hide it below the tablet band. */
+@media (max-width: 760px) {
+  .ab-devcheck { display: none; }
+}

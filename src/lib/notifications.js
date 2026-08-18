@@ -8,15 +8,18 @@ import { useEffect, useMemo, useRef, useState } from 'react'
 import { useAuth } from './auth.jsx'
 import { useI18n } from './i18n.jsx'
 import {
-  watchActiveOrders, watchOpenWaiterCalls, watchComplaints, watchAnnouncements,
+  watchComplaints, watchAnnouncements,
   watchLeaves, watchMyLeaves, watchAllReviews, watchMyAttendance, resolveWaiterCall,
   watchStatusLog, watchMyShifts, watchShiftSwaps,
 } from './db.js'
+import { useActiveOrders, useOpenWaiterCalls } from './liveBoard.js'
 import { CAP } from './permissions.js'
 import { alertParty } from './notify.js'
 import { orderNumber } from './format.js'
 
 const ms = (ts) => ts?.toMillis?.() ?? (typeof ts === 'number' ? ts : 0)
+// ONE stable empty array — a per-render `[]` here caused a render loop (see below)
+const EMPTY_ORDERS = []
 // Kinds that should make a sound when they arrive (orders beep from the page itself).
 const ALERT_KINDS = new Set(['announcement', 'waiter', 'complaint', 'leave', 'leaveDecision', 'rating', 'late', 'status', 'shift', 'swap'])
 const isoToday = () => { const d = new Date(); return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}` }
@@ -28,8 +31,17 @@ export function useNotificationFeed(tenantId) {
   const uid = user?.uid
   const takesOrders = can(CAP.TAKE_ORDERS)
 
-  const [orders, setOrders] = useState([])
-  const [calls, setCalls] = useState([])
+  // Orders + calls ride liveBoard's SHARED subscription (one onSnapshot per
+  // tenant across the whole app) instead of opening a second private stream
+  // beside IncomingAlerts + the v2 feed. Cap-gated by passing null when this
+  // staffer can't take orders, so a non-order-taker adds no listener.
+  // `|| EMPTY`, NOT `|| []`: useActiveOrders returns null until the first
+  // snapshot (and forever when gated off). A fresh [] per render broke every
+  // downstream memo → StaffBell re-fired onUnread with a new array → the
+  // layout re-rendered → new [] again — an unbreakable render loop that
+  // pegged the CPU for any staffer without take_orders.
+  const orders = useActiveOrders(takesOrders ? tenantId : null) || EMPTY_ORDERS
+  const calls = useOpenWaiterCalls(takesOrders ? tenantId : null)
   const [complaints, setComplaints] = useState([])
   const [announcements, setAnnouncements] = useState([])
   const [leaves, setLeaves] = useState([])
@@ -40,9 +52,7 @@ export function useNotificationFeed(tenantId) {
   const [myShifts, setMyShifts] = useState([])
   const [swaps, setSwaps] = useState([])
 
-  // role-gated subscriptions
-  useEffect(() => { if (!tenantId || !takesOrders) return; return watchActiveOrders(tenantId, (l) => setOrders(l || [])) }, [tenantId, takesOrders])
-  useEffect(() => { if (!tenantId || !takesOrders) return; return watchOpenWaiterCalls(tenantId, (l) => setCalls(l || [])) }, [tenantId, takesOrders])
+  // role-gated subscriptions (orders + calls come from liveBoard above)
   useEffect(() => { if (!tenantId || !isManager) return; return watchComplaints(tenantId, (l) => setComplaints((l || []).filter((c) => (c.status || 'open') === 'open')), 50) }, [tenantId, isManager])
   useEffect(() => { if (!tenantId) return; return watchAnnouncements(tenantId, (l) => setAnnouncements(l || []), 30) }, [tenantId])
   useEffect(() => { if (!tenantId || !isManager) return; return watchLeaves(tenantId, (l) => setLeaves(l || [])) }, [tenantId, isManager])

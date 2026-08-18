@@ -3,7 +3,8 @@ import { Link } from 'react-router-dom'
 import { useAuth } from '../../lib/auth.jsx'
 import { useI18n, pickLang } from '../../lib/i18n.jsx'
 import { Spinner, Empty } from '../../components/ui.jsx'
-import { watchActiveOrders, watchOrdersSince, watchCategories, watchItems, updateOrderStatus, setOrderLineDone } from '../../lib/db.js'
+import { watchOrdersSince, watchCategories, watchItems, updateOrderStatus, setOrderLineDone } from '../../lib/db.js'
+import { useActiveOrders } from '../../lib/liveBoard.js'
 import { orderNumber, minutesSince } from '../../lib/format.js'
 import { alertParty } from '../../lib/notify.js'
 import StaffBell from '../../components/StaffBell.jsx'
@@ -13,8 +14,13 @@ import { sectionTemplate, templateOptions } from '../../lib/systemTemplates.js'
 import { useSectionTemplate } from '../../lib/useSectionTemplate.js'
 import { systemThemeAttr, useSystemThemeBody } from '../../lib/systemThemes.js'
 import PinLock from '../../components/PinLock.jsx'
+import IncomingAlerts from '../../components/IncomingAlerts.jsx'
 import AppBackground from '../../components/AppBackground.jsx'
 import { requestLock, getPinActor } from '../../lib/pin.js'
+import { useToast } from '../../components/Toast.jsx'
+import DeviceCheck from '../../components/DeviceCheck.jsx'
+import { useDeviceHeartbeat } from '../../lib/staffDevice.js'
+import { applyStaffManifest } from '../../lib/pwa.js'
 import '../../styles/venue-console.css'
 
 const startOfToday = () => { const d = new Date(); d.setHours(0, 0, 0, 0); return d }
@@ -36,9 +42,21 @@ export default function Kds() {
   useCompactUI()
   const { t, lang, toggleTheme, theme } = useI18n()
   const { tenantId, tenant, profile, user } = useAuth()
+  const toast = useToast()
   const ar = lang === 'ar'
   useSystemThemeBody(tenant, 'kds')
-  const [orders, setOrders] = useState(null) // active: pending/accepted/preparing/ready
+  // The kitchen screen announces itself in the venue's device registry
+  // (heartbeat every 5 min + on wake) — a KDS that stops beating is exactly
+  // the "kitchen went silent" incident the device-check sheet exists to catch.
+  useDeviceHeartbeat(tenantId)
+  // Venue-branded install identity — same guard as AdminLayout: installing
+  // from the KDS must produce the venue-logo staff app, not the platform one.
+  useEffect(() => {
+    if (!tenant?.slug) return
+    applyStaffManifest(tenant, tenant.slug)
+  }, [tenant?.name, tenant?.logoUrl, tenant?.slug])
+  // active pending/accepted/preparing/ready — shared refcounted stream (liveBoard)
+  const orders = useActiveOrders(tenantId)
   const [today, setToday] = useState([]) // everything since midnight → bumped count + avg prep
   const [cats, setCats] = useState([])
   const [items, setItems] = useState([]) // menu items → allergy warnings + station fallback
@@ -47,6 +65,7 @@ export default function Kds() {
   // Persisted: the chosen view survives navigation, reload and logout.
   const [tpl, setTpl] = useSectionTemplate(tenant, tenantId, 'kds', templateOptions('kds'))
   const [events, setEvents] = useState([]) // live activity feed (client-side, this screen)
+  const [devOpen, setDevOpen] = useState(false) // device self-test sheet
   const prevCount = useRef(0)
   const seeded = useRef(false)
   const prevStatus = useRef(null) // Map(id → {status, code}) for the activity diff
@@ -64,7 +83,6 @@ export default function Kds() {
   // (a studio tweak, counters) must not snap back a manually chosen board
   // (no re-seed here: useSectionTemplate already seeds from the tenant and lets
   //  a local choice win — re-applying the saved value would snap the board back)
-  useEffect(() => { if (!tenantId) return; return watchActiveOrders(tenantId, setOrders) }, [tenantId])
   useEffect(() => { if (!tenantId) return; return watchOrdersSince(tenantId, startOfToday(), setToday) }, [tenantId, dayKey])
   useEffect(() => { if (!tenantId) return; return watchCategories(tenantId, setCats) }, [tenantId])
   useEffect(() => { if (!tenantId) return; return watchItems(tenantId, setItems) }, [tenantId])
@@ -148,10 +166,15 @@ export default function Kds() {
   // the cashier did — one order history, two levels of detail, depending on
   // which screen the staffer was standing at. PIN takes precedence on a shared
   // device, exactly as the cashier resolves it.
-  const kdsActor = getPinActor(tenantId)?.name || profile?.displayName || profile?.email || (ar ? 'مطبخ' : 'kitchen')
-  const accept = (o) => updateOrderStatus(tenantId, o.id, 'accepted', { acceptedByName: kdsActor, acceptedByUid: user?.uid || '', _actor: kdsActor })
-  const serve = (o) => updateOrderStatus(tenantId, o.id, 'served', { servedByName: kdsActor, servedByUid: user?.uid || '', _actor: kdsActor })
-  const recall = (o) => updateOrderStatus(tenantId, o.id, 'preparing', { _actor: kdsActor })
+  // the session IS the staffer since PIN sign-in — profile name leads
+  const kdsActor = profile?.displayName || getPinActor(tenantId)?.name || profile?.email || (ar ? 'مطبخ' : 'kitchen')
+  // A DENIED bump must say so: offline-queued writes replayed against an order
+  // a coworker meanwhile refunded/cancelled are rejected by rules, and the
+  // optimistic card snapping back with no message read as a dead button.
+  const bumpFail = () => toast.error(ar ? 'تعذّر تحديث الطلب — تغيّرت حالته' : 'Update failed — the order state changed')
+  const accept = (o) => updateOrderStatus(tenantId, o.id, 'accepted', { acceptedByName: kdsActor, acceptedByUid: user?.uid || '', _actor: kdsActor, _code: o.code || '' }).catch(bumpFail)
+  const serve = (o) => updateOrderStatus(tenantId, o.id, 'served', { servedByName: kdsActor, servedByUid: user?.uid || '', _actor: kdsActor, _code: o.code || '' }).catch(bumpFail)
+  const recall = (o) => updateOrderStatus(tenantId, o.id, 'preparing', { _actor: kdsActor, _code: o.code || '' }).catch(bumpFail)
 
   // One renderer for every template. In mixed views (rail/grid/display) the
   // tickets of both statuses share one surface, so a status chip is shown —
@@ -195,7 +218,7 @@ export default function Kds() {
           })}
         </div>
         {o.notes && <div className="kds-note">{o.notes}</div>}
-        <button className={`btn kds-bump ${cls} ${allDone ? 'all-done' : ''}`} onClick={() => updateOrderStatus(tenantId, o.id, next)}>{allDone ? <Icon name="check" size={15} /> : null}{label}</button>
+        <button className={`btn kds-bump ${cls} ${allDone ? 'all-done' : ''}`} onClick={() => updateOrderStatus(tenantId, o.id, next, { _code: o.code || '' }).catch(bumpFail)}>{allDone ? <Icon name="check" size={15} /> : null}{label}</button>
       </div>
     )
   }
@@ -229,6 +252,8 @@ export default function Kds() {
     <div className="kds-shell" data-theme={tpl === 'display' ? 'dark' : undefined} data-systheme={systemThemeAttr(tenant, 'kds')}>
       <AppBackground tenant={tenant} />
       <PinLock tenant={tenant} tenantId={tenantId} />
+      <IncomingAlerts />
+      <DeviceCheck open={devOpen} onClose={() => setDevOpen(false)} tenant={tenant} tenantId={tenantId} />
       {/* Every control here is `flex: none` (see .kds-shell > .app-bar in
           index.css): this row used to squeeze until the BACK button hit 0px
           wide — a cook on a phone could not leave the kitchen screen at all —
@@ -250,6 +275,7 @@ export default function Kds() {
         </div>
         {tenant?.pinLock?.enabled && <button className="icon-btn" onClick={requestLock} title={ar ? 'قفل الشاشة الآن' : 'Lock now'}><Icon name="key" size={18} /></button>}
         <StaffBell tenantId={tenantId} />
+        <button className="icon-btn ab-devcheck" onClick={() => setDevOpen(true)} aria-label={ar ? 'فحص الجهاز' : 'Device check'} title={ar ? 'فحص الجهاز' : 'Device check'}><Icon name="settings" size={18} /></button>
         <button className="icon-btn" onClick={toggleTheme}><Icon name={theme === 'dark' ? 'sun' : 'moon'} /></button>
       </header>
 

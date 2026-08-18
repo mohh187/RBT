@@ -7,6 +7,8 @@ import Icon from '../../components/Icon.jsx'
 import Lightbox from '../../components/Lightbox.jsx'
 import { Price } from '../../components/Riyal.jsx'
 import { watchMyAttendance, setStaffMeta, watchStatusLog, watchLeaves, setStaffCaps } from '../../lib/db.js'
+import { httpsCallable } from 'firebase/functions'
+import { functions } from '../../lib/firebase.js'
 import { uploadImage, shrinkImage } from '../../lib/storage.js'
 import { roleName, roleDefaultCaps, CAP_GROUPS, CAP_LABELS } from '../../lib/permissions.js'
 import { staffIdFallback } from '../../lib/format.js'
@@ -24,7 +26,7 @@ const WD_EN = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat']
 // Unified per-staffer profile — organised into professional tabs.
 export default function StaffProfile({ tid, row, reviews = [], target = 0, currency = 'SAR', onClose }) {
   const { t, lang } = useI18n()
-  const { isManager, tenant } = useAuth()
+  const { isManager, tenant, user } = useAuth()
   const toast = useToast()
   const ar = lang === 'ar'
   const [tab, setTab] = useState('overview')
@@ -52,6 +54,28 @@ export default function StaffProfile({ tid, row, reviews = [], target = 0, curre
   const [capBusy, setCapBusy] = useState(false)
   const [photoBusy, setPhotoBusy] = useState(false)
   const [photoUrl, setPhotoUrl] = useState(row?.photoUrl || '')
+  // Login-credentials editor (server-side change via updateStaffCredentials)
+  const [credEmail, setCredEmail] = useState('')
+  const [credPass, setCredPass] = useState('')
+  const [credBusy, setCredBusy] = useState(false)
+  const saveCredentials = async () => {
+    if (credBusy || (!credEmail.trim() && !credPass)) return
+    setCredBusy(true)
+    try {
+      await httpsCallable(functions, 'updateStaffCredentials')({
+        tenantId: tid, staffId: row.uid,
+        ...(credEmail.trim() ? { newEmail: credEmail.trim() } : {}),
+        ...(credPass ? { newPassword: credPass } : {}),
+      })
+      toast.success(ar ? 'تم تحديث بيانات الدخول' : 'Credentials updated')
+      setCredEmail(''); setCredPass('')
+    } catch (e) {
+      const msg = String(e?.message || '')
+      toast.error(msg.includes('email-taken') ? (ar ? 'هذا البريد مستخدم لحساب آخر' : 'Email already in use')
+        : msg.includes('password too short') ? (ar ? 'كلمة المرور قصيرة (6 أحرف على الأقل)' : 'Password too short (min 6)')
+          : (ar ? 'تعذّر التحديث — تحقق من الصلاحيات والاتصال' : 'Update failed — check permissions and connection'))
+    } finally { setCredBusy(false) }
+  }
 
   // Manager uploads a photo FOR the staffer (tap the avatar) — staff-photos path,
   // shrunk client-side; the staffer's portal upload stays independent.
@@ -426,6 +450,21 @@ export default function StaffProfile({ tid, row, reviews = [], target = 0, curre
         {/* ---------- PERMISSIONS (managers) ---------- */}
         {tab === 'permissions' && isManager && (
           <div className="stack" style={{ gap: 'var(--sp-3)' }}>
+            {/* Login credentials — server-side change (Admin SDK callable).
+                A manager cannot change the OWNER's credentials (server enforces
+                it too); the owner edits their own row. Every change emails the
+                platform's central address automatically. */}
+            {(row?.role !== 'owner' || user?.uid === row?.uid) && (
+              <div className="card card-pad stack" style={{ gap: 8 }}>
+                <strong className="small row" style={{ gap: 6 }}><Icon name="mail" size={15} /> {ar ? 'بيانات الدخول' : 'Login credentials'}</strong>
+                <p className="xs faint">{ar ? 'تغيير البريد أو كلمة المرور يسري فوراً على تسجيل الدخول، ويصل إشعار للنظام المركزي بكل تغيير.' : 'Changing the email or password applies to sign-in immediately; the central system is notified of every change.'}</p>
+                <input className="input input-sm" type="email" autoComplete="off" dir="ltr" placeholder={row?.email || (ar ? 'بريد جديد (اختياري)' : 'New email (optional)')} value={credEmail} onChange={(e) => setCredEmail(e.target.value)} />
+                <input className="input input-sm" type="password" autoComplete="new-password" dir="ltr" placeholder={ar ? 'كلمة مرور جديدة (اختياري، 6+ أحرف)' : 'New password (optional, 6+ chars)'} value={credPass} onChange={(e) => setCredPass(e.target.value)} />
+                <button className="btn btn-sm btn-primary" disabled={credBusy || (!credEmail.trim() && !credPass)} onClick={saveCredentials}>
+                  {credBusy ? t('saving') : (ar ? 'حفظ بيانات الدخول' : 'Save credentials')}
+                </button>
+              </div>
+            )}
             {isPrivileged ? (
               <div className="card card-pad row" style={{ gap: 8, background: 'var(--surface-2)' }}>
                 <Icon name="lock" size={16} className="faint" />

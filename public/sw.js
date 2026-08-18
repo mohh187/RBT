@@ -3,8 +3,21 @@
    offline fallback. */
 
 // Bump on deploy to drop stale/bad cached assets (activate purges old caches).
-const CACHE = 'rbt360-v6'
-const APP_SHELL = ['/', '/index.html', '/brand/favicon.png', '/manifest.webmanifest']
+// KEEP IN SYNC with SW_VERSION in src/lib/notify.js (the ?v= cache-buster on
+// the registration URL) — drifting versions leave devices on a stale worker.
+const CACHE = 'rbt360-v9'
+// The venue's photographs (wall, tables, dishes, header, logo) — a SEPARATE
+// cache that SURVIVES deploys: every Storage upload lives at a unique
+// timestamped path, so its bytes never change and cache-first is always
+// correct. This is what makes a repeat menu open paint instantly instead of
+// «تظهر النوافذ فارغة بعدها تحمل الصور».
+const IMG_CACHE = 'rbt360-img-v1'
+const IMG_HOSTS = ['firebasestorage.googleapis.com']
+const IMG_MAX_ENTRIES = 400
+// NOT the manifest: precaching the PLATFORM manifest under the app-shell cache
+// leaked the platform's install identity onto venue/staff surfaces whose
+// manifest is per-venue (/m/:slug, /app/:slug). It's tiny and no-cache'd anyway.
+const APP_SHELL = ['/', '/index.html', '/brand/favicon.png']
 
 self.addEventListener('install', (event) => {
   self.skipWaiting()
@@ -15,17 +28,58 @@ self.addEventListener('activate', (event) => {
   event.waitUntil(
     (async () => {
       const keys = await caches.keys()
-      await Promise.all(keys.filter((k) => k !== CACHE).map((k) => caches.delete(k)))
+      await Promise.all(keys.filter((k) => k !== CACHE && k !== IMG_CACHE).map((k) => caches.delete(k)))
       await self.clients.claim()
     })(),
   )
 })
 
+// Cache-first for the venue photos: hit = zero network, miss = fetch + store.
+// Opaque (no-cors <img>) responses are stored too — their status is unreadable,
+// which also means an opaque 403/404 (Storage token not yet propagated, a 429)
+// is indistinguishable from a good image and would otherwise sit in the cache
+// FOREVER, leaving that dish photo permanently blank on the device. So opaque
+// hits are served instantly but re-fetched in the background and overwritten
+// (stale-while-revalidate) — cheap, because the browser's HTTP cache answers
+// the revalidation for genuinely-immutable URLs, while a cached error heals on
+// the next successful fetch. Insertion-ordered trim bounds the cache.
+async function imgPut(cache, req, res) {
+  try {
+    await cache.put(req, res.clone())
+    const keys = await cache.keys()
+    if (keys.length > IMG_MAX_ENTRIES) await Promise.all(keys.slice(0, keys.length - IMG_MAX_ENTRIES).map((k) => cache.delete(k)))
+  } catch (_) { /* storage full — serve from network as-is */ }
+}
+async function imageFirst(req) {
+  const cache = await caches.open(IMG_CACHE)
+  const hit = await cache.match(req, { ignoreVary: true })
+  if (hit) {
+    if (hit.type === 'opaque') {
+      // background revalidate: replaces a cached opaque error with the real image
+      fetch(req).then((res) => { if (res && (res.ok || res.type === 'opaque')) return imgPut(cache, req, res) }).catch(() => {})
+    }
+    return hit
+  }
+  const res = await fetch(req)
+  if (res && (res.ok || res.type === 'opaque')) await imgPut(cache, req, res)
+  return res
+}
+
 self.addEventListener('fetch', (event) => {
   const req = event.request
   if (req.method !== 'GET') return
   const url = new URL(req.url)
-  if (url.origin !== self.location.origin) return // never cache Firestore/Storage/CDN
+  if (url.origin !== self.location.origin) {
+    // ONLY no-cors <img> requests to the venue-photo hosts get the cache.
+    // A CORS fetch (canvas edits, manifest icons, background removal) served
+    // an opaque cache hit is a spec violation the browser turns into
+    // net::ERR_FAILED — exactly the pwa.js console failure — so CORS-mode
+    // requests pass straight through to the network untouched.
+    if (IMG_HOSTS.includes(url.hostname) && req.destination === 'image' && req.mode === 'no-cors') {
+      event.respondWith(imageFirst(req).catch(() => fetch(req)))
+    }
+    return
+  }
 
   if (req.mode === 'navigate') {
     // ALWAYS resolve to a real Response. `caches.match` returns undefined when
@@ -94,14 +148,14 @@ self.addEventListener('notificationclick', (event) => {
   event.waitUntil(
     self.clients.matchAll({ type: 'window', includeUncontrolled: true }).then(async (list) => {
       for (const client of list) {
-        try {
-          if ('focus' in client) await client.focus()
-          if ('navigate' in client) { await client.navigate(url); return }
-          // Uncontrolled client: it cannot be navigated from here, but it can be
-          // told where to go. App code listens for this (src/lib/push.js).
-          if ('postMessage' in client) { client.postMessage({ type: 'navigate', url }); return }
-          return
-        } catch (_) { /* try the next client */ }
+        try { if ('focus' in client) await client.focus() } catch (_) { /* keep going */ }
+        // navigate() exists on every WindowClient but REJECTS for a client this
+        // worker doesn't control (e.g. after a hard reload) — so the message
+        // fallback must live in the catch, not behind an `in` test that is
+        // always true. AdminLayout listens for the message; other shells fall
+        // through to openWindow below.
+        try { await client.navigate(url); return } catch (_) { /* uncontrolled */ }
+        try { client.postMessage({ type: 'navigate', url }); return } catch (_) { /* try next */ }
       }
       if (self.clients.openWindow) return self.clients.openWindow(url)
     }),
@@ -111,8 +165,11 @@ self.addEventListener('notificationclick', (event) => {
 // ---- Firebase Cloud Messaging (background push when app is closed) ----
 // Best-effort: if offline or blocked, the rest of the SW still works.
 try {
-  importScripts('https://www.gstatic.com/firebasejs/11.1.0/firebase-app-compat.js')
-  importScripts('https://www.gstatic.com/firebasejs/11.1.0/firebase-messaging-compat.js')
+  // KEEP IN SYNC with the app bundle's firebase version (package-lock resolves
+  // ^11.1.0 → 11.10.0); a 9-minor skew between getToken (page) and
+  // onBackgroundMessage (this worker) is silent drift.
+  importScripts('https://www.gstatic.com/firebasejs/11.10.0/firebase-app-compat.js')
+  importScripts('https://www.gstatic.com/firebasejs/11.10.0/firebase-messaging-compat.js')
   firebase.initializeApp({
     apiKey: 'AIzaSyCeR42D9DdwYgXMb4CCAqbzCTkp_AMpfU8',
     projectId: 'menu-88996',
@@ -125,7 +182,8 @@ try {
     const data = payload.data || {}
     self.registration.showNotification(n.title || 'RBT360', {
       body: n.body || '',
-      icon: '/brand/favicon.png',
+      // the sender may carry the venue's own logo (data.icon) — honor it
+      icon: data.icon || n.icon || '/brand/favicon.png',
       badge: '/brand/favicon.png',
       tag: data.tag || 'push',
       renotify: true,

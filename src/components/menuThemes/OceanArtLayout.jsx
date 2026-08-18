@@ -43,7 +43,7 @@ function WaveDivider() {
 
 const isOut = (it) => it.available === false || (it.trackStock && (it.stock || 0) <= 0)
 
-export default function OceanArtLayout({ tenant, cats, itemsByCat, visibleItems, filtered, activeCat, onPickCat, currency, offers, stickyTop, onOpen }) {
+export default function OceanArtLayout({ tenant, cats, itemsByCat, visibleItems, filtered, activeCat, onPickCat, currency, offers, stickyTop, onOpen, onQuickAdd = null, hidePrep = false }) {
   const { t, lang } = useI18n()
   const tone = OA_TONES.includes(tenant?.artBgTone) ? tenant.artBgTone : 'deepblue'
   const artBg = tenant?.artBgUrl || ''
@@ -70,14 +70,14 @@ export default function OceanArtLayout({ tenant, cats, itemsByCat, visibleItems,
         <div className="oa-empty"><Empty icon="menu" title={lang === 'ar' ? 'لا توجد أصناف' : 'No items'} /></div>
       ) : (
         groups.map((g, gi) => (
-          <OaSection key={g.cat?.id || `g${gi}`} cat={g.cat} items={g.items} artBg={artBg} currency={currency} offers={offers} lang={lang} t={t} onOpen={onOpen} />
+          <OaSection key={g.cat?.id || `g${gi}`} cat={g.cat} items={g.items} artBg={artBg} currency={currency} offers={offers} lang={lang} t={t} onOpen={onOpen} onQuickAdd={onQuickAdd} hidePrep={hidePrep} />
         ))
       )}
     </div>
   )
 }
 
-function OaSection({ cat, items, artBg, currency, offers, lang, t, onOpen }) {
+function OaSection({ cat, items, artBg, currency, offers, lang, t, onOpen, onQuickAdd = null, hidePrep = false }) {
   // Backdrop priority: this category's cover image > venue art image > tone texture.
   const bgImg = cat?.coverUrl || cat?.imageUrl || artBg
   const cdesc = cat ? pickLang(cat, 'desc', lang) : ''
@@ -92,20 +92,21 @@ function OaSection({ cat, items, artBg, currency, offers, lang, t, onOpen }) {
           <WaveDivider />
         </header>
         {items.map((it, i) => (
-          <OaCard key={it.id} it={it} flip={i % 2 === 1} currency={currency} offers={offers} lang={lang} t={t} onOpen={onOpen} />
+          <OaCard key={it.id} it={it} flip={i % 2 === 1} currency={currency} offers={offers} lang={lang} t={t} onOpen={onOpen} onQuickAdd={onQuickAdd} hidePrep={hidePrep} />
         ))}
       </div>
     </section>
   )
 }
 
-function OaCard({ it, flip, currency, offers, lang, t, onOpen }) {
+function OaCard({ it, flip, currency, offers, lang, t, onOpen, onQuickAdd = null, hidePrep = false }) {
   const out = isOut(it)
   const offer = offerForItem(it, offers)
   const price = offer ? discountedPrice(it.price, offer) : it.price
   const name = pickLang(it, 'name', lang)
   const desc = pickLang(it, 'desc', lang)
   const open = () => { if (!out) onOpen(it) }
+  const quick = (e) => { e.stopPropagation(); if (!out && onQuickAdd) onQuickAdd(it) }
   return (
     <div className={`oa-card ${out ? 'is-out' : ''}`} data-flip={flip ? '1' : '0'} data-item-id={it.id}>
       <div className="oa-plate">
@@ -128,8 +129,13 @@ function OaCard({ it, flip, currency, offers, lang, t, onOpen }) {
         <div className="oa-meta">
           {it.rating ? <span><Icon name="star" size={13} fill="currentColor" strokeWidth={1.5} /> {it.rating}</span> : null}
           {it.calories ? <span><Icon name="flame" size={13} /> {it.calories}</span> : null}
-          {it.prepTime ? <span><Icon name="clock" size={13} /> {it.prepTime} {t('minutesShort')}</span> : null}
+          {!hidePrep && it.prepTime ? <span><Icon name="clock" size={13} /> {it.prepTime} {t('minutesShort')}</span> : null}
         </div>
+        {onQuickAdd && !out && (
+          <button type="button" className="oa-add" onClick={quick}>
+            <Icon name="add" size={14} /> {t('addToCart')}
+          </button>
+        )}
       </div>
     </div>
   )

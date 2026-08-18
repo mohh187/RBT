@@ -36,7 +36,7 @@ const KINDS = [
 
 // Client mirror of storage.rules → tenants/{tid}/library/ limits (fail fast
 // with a clear message instead of uploading for minutes then being rejected).
-const LIB_LIMITS_MB = { image: 10, video: 150, audio: 40, file: 25 }
+const LIB_LIMITS_MB = { image: 10, video: 1024, audio: 40, file: 25 }
 
 // Extension fallbacks for files whose browser `type` is empty (mirrors
 // storage.js): keeps kind + content-type correct so the right rule limit applies.

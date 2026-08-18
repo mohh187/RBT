@@ -28,9 +28,12 @@ function priceHtml(value, currency, lang) {
 
 // Opens a print window styled like an 80mm thermal receipt for one or more orders.
 // proforma=true prints an unpaid "bill" (no tax-invoice label / no ZATCA QR).
+// Resolves to a BOOLEAN: false when the popup was blocked (the installed
+// TWA/PWA and strict browsers can swallow window.open silently — this used to
+// no-op and read as "the printer is broken"), true when the window opened.
 export async function printReceipt(orders, { tenant, lang = 'ar', title, proforma = false } = {}) {
   const list = Array.isArray(orders) ? orders : [orders]
-  if (!list.length) return
+  if (!list.length) return false
   const currency = tenant?.currency || 'SAR'
   const ar = lang === 'ar'
   const name = (l) => (lang === 'en' && l.nameEn ? l.nameEn : l.nameAr)
@@ -71,9 +74,11 @@ export async function printReceipt(orders, { tenant, lang = 'ar', title, proform
   const vat = vatEnabled ? Math.round((total - total / (1 + vatRate / 100)) * 100) / 100 : 0
   const isTaxInvoice = !proforma && vatEnabled && tenant?.vatNumber
 
-  // open the window synchronously (keeps the user gesture), then fill it in
+  // open the window synchronously (keeps the user gesture), then fill it in.
+  // null = popup blocked — report it so the caller can tell the staffer,
+  // instead of the old silent no-op.
   const w = window.open('', '_blank', 'width=380,height=620')
-  if (!w) return
+  if (!w) return false
   let barcodeImg = ''
   if (isTaxInvoice) {
     try {
@@ -146,4 +151,5 @@ export async function printReceipt(orders, { tenant, lang = 'ar', title, proform
     <script>window.onload=function(){window.print()}</script>
   </body></html>`)
   w.document.close()
+  return true
 }

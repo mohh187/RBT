@@ -1,0 +1,37 @@
+/* ICON PICKER — screen-only chrome for the print studio's icon library. */
+
+.icp { display: flex; flex-direction: column; gap: 8px; min-height: 0; }
+
+.icp-bar { display: flex; align-items: center; gap: 6px; }
+.icp-search {
+  display: flex; align-items: center; gap: 6px; flex: 1; min-width: 0;
+  background: var(--surface); border: 1px solid var(--border);
+  border-radius: var(--r-pill); padding: 3px 10px;
+  color: var(--text-faint);
+}
+.icp-search .input {
+  border: none; background: none; padding: 4px 0; flex: 1; min-width: 0;
+  color: var(--text);
+}
+.icp-search .input:focus { outline: none; box-shadow: none; }
+
+.icp-grid {
+  display: grid; gap: 4px;
+  grid-template-columns: repeat(auto-fill, minmax(40px, 1fr));
+  /* The list is capped at 400 cells, which stays smooth without virtualisation;
+     the overlay-scroll rule in index.css keeps the thumb hover-only. */
+  overflow-y: auto; max-height: 46vh; min-height: 0;
+  padding: 2px;
+}
+
+.icp-cell {
+  display: grid; place-items: center;
+  aspect-ratio: 1; border-radius: var(--r-sm);
+  background: var(--surface); border: 1px solid var(--border);
+  color: var(--text); cursor: pointer;
+  transition: border-color var(--dur-fast) var(--ease), background var(--dur-fast) var(--ease);
+}
+.icp-cell:hover { border-color: var(--brand); background: color-mix(in srgb, var(--brand) 8%, var(--surface)); }
+.icp-cell:focus-visible { outline: 2px solid var(--brand); outline-offset: 1px; }
+
+.icp-note { margin: 0; font-size: var(--fs-xs); color: var(--text-faint); }

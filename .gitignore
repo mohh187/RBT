@@ -32,3 +32,26 @@ ui-debug.log
 
 # legacy build leftovers
 .netlify/
+
+# Android signing key — NEVER commit (losing it = new app identity; leaking it = anyone signs as you)
+android.keystore
+app-release-*.apk
+app-release-*.aab
+app-release-*.idsig
+
+# Android/TWA build output + machine-specific paths (the TWA SOURCE — app/src,
+# build.gradle, twa-manifest.json, gradle wrapper — IS tracked; only the ~76 MB
+# of generated artifacts and this machine's SDK path are not)
+.gradle/
+build/
+local.properties
+manifest-checksum.txt
+
+# working media folders (venue photo/brand source material, ~135 MB — belongs in
+# Storage/Drive, not in the app repo)
+RBT360 - Brand/
+Saj ITEMS/
+
+# editor / agent local config
+.vscode/
+.claude/

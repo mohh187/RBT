@@ -299,9 +299,19 @@ service cloud.firestore {
       }
       match /tables/{id} {
         // Diners resolve a table by its qrToken (read needed); managers (or a staffer
-        // granted manage_tables) manage tables.
+        // granted manage_tables) manage tables. Order-taking staff may flip ONLY the
+        // stored occupancy field (seat a walk-in, free a table) — layout, labels and
+        // QR tokens stay manage_tables-only.
         allow read: if true;
         allow write: if hasCap(tid, 'manage_tables');
+        // occupancy shape is pinned: without it the escape hatch doubled as a
+        // public-read storage primitive (any order-taker could park an
+        // arbitrarily large map on a world-readable doc).
+        allow update: if hasCap(tid, 'manage_tables')
+          || (hasCap(tid, 'take_orders')
+              && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['occupancy', 'updatedAt'])
+              && request.resource.data.occupancy is map
+              && request.resource.data.occupancy.keys().hasOnly(['state', 'since', 'byName', 'byUid', 'orderId', 'partySize']));
       }
 
       // ---- events (café-hosted): public read; manager OR manage_events ----
@@ -402,7 +412,21 @@ service cloud.firestore {
         // advances, managers correct).
         allow update: if isStaff(tid)
           && (userDoc().role != 'driver'
-              || request.resource.data.diff(resource.data).affectedKeys().hasOnly(['delivery', 'updatedAt']));
+              || request.resource.data.diff(resource.data).affectedKeys().hasOnly(['delivery', 'updatedAt']))
+          // NO RESURRECTION. Order status writes are now latency-compensated
+          // updateDoc (not a server transaction), so an OFFLINE device can queue
+          // an "advance" against a stale snapshot and, on reconnect, overwrite a
+          // settlement another device already made — flipping a paid/cancelled/
+          // refunded order back into an active status (kitchen re-cooks a
+          // cancelled order; a paid order becomes collectible again). A settled/
+          // void order may only stay put, or move paid -> refunded (the one
+          // legitimate terminal transition). Everything else on a terminal order
+          // is rejected server-side; the offending optimistic write rolls back.
+          && (
+            !(resource.data.status in ['paid', 'cancelled', 'refunded'])
+            || request.resource.data.status == resource.data.status
+            || (resource.data.status == 'paid' && request.resource.data.status == 'refunded')
+          );
         allow delete: if isManager(tid);
       }
 
@@ -822,12 +846,14 @@ service cloud.firestore {
 
       // ---- complaints: diners submit, staff read & resolve ----
       match /complaints/{id} {
-        allow read: if isStaff(tid);
+        // Complaints are an ADMIN feed — a waiter's bell must not stream them.
+        // (Clients also stop subscribing without the cap; this is the backstop.)
+        allow read: if hasCap(tid, 'view_complaints');
         allow create: if true
           && request.resource.data.status == 'open'
           && request.resource.data.message is string
           && request.resource.data.message.size() > 0;
-        allow update, delete: if isStaff(tid);
+        allow update, delete: if hasCap(tid, 'view_complaints');
       }
 
       // ---- customers (CRM) ----
@@ -957,6 +983,22 @@ service cloud.firestore {
       match /pushTokens/{id} {
         allow read: if isStaff(tid);
         allow write: if isStaff(tid);
+      }
+
+      // ---- staff device registry (name + heartbeat) — operational, non-sensitive ----
+      match /devices/{id} {
+        allow read, write: if isStaff(tid);
+      }
+
+      // ---- AI assistant conversations — STRICTLY PER USER: a staffer reads
+      // and writes only chats whose uid field is their own (the doc id is also
+      // uid-prefixed). This is what lets the same account find its chats from
+      // any device, without ever exposing them to coworkers. ----
+      match /aiChats/{id} {
+        allow read, delete: if isStaff(tid) && resource.data.uid == request.auth.uid;
+        allow create: if isStaff(tid) && request.resource.data.uid == request.auth.uid;
+        allow update: if isStaff(tid) && resource.data.uid == request.auth.uid
+          && request.resource.data.uid == request.auth.uid;
       }
 
       // ---- central media library: every upload is registered here so assets can

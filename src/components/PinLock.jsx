@@ -1,19 +1,26 @@
 import { useEffect, useRef, useState } from 'react'
 import { createPortal } from 'react-dom'
+import { useNavigate } from 'react-router-dom'
 import { watchStaff } from '../lib/db.js'
-import { verifyPin, staffHasPin, isUnlocked, markUnlocked, clearUnlocked, setPinActor, getPinActor } from '../lib/pin.js'
+import { staffHasPin, isUnlocked, clearUnlocked, getPinActor, rememberRoster, getRoster, markUnlocked, tryQuickUnlock, warmPinSignIn } from '../lib/pin.js'
 import { useAuth } from '../lib/auth.jsx'
 import { useToast } from './Toast.jsx'
 import Icon from './Icon.jsx'
 
-// Full-screen PIN gate for shared devices — themeable (tenant.pinLockStyle),
-// with live clock/greeting, physical-keyboard support, haptics, success/error
-// motion, and a demo mode for the Settings live preview.
-// demo=true → always shown, fake staff if none, wrong PINs just shake.
+// Full-screen PIN gate for shared devices — PIN-ONLY entry: the code itself
+// identifies the staffer (unique per venue, enforced server-side) and opens
+// THEIR real Firebase session via pinSignIn → signInWithCustomToken. Legacy
+// duplicate PINs get a one-time name disambiguation among the matches only.
+// Themeable (tenant.pinLockStyle), live clock, physical keyboard, haptics,
+// demo mode for the Settings preview, and a `standalone` mode for the /lock
+// cold-start route (no Firebase user yet — venue identity from device cache).
 
 const vibrate = (p) => { try { navigator.vibrate?.(p) } catch (_) { /* ignore */ } }
+// key-press ripple: retrigger the CSS animation (.rip::before) on every tap.
+// Class-based (not :active) so a fast tap still plays the full wave.
+const rippleFx = (e) => { const b = e.currentTarget; b.classList.remove('rip'); void b.offsetWidth; b.classList.add('rip') }
 const hueOf = (name = '') => { let h = 0; for (const c of name) h = (h * 31 + c.charCodeAt(0)) % 360; return h }
-const ROLE_AR = { manager: 'مدير', cashier: 'كاشير', kitchen: 'مطبخ', waiter: 'نادل' }
+const ROLE_AR = { owner: 'مالك', manager: 'مدير', supervisor: 'مشرف', accountant: 'محاسب', cashier: 'كاشير', barista: 'باريستا', kitchen: 'مطبخ', waiter: 'نادل', driver: 'مندوب', marketing: 'تسويق', cleaner: 'نظافة', staff: 'موظف' }
 
 // Apple-style customizable clock: font / size / 12-24h come from pinLockStyle.
 function LockClock({ st = {} }) {
@@ -34,35 +41,49 @@ function LockClock({ st = {} }) {
   )
 }
 
-export default function PinLock({ tenant, tenantId, demo = false }) {
-  const enabled = demo || !!tenant?.pinLock?.enabled
+export default function PinLock({ tenant, tenantId, demo = false, standalone = false, onSuccess = null }) {
+  const enabled = demo || standalone || !!tenant?.pinLock?.enabled
   const idleMin = Number(tenant?.pinLock?.idleMin) || 0
   const st = tenant?.pinLockStyle || {}
-  const { logout } = useAuth()
+  const { logout, pinLogin, user } = useAuth()
   const toast = useToast()
-  const [locked, setLocked] = useState(() => demo || (enabled && !isUnlocked(tenantId)))
-  const [staff, setStaff] = useState([])
-  const [staffLoaded, setStaffLoaded] = useState(false)
-  const staffRef = useRef([])
-  const [sel, setSel] = useState(null)
+  const [locked, setLocked] = useState(() => demo || standalone || (enabled && !isUnlocked(tenantId)))
+  const [staff, setStaff] = useState(() => (standalone ? getRoster(tenantId) : []))
+  const [staffLoaded, setStaffLoaded] = useState(standalone)
+  const staffRef = useRef(staff)
   const [pin, setPin] = useState('')
   const [err, setErr] = useState(false)
   const [ok, setOk] = useState(false)
+  const [okName, setOkName] = useState('')
   const [checking, setChecking] = useState(false)
+  // legacy duplicate-PIN disambiguation: { pin, matches:[{uid,name}] }
+  const [amb, setAmb] = useState(null)
   const fails = useRef(0)
   const idleTimer = useRef(null)
   const delHold = useRef(null)
+  const navigate = useNavigate()
+  // false = this lock is an ENTRY (fresh tab / shift start); true = a mid-shift
+  // RE-lock (idle timer / manual). Entry unlocks and identity handovers route
+  // to the role's home screen; a same-user idle unlock stays exactly where the
+  // staffer was working.
+  const relock = useRef(false)
 
-  useEffect(() => { if (!demo) setLocked(enabled && !isUnlocked(tenantId)) }, [enabled, tenantId, demo])
+  useEffect(() => { if (!demo && !standalone) setLocked(enabled && !isUnlocked(tenantId)) }, [enabled, tenantId, demo, standalone])
   useEffect(() => {
-    if (!tenantId || !enabled) return
-    return watchStaff(tenantId, (list) => { setStaff(list); staffRef.current = list; setStaffLoaded(true) })
-  }, [tenantId, enabled])
+    if (!tenantId || !enabled || standalone) return
+    return watchStaff(tenantId, (list) => {
+      setStaff(list); staffRef.current = list; setStaffLoaded(true)
+      // keep the cold-start roster fresh for the /lock route
+      rememberRoster(tenantId, list)
+    })
+  }, [tenantId, enabled, standalone])
 
-  // manual lock event + idle auto-lock (real mode only)
+  // manual lock event + idle auto-lock (real mode only). Idle lock is the
+  // OVERLAY only — no sign-out — so resume is instant and the Firestore cache
+  // stays warm; the explicit button below is the full sign-out.
   useEffect(() => {
-    if (!enabled || demo) return
-    const lock = () => { clearUnlocked(tenantId); setLocked(true); setSel(null); setPin(''); setOk(false) }
+    if (!enabled || demo || standalone) return
+    const lock = () => { relock.current = true; clearUnlocked(tenantId); setLocked(true); setPin(''); setOk(false); setAmb(null) }
     const onManual = () => {
       const has = staffRef.current.some((s) => staffHasPin(s) && s.active !== false)
       if (!has) { toast.error('عيّن رمز PIN لموظف واحد على الأقل أولاً (الإعدادات ← قفل PIN)'); return }
@@ -87,41 +108,55 @@ export default function PinLock({ tenant, tenantId, demo = false }) {
       window.removeEventListener('ml:upload', resetIdle)
       clearTimeout(idleTimer.current)
     }
-  }, [enabled, idleMin, locked, tenantId]) // eslint-disable-line react-hooks/exhaustive-deps
+  }, [enabled, idleMin, locked, tenantId, standalone]) // eslint-disable-line react-hooks/exhaustive-deps
 
   const realPins = staff.filter((s) => staffHasPin(s) && s.active !== false)
   const withPins = demo && realPins.length === 0
     ? [{ uid: 'd1', name: 'أحمد', role: 'cashier' }, { uid: 'd2', name: 'سارة', role: 'manager' }]
     : realPins
-  // the last staff member who unlocked this device comes first + is preselected
+  // the last unlocker greets first in the roster strip (purely informational now)
   const lastId = getPinActor(tenantId)?.id
   const ordered = [...withPins].sort((a, b) => ((b.uid === lastId ? 1 : 0) - (a.uid === lastId ? 1 : 0)))
 
-  useEffect(() => {
-    if (!locked || sel || !ordered.length) return
-    if (demo) setSel(ordered[0])
-    else if (lastId && ordered[0]?.uid === lastId) setSel(ordered[0])
-  }, [locked, ordered.length]) // eslint-disable-line react-hooks/exhaustive-deps
-
-  const press = async (d) => {
-    if (err || ok || checking) return
-    vibrate(8)
-    const next = (pin + d).slice(0, 4)
-    setPin(next)
-    if (next.length < 4 || !sel) return
-    if (demo) { setErr(true); vibrate([60, 40, 60]); setTimeout(() => { setErr(false); setPin('') }, 600); return }
-    // Server-side verify: the hash never reaches the client, and the server
-    // rate-limits attempts on top of this screen's own cool-down.
-    setChecking(true)
-    const res = await verifyPin(tenantId, sel.uid || sel.id, next)
+  const handleRes = (res, usedPin) => {
     setChecking(false)
     if (res.ok) {
       fails.current = 0
       setOk(true)
+      setOkName(res.name || '')
       vibrate(30)
-      setPinActor(tenantId, { id: sel.uid || sel.id, name: sel.name || sel.displayName || '' })
-      markUnlocked(tenantId)
-      setTimeout(() => { setLocked(false); setSel(null); setPin(''); setOk(false) }, 420)
+      // ROLE ROUTING (owner decision 2026-08-18): a real PIN ENTRY — shift
+      // start, or the device handed to a DIFFERENT staffer — goes to that
+      // role's working screen via /go/pin (waiter → tables, cashier → POS,
+      // kitchen → KDS). A same-user idle re-unlock stays where they were.
+      // Navigate NOW, not inside the timeout: a different-user swap remounts
+      // the tree and an unmounted component's deferred navigate is a no-op.
+      const swapped = !!(res.uid && user?.uid && res.uid !== user.uid)
+      if (!demo && !standalone && (swapped || !relock.current)) navigate('/go/pin', { replace: true })
+      // Different-user PINs swap the Firebase session (auth.pinLogin) and the
+      // whole tree remounts under the loading gate; same-user PINs just lift
+      // this overlay. Either way the unlock markers are already stamped.
+      // 260ms: just enough to read the green dots — the wait lives here, not
+      // in front of the staffer's next order.
+      setTimeout(() => { setLocked(false); setPin(''); setOk(false); onSuccess?.(res) }, 260)
+    } else if (res.ambiguous && res.matches?.length) {
+      // two legacy staffers share this PIN — one-time pick among the MATCHES only
+      setAmb({ pin: usedPin, matches: res.matches })
+      setPin('')
+    } else if (res.inactive) {
+      // CORRECT pin, suspended account — not a wrong-PIN attempt, so it must not
+      // increment the attempts-remaining counter or wear the error shake.
+      toast.error('هذا الحساب موقوف — راجع الإدارة')
+      setPin('')
+    } else if (res.config) {
+      // server can't mint the session token (missing IAM role) — NOT a wrong PIN.
+      toast.error('الدخول بالرمز غير مُفعّل على الخادم بعد — راجع الدعم')
+      setPin('')
+    } else if (res.swapFailed) {
+      // CORRECT pin — the token was minted but the local session swap failed
+      // (network blip mid-swap). Not a wrong-PIN attempt: no counter, no shake.
+      toast.error('تعذّر فتح الجلسة — أعد المحاولة')
+      setPin('')
     } else {
       if (res.error) toast.error('تعذّر التحقق — تأكد من الاتصال بالإنترنت')
       fails.current = res.locked ? 5 : fails.current + 1
@@ -132,21 +167,66 @@ export default function PinLock({ tenant, tenantId, demo = false }) {
     }
   }
 
+  // hard re-entrancy guard: setChecking(true) does not commit synchronously, so
+  // the `checking` state check alone can miss a 5th keypress that re-submits the
+  // already-complete 4-digit PIN (two token mints / two counter charges).
+  const submitting = useRef(false)
+  const press = async (d) => {
+    if (err || ok || checking || amb || submitting.current) return
+    vibrate(8)
+    const next = (pin + d).slice(0, 4)
+    if (pin.length >= 4) return // already full — ignore extra taps
+    // first digit = clear intent: boot a cold pinSignIn container NOW so its
+    // start-up cost is paid while the remaining three digits are typed
+    if (!demo && pin.length === 0) warmPinSignIn()
+    setPin(next)
+    if (next.length < 4) return
+    if (demo) { setErr(true); vibrate([60, 40, 60]); setTimeout(() => { setErr(false); setPin('') }, 600); return }
+    submitting.current = true
+    setChecking(true)
+    try {
+      // Same-user fast path: the staffer who is ALREADY signed in on this
+      // device re-enters their own PIN (the idle-lock case) → verified against
+      // this tab's salted digest, zero network, instant. Anything else — other
+      // PINs, cold starts, no cache — falls through to the server unchanged.
+      if (!standalone && user?.uid && await tryQuickUnlock(tenantId, user.uid, next)) {
+        markUnlocked(tenantId)
+        handleRes({ ok: true, uid: user.uid, name: getPinActor(tenantId)?.name || '' }, next)
+        return
+      }
+      // Server-side: the PIN identifies the staffer, rate-limited per staffer
+      // AND per venue; success mints the custom token that opens their session.
+      handleRes(await pinLogin(tenantId, next), next)
+    } finally { submitting.current = false }
+  }
+
+  const chooseAmb = async (uid) => {
+    // same ref guard as press(): state alone misses a fast double-tap across
+    // two names → two token mints + a wrongly-charged coworker fail counter
+    if (checking || !amb || submitting.current) return
+    submitting.current = true
+    setChecking(true)
+    const { pin: usedPin } = amb
+    setAmb(null)
+    try { handleRes(await pinLogin(tenantId, usedPin, uid), usedPin) } finally { submitting.current = false }
+  }
+
   // physical keyboard: digits / Backspace / Escape
   useEffect(() => {
-    if (!locked || !sel) return
+    if (!locked) return
     const onKey = (e) => {
       if (/^[0-9]$/.test(e.key)) press(e.key)
       else if (e.key === 'Backspace') setPin((p) => p.slice(0, -1))
-      else if (e.key === 'Escape') { setSel(null); setPin('') }
+      else if (e.key === 'Escape') { setPin(''); setAmb(null) }
     }
     window.addEventListener('keydown', onKey)
     return () => window.removeEventListener('keydown', onKey)
-  }, [locked, sel, pin, err, ok, checking]) // eslint-disable-line react-hooks/exhaustive-deps
+  }, [locked, pin, err, ok, checking, amb]) // eslint-disable-line react-hooks/exhaustive-deps
 
-  if (!demo && (!enabled || !locked || !staffLoaded || withPins.length === 0)) return null
+  if (!demo && !standalone && (!enabled || !locked || !staffLoaded || withPins.length === 0)) return null
+  if (standalone && !locked) return null
 
-  const PAD = ['1', '2', '3', '4', '5', '6', '7', '8', '9', 'back', '0', 'del']
+  const PAD = ['1', '2', '3', '4', '5', '6', '7', '8', '9', 'clear', '0', 'del']
 
   // portaled to <body>: a glass-themed ancestor's backdrop-filter would otherwise
   // become this overlay's containing block and trap the fixed positioning
@@ -155,7 +235,9 @@ export default function PinLock({ tenant, tenantId, demo = false }) {
       {st.bg?.url && (
         <div className="pinlock-bglayer" aria-hidden="true" style={{ opacity: st.bgOpacity ?? 0.35 }}>
           {st.bg.kind === 'video'
-            ? <video src={st.bg.url} autoPlay muted loop playsInline style={{ objectPosition: st.bgPosition || 'center', transform: Number(st.bgScale) > 1 ? `scale(${Number(st.bgScale)})` : undefined, transformOrigin: st.bgPosition || 'center' }} />
+            // preload=auto buffers immediately; the ref nudge restarts playback
+            // if the browser parked autoplay (tab restore, compositor hiccup)
+            ? <video src={st.bg.url} autoPlay muted loop playsInline preload="auto" ref={(el) => { if (el && el.paused) el.play().catch(() => {}) }} style={{ objectPosition: st.bgPosition || 'center', transform: Number(st.bgScale) > 1 ? `scale(${Number(st.bgScale)})` : undefined, transformOrigin: st.bgPosition || 'center' }} />
             : <div style={{ backgroundImage: `url(${st.bg.url})`, backgroundPosition: st.bgPosition || 'center', backgroundSize: Number(st.bgScale) > 1 ? `${Number(st.bgScale) * 100}%` : 'cover' }} />}
         </div>
       )}
@@ -163,53 +245,67 @@ export default function PinLock({ tenant, tenantId, demo = false }) {
         <LockClock st={st} />
         {tenant?.logoUrl && <img src={tenant.logoUrl} alt="" className="pinlock-logo" />}
         <strong style={{ fontSize: 'var(--fs-lg)' }}>{tenant?.name || ''}</strong>
-        {!sel ? (
+        {amb ? (
           <>
-            <p className="small faint" style={{ margin: 0 }}>اختر اسمك لفتح النظام</p>
+            <p className="small" style={{ margin: 0 }}>الرمز مشترك بين أكثر من موظف — اختر اسمك</p>
+            <p className="xs faint" style={{ margin: 0 }}>يُنصح بتغيير أحد الرمزين من الإعدادات — الرموز أصبحت فريدة لكل موظف</p>
             <div className="pinlock-staff">
-              {withPins.length === 0
-                ? <p className="small faint">لا موظفين برمز PIN — عيّن الأرقام من الإعدادات ← قفل PIN</p>
-                : ordered.map((s) => (
-                  <button key={s.uid || s.id} className="pinlock-person" onClick={() => { setSel(s); setPin('') }}>
-                    <span className="pinlock-avatar" style={s.photoUrl ? undefined : { background: `hsl(${hueOf(s.name)} 55% 45% / .22)`, color: `hsl(${hueOf(s.name)} 60% 38%)` }}>
-                      {s.photoUrl ? <img src={s.photoUrl} alt="" /> : (s.name || '?').slice(0, 1)}
-                    </span>
-                    <span className="small bold">{s.name || s.displayName || '—'}</span>
-                    {s.role && <span className="xs faint">{ROLE_AR[s.role] || s.role}</span>}
-                  </button>
-                ))}
+              {amb.matches.map((m) => (
+                <button key={m.uid} className="pinlock-person" onClick={() => chooseAmb(m.uid)}>
+                  <span className="pinlock-avatar" style={{ background: `hsl(${hueOf(m.name)} 55% 45% / .22)`, color: `hsl(${hueOf(m.name)} 60% 38%)` }}>
+                    {(m.name || '?').slice(0, 1)}
+                  </span>
+                  <span className="small bold">{m.name || '—'}</span>
+                </button>
+              ))}
             </div>
+            <button className="btn-link xs faint" style={{ background: 'none', border: 'none', cursor: 'pointer' }} onClick={() => setAmb(null)}>رجوع</button>
           </>
         ) : (
           <>
-            <p className="small" style={{ margin: 0 }}>
-              <strong>{sel.name}</strong>{sel.role ? <span className="faint"> · {ROLE_AR[sel.role] || sel.role}</span> : null} — أدخل رمزك
-            </p>
+            <p className="small" style={{ margin: 0 }}>أدخل رمزك لفتح حسابك</p>
             <div className={`pinlock-dots ${err ? 'err' : ''} ${ok ? 'ok' : ''} ${checking ? 'checking' : ''}`}>
               {[0, 1, 2, 3].map((i) => <span key={i} className={pin.length > i ? 'on' : ''} />)}
             </div>
             <div className="pinlock-pad" dir="ltr">
-              {PAD.map((k, i) => k === 'back' ? (
-                <button key={k} className="pinlock-alt" style={{ '--i': i }} onClick={() => { setSel(null); setPin('') }} aria-label="رجوع"><Icon name="undo" size={20} /></button>
+              {PAD.map((k, i) => k === 'clear' ? (
+                <button key={k} className="pinlock-alt" style={{ '--i': i }} onPointerDown={rippleFx} onClick={() => setPin('')} aria-label="مسح الكل"><Icon name="close" size={20} /></button>
               ) : k === 'del' ? (
                 <button key={k} className="pinlock-alt" style={{ '--i': i }} aria-label="حذف"
                   onClick={() => setPin((p) => p.slice(0, -1))}
-                  onPointerDown={() => { delHold.current = setTimeout(() => setPin(''), 450) }}
+                  onPointerDown={(e) => { rippleFx(e); delHold.current = setTimeout(() => setPin(''), 450) }}
                   onPointerUp={() => clearTimeout(delHold.current)}
                   onPointerLeave={() => clearTimeout(delHold.current)}><Icon name="back" size={20} /></button>
               ) : (
-                <button key={k} style={{ '--i': i }} onClick={() => press(k)}>{k}</button>
+                <button key={k} style={{ '--i': i }} onPointerDown={rippleFx} onClick={() => press(k)}>{k}</button>
               ))}
             </div>
-            {ok && <p className="xs" style={{ color: 'var(--success)', margin: 0, fontWeight: 800, display: 'inline-flex', alignItems: 'center', gap: 4 }}><Icon name="check" size={13} /> أهلاً {sel.name}</p>}
+            {ok && <p className="xs" style={{ color: 'var(--success)', margin: 0, fontWeight: 800, display: 'inline-flex', alignItems: 'center', gap: 4 }}><Icon name="check" size={13} /> أهلاً {okName}</p>}
             {!ok && fails.current >= 2 && !err && <p className="xs faint" style={{ margin: 0 }}>متبقٍ {Math.max(0, 5 - fails.current)} محاولات قبل الإيقاف المؤقت</p>}
             {fails.current >= 5 && err && <p className="xs" style={{ color: 'var(--danger)', margin: 0 }}>محاولات كثيرة — انتظر قليلاً</p>}
+            {/* the team strip — who can unlock here (informational; PIN is the identity) */}
+            {ordered.length > 0 && (
+              <div className="pinlock-staff pinlock-staff-strip">
+                {ordered.slice(0, 6).map((s) => (
+                  <span key={s.uid || s.id} className="pinlock-person" style={{ cursor: 'default' }}>
+                    <span className="pinlock-avatar" style={s.photoUrl ? undefined : { background: `hsl(${hueOf(s.name)} 55% 45% / .22)`, color: `hsl(${hueOf(s.name)} 60% 38%)` }}>
+                      {s.photoUrl ? <img src={s.photoUrl} alt="" /> : (s.name || '?').slice(0, 1)}
+                    </span>
+                    <span className="xs bold">{s.name || s.displayName || '—'}</span>
+                    {s.role && <span className="xs faint">{ROLE_AR[s.role] || s.role}</span>}
+                  </span>
+                ))}
+              </div>
+            )}
           </>
         )}
-        {!demo && (
-          <button className="btn-link xs faint" style={{ background: 'none', border: 'none', cursor: 'pointer', marginTop: 6 }} onClick={logout}>
+        {!demo && !standalone && (
+          <button className="pinlock-link xs" onClick={logout}>
             تسجيل الخروج من الحساب
           </button>
+        )}
+        {standalone && (
+          <a className="pinlock-link xs" href="/login">الدخول بالبريد الإلكتروني</a>
         )}
       </div>
     </div>,

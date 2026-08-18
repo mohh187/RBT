@@ -31,6 +31,34 @@ import { useEffect, useRef } from 'react'
 // closes the hub. That is the nesting the guest expects.
 const open_ = []
 
+// THE ECHO PROBLEM.
+//
+// Cleanup takes our history entry back off with history.back(), and the browser
+// answers that with a `popstate` — the SAME event a real Back press produces,
+// arriving asynchronously, after cleanup has finished. Nothing in the event says
+// who asked for it.
+//
+// That was survivable while `byPop` lived inside the effect, because the only
+// listener that could hear the echo had already been removed. It stopped being
+// survivable the moment a SECOND instance existed by the time the echo landed —
+// which is exactly what React.StrictMode does in development (setup → cleanup →
+// setup) and what any fast close-then-reopen does in production. The new
+// instance heard the previous instance's echo, read it as a user pressing Back,
+// and closed itself in the same frame. Visibly: the games hub opened and
+// vanished, so tapping «الألعاب والتحديات» appeared to do nothing at all.
+//
+// The flag therefore has to outlive the instance that set it, so it lives at
+// module scope beside the stack. It is consumed by the first popstate that sees
+// it, and cleared on a timer as well: if the browser never delivers the echo
+// (no entry left to pop), a stuck flag would swallow the user's next real Back.
+let selfPop = false
+let selfPopTimer = 0
+function markSelfPop() {
+  selfPop = true
+  clearTimeout(selfPopTimer)
+  selfPopTimer = setTimeout(() => { selfPop = false }, 500)
+}
+
 export function useDismiss(open, onClose) {
   // Read the latest onClose without re-running the effect (and thus without
   // pushing a second history entry) every time the parent re-renders.
@@ -50,13 +78,22 @@ export function useDismiss(open, onClose) {
       cb.current?.()
     }
     const onPop = () => {
+      // Our own history.back() echoing back. Swallow it once — acting on it
+      // would close an overlay the user never asked to close.
+      if (selfPop) { selfPop = false; return }
       if (!top()) return
       byPop = true
       cb.current?.()
     }
 
     open_.push(me)
-    window.history.pushState({ dismiss: true }, '')
+    // SPREAD, don't replace. react-router keeps its own bookkeeping in
+    // history.state — `{ usr, key, idx }` — and getIndex() reads state.idx
+    // (@remix-run/router router.cjs.js:449). Overwriting the object with a bare
+    // `{ dismiss: true }` left idx undefined, so the router's pop-delta maths
+    // went NaN and it desynced from the actual history stack. Preserving the
+    // existing state costs one spread and keeps navigation coherent.
+    window.history.pushState({ ...(window.history.state || {}), dismiss: true }, '')
     window.addEventListener('popstate', onPop)
     window.addEventListener('keydown', onKey)
 
@@ -66,7 +103,10 @@ export function useDismiss(open, onClose) {
       const at = open_.indexOf(me)
       if (at >= 0) open_.splice(at, 1)
       if (byPop) return
-      if (window.history.state?.dismiss) window.history.back()
+      if (window.history.state?.dismiss) {
+        markSelfPop()
+        window.history.back()
+      }
     }
   }, [open])
 }

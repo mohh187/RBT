@@ -9,7 +9,7 @@ import Markdown from '../../components/Markdown.jsx'
 import { runAssistant, aiConfigured } from '../../lib/aiBridge.js'
 import { getAiUsage } from '../../lib/db.js'
 import { createIssue } from '../../lib/platform.js'
-import { listChats, getChat, saveChat, deleteChat, newChatId } from '../../lib/aiChats.js'
+import { listChats, getChat, saveChat, deleteChat, newChatId, syncChats } from '../../lib/aiChats.js'
 import { fileToAttachment, ACCEPT } from '../../lib/aiFiles.js'
 import Sheet from '../../components/Sheet.jsx'
 import { useToast } from '../../components/Toast.jsx'
@@ -131,7 +131,16 @@ export default function Assistant() {
   useEffect(() => { autoRunRef.current = autoRun }, [autoRun])
   const scrollDown = () => setTimeout(() => { const s = scrollRef.current; if (s) s.scrollTop = s.scrollHeight }, 30)
 
-  useEffect(() => { if (tenantId) setChats(listChats(tenantId)) }, [tenantId])
+  // Cache paints instantly, then syncChats pulls this USER's chats from
+  // Firestore (and uploads any pre-sync local history once) — so the same
+  // account finds its conversations from any device.
+  useEffect(() => {
+    if (!tenantId) return
+    setChats(listChats(tenantId))
+    let on = true
+    syncChats(tenantId).then((merged) => { if (on) setChats(merged) })
+    return () => { on = false }
+  }, [tenantId])
 
   // slash palette
   const slash = /^\/(\S*)$/.exec(input.trim())

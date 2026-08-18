@@ -1,0 +1,71 @@
+/* QR STYLE PICKER
+ *
+ * Screen-only chrome (never printed) shared by the table-sticker generator and the
+ * print studio. Thumbnails are inline SVG so they scale crisply at any cell size
+ * and cost no network round-trip.
+ */
+
+.qrp { display: flex; flex-direction: column; gap: 8px; }
+
+.qrp-head { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+.qrp-current {
+  font-size: var(--fs-sm); font-weight: 700;
+  background: color-mix(in srgb, var(--brand) 10%, var(--surface));
+  border: 1px solid var(--border); border-radius: var(--r-pill);
+  padding: 2px 9px;
+}
+
+/* ---- verdict strip ---- */
+.qrp-verdict {
+  display: flex; align-items: center; gap: 6px;
+  font-size: var(--fs-xs); font-weight: 600; line-height: 1.4;
+  border-radius: var(--r-sm); padding: 6px 9px;
+  border: 1px solid transparent;
+}
+.qrp-verdict.is-testing { background: var(--surface-2); color: var(--text-faint); }
+.qrp-verdict.is-ok { background: color-mix(in srgb, var(--success) 12%, var(--surface)); color: var(--success); border-color: color-mix(in srgb, var(--success) 34%, transparent); }
+.qrp-verdict.is-bad { background: color-mix(in srgb, var(--danger) 12%, var(--surface)); color: var(--danger); border-color: color-mix(in srgb, var(--danger) 34%, transparent); }
+.qrp-verdict.is-unknown { background: color-mix(in srgb, var(--warning) 12%, var(--surface)); color: var(--warning); border-color: color-mix(in srgb, var(--warning) 34%, transparent); }
+
+.qrp-spin {
+  width: 11px; height: 11px; flex-shrink: 0; border-radius: 50%;
+  border: 2px solid color-mix(in srgb, var(--text-faint) 35%, transparent);
+  border-top-color: var(--text-faint);
+  animation: qrp-rot 0.7s linear infinite;
+}
+@keyframes qrp-rot { to { transform: rotate(360deg); } }
+@media (prefers-reduced-motion: reduce) { .qrp-spin { animation-duration: 2.4s; } }
+
+.qrp-warn {
+  margin: 0; font-size: var(--fs-xs); line-height: 1.5;
+  color: var(--warning);
+}
+
+/* ---- grid ---- */
+.qrp-grid {
+  display: grid; gap: 6px;
+  grid-template-columns: repeat(auto-fill, minmax(74px, 1fr));
+}
+.qrp-cell {
+  display: flex; flex-direction: column; align-items: center; gap: 3px;
+  background: var(--surface); border: 1.5px solid var(--border);
+  border-radius: var(--r-sm); padding: 5px 4px 4px;
+  cursor: pointer; text-align: center;
+  transition: border-color var(--dur-fast) var(--ease), transform var(--dur-fast) var(--ease);
+}
+.qrp-cell:hover { border-color: color-mix(in srgb, var(--brand) 50%, var(--border)); }
+.qrp-cell.active { border-color: var(--brand); background: color-mix(in srgb, var(--brand) 7%, var(--surface)); }
+.qrp-cell:focus-visible { outline: 2px solid var(--brand); outline-offset: 2px; }
+
+.qrp-thumb { display: block; width: 100%; background: #fff; border-radius: 3px; overflow: hidden; }
+.qrp-thumb svg { display: block; width: 100%; height: auto; }
+/* keeps the row height stable while the twenty thumbs rasterise in */
+.qrp-thumb:empty { aspect-ratio: 1; background: var(--surface-2); }
+
+.qrp-name { font-size: 10px; font-weight: 700; line-height: 1.2; }
+.qrp-risk { font-size: 8.5px; font-weight: 600; line-height: 1; }
+.qrp-risk.r-low { color: var(--success); }
+.qrp-risk.r-med { color: var(--warning); }
+.qrp-risk.r-high { color: var(--danger); }
+
+@media print { .qrp { display: none !important; } }

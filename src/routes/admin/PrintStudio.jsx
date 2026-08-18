@@ -4,16 +4,21 @@ import { collection, doc, onSnapshot, query, orderBy, setDoc, deleteDoc, serverT
 import { db } from '../../lib/firebase.js'
 import { useAuth } from '../../lib/auth.jsx'
 import { useToast } from '../../components/Toast.jsx'
-import { watchItems } from '../../lib/db.js'
+import { watchItems, watchTables } from '../../lib/db.js'
 import { uploadImage } from '../../lib/storage.js'
 import { FONT_OPTIONS, loadFont } from '../../lib/skins.js'
 import { resolveTenantTheme } from '../../lib/themes.js'
-import { qrDataUrl, menuUrl } from '../../lib/qr.js'
+import { PRINT_TOKENS, usesTableVars, qrKeysForDesign } from '../../lib/printVars.js'
+import { qrDataUrl, menuUrl, printBaseCandidates } from '../../lib/qr.js'
+import { qrStyleDataUrl, QR_FRAMES } from '../../lib/qrStyles.js'
+import QrStylePicker from '../../components/QrStylePicker.jsx'
+import IconPicker from '../../components/IconPicker.jsx'
 import { lex } from '../../lib/venueTypes.js'
+import { stickerContent } from '../../lib/stickerContent.js'
 import { PRINT_SHAPES, SHAPE_CATS, renderShapeSvg, shapeById } from '../../lib/printShapes.js'
 import { generatePostImage, cleanCaption } from '../../lib/postGen.js'
 import { aiQuick } from '../../lib/aiBridge.js'
-import PrintCanvas, { aabbOf, bboxOfMany } from '../../components/PrintCanvas.jsx'
+import PrintCanvas, { aabbOf, bboxOfMany, TEXT_FX, TEXT_FILLS, expandGroups } from '../../components/PrintCanvas.jsx'
 import { exportDesignPng, downloadBlob } from '../../components/print/exportPng.js'
 import MediaLibrary from '../../components/MediaLibrary.jsx'
 import Icon from '../../components/Icon.jsx'
@@ -39,7 +44,8 @@ const PAGE_PRESETS = [
   { id: 'A4', ar: 'A4 عمودي', w: 794, h: 1123 },
   { id: 'A4L', ar: 'A4 أفقي', w: 1123, h: 794 },
   { id: 'A5', ar: 'A5', w: 559, h: 794 },
-  { id: 'A3', ar: 'A3', w: 1123, h: 1587 },
+  { id: 'A3', ar: 'A3 عمودي', w: 1123, h: 1587 },
+  { id: 'A3L', ar: 'A3 أفقي', w: 1587, h: 1123 },
   { id: 'square', ar: 'مربع (منشور)', w: 1080, h: 1080 },
   { id: 'story', ar: 'ستوري (طولي)', w: 1080, h: 1920 },
 ]
@@ -74,10 +80,149 @@ const mkText = (o) => ({
 })
 const mkShape = (o) => ({ type: 'shape', stroke: '', strokeW: 0, ...o })
 
+// Builds one face of a napkin-stand strip at page-relative coordinates.
+// `x0`/`fw` are the face's left edge and width as fractions of the page, so the
+// same builder lays out the wide centre panel and the two narrow sides.
+function standFace({ page, brand, tenant, x0, fw, kind }) {
+  const pad = page.w * fw * 0.06
+  const L = R(page.w * x0 + pad)
+  const W = R(page.w * fw - pad * 2)
+  const qr = R(Math.min(W * 0.52, page.h * 0.42))
+  const out = [
+    mkShape({ shapeId: 'frame-arch', fill: brand, x: R(page.w * x0 + pad * 0.4), y: R(page.h * 0.03), w: R(page.w * fw - pad * 0.8), h: R(page.h * 0.94) }),
+  ]
+  if (kind === 'centre') {
+    out.push(
+      mkText({ text: tenant?.name || '{{venue}}', size: relSize(page, 0.075), weight: 800, color: brand, align: 'center', x: L, y: R(page.h * 0.09), w: W, h: R(page.h * 0.11) }),
+      mkText({ text: 'امسح. اطلب. العب.', size: relSize(page, 0.055), weight: 800, color: brand, align: 'center', x: L, y: R(page.h * 0.22), w: W, h: R(page.h * 0.09) }),
+      { type: 'qr', kind: 'table', x: R(page.w * x0 + (page.w * fw - qr) / 2), y: R(page.h * 0.34), w: qr, h: qr },
+      mkText({ text: 'TABLE {{table}}', size: relSize(page, 0.05), weight: 900, color: brand, align: 'center', dir: 'ltr', x: L, y: R(page.h * 0.34 + qr + page.h * 0.03), w: W, h: R(page.h * 0.09) }),
+    )
+  } else {
+    const t = kind === 'games'
+      ? { title: 'ركن الألعاب', body: 'وست · ليدو · دومينو · شطرنج — والمزيد والمزيد داخل القائمة.', cta: 'امسح والعب' }
+      : { title: 'نادي الولاء', body: 'اجمع زياراتك واحصل على مشروبك المجاني، وعروضنا تصلك أولاً.', cta: 'امسح وسجّل' }
+    out.push(
+      mkText({ text: t.title, size: relSize(page, 0.05), weight: 800, color: brand, align: 'center', x: L, y: R(page.h * 0.1), w: W, h: R(page.h * 0.08) }),
+      mkText({ text: t.body, size: relSize(page, 0.028), weight: 500, color: '#5c5c66', align: 'center', x: L, y: R(page.h * 0.2), w: W, h: R(page.h * 0.16) }),
+      { type: 'qr', kind: 'table', x: R(page.w * x0 + (page.w * fw - qr) / 2), y: R(page.h * 0.4), w: qr, h: qr },
+      mkText({ text: t.cta, size: relSize(page, 0.032), weight: 700, color: brand, align: 'center', x: L, y: R(page.h * 0.4 + qr + page.h * 0.025), w: W, h: R(page.h * 0.07) }),
+    )
+  }
+  return out
+}
+
+// PRINT MATERIALS.
+//
+// A commercial printer needs bleed — artwork extended past the trim line — or a
+// millimetre of cutting drift leaves a white hairline down the edge of the
+// sticker. 3mm is the near-universal ask; die-cut vinyl wants more because the
+// blade wanders further than a guillotine. `safe` is the inverse: keep text off
+// the edge by this much or the trim eats it.
+const MATERIALS = [
+  { id: 'none', ar: 'بلا حدود طباعة', bleed: 0, safe: 0 },
+  { id: 'paper', ar: 'ورق لاصق — قص مستقيم', bleed: 3, safe: 4 },
+  { id: 'vinyl', ar: 'فينيل — قص بالسكين', bleed: 5, safe: 6 },
+  { id: 'laminated', ar: 'مغلّف/لامينيت', bleed: 3, safe: 5 },
+  { id: 'diecut', ar: 'قص خاص (Die-cut)', bleed: 5, safe: 7 },
+]
+export const materialById = (id) => MATERIALS.find((m) => m.id === id) || MATERIALS[0]
+
+// stickerContent()'s icon keys → real lucide glyph names.
+//
+// These are the LIBRARY names, not the app's Icon.jsx aliases: Icon.jsx maps
+// `image` to lucide's `Image as ImageIcon`, and reaching for "ImageIcon" here
+// silently yields nothing because the generated data is keyed on lucide's own
+// names. Every entry below was checked against iconLibraryData.js.
+const FEATURE_ICONS = {
+  cart: 'ShoppingCart', games: 'Gamepad2', award: 'Award', waiter: 'Hand',
+  bell: 'BellRing', image: 'Image', customers: 'Users', star: 'Star',
+  mic: 'Mic', flame: 'Flame', trending: 'TrendingUp',
+}
+
 const TEMPLATES = [
   {
     id: 'blank', ar: 'صفحة فارغة', prev: [],
     build: () => [],
+  },
+  {
+    // The three faces of a napkin stand, laid out across ONE wide page — set the
+    // size to your stand's total width (a 20+11+11cm stand is 420 × 145mm, i.e.
+    // A3 landscape) and cut on the seams. Every face carries the TABLE qr, not
+    // the venue menu, so one design generates a correct sticker per table via
+    // «PNG لكل طاولة».
+    id: 'stand', ar: 'استاند مناديل (3 واجهات)',
+    prev: [[4, 12, 26, 70, 'b'], [36, 12, 28, 70, 'a'], [70, 12, 26, 70, 'b']],
+    build: ({ page, brand, tenant }) => [
+      ...standFace({ page, brand, tenant, x0: 0.00, fw: 0.262, kind: 'games' }),
+      ...standFace({ page, brand, tenant, x0: 0.262, fw: 0.476, kind: 'centre' }),
+      ...standFace({ page, brand, tenant, x0: 0.738, fw: 0.262, kind: 'loyalty' }),
+    ],
+  },
+  {
+    // Photo-led, like a café's own artwork: full-bleed background, a scrim so
+    // type stays legible over it, an oversized outlined table number, and framed
+    // table codes on both wings.
+    id: 'standPhoto', ar: 'استاند بخلفية صورة',
+    prev: [[2, 6, 96, 88, 'b'], [8, 22, 20, 44, 'a'], [72, 22, 20, 44, 'a'], [40, 26, 20, 48, '']],
+    build: ({ page, brand, tenant }) => {
+      const qr = R(Math.min(page.w * 0.13, page.h * 0.5))
+      const wing = (x0) => ([
+        { type: 'qr', kind: 'table', qrStyle: 'fluid', qrFrame: 'card', qrCaption: 'امسح واطلب', qrFrameColor: '#ffffff', qrLight: '#ffffff',
+          x: R(page.w * x0), y: R(page.h * 0.24), w: qr, h: R(qr * 1.22) },
+      ])
+      return [
+        // Scrim: without it, photo-backed type is unreadable on half the images
+        // a venue will pick. Sits behind everything, above the page background.
+        mkShape({ shapeId: 'rect', fill: '#2b1016', x: 0, y: 0, w: page.w, h: page.h, opacity: 0.45 }),
+        mkText({ text: tenant?.name || '{{venue}}', size: relSize(page, 0.062), weight: 800, color: '#ffffff', align: 'center',
+          x: R(page.w * 0.3), y: R(page.h * 0.06), w: R(page.w * 0.4), h: R(page.h * 0.1) }),
+        mkText({ text: '{{table}}', size: relSize(page, 0.34), weight: 900, color: brand, align: 'center', dir: 'ltr',
+          fx: 'outline', fxColor: '#ffffff', fxDepth: 10,
+          x: R(page.w * 0.36), y: R(page.h * 0.2), w: R(page.w * 0.28), h: R(page.h * 0.56) }),
+        ...wing(0.06),
+        ...wing(0.81),
+        mkText({ text: 'اختر مزاجك — القائمة والألعاب في جوالك', size: relSize(page, 0.026), weight: 600, color: '#f4e9dc', align: 'center',
+          x: R(page.w * 0.25), y: R(page.h * 0.85), w: R(page.w * 0.5), h: R(page.h * 0.08) }),
+      ]
+    },
+  },
+  {
+    id: 'standLuxe', ar: 'استاند فاخر ذهبي',
+    prev: [[6, 8, 88, 84, 'a'], [38, 18, 24, 30, 'b'], [34, 56, 32, 8, '']],
+    build: ({ page, tenant }) => {
+      const gold = '#b6923f'
+      const qr = R(Math.min(page.w * 0.17, page.h * 0.46))
+      return [
+        mkShape({ shapeId: 'rect', fill: '#14100c', x: 0, y: 0, w: page.w, h: page.h }),
+        mkShape({ shapeId: 'frame-thin', fill: gold, x: R(page.w * 0.03), y: R(page.h * 0.05), w: R(page.w * 0.94), h: R(page.h * 0.9) }),
+        mkText({ text: tenant?.name || '{{venue}}', size: relSize(page, 0.058), weight: 700, color: gold, align: 'center', fontKey: 'arefRuqaa',
+          x: R(page.w * 0.25), y: R(page.h * 0.12), w: R(page.w * 0.5), h: R(page.h * 0.1) }),
+        { type: 'qr', kind: 'table', qrStyle: 'gradDiag', qrDark: gold, qrDark2: '#f0d693', qrLight: '#14100c', qrFrame: 'none',
+          x: R((page.w - qr) / 2), y: R(page.h * 0.28), w: qr, h: qr },
+        mkText({ text: 'TABLE {{table}}', size: relSize(page, 0.038), weight: 700, color: gold, align: 'center', dir: 'ltr',
+          x: R(page.w * 0.3), y: R(page.h * 0.28 + qr + page.h * 0.04), w: R(page.w * 0.4), h: R(page.h * 0.07) }),
+        mkText({ text: 'امسح لتصفّح القائمة', size: relSize(page, 0.026), weight: 500, color: '#d8c9a8', align: 'center',
+          x: R(page.w * 0.28), y: R(page.h * 0.84), w: R(page.w * 0.44), h: R(page.h * 0.06) }),
+      ]
+    },
+  },
+  {
+    id: 'standMinimal', ar: 'استاند مبسّط — أقصى مسح',
+    prev: [[30, 14, 40, 44, 'a'], [26, 64, 48, 10, '']],
+    build: ({ page, brand, tenant }) => {
+      const qr = R(Math.min(page.w * 0.44, page.h * 0.5))
+      return [
+        mkText({ text: 'TABLE {{table}}', size: relSize(page, 0.05), weight: 800, color: brand, align: 'center', dir: 'ltr',
+          x: R(page.w * 0.3), y: R(page.h * 0.08), w: R(page.w * 0.4), h: R(page.h * 0.08) }),
+        { type: 'qr', kind: 'table', qrStyle: 'rounded', qrFrame: 'none',
+          x: R((page.w - qr) / 2), y: R(page.h * 0.2), w: qr, h: qr },
+        mkText({ text: 'امسح. اطلب. العب.', size: relSize(page, 0.055), weight: 800, color: brand, align: 'center',
+          x: R(page.w * 0.15), y: R(page.h * 0.2 + qr + page.h * 0.04), w: R(page.w * 0.7), h: R(page.h * 0.1) }),
+        mkText({ text: tenant?.name || '{{venue}}', size: relSize(page, 0.026), weight: 600, color: '#6b6b76', align: 'center',
+          x: R(page.w * 0.25), y: R(page.h * 0.88), w: R(page.w * 0.5), h: R(page.h * 0.06) }),
+      ]
+    },
   },
   {
     id: 'header', ar: 'ترويسة وفاصل',
@@ -203,6 +348,7 @@ const SHORTCUTS = [
   ['تراجع / إعادة', 'Ctrl+Z / Ctrl+Shift+Z'],
   ['نسخ / لصق / قص', 'Ctrl+C / Ctrl+V / Ctrl+X'],
   ['تكرار', 'Ctrl + D'],
+  ['تجميع / فكّ التجميع', 'Ctrl+G / Ctrl+Shift+G'],
   ['حذف', 'Delete'],
   ['تحريك دقيق', 'Arrows (Shift = 10)'],
   ['حفظ النسبة أثناء التحجيم', 'Shift + Resize'],
@@ -216,9 +362,19 @@ const SHORTCUTS = [
   ['هذه القائمة', 'Shift + /'],
 ]
 
-const TYPE_AR = { text: 'نص', image: 'صورة', shape: 'شكل', qr: 'رمز QR', itemcard: 'بطاقة صنف' }
+const TYPE_AR = { text: 'نص', image: 'صورة', shape: 'شكل', icon: 'أيقونة', qr: 'رمز QR', itemcard: 'بطاقة صنف' }
 
-export default function PrintStudio() {
+// EMBEDDED MODE.
+//
+// `embedded` renders the studio inside another page — the table-stickers tabs —
+// instead of taking over the viewport. The editor still needs a KNOWN height,
+// because PrintCanvas measures its viewport to fit the sheet, so embedding
+// swaps the fixed full-screen takeover for a tall in-flow box rather than
+// letting it collapse to its content and fit the sheet to nothing.
+//
+// The standalone route keeps working unchanged: this is an added mode, not a
+// replacement.
+export default function PrintStudio({ embedded = false }) {
   const { tenantId, tenant } = useAuth()
   const toast = useToast()
   const brand = resolveTenantTheme(tenant).brand || '#7c2d2d'
@@ -229,6 +385,12 @@ export default function PrintStudio() {
   const [designs, setDesigns] = useState(null)
   const [items, setItems] = useState([])
   const [qrSrc, setQrSrc] = useState('')
+  // per-table variable data
+  const [tables, setTables] = useState([])
+  const [tableQrs, setTableQrs] = useState({})
+  const [previewTableId, setPreviewTableId] = useState('')
+  const [printBase, setPrintBase] = useState('')
+  const [batch, setBatch] = useState(false)
 
   // ---------- editor state ----------
   const [design, setDesign] = useState(null) // null = gallery
@@ -251,6 +413,7 @@ export default function PrintStudio() {
   const [saving, setSaving] = useState(false)
   const [exporting, setExporting] = useState(false)
   const [panelSheet, setPanelSheet] = useState(null) // narrow screens: 'lib' | 'props'
+  const [dragLayer, setDragLayer] = useState(null)
   // AI
   const [aiImgPrompt, setAiImgPrompt] = useState('')
   const [aiImgBusy, setAiImgBusy] = useState(false)
@@ -281,9 +444,95 @@ export default function PrintStudio() {
     if (!tenant?.slug) return
     qrDataUrl(menuUrl(tenant.slug), { width: 512 }).then(setQrSrc).catch(() => {})
   }, [tenant?.slug])
+  useEffect(() => {
+    if (!tenantId) return
+    return watchTables(tenantId, (list) => setTables(list || []))
+  }, [tenantId])
+
+  // The host is picked, not inherited — a sticker outlives the tab it was printed
+  // from, and publicBaseUrl() would otherwise bake in a preview channel. Same
+  // reasoning (and helper) as the table-sticker generator.
+  const printBases = useMemo(() => printBaseCandidates({ slug: tenant?.slug }), [tenant?.slug])
+  useEffect(() => { if (!printBase && printBases.length) setPrintBase(printBases[0].url) }, [printBases, printBase])
+
+  // One QR per table, error-correction 'H' because these get laminated onto
+  // furniture and lose corners. Only built when the design actually binds tables.
+  const needsTables = usesTableVars(design)
+  useEffect(() => {
+    if (!needsTables || !tenant?.slug || !printBase || !tables.length) return
+    let alive = true
+    Promise.all(tables.filter((tb) => tb.qrToken).map(async (tb) => {
+      const url = `${printBase}/t/${tenant.slug}/${tb.qrToken}`
+      return [tb.id, await qrDataUrl(url, { width: 640, margin: 1, ec: 'H' })]
+    })).then((rows) => { if (alive) setTableQrs(Object.fromEntries(rows)) }).catch(() => {})
+    return () => { alive = false }
+  }, [needsTables, tables, tenant?.slug, printBase])
+
+  // The stage shows ONE table so the designer can see real data while editing.
+  // Declared before varsFor/qrTextFor/qrJobs — they close over it, and a `const`
+  // read from a hook body that runs on the same render would hit the TDZ.
+  const previewTable = useMemo(
+    () => tables.find((tb) => tb.id === previewTableId) || tables[0] || null,
+    [tables, previewTableId],
+  )
+
+  const varsFor = useCallback((tb) => ({
+    tableId: tb?.id || '',
+    tableLabel: tb?.label || '',
+    venueName: tenant?.name || '',
+    tableQr: tb ? (tableQrs[tb.id] || '') : '',
+  }), [tableQrs, tenant?.name])
+
+  // The URL a given QR element encodes — menu-wide, or one specific table.
+  const qrTextFor = useCallback((el, tb) => {
+    if (!tenant?.slug) return ''
+    if (el?.kind !== 'table') return menuUrl(tenant.slug)
+    const t = tb || previewTable
+    return t?.qrToken ? `${printBase || ''}/t/${tenant.slug}/${t.qrToken}` : ''
+  }, [tenant?.slug, printBase, previewTable])
+
+  // STYLED QR MAP. Each distinct (target, style, palette) is rasterised once and
+  // looked up by qrKeyOf, because a page can hold several codes of different
+  // shapes and re-rendering them on every drag would make the canvas unusable.
+  const [qrMap, setQrMap] = useState({})
+  const qrJobs = useMemo(() => {
+    if (!design) return []
+    const rows = needsTables ? (previewTable ? [varsFor(previewTable)] : []) : [null]
+    return [...qrKeysForDesign(design, rows).entries()].map(([key, v]) => ({ key, ...v }))
+  }, [design, needsTables, previewTable, varsFor])
+
+  useEffect(() => {
+    if (!qrJobs.length) return
+    let alive = true
+    ;(async () => {
+      const next = {}
+      for (const { key, el, vars } of qrJobs) {
+        if (qrMap[key]) { next[key] = qrMap[key]; continue }
+        const text = qrTextFor(el, tables.find((t) => t.id === vars?.tableId))
+        if (!text) continue
+        try {
+          next[key] = await qrStyleDataUrl(text, {
+            styleId: el.qrStyle || 'classic',
+            dark: el.qrDark || '#111111',
+            dark2: el.qrDark2 || brand,
+            light: el.qrLight || '#ffffff',
+            logoUrl: tenant?.logoUrl || '',
+            frame: el.qrFrame || 'none',
+            caption: el.qrCaption || '',
+            frameColor: el.qrFrameColor || '',
+            font: 'Tajawal, sans-serif',
+            px: 720,
+          })
+        } catch (_) { /* one bad code must not blank the page */ }
+      }
+      if (alive && Object.keys(next).length) setQrMap((m) => ({ ...m, ...next }))
+    })()
+    return () => { alive = false }
+  }, [qrJobs, qrTextFor, brand, tenant?.logoUrl, tables])
 
   // fonts for the editor
   useEffect(() => { loadFont('tajawal'); loadFont('cairo') }, [])
+  useEffect(() => () => document.body.classList.remove('ps-batching'), [])
   useEffect(() => {
     for (const el of design?.elements || []) if (el.type === 'text' && el.fontKey) loadFont(el.fontKey)
   }, [design?.id])
@@ -495,6 +744,48 @@ export default function PrintStudio() {
     setSelectedIds(d.elements.filter((e) => !e.hidden).map((e) => e.id))
   }, [])
 
+  // ---------- layer reordering ----------
+  // Dropping layer `dragId` onto row `overIdx` renumbers z across the WHOLE
+  // list rather than nudging one value. Sparse or duplicated z values are legal
+  // in saved designs (elements arrive with z = index, reorder() only swaps), and
+  // a local tweak against a duplicate pair silently does nothing.
+  const moveLayerTo = useCallback((dragId, overId) => {
+    const d = designRef.current
+    if (!d || dragId === overId) return
+    const order = [...d.elements].sort((a, b) => (a.z || 0) - (b.z || 0))
+    const from = order.findIndex((e) => e.id === dragId)
+    const to = order.findIndex((e) => e.id === overId)
+    if (from < 0 || to < 0) return
+    const [moved] = order.splice(from, 1)
+    order.splice(to, 0, moved)
+    const zById = new Map(order.map((e, i) => [e.id, i + 1]))
+    change({ ...d, elements: d.elements.map((e) => ({ ...e, z: zById.get(e.id) ?? e.z })) }, true)
+  }, [change])
+
+  // ---------- groups ----------
+  // Grouping ABSORBS any group the selection already touches, so grouping a
+  // member of an existing group with a loose element yields one group rather
+  // than a half-overlapping pair that can never be cleanly taken apart.
+  const groupSel = useCallback(() => {
+    const d = designRef.current
+    const ids = selIdsRef.current
+    if (!d || ids.length < 2) return
+    const gid = `g${uid()}`
+    change({ ...d, elements: d.elements.map((e) => (ids.includes(e.id) ? { ...e, groupId: gid } : e)) }, true)
+  }, [change])
+
+  const ungroupSel = useCallback(() => {
+    const d = designRef.current
+    const ids = selIdsRef.current
+    if (!d || !ids.length) return
+    const gids = new Set(d.elements.filter((e) => ids.includes(e.id) && e.groupId).map((e) => e.groupId))
+    if (!gids.size) return
+    change({
+      ...d,
+      elements: d.elements.map((e) => (e.groupId && gids.has(e.groupId) ? { ...e, groupId: null } : e)),
+    }, true)
+  }, [change])
+
   // ---------- open / create / save ----------
   const openDesign = (d) => {
     const clean = JSON.parse(JSON.stringify({
@@ -567,10 +858,102 @@ export default function PrintStudio() {
     if (exporting) return
     setExporting(true)
     try {
-      const { blob, skipped } = await exportDesignPng({ design: designRef.current, items, currency, qrSrc, scale: 2 })
+      const { blob, skipped } = await exportDesignPng({ design: designRef.current, items, currency, qrSrc, qrMap, vars: varsFor(previewTable), scale: 2 })
       downloadBlob(blob, `${(designRef.current.name || 'design').replace(/[\\/:*?"<>|]/g, '')}.png`)
       if (skipped.length) toast.error('نزلت الصورة لكن تعذر رسم: ' + [...new Set(skipped)].join('، '))
       else toast.success('تم تنزيل الصورة PNG')
+    } catch (e) {
+      toast.error(String(e?.message || e))
+    } finally { setExporting(false) }
+  }
+
+  // ONE PDF FOR EVERY TABLE.
+  //
+  // WHY NOT A PDF LIBRARY: jsPDF and pdfmake do no Arabic shaping or bidi, so
+  // letters come out disconnected and reversed; pdf-lib has no text layout at
+  // all. This codebase already settled that question for tax invoices (see the
+  // note atop PlatformDocSheet.jsx) and the answer is the browser's own print
+  // engine, which is the only thing in reach that renders Arabic correctly.
+  //
+  // So each table is rasterised through the SAME export path as a single sticker
+  // — canvas fillText, which uses the platform text shaper — and the pages are
+  // stacked in a print-only container with a break between them. One Ctrl+P, one
+  // multi-page PDF, no 25 separate downloads.
+  //
+  // Rasterised at 3x (≈288 dpi) rather than the screen export's 2x: a print shop
+  // wants 300. Higher would be better still, but a 420 × 145 mm page at 4x is a
+  // ~55 MB canvas and twenty-five of them in sequence starts failing on modest
+  // laptops.
+  const [batchPages, setBatchPages] = useState(null)
+  const doPrintAllTables = async () => {
+    if (exporting) return
+    const list = tables.filter((tb) => tb.qrToken)
+    if (!list.length) { toast.error('لا توجد طاولات لها رمز — أضِف طاولات أولاً'); return }
+    setExporting(true)
+    const urls = []
+    const failed = []
+    try {
+      for (const tb of list) {
+        try {
+          const { blob } = await exportDesignPng({
+            design: designRef.current, items, currency, qrSrc, qrMap, vars: varsFor(tb), scale: 3,
+          })
+          urls.push({ id: tb.id, label: tb.label, url: URL.createObjectURL(blob) })
+        } catch (_) { failed.push(tb.label) }
+      }
+      if (!urls.length) { toast.error('تعذّر توليد أي صفحة'); return }
+      if (failed.length) toast.error(`تعذّر توليد: ${failed.join('، ')}`)
+      setBatchPages(urls)
+      document.body.classList.add('ps-batching')
+      // Teardown hangs off afterprint, not off print() returning: print() blocks
+      // until the dialog closes in some browsers and returns immediately in
+      // others, and clearing early un-hides the interactive sheet on top of
+      // page one. afterprint is the only signal that means "the dialog is done".
+      const done = () => {
+        document.body.classList.remove('ps-batching')
+        urls.forEach((u) => URL.revokeObjectURL(u.url))
+        setBatchPages(null)
+      }
+      window.addEventListener('afterprint', done, { once: true })
+      // Let React paint the pages before handing over to the print dialog.
+      await new Promise((r) => setTimeout(r, 300))
+      window.print()
+    } catch (e) {
+      toast.error(String(e?.message || e))
+    } finally {
+      setExporting(false)
+      // Teardown belongs to the afterprint handler above — doing it here too
+      // would un-hide the interactive sheet while the dialog is still open.
+      // The only case left is a browser that never fires afterprint (or a user
+      // who dismisses the dialog in a way that suppresses it): this backstop
+      // reclaims the blob URLs long after any real print job has finished.
+      setTimeout(() => {
+        urls.forEach((u) => URL.revokeObjectURL(u.url))
+        document.body.classList.remove('ps-batching')
+        setBatchPages(null)
+      }, 120000)
+    }
+  }
+
+  // ONE PNG PER TABLE. Sequential on purpose: each pass rasterises a full-page
+  // canvas at 2x, and firing twenty-five of those at once on a mid-range laptop
+  // is how you get an out-of-memory tab instead of twenty-five stickers. A table
+  // whose QR has not resolved is skipped and named rather than exported blank.
+  const doPngPerTable = async () => {
+    if (exporting) return
+    const list = tables.filter((tb) => tb.qrToken)
+    if (!list.length) { toast.error('لا توجد طاولات لها رمز — أضِف طاولات أولاً'); return }
+    setExporting(true)
+    const base = (designRef.current.name || 'sticker').replace(/[\\/:*?"<>|]/g, '')
+    const failed = []
+    try {
+      for (const tb of list) {
+        if (!tableQrs[tb.id]) { failed.push(tb.label); continue }
+        const { blob } = await exportDesignPng({ design: designRef.current, items, currency, qrSrc, vars: varsFor(tb), scale: 2 })
+        downloadBlob(blob, `${base}-${String(tb.label || tb.id).replace(/[\\/:*?"<>|\s]/g, '-')}.png`)
+      }
+      if (failed.length) toast.error(`تعذّر توليد رمز: ${failed.join('، ')}`)
+      else toast.success(`نزلت ${list.length} ملصقاً — واحد لكل طاولة`)
     } catch (e) {
       toast.error(String(e?.message || e))
     } finally { setExporting(false) }
@@ -595,6 +978,7 @@ export default function PrintStudio() {
       if (mod && k === 'c') { e.preventDefault(); copySel(false); return }
       if (mod && k === 'x') { e.preventDefault(); copySel(true); return }
       if (mod && k === 'd') { e.preventDefault(); duplicateSel(); return }
+      if (mod && k === 'g') { e.preventDefault(); if (e.shiftKey) ungroupSel(); else groupSel(); return }
       if (mod && k === ']') { e.preventDefault(); reorder(e.shiftKey ? 'front' : 'up'); return }
       if (mod && k === '[') { e.preventDefault(); reorder(e.shiftKey ? 'back' : 'down'); return }
       if (e.key === 'Delete' || e.key === 'Backspace') { e.preventDefault(); deleteSel(); return }
@@ -604,7 +988,7 @@ export default function PrintStudio() {
     }
     window.addEventListener('keydown', onKey)
     return () => window.removeEventListener('keydown', onKey)
-  }, [undo, redo, duplicateSel, deleteSel, nudge, copySel, pasteClip, selectAll, reorder, save, helpOpen])
+  }, [undo, redo, duplicateSel, deleteSel, nudge, copySel, pasteClip, selectAll, reorder, save, helpOpen, groupSel, ungroupSel])
 
   // ---------- AI assists ----------
   const genAiImage = async (forBg) => {
@@ -678,6 +1062,45 @@ export default function PrintStudio() {
     })
   }
   const addQr = () => addElement({ type: 'qr', kind: 'menu', w: 140, h: 140 })
+  // The picker hands over the markup it rendered, so the design owns its vector.
+  const addIcon = ({ name, svg }) => addElement({ type: 'icon', name, svg, color: brand, strokeW: 2, w: 90, h: 90 })
+
+  // FEATURE BLOCKS.
+  //
+  // The copy comes from stickerContent(), which derives every line from THIS
+  // venue's settings — a browse-only venue is never offered «اطلب من جوالك», the
+  // loyalty line carries the venue's real threshold, and the games line names
+  // only games actually left switched on. So a designer cannot drop a promise
+  // onto a table that the guest will not find when they scan.
+  //
+  // Inserted as one GROUP (icon + title + body) so it drags as a unit, which is
+  // what "block" has to mean for it to be worth having.
+  const featureBlocks = useMemo(() => stickerContent(tenant, { lang: 'ar' }).features || [], [tenant])
+
+  const addFeatureBlock = async (f) => {
+    const d = designRef.current
+    if (!d) return
+    const { iconSvg } = await import('../../lib/iconLibrary.js')
+    const svg = iconSvg(FEATURE_ICONS[f.icon] || 'Sparkles', { strokeWidth: 2 })
+    const gid = `g${uid()}`
+    const s = R(Math.min(d.page.w, d.page.h) * 0.06)
+    const x = R(d.page.w * 0.08)
+    const y = R(d.page.h * 0.4)
+    const tw = R(d.page.w * 0.62)
+    const z = topZ(d)
+    const shared = { rotate: 0, opacity: 1, locked: false, hidden: false, groupId: gid }
+    change({
+      ...d,
+      elements: [
+        ...d.elements,
+        { id: uid(), type: 'icon', name: f.icon, svg, color: brand, strokeW: 2, x, y, w: s, h: s, z: z + 1, ...shared },
+        { ...mkText({ text: f.title, size: R(s * 0.44), weight: 800, color: brand, align: 'right' }),
+          id: uid(), x: R(x + s * 1.3), y, w: tw, h: R(s * 0.62), z: z + 2, ...shared },
+        { ...mkText({ text: f.body, size: R(s * 0.33), weight: 500, color: '#5c5c66', align: 'right' }),
+          id: uid(), x: R(x + s * 1.3), y: R(y + s * 0.66), w: tw, h: R(s * 0.8), z: z + 3, ...shared },
+      ],
+    }, true)
+  }
   const addItemCard = (it) => addElement({
     type: 'itemcard', itemId: it.id, showPrice: true, showDesc: false, layout: 'h',
     bg: '#ffffff', ink: '#1c1c1e', accent: brand, w: 280, h: 92,
@@ -759,9 +1182,11 @@ export default function PrintStudio() {
   if (!design) {
     const tplList = TEMPLATES.filter((t) => !t.needsItems || items.some((it) => !it.archived))
     return (
-      <div className="page ps-root">
+      <div className={`page ps-root${embedded ? ' ps-embed-gallery' : ''}`}>
         <div className="row" style={{ alignItems: 'center', gap: 10, flexWrap: 'wrap', marginBottom: 14 }}>
-          <Link to="/admin/print-menu" className="icon-btn" aria-label="رجوع"><Icon name="back" size={18} /></Link>
+          {/* Back goes to the print-menu designer, which is not where an
+              embedded studio came from — the host page owns navigation there. */}
+          {!embedded && <Link to="/admin/print-menu" className="icon-btn" aria-label="رجوع"><Icon name="back" size={18} /></Link>}
           <div className="stack" style={{ gap: 2 }}>
             <strong style={{ fontSize: 'var(--fs-md)' }}>استوديو التصميم الحر</strong>
             <span className="xs faint">تصاميم لامحدودة بأشكال لامحدودة — منيوهات، بوسترات، منشورات وستوري للطباعة والنشر</span>
@@ -872,7 +1297,7 @@ export default function PrintStudio() {
   const nSel = selectedEls.length
 
   return (
-    <div className="page ps-root ps-edit-root">
+    <div className={`page ps-root ps-edit-root${embedded ? ' ps-embed' : ''}`}>
       {/* -------- toolbar -------- */}
       <div className="ps-toolbar no-print">
         <button className="icon-btn" onClick={closeEditor} aria-label="رجوع"><Icon name="back" size={17} /></button>
@@ -900,10 +1325,38 @@ export default function PrintStudio() {
         <button className="btn btn-sm btn-outline" disabled={saving} onClick={save}>
           <Icon name="check" size={14} /> {saving ? 'يحفظ...' : dirty ? 'حفظ *' : 'حفظ'}
         </button>
+        {/* Table binding only surfaces once the design actually uses it, so a
+            poster or a printed menu never carries controls it cannot honour. */}
+        {needsTables && (
+          <>
+            <span className="ps-tools-sep" />
+            <label className="row" style={{ gap: 4, alignItems: 'center' }} title="الطاولة المعروضة أثناء التصميم">
+              <Icon name="tables" size={14} />
+              <select className="select" style={{ maxWidth: 130, height: 30, fontSize: 12 }} value={previewTable?.id || ''} onChange={(e) => setPreviewTableId(e.target.value)}>
+                {tables.filter((tb) => tb.qrToken).map((tb) => <option key={tb.id} value={tb.id}>{tb.label}</option>)}
+              </select>
+            </label>
+            <select className="select" style={{ maxWidth: 180, height: 30, fontSize: 12 }} value={printBase} onChange={(e) => setPrintBase(e.target.value)} title="النطاق المطبوع في الرمز">
+              {printBases.map((b) => <option key={b.url} value={b.url}>{b.label}</option>)}
+            </select>
+          </>
+        )}
         <button className="btn btn-sm btn-outline" onClick={doPrint}><Icon name="print" size={14} /> طباعة / PDF</button>
         <button className="btn btn-sm ps-export-btn" disabled={exporting} onClick={doPng}>
           <Icon name="download" size={14} /> {exporting ? 'يصدّر...' : 'تصدير PNG'}
         </button>
+        {needsTables && (
+          <button className="btn btn-sm btn-primary" disabled={exporting} onClick={doPrintAllTables}
+            title="ملف PDF واحد فيه صفحة لكل طاولة برمزها ورقمها">
+            <Icon name="print" size={14} /> {exporting ? 'يجهّز...' : `PDF لكل الطاولات (${tables.filter((tb) => tb.qrToken).length})`}
+          </button>
+        )}
+        {needsTables && (
+          <button className="btn btn-sm btn-outline" disabled={exporting} onClick={doPngPerTable}
+            title="نسخة لكل طاولة، برمزها الخاص ورقمها">
+            <Icon name="copy" size={14} /> {exporting ? 'يصدّر...' : 'PNG منفصل لكل طاولة'}
+          </button>
+        )}
       </div>
 
       <div className="ps-editor">
@@ -911,14 +1364,23 @@ export default function PrintStudio() {
         <aside className={`ps-panel ps-lib no-print ${panelSheet === 'lib' ? 'open' : ''}`}>
           <div className="ps-tabs">
             {[
-              ['shapes', 'العناصر', 'shapes'], ['text', 'النصوص', 'text'], ['images', 'الصور', 'image'],
-              ['items', 'الأصناف', 'menu'], ['layers', 'الطبقات', 'layers'], ['page', 'الصفحة', 'file'],
+              ['shapes', 'العناصر', 'shapes'], ['icons', 'الأيقونات', 'sparkles'], ['text', 'النصوص', 'text'],
+              ['images', 'الصور', 'image'], ['items', 'الأصناف', 'menu'], ['layers', 'الطبقات', 'layers'],
+              ['page', 'الصفحة', 'file'],
             ].map(([id, ar, icon]) => (
               <button key={id} className={`ps-tab ${tab === id ? 'active' : ''}`} onClick={() => setTab(id)}>
                 <Icon name={icon} size={15} /><span>{ar}</span>
               </button>
             ))}
           </div>
+
+          {tab === 'icons' && (
+            <div className="ps-tabbody">
+              {/* Lazily mounted: the whole lucide set only downloads once this tab
+                  is actually opened. See the note in IconPicker. */}
+              <IconPicker color={brand} onPick={addIcon} />
+            </div>
+          )}
 
           {tab === 'shapes' && (
             <div className="ps-tabbody">
@@ -942,6 +1404,21 @@ export default function PrintStudio() {
 
           {tab === 'text' && (
             <div className="ps-tabbody">
+              {featureBlocks.length > 0 && (
+                <>
+                  <strong className="ps-sect">بلوكات ميزات منشأتك</strong>
+                  <p className="xs faint" style={{ lineHeight: 1.65, margin: '0 0 4px' }}>
+                    مأخوذة من إعدادات منشأتك الفعلية — لا تَعِد بميزة مطفأة. كل بلوك يُضاف كمجموعة واحدة.
+                  </p>
+                  {featureBlocks.map((f, i) => (
+                    <button key={i} className="btn btn-sm btn-outline" style={{ justifyContent: 'flex-start', textAlign: 'start' }}
+                      onClick={() => addFeatureBlock(f)} title={f.body}>
+                      <Icon name={f.icon} size={14} /> {f.title}
+                    </button>
+                  ))}
+                  <strong className="ps-sect">نصوص</strong>
+                </>
+              )}
               {TEXT_PRESETS.map((p) => (
                 <button key={p.ar} className="ps-textpreset" style={{ fontSize: Math.min(p.size, 26), fontWeight: p.weight }} onClick={() => addText(p)}>
                   {p.ar}
@@ -996,18 +1473,27 @@ export default function PrintStudio() {
                 {zSorted.map((el) => (
                   <div
                     key={el.id}
-                    className={`ps-layer ${selectedIds.includes(el.id) ? 'sel' : ''} ${el.hidden ? 'off' : ''}`}
+                    className={`ps-layer ${selectedIds.includes(el.id) ? 'sel' : ''} ${el.hidden ? 'off' : ''} ${dragLayer === el.id ? 'dragging' : ''}`}
                     role="button" tabIndex={0}
+                    draggable
+                    onDragStart={(e) => { setDragLayer(el.id); e.dataTransfer.effectAllowed = 'move' }}
+                    onDragOver={(e) => { e.preventDefault(); e.dataTransfer.dropEffect = 'move' }}
+                    onDrop={(e) => { e.preventDefault(); if (dragLayer) moveLayerTo(dragLayer, el.id); setDragLayer(null) }}
+                    onDragEnd={() => setDragLayer(null)}
                     onClick={(e) => {
                       const add = e.shiftKey || e.ctrlKey || e.metaKey
+                      // Selecting a grouped layer selects its whole group, exactly
+                      // as clicking it on the canvas would.
+                      const fam = expandGroups([el.id], designRef.current?.elements || [])
                       setSelectedIds((ids) => (add
-                        ? (ids.includes(el.id) ? ids.filter((i) => i !== el.id) : [...ids, el.id])
-                        : [el.id]))
+                        ? (ids.includes(el.id) ? ids.filter((i) => !fam.includes(i)) : [...new Set([...ids, ...fam])])
+                        : fam))
                     }}
                     onKeyDown={(e) => { if (e.key === 'Enter') setSelectedIds([el.id]) }}
                   >
                     <span className="ps-layer-ico"><Icon name={layerIcon(el)} size={14} /></span>
                     <span className="ps-layer-name">{layerLabel(el)}</span>
+                    {el.groupId ? <span className="ps-layer-grp" title="ضمن مجموعة"><Icon name="layers" size={11} /></span> : null}
                     <span className="ps-layer-acts" onClick={(e) => e.stopPropagation()}>
                       <button className="icon-btn" title={el.hidden ? 'إظهار' : 'إخفاء'}
                         onClick={() => patchEl(el.id, { hidden: !el.hidden }, true)}>
@@ -1028,6 +1514,18 @@ export default function PrintStudio() {
 
           {tab === 'page' && (
             <div className="ps-tabbody">
+              <strong className="ps-sect">مادة الطباعة</strong>
+              <select className="select" value={page.material || 'none'} onChange={(e) => changePage({ material: e.target.value })}>
+                {MATERIALS.map((m) => <option key={m.id} value={m.id}>{m.ar}</option>)}
+              </select>
+              {(page.material && page.material !== 'none') && (
+                <p className="xs faint" style={{ lineHeight: 1.7 }}>
+                  {`نزيف ${materialById(page.material).bleed} مم حول الحواف، ومنطقة آمنة ${materialById(page.material).safe} مم.`}
+                  {' '}مدّ الخلفية إلى الخط الخارجي، وأبقِ كل نص داخل الخط الداخلي — القص يتحرّك مليمتراً أو اثنين ويأكل ما يلامس الحافة.
+                  {' '}الأدلّة إرشادية على الشاشة فقط ولا تُطبع.
+                </p>
+              )}
+
               <strong className="ps-sect">مقاس الصفحة</strong>
               <div className="ps-chips">
                 {PAGE_PRESETS.map((p) => (
@@ -1079,13 +1577,28 @@ export default function PrintStudio() {
           )}
         </aside>
 
-        {/* -------- canvas -------- */}
+        {/* Batch pages: screen-hidden, one printed page each. Rendered as images
+          because they come from the export rasterizer — same pixels as a single
+          sticker export, so a batch can never disagree with a spot check. */}
+      {batchPages && (
+        <div className="ps-batch" aria-hidden="true">
+          {batchPages.map((pg) => (
+            <img key={pg.id} src={pg.url} alt={pg.label} className="ps-batch-page" />
+          ))}
+        </div>
+      )}
+
+      {/* -------- canvas -------- */}
         <div className="ps-canvas-wrap">
           <PrintCanvas
             design={design}
             items={items}
             currency={currency}
             qrSrc={qrSrc}
+            vars={varsFor(previewTable)}
+            qrMap={qrMap}
+            bleedMm={materialById(design.page?.material).bleed}
+            safeMm={materialById(design.page?.material).safe}
             selectedIds={selectedIds}
             onSelect={setSelectedIds}
             onPatchMany={patchMany}
@@ -1147,6 +1660,23 @@ export default function PrintStudio() {
                       (v) => patchMany(Object.fromEntries(selectedEls.map((e) => [e.id, { opacity: v }])), false),
                       { min: 0.05, max: 1, step: 0.05 })}
                   </label>
+                  <div className="row" style={{ gap: 6 }}>
+                    <button className="btn btn-sm btn-primary" style={{ flex: 1 }} onClick={groupSel} title="Ctrl+G">
+                      <Icon name="layers" size={13} /> تجميع
+                    </button>
+                    {selectedEls.some((e) => e.groupId) && (
+                      <button className="btn btn-sm btn-outline" style={{ flex: 1 }} onClick={ungroupSel} title="Ctrl+Shift+G">
+                        فكّ التجميع
+                      </button>
+                    )}
+                  </div>
+                  {/* One colour for every element in the selection — the bulk edit
+                      the multi-select is mostly opened for. */}
+                  <label className="ps-field"><span>لون الكل</span>
+                    <input type="color" defaultValue={selectedEls[0].color || '#1c1c1e'}
+                      onChange={(e) => patchMany(Object.fromEntries(selectedEls.map((x) => [x.id, { color: e.target.value }])), false)}
+                      onBlur={commit} />
+                  </label>
                   <button className="btn btn-sm btn-outline"
                     onClick={() => patchMany(Object.fromEntries(selectedEls.map((e) => [e.id, { locked: !selectedEls.every((x) => x.locked) }])), true)}>
                     <Icon name="lock" size={13} /> {selectedEls.every((x) => x.locked) ? 'فك قفل الكل' : 'قفل الكل'}
@@ -1207,6 +1737,87 @@ export default function PrintStudio() {
                           <button key={v} className={`btn btn-sm ${(selected.align || 'right') === v ? 'btn-primary' : 'btn-outline'}`} style={{ flex: 1 }} onClick={() => patchEl(selected.id, { align: v }, true)}>{ar}</button>
                         ))}
                       </div>
+                      {/* Variable data: the token is stored in the text and resolved
+                          per table at render, so one design serves every table. */}
+                      <div className="ps-field">
+                        <span>حقول متغيّرة</span>
+                        <div className="row" style={{ gap: 4, flexWrap: 'wrap' }}>
+                          {PRINT_TOKENS.map((tk) => (
+                            <button key={tk.token} className="btn btn-sm btn-outline" title={`يُستبدل بـ${tk.ar} عند الطباعة`}
+                              onClick={() => patchEl(selected.id, { text: `${selected.text || ''}${tk.token}` }, true)}>
+                              {tk.ar}
+                            </button>
+                          ))}
+                        </div>
+                      </div>
+                      <label className="ps-field"><span>التعبئة</span>
+                        <select className="select" value={selected.fill2 || 'solid'} onChange={(e) => patchEl(selected.id, { fill2: e.target.value }, true)}>
+                          {TEXT_FILLS.map((f) => <option key={f.id} value={f.id}>{f.ar}</option>)}
+                        </select>
+                      </label>
+                      {(selected.fill2 && selected.fill2 !== 'solid') && (
+                        <>
+                          {selected.fill2 === 'image' ? (
+                            <>
+                              <button className="btn btn-sm btn-outline" onClick={() => setMediaOpen('textfill')}>
+                                <Icon name="image" size={13} /> {selected.fillImageUrl ? 'تغيير الصورة' : 'اختر صورة'}
+                              </button>
+                              <p className="xs" style={{ color: 'var(--warning)', lineHeight: 1.6 }}>
+                                الصورة داخل النص تظهر في المعاينة فقط؛ التصدير يطبع اللون الواحد. استخدم التدرّج إن أردت مطابقة الطباعة.
+                              </p>
+                            </>
+                          ) : (
+                            <>
+                              <label className="ps-field"><span>اللون الثاني</span>
+                                <input type="color" value={selected.fillColor2 || '#b4632c'} onChange={(e) => patchEl(selected.id, { fillColor2: e.target.value })} onBlur={commit} />
+                              </label>
+                              {selected.fill2 === 'linear' && (
+                                <label className="ps-field"><span>زاوية التدرّج</span>
+                                  {slider(selected.fillAngle ?? 90, (v) => patchEl(selected.id, { fillAngle: v }), { min: 0, max: 360, step: 5 })}
+                                </label>
+                              )}
+                            </>
+                          )}
+                          {selected.fx === 'outline' && (
+                            <p className="xs" style={{ color: 'var(--warning)' }}>الحدّ الخارجي لا يجتمع مع التعبئة المتدرّجة — اختر أحدهما.</p>
+                          )}
+                        </>
+                      )}
+                      <label className="ps-field"><span>انحناء النص</span>
+                        {slider(selected.curve || 0, (v) => patchEl(selected.id, { curve: v }), { min: -100, max: 100, step: 5 })}
+                      </label>
+                      {!!selected.curve && (
+                        <p className="xs faint" style={{ lineHeight: 1.6 }}>النص المنحني يُرسم كمسار SVG — يحافظ على اتصال الحروف العربية، ولا يلتفّ على أسطر.</p>
+                      )}
+
+                      {/* Effects. Each is implemented twice on purpose — CSS for
+                          the stage, canvas for the export — so what prints is
+                          what you see. See textFxStyle / drawTextBox. */}
+                      <label className="ps-field"><span>التأثير</span>
+                        <select className="select" value={selected.fx || 'none'} onChange={(e) => patchEl(selected.id, { fx: e.target.value }, true)}>
+                          {TEXT_FX.map((f) => <option key={f.id} value={f.id}>{f.ar}</option>)}
+                        </select>
+                      </label>
+                      {(selected.fx && selected.fx !== 'none') && (
+                        <>
+                          <label className="ps-field"><span>لون التأثير</span>
+                            <input type="color" value={selected.fxColor || '#ffffff'} onChange={(e) => patchEl(selected.id, { fxColor: e.target.value })} onBlur={commit} />
+                          </label>
+                          <label className="ps-field"><span>{selected.fx === 'outline' ? 'سماكة الحدّ' : 'العمق'}</span>
+                            {slider(selected.fxDepth ?? 6, (v) => patchEl(selected.id, { fxDepth: v }), { min: 1, max: 24, step: 1 })}
+                          </label>
+                          {(selected.fx === 'shadow' || selected.fx === 'glow') && (
+                            <label className="ps-field"><span>التمويه</span>
+                              {slider(selected.fxBlur ?? 4, (v) => patchEl(selected.id, { fxBlur: v }), { min: 0, max: 30, step: 1 })}
+                            </label>
+                          )}
+                          {(selected.fx === 'shadow' || selected.fx === 'extrude') && (
+                            <label className="ps-field"><span>الزاوية</span>
+                              {slider(selected.fxAngle ?? 45, (v) => patchEl(selected.id, { fxAngle: v }), { min: 0, max: 360, step: 5 })}
+                            </label>
+                          )}
+                        </>
+                      )}
                       <label className="ps-field"><span>ارتفاع السطر</span>
                         {slider(selected.lineHeight || 1.4, (v) => patchEl(selected.id, { lineHeight: v }), { min: 1, max: 2.4, step: 0.05 })}
                       </label>
@@ -1275,12 +1886,70 @@ export default function PrintStudio() {
                     </>
                   )}
 
+                  {selected.type === 'icon' && (
+                    <>
+                      <label className="ps-field"><span>اللون</span>
+                        <input type="color" value={selected.color || '#1c1c1e'} onChange={(e) => patchEl(selected.id, { color: e.target.value })} onBlur={commit} />
+                      </label>
+                      <label className="ps-field"><span>سماكة الخط</span>
+                        {slider(selected.strokeW || 2, (v) => patchEl(selected.id, { strokeW: v }), { min: 0.5, max: 4, step: 0.1 })}
+                      </label>
+                      <label className="ps-field"><span>تعبئة داخلية</span>
+                        <input type="color" value={selected.fill && selected.fill !== 'none' ? selected.fill : '#ffffff'} onChange={(e) => patchEl(selected.id, { fill: e.target.value })} onBlur={commit} />
+                      </label>
+                      <button className="btn btn-sm btn-outline" onClick={() => patchEl(selected.id, { fill: 'none' }, true)}>بلا تعبئة</button>
+                      <p className="xs faint">{selected.name || ''}</p>
+                    </>
+                  )}
+
                   {selected.type === 'qr' && (
-                    <p className="xs faint" style={{ lineHeight: 1.7 }}>
-                      {tenant?.slug
-                        ? 'رمز QR حي يقود إلى المنيو الرقمي لمنشأتك. حجّمه من المقابض.'
-                        : 'لم يُضبط رابط المنيو (slug) للمنشأة بعد — الرمز لن يُطبع ولن يُصدَّر حتى يُضبط.'}
-                    </p>
+                    <>
+                      <label className="ps-field"><span>يقود إلى</span>
+                        <select className="select" value={selected.kind || 'menu'} onChange={(e) => patchEl(selected.id, { kind: e.target.value }, true)}>
+                          <option value="menu">منيو المنشأة (رمز واحد للجميع)</option>
+                          <option value="table">رمز الطاولة (يتغيّر لكل طاولة)</option>
+                        </select>
+                      </label>
+                      <p className="xs faint" style={{ lineHeight: 1.7 }}>
+                        {!tenant?.slug
+                          ? 'لم يُضبط رابط المنيو (slug) للمنشأة بعد — الرمز لن يُطبع ولن يُصدَّر حتى يُضبط.'
+                          : (selected.kind || 'menu') === 'table'
+                            ? 'يفتح طاولة الضيف مباشرةً — فيعمل الطلب من الطاولة والسلة المشتركة. صمّم مرة، ثم ولّد نسخة لكل طاولة من لوحة «الطاولات».'
+                            : 'رمز QR حي يقود إلى المنيو الرقمي لمنشأتك. حجّمه من المقابض.'}
+                      </p>
+                      <label className="ps-field"><span>الإطار</span>
+                        <select className="select" value={selected.qrFrame || 'none'} onChange={(e) => patchEl(selected.id, { qrFrame: e.target.value }, true)}>
+                          {QR_FRAMES.map((f) => <option key={f.id} value={f.id}>{f.ar}</option>)}
+                        </select>
+                      </label>
+                      {(selected.qrFrame && selected.qrFrame !== 'none') && (
+                        <>
+                          <label className="ps-field"><span>نص الإطار</span>
+                            <input className="input input-sm" value={selected.qrCaption || ''} placeholder="امسح للطلب"
+                              onChange={(e) => patchEl(selected.id, { qrCaption: e.target.value })} onBlur={commit} />
+                          </label>
+                          <label className="ps-field"><span>لون الإطار</span>
+                            <input type="color" value={selected.qrFrameColor || brand} onChange={(e) => patchEl(selected.id, { qrFrameColor: e.target.value })} onBlur={commit} />
+                          </label>
+                        </>
+                      )}
+                      <label className="ps-field"><span>لون ثانٍ (للتدرّج)</span>
+                        <input type="color" value={selected.qrDark2 || brand} onChange={(e) => patchEl(selected.id, { qrDark2: e.target.value })} onBlur={commit} />
+                      </label>
+                      {/* printedMm: the element's page width is CSS px at 96dpi, so
+                          px / (96/25.4) is its real printed millimetres. */}
+                      <QrStylePicker
+                        value={selected.qrStyle || 'classic'}
+                        onChange={(id) => patchEl(selected.id, { qrStyle: id }, true)}
+                        text={qrTextFor(selected)}
+                        dark={selected.qrDark || '#111111'}
+                        dark2={selected.qrDark2 || brand}
+                        light={selected.qrLight || '#ffffff'}
+                        logoUrl={tenant?.logoUrl || ''}
+                        printedMm={mmOf(selected.w)}
+                        compact
+                      />
+                    </>
                   )}
 
                   {selected.type === 'itemcard' && (
@@ -1340,6 +2009,7 @@ export default function PrintStudio() {
         kind="image"
         onPick={(url) => {
           if (mediaOpen === 'bg') changePage({ bgImageUrl: url })
+          else if (mediaOpen === 'textfill' && selIdsRef.current.length === 1) patchEl(selIdsRef.current[0], { fillImageUrl: url }, true)
           else if (mediaOpen === 'replace' && selIdsRef.current.length === 1) patchEl(selIdsRef.current[0], { url }, true)
           else addImageEl(url)
           setMediaOpen(null)

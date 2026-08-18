@@ -1,0 +1,168 @@
+/* OrderDetail sheet — the order's full story, staff-side.
+   `od-` prefix keeps the venue-console density tokens from fighting it.
+   Tokens only, so every system theme (classic/paper/wood/glass/neon) adapts. */
+
+/* ---- header band ---- */
+.od-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+.od-chips { display: flex; flex-wrap: wrap; gap: 6px; }
+.od-chip {
+  display: inline-flex; align-items: center; gap: 5px;
+  padding: 4px 10px; border-radius: 999px;
+  background: var(--surface-2); border: 1px solid var(--border);
+  font-size: 12px; font-weight: 700;
+}
+
+/* ---- journey bar ---- */
+.od-journey {
+  background: var(--surface-2);
+  border: 1px solid var(--border);
+  border-radius: 14px;
+  padding: 14px 12px 10px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.od-journey-track {
+  position: relative;
+  display: flex;
+  align-items: flex-start;
+}
+.od-stage {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+  min-width: 0;
+  position: relative;
+  z-index: 1;
+}
+.od-stage-time {
+  font-size: 10.5px;
+  font-weight: 800;
+  line-height: 1.1;
+  min-height: 12px;
+  color: var(--brand);
+  text-align: center;
+}
+.od-stage.is-live .od-stage-time { color: var(--gold, #e0a82e); }
+.od-stage-dot {
+  width: 32px; height: 32px;
+  border-radius: 50%;
+  display: grid; place-items: center;
+  background: var(--surface);
+  border: 2px solid var(--border);
+  color: var(--text-faint);
+  transition: background 200ms ease, border-color 200ms ease, color 200ms ease;
+}
+.od-stage.is-done .od-stage-dot {
+  background: var(--brand);
+  border-color: var(--brand);
+  color: var(--on-brand, #fff);
+}
+.od-stage.is-now:not(.is-final) .od-stage-dot { animation: od-pulse 1.6s ease-in-out infinite; }
+@keyframes od-pulse {
+  0%, 100% { box-shadow: 0 0 0 0 color-mix(in srgb, var(--brand) 45%, transparent); }
+  55% { box-shadow: 0 0 0 7px color-mix(in srgb, var(--brand) 0%, transparent); }
+}
+@media (prefers-reduced-motion: reduce) { .od-stage.is-now .od-stage-dot { animation: none; } }
+.od-stage-label {
+  font-size: 11px;
+  font-weight: 700;
+  color: var(--text-faint);
+  text-align: center;
+  line-height: 1.2;
+}
+.od-stage.is-done .od-stage-label { color: var(--brand); }
+/* connector line behind the dots — fill grows with progress (logical props → RTL-safe) */
+.od-journey-line {
+  position: absolute;
+  /* dot center = time row (12px) + column gap (4px) + half dot (16px) − half line */
+  top: 30.5px;
+  inset-inline: 10%; /* first/last dot centers sit at 10% / 90% of 5 equal columns */
+  height: 3px;
+  border-radius: 99px;
+  background: var(--border);
+  z-index: 0;
+}
+.od-journey-fill {
+  height: 100%;
+  border-radius: 99px;
+  background: var(--brand);
+  transition: width 300ms ease;
+}
+.od-journey-total {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  border-top: 1px dashed var(--border);
+  padding-top: 8px;
+  font-size: 12px;
+}
+
+/* ---- items ---- */
+.od-items { display: flex; flex-direction: column; gap: 8px; }
+.od-item {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+}
+.od-item-thumb {
+  position: relative;
+  flex: none;
+  width: 54px; height: 54px;
+  border-radius: 10px;
+  display: grid; place-items: center;
+  color: var(--text-faint);
+  background: var(--surface-2); /* only shows behind the icon fallback */
+}
+/* a real dish photo is a cut-out on transparency, exactly like the menu — no
+   frame, no plate box, the whole dish visible (contain, not cover-cropped). */
+.od-item-thumb:has(img) { background: transparent; }
+.od-item-thumb img { width: 100%; height: 100%; object-fit: contain; display: block; }
+.od-item-qty {
+  position: absolute;
+  bottom: -1px;
+  inset-inline-end: -1px;
+  min-width: 18px; height: 18px;
+  padding-inline: 4px;
+  border-radius: 9px 0;
+  background: var(--brand);
+  color: var(--on-brand, #fff);
+  font-size: 10.5px; font-weight: 800;
+  display: grid; place-items: center;
+  line-height: 1;
+}
+.od-item-main { flex: 1; min-width: 0; }
+.od-item-name { font-size: 14px; font-weight: 700; line-height: 1.35; }
+.od-item-sub { font-size: 11.5px; color: var(--text-muted); line-height: 1.4; }
+.od-item-price { flex: none; font-weight: 700; }
+
+/* ---- money block ---- */
+.od-money {
+  background: var(--surface-2);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  padding: 10px 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.od-money-row { display: flex; align-items: center; justify-content: space-between; font-size: 13px; }
+.od-money-total {
+  border-top: 1px solid var(--border);
+  padding-top: 8px;
+  font-size: 15px;
+  font-weight: 800;
+}
+.od-money-total .price { color: var(--brand); font-size: 18px; }
+
+/* ---- footer actions (sheet footer keeps them reachable without scrolling) ---- */
+.od-foot { display: flex; flex-direction: column; gap: 8px; }
+.od-foot .btn { min-height: 46px; font-weight: 800; }

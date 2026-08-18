@@ -20,6 +20,7 @@ import VipCard from '../../components/VipCard.jsx'
 import { planAllows } from '../../lib/plans.js'
 import { menuUrl } from '../../lib/qr.js'
 import InstallButton from '../../components/InstallButton.jsx'
+import DeviceCheck from '../../components/DeviceCheck.jsx'
 import Icon from '../../components/Icon.jsx'
 import ImageCropper from '../../components/ImageCropper.jsx'
 import CustomDomainCard from '../../components/CustomDomainCard.jsx'
@@ -42,7 +43,7 @@ import {
   SECTION_MODES, SECTION_RANGE, resolveSections,
   DECOR_ANCHORS, DECOR_MOTIONS, DECOR_RANGE, DECOR_DEPTHS, resolveDecor, decorStyle,
   TABLE_KINDS, TABLE_MATERIALS, TABLE_EDGES, TABLE_RANGE, TABLE_STAGE_KEYS, resolveTable,
-  STAGE_BLOCKS, STAGE_BLOCK_IDS, STAGE_ALIGN_IDS, STAGE_TEXT_RANGE, resolveStageBlocks, decorSpinRate,
+  STAGE_BLOCKS, STAGE_BLOCK_IDS, LIST_BLOCKS, LIST_BLOCK_IDS, STAGE_ALIGN_IDS, STAGE_TEXT_RANGE, resolveStageBlocks, decorSpinRate,
   HEADER_MODES, HEADER_RANGE, resolveMenuHeader,
   BUTTON_SKINS, BUTTON_SCOPES, BUTTON_SHAPES, BUTTON_RANGE, resolveButtons,
   SHADOW_RANGE,
@@ -138,7 +139,7 @@ const SECTIONS = [
 // Sections whose cards are rendered from the shared venue-setup column below.
 const SETUP_SECTIONS = ['identity', 'experience', 'ops', 'system']
 // Menu elements the venue can show/hide — [key, ar, en]
-const HIDEABLE = [['offers', 'زر العروض', 'Offers button'], ['events', 'الفعاليات', 'Events'], ['reservations', 'الحجوزات', 'Reservations'], ['promos', 'شريط العروض', 'Promos strip'], ['special', 'الأصناف المميّزة', 'Featured'], ['search', 'البحث', 'Search'], ['viewToggle', 'زر طريقة العرض', 'View toggle'], ['notifications', 'جرس الإشعارات', 'Notifications'], ['social', 'أيقونات التواصل', 'Social icons'], ['stories', 'الاستوري', 'Stories'], ['profile', 'زر البروفايل والأخبار', 'Profile button'], ['covers', 'أغلفة الفئات (واجهة العرض)', 'Category covers (Spotlight)'], ['pairings', 'توصيات «يُطلب معه»', 'Pairings'], ['bottomNav', 'القائمة السفلية كاملة', 'Bottom navigation bar'], ['welcome', 'بطاقة الترحيب والولاء', 'Welcome & loyalty card']]
+const HIDEABLE = [['offers', 'زر العروض', 'Offers button'], ['events', 'الفعاليات', 'Events'], ['reservations', 'الحجوزات', 'Reservations'], ['promos', 'شريط العروض', 'Promos strip'], ['special', 'الأصناف المميّزة', 'Featured'], ['search', 'البحث', 'Search'], ['viewToggle', 'زر طريقة العرض', 'View toggle'], ['notifications', 'جرس الإشعارات', 'Notifications'], ['social', 'أيقونات التواصل', 'Social icons'], ['stories', 'الاستوري', 'Stories'], ['profile', 'زر البروفايل والأخبار', 'Profile button'], ['covers', 'أغلفة الفئات (واجهة العرض)', 'Category covers (Spotlight)'], ['pairings', 'توصيات «يُطلب معه»', 'Pairings'], ['bottomNav', 'القائمة السفلية كاملة', 'Bottom navigation bar'], ['welcome', 'بطاقة الترحيب والولاء', 'Welcome & loyalty card'], ['prepTime', 'وقت التحضير', 'Prep time'], ['serves', 'عدد الأشخاص (يكفي لـ)', 'Serves count'], ['quickAdd', 'زر الإضافة السريعة للسلة', 'Quick add-to-cart']]
 // Per-element typography control — [key, ar, en, defaultPx]
 const TYPO_ELEMENTS = [['header', 'الهيدر', 'Header', 16], ['hero', 'اسم الكافيه', 'Venue name', 28], ['desc', 'الوصف', 'Description', 14], ['item', 'اسم الصنف', 'Item name', 15], ['price', 'السعر', 'Price', 16]]
 
@@ -192,6 +193,8 @@ const TABLE_DEFAULTS = {
   // stage-window cohesion: extend-to-bottom + the space/height of the hero photo
   extend: false, heroPad: TABLE_RANGE.heroPad.dflt, heroMax: TABLE_RANGE.heroMax.dflt,
   textPad: TABLE_RANGE.textPad.dflt, minBody: TABLE_RANGE.minBody.dflt,
+  // «سطح الطبق» — the perspective tabletop band inside the photo box
+  topUrl: '', topH: TABLE_RANGE.topH.dflt, topSeat: TABLE_RANGE.topSeat.dflt, topFeather: TABLE_RANGE.topFeather.dflt, topFade: TABLE_RANGE.topFade.dflt, topEdge: TABLE_RANGE.topEdge.dflt,
   // per-place overrides for the opened-item window (TABLE_STAGE_KEYS only)
   stage: {},
 }
@@ -234,6 +237,15 @@ const TABLE_FREE_SLIDERS = [
   ['w', 'عرض الطاولة', 'Table width', 'pct'],
   ['h', 'ارتفاع الطاولة', 'Table height', 'pct'],
 ]
+// «سطح الطبق» — the perspective band inside the photo box (menuTable.topUrl).
+// topH/topSeat are TABLE_STAGE_KEYS (per-place via writeTableAt); topFeather is
+// room-global like the band photo itself.
+const TABLE_TOP_SLIDERS = [
+  ['topH', 'ارتفاع السطح داخل الصورة', 'Surface height inside the photo', 'p'],
+  ['topSeat', 'جلوس الطبق فوق الحافة القريبة', 'Seat above the near edge', 'p'],
+  ['topFeather', 'ذوبان الحافة البعيدة في الجدار', 'Far-edge melt into the wall', 'pct'],
+  ['topFade', 'تدرج اختفاء الطاولة من الأسفل', 'Bottom fade-out', 'pct'],
+]
 // which slider keys may hold a DIFFERENT value inside the opened-item window
 const TABLE_STAGE_SET = new Set(TABLE_STAGE_KEYS)
 // A picker tile is deliberately painted with NO mood on it (no blur, no blend,
@@ -255,7 +267,9 @@ const WALL_SLIDERS = [
   // left on the room («خط شفاف داكن»). 0% removes it outright.
   ['vignette', 'ذوبان أسفل صورة الطبق في الجدار', 'Melt under the dish photo', 'pct'],
 ]
-const wallSliderText = (unit, v) => (unit === 'pct' ? `${Math.round(v * 100)}%` : unit === 'x' ? `${Number(v).toFixed(2)}x` : `${Number(v)}px`)
+// 'pct' formats a 0..1 dial; 'p' formats a dial ALREADY in percent units
+// (topH 44 must read «44%», not «4400%»).
+const wallSliderText = (unit, v) => (unit === 'pct' ? `${Math.round(v * 100)}%` : unit === 'p' ? `${Math.round(v)}%` : unit === 'x' ? `${Number(v).toFixed(2)}x` : `${Number(v)}px`)
 
 // ============================ SHADOWS (tenant.menuShadows) ==================
 // One dial per fixed dark line/cast in the editorial room — bounds ONLY from
@@ -350,6 +364,7 @@ const CROP_KINDS = {
   wall: { shape: 'rect', ar: 'قص صورة الجدار', en: 'Crop the wall image', hintAr: 'صورة جدار غرفتك — اختر النسبة «حر» لأي مقاس', hintEn: 'A photo of your own room — pick the “Free” ratio for any size' },
   decor: { shape: 'rect', ar: 'قص قطعة الزينة', en: 'Crop the decoration', hintAr: 'اقتطع الفانوس وحده وتخلّص من الفراغ حوله — اختر النسبة «حر»', hintEn: 'Trim to the object itself and drop the empty margin — pick the “Free” ratio' },
   table: { shape: 'rect', ar: 'قص صورة الطاولة', en: 'Crop the table photo', hintAr: 'صورة سطح طاولتك الحقيقية — اختر النسبة «حر» لأي مقاس', hintEn: 'A photo of your real tabletop — pick the “Free” ratio for any size' },
+  tabletop: { aspect: 9 / 16, shape: 'rect', output: { width: 900, height: 1600 }, ar: 'قص الطاولة الكاملة', en: 'Crop the full table', hintAr: 'صورة طولية: السطح بمنظوره في الأعلى ثم واجهة الطاولة تحته حتى أسفل الصورة', hintEn: 'Portrait: the surface in perspective on top, the table front below it to the bottom' },
 }
 
 // ==================== HOW ONE DISH IS JOINED TO THE NEXT ====================
@@ -690,6 +705,9 @@ const SEARCH_INDEX = [
   { keys: ['ويب هوك', 'ربط مخصص', 'api', 'webhook', 'odoo', 'erp'], tab: 'connect', at: 'set-webhook', ar: 'الربط المخصص (Webhook)', en: 'Custom webhook' },
   // ---- النظام والأمان ----
   { keys: ['تثبيت', 'التطبيق', 'install', 'pwa'], tab: 'system', at: 'set-install', ar: 'تثبيت التطبيق', en: 'Install the app' },
+  { keys: ['تطبيق الفريق', 'التابلت', 'تابلت', 'الموظفين تطبيق', 'staff app', 'tablet'], tab: 'system', at: 'set-staffapp', ar: 'تطبيق الفريق على التابلت', en: 'Staff tablet app' },
+  { keys: ['حقول الطلب', 'كود الخصم', 'بيانات العميل', 'checkout', 'coupon'], tab: 'studio', aSec: 'elements', at: 'set-checkoutfields', ar: 'حقول إتمام الطلب (السلة)', en: 'Checkout fields' },
+  { keys: ['وقت التحضير', 'يكفي', 'الاضافة السريعة', 'الإضافة السريعة', 'prep', 'serves', 'quick add'], tab: 'studio', aSec: 'elements', at: 'set-hidematrix', ar: 'إخفاء وقت التحضير وعدد الأشخاص', en: 'Hide prep time & serves' },
   { keys: ['اللغة', 'لغة', 'الوضع الداكن', 'داكن', 'فاتح', 'الجولات', 'جولة', 'language', 'dark', 'tour'], tab: 'system', at: 'set-prefs', ar: 'اللغة والوضع والجولات', en: 'Language, mode & tours' },
   { keys: ['الموظفون', 'الموظفين', 'موظف', 'pin', 'رمز القفل', 'قفل', 'lock'], tab: 'system', at: 'set-pin', ar: 'قفل النظام وأرقام الموظفين', en: 'PIN lock & staff PINs' },
 ]
@@ -778,6 +796,8 @@ export default function Settings() {
   const [q, setQ] = useState('')
   const [searchOpen, setSearchOpen] = useState(false)
   const [lastSavedAt, setLastSavedAt] = useState(null)
+  // Device self-test sheet (system tab) — internet/db/alerts/printing/registry.
+  const [deviceCheckOpen, setDeviceCheckOpen] = useState(false)
   // Kitchen (KDS) operational settings — categories for the station mapping +
   // the venue's late threshold, both saved instantly like the templates card.
   const [kdsCats, setKdsCats] = useState([])
@@ -1183,6 +1203,7 @@ export default function Settings() {
   const wallSample = useMemo(() => allItems.find((it) => it.imageUrl) || allItems[0] || null, [allItems])
 
   const onTableFile = (e) => { const file = e.target.files?.[0]; e.target.value = ''; if (file) setCropState({ file, kind: 'table' }) }
+  const onTopFile = (e) => { const file = e.target.files?.[0]; e.target.value = ''; if (file) setCropState({ file, kind: 'tabletop' }) }
 
   // ===== THE TABLE UNDER THE DISH DETAILS (tenant.menuTable) =====
   // The owner's own idea. Same draft-free discipline as the wall.
@@ -1248,6 +1269,36 @@ export default function Settings() {
       const msg = err?.message || ''
       toast.error(msg && !/internal/i.test(msg) ? msg : (ar ? 'تعذّر التوليد — جرّب مرة أخرى' : 'Generation failed — try again'))
     } finally { setTblAiBusy(false) }
+  }
+  // «سطح الطبق» بالذكاء: same callable, mode 'top' — a PERSPECTIVE tabletop
+  // band (near edge at the bottom, planks receding to this venue's wall) that
+  // the dish cutouts sit on inside the photo box. Shares the hint field with
+  // the panel generator (same semantics: surface style).
+  const [tblTopBusy, setTblTopBusy] = useState(false)
+  const genTopAi = async () => {
+    if (tblTopBusy) return
+    setTblTopBusy(true)
+    try {
+      const [{ httpsCallable }, fb] = await Promise.all([import('firebase/functions'), import('../../lib/firebase.js')])
+      const res = await httpsCallable(fb.functions, 'generateTableImage')({
+        tenantId,
+        mode: 'top',
+        hint: tblAiHint.trim(),
+        surfaceEn: tblCfg.kind === 'material' ? (TABLE_MATERIALS.find((m) => m.id === tblCfg.material)?.en || '') : '',
+        wall: { color: wallCfg.color, pattern: wallCfg.pattern, finish: wallCfg.finish, url: wallCfg.pattern === 'image' ? wallCfg.url : '' },
+        venueName: name || tenant?.name || '',
+      })
+      const url = res?.data?.url
+      if (!url) throw new Error('no url')
+      // ONE piece of furniture: the generated photo is a COMPLETE table
+      // (surface + front face); topUrl===url switches the menu to the
+      // continuous one-piece rendering (.edt-topfull), full screen width.
+      await writeTable({ topUrl: url, url, kind: 'image', scale: 1 })
+      toast.success(ar ? 'وُلّدت الطاولة الكاملة ورُكّبت بعرض الشاشة — اضبط ارتفاع السطح وجلوس الطبق' : 'Full table generated and applied edge to edge — tune the surface height and the seating')
+    } catch (err) {
+      const msg = err?.message || ''
+      toast.error(msg && !/internal/i.test(msg) ? msg : (ar ? 'تعذّر التوليد — جرّب مرة أخرى' : 'Generation failed — try again'))
+    } finally { setTblTopBusy(false) }
   }
 
   // ===== THE TOP HEADER (tenant.menuHeader) =====
@@ -1405,19 +1456,34 @@ export default function Settings() {
     setStgCfg(next)
     try { await saveNow({ menuStage: next }); updateTenantLocal({ menuStage: next }); toast.success(t('saved')) } catch (_) { toast.error(t('error')) }
   }
-  const writeStageBlock = (id, patch) => writeStage({ blocks: { ...(stgCfg.blocks || {}), [id]: { ...((stgCfg.blocks || {})[id] || {}), ...patch } } })
   const resetStage = async () => {
     setStgCfg({})
     try { await saveNow({ menuStage: null }); updateTenantLocal({ menuStage: null }); toast.success(t('saved')) } catch (_) { toast.error(t('error')) }
   }
-  const stgOrder = useMemo(() => (resolveStageBlocks({ menuStage: stgCfg })?.order) || [...STAGE_BLOCK_IDS], [stgCfg])
+  // «تخصيصان»: the same block system tuned per PLACE — the opened window
+  // (menuStage's own keys, as before) or the browsing list (menuStage.list).
+  const [stgPlace, setStgPlace] = useState('stage')
+  const stgIsList = stgPlace === 'list'
+  const stgAt = stgIsList ? (stgCfg.list && typeof stgCfg.list === 'object' ? stgCfg.list : {}) : stgCfg
+  const writeStageAt = (patch) => (stgIsList ? writeStage({ list: { ...stgAt, ...patch } }) : writeStage(patch))
+  const writeStageBlock = (id, patch) => writeStageAt({ blocks: { ...(stgAt.blocks || {}), [id]: { ...((stgAt.blocks || {})[id] || {}), ...patch } } })
+  const stgBlockList = stgIsList ? LIST_BLOCKS : STAGE_BLOCKS
+  const stgOrder = useMemo(
+    () => (resolveStageBlocks({ menuStage: stgCfg }, stgPlace)?.order) || [...(stgPlace === 'list' ? LIST_BLOCK_IDS : STAGE_BLOCK_IDS)],
+    [stgCfg, stgPlace],
+  )
   const [stgBlockId, setStgBlockId] = useState('name')
+  const pickStgPlace = (p) => {
+    setStgPlace(p)
+    const ids = p === 'list' ? LIST_BLOCK_IDS : STAGE_BLOCK_IDS.concat(['ar'])
+    if (!ids.includes(stgBlockId)) setStgBlockId('name')
+  }
   const onStageDragEnd = ({ active, over }) => {
     if (!over || active.id === over.id) return
     const from = stgOrder.indexOf(active.id)
     const to = stgOrder.indexOf(over.id)
     if (from < 0 || to < 0) return
-    writeStage({ order: arrayMove(stgOrder, from, to) })
+    writeStageAt({ order: arrayMove(stgOrder, from, to) })
   }
 
   // ===== THE MENU CHROME (tenant.menuChrome) =====
@@ -1713,6 +1779,10 @@ export default function Settings() {
       // the table mirrors the wall: nested object, and the upload IS the switch
       // over to «صورتي»
       if (kind === 'table') { await writeTable({ url, kind: 'image' }); return }
+      // «سطح الطبق»: an uploaded photo is a COMPLETE table (surface + front),
+      // so it lands in BOTH slots — topUrl===url is what switches the menu to
+      // the continuous one-piece rendering (.edt-topfull).
+      if (kind === 'tabletop') { await writeTable({ topUrl: url, url, kind: 'image', scale: 1 }); return }
       // a decoration is one row of an ARRAY: the crop replaces that row's photo
       // and leaves its placement, size, motion and glow exactly as hung. WebP
       // off a canvas keeps the alpha channel, so a trimmed lantern stays cut out.
@@ -2059,6 +2129,15 @@ export default function Settings() {
           <input
             className="input input-sm"
             value={q}
+            // type=search + autoComplete=off + password-manager opt-outs: an
+            // unnamed type=text field here got AUTOFILLED with the venue's
+            // saved login email on page load («لا يوجد إعداد بهذا الاسم»)
+            type="search"
+            name="settings-search"
+            autoComplete="off"
+            dir="auto"
+            data-lpignore="true"
+            data-1p-ignore="true"
             placeholder={ar ? 'ابحث عن أي إعداد…' : 'Search any setting…'}
             aria-label={ar ? 'ابحث في الإعدادات' : 'Search settings'}
             onChange={(e) => { setQ(e.target.value); setSearchOpen(true) }}
@@ -2128,6 +2207,50 @@ export default function Settings() {
       {SETUP_SECTIONS.includes(tab) && (
         <div className="stack" style={{ gap: 'var(--sp-4)' }}>
           {tab === 'system' && <div id="set-install"><InstallButton /></div>}
+
+          {/* device self-test: one sheet that proves internet, database, alerts,
+              printing and this device's registration — the shop's first question
+              ("why is nothing arriving?") answered without a support call. */}
+          {tab === 'system' && (
+          <div className="card card-pad stack" id="set-devicecheck" style={{ gap: 10 }}>
+            <strong className="small"><Icon name="wrench" size={14} style={{ verticalAlign: 'middle' }} /> {ar ? 'فحص الجهاز والطابعة' : 'Device & printer check'}</strong>
+            <p className="xs faint" style={{ margin: 0 }}>
+              {ar
+                ? 'تحقّق من الإنترنت وقاعدة البيانات والإشعارات والطباعة وتسجيل هذا الجهاز.'
+                : 'Check internet, database, notifications, printing — and register this device.'}
+            </p>
+            <button className="btn btn-sm btn-outline" style={{ alignSelf: 'flex-start' }} onClick={() => setDeviceCheckOpen(true)}>
+              <Icon name="ok" size={14} /> {ar ? 'فتح الفحص' : 'Open check'}
+            </button>
+            <DeviceCheck open={deviceCheckOpen} onClose={() => setDeviceCheckOpen(false)} tenant={tenant} tenantId={tenantId} />
+          </div>
+          )}
+
+          {/* staff tablet app: the venue-branded /app/:slug entry (never the
+              landing page) — install from Chrome = venue-logo app that opens on
+              the PIN lock. The copyable link is what you open on the tablet. */}
+          {tab === 'system' && tenant?.slug && (
+          <div className="card card-pad stack" id="set-staffapp" style={{ gap: 10 }}>
+            <strong className="small"><Icon name="cashier" size={14} style={{ verticalAlign: 'middle' }} /> {ar ? 'تطبيق الفريق على التابلت' : 'Staff app on the tablet'}</strong>
+            <p className="xs faint" style={{ margin: 0 }}>
+              {ar
+                ? 'افتح هذا الرابط على جهاز التابلت ثم «تثبيت التطبيق» من قائمة كروم: يتثبت بشعار المنشأة واسمها، ويفتح مباشرة على شاشة القفل — بلا صفحة تسويقية أبداً.'
+                : 'Open this link on the tablet, then “Install app” from Chrome’s menu: installs with the venue’s logo and name, opening straight on the PIN lock — never the marketing page.'}
+            </p>
+            <div className="row" style={{ gap: 6, alignItems: 'center', flexWrap: 'wrap' }}>
+              <code className="xs" dir="ltr" style={{ background: 'var(--surface-2)', padding: '6px 10px', borderRadius: 8, wordBreak: 'break-all' }}>{`${window.location.origin}/app/${tenant.slug}`}</code>
+              <button className="btn btn-sm btn-outline" onClick={async () => {
+                // toast only AFTER the write lands — clipboard is unavailable on
+                // insecure origins/in-app browsers, and a false «تم النسخ» there
+                // sends the owner off with an empty clipboard
+                try { await navigator.clipboard.writeText(`${window.location.origin}/app/${tenant.slug}`); toast.success(ar ? 'تم نسخ الرابط' : 'Link copied') }
+                catch (_) { toast.error(ar ? 'تعذّر النسخ — انسخ الرابط يدوياً' : 'Copy failed — copy the link manually') }
+              }}>
+                <Icon name="copy" size={14} /> {ar ? 'نسخ' : 'Copy'}
+              </button>
+            </div>
+          </div>
+          )}
 
           {tab === 'identity' && (
           <VenueTypeCard ar={ar} tenant={tenant} saveNow={saveNow} updateTenantLocal={updateTenantLocal} toast={toast} t={t} />
@@ -2504,14 +2627,23 @@ export default function Settings() {
                         const v = e.target.value.replace(/[^0-9]/g, '')
                         e.target.value = ''
                         if (v.length !== 4) return
-                        // hashed + salted server-side (staffPins) — no hash ever client-side
-                        try { await setStaffPinSecure(tenantId, s.uid || s.id, v); toast.success(t('saved')) } catch (_) { toast.error(t('error')) }
+                        // hashed + salted server-side (staffPins) — no hash ever client-side.
+                        // PINs are UNIQUE per venue now (the code alone identifies the
+                        // staffer at the lock screen) — a taken code is rejected loudly.
+                        try {
+                          await setStaffPinSecure(tenantId, s.uid || s.id, v)
+                          toast.success(t('saved'))
+                        } catch (err2) {
+                          if (String(err2?.message || err2?.code || '').includes('already-exists') || String(err2?.message || '').includes('pin-taken')) {
+                            toast.error(ar ? 'هذا الرمز مستخدم لموظف آخر — اختر رمزاً مختلفاً' : 'This PIN belongs to another staffer — pick a different one')
+                          } else toast.error(t('error'))
+                        }
                       }} />
                     {staffHasPin(s) && <button className="icon-btn" style={{ width: 30, height: 30, color: 'var(--danger)' }} title={ar ? 'مسح الرمز' : 'Clear PIN'}
                       onClick={async () => { try { await setStaffPinSecure(tenantId, s.uid || s.id, null); toast.success(t('saved')) } catch (_) { toast.error(t('error')) } }}><Icon name="close" size={13} /></button>}
                   </div>
                 ))}
-                <p className="xs faint" style={{ margin: 0 }}>{ar ? 'قفل تشغيلي ضد العبث على جهاز مفتوح — الأمان الحقيقي يبقى بحساب الدخول. الرمز يُخزن مشفراً (هاش) ولا يمكن استرجاعه.' : 'An operational tamper guard — real security stays with the account. PINs are stored hashed.'}</p>
+                <p className="xs faint" style={{ margin: 0 }}>{ar ? 'الرمز يفتح حساب الموظف نفسه بصلاحياته وإشعاراته (لكل موظف رمز فريد في المنشأة). يُخزن مشفراً (هاش) ولا يمكن استرجاعه.' : 'The PIN opens that staffer’s own account with their caps and notifications (unique per venue). Stored hashed, unrecoverable.'}</p>
               </>
             )}
             <p className="xs faint" style={{ margin: 0 }}>{ar ? 'مظهر شاشة القفل نفسها (الثيم والخلفية وشكل الأزرار) في: المظهر والثيمات ← شاشة القفل.' : 'The lock screen’s own look lives in Look & themes → Lock screen.'}</p>
@@ -3512,7 +3644,8 @@ export default function Settings() {
                   {[
                     [ar ? 'الواجهة والأدوات' : 'Chrome & tools', ['search', 'viewToggle', 'stories', 'social', 'profile', 'notifications', 'welcome']],
                     [ar ? 'الأقسام والمحتوى' : 'Sections & content', ['promos', 'special', 'covers', 'pairings']],
-                    [ar ? 'الطلب والتنقل' : 'Ordering & navigation', ['offers', 'events', 'reservations', 'bottomNav']],
+                    [ar ? 'بيانات الصنف' : 'Item facts', ['prepTime', 'serves']],
+                    [ar ? 'الطلب والتنقل' : 'Ordering & navigation', ['offers', 'events', 'reservations', 'bottomNav', 'quickAdd']],
                   ].map(([glbl, keys]) => (
                     <div key={glbl} className="stack" style={{ gap: 6 }}>
                       <span className="xs faint bold">{glbl}</span>
@@ -3564,6 +3697,46 @@ export default function Settings() {
                     </div>
                     <span className="xs faint">{ar ? 'هذه نفس مفاتيح تبويب «تجربة العميل» — أي تغيير هنا يظهر هناك والعكس.' : 'Same switches as the “Customer experience” tab — a change here shows there and vice versa.'}</span>
                   </div>
+                </div>
+
+                {/* checkout fields — venue chooses what the guest is asked for
+                    (owner request: hide the coupon box and the customer data
+                    fields). Saves instantly; delivery always re-shows the phone. */}
+                <div id="set-checkoutfields" className="card card-pad stack" style={{ gap: 10 }}>
+                  <strong className="small"><Icon name="cashier" size={14} style={{ verticalAlign: 'middle' }} /> {ar ? 'حقول إتمام الطلب (السلة)' : 'Checkout fields (cart)'}</strong>
+                  <p className="xs faint" style={{ margin: 0 }}>
+                    {ar ? 'الأخضر ظاهر للعميل. تُحفظ فوراً.' : 'Green = shown to the guest. Saves instantly.'}
+                  </p>
+                  <div className="row wrap" style={{ gap: 6 }}>
+                    {[
+                      ['coupon', 'كود الخصم', 'Coupon code'],
+                      ['name', 'اسم العميل', 'Guest name'],
+                      ['phone', 'رقم الجوال', 'Phone'],
+                      ['email', 'البريد الإلكتروني', 'Email'],
+                      ['notes', 'الملاحظات', 'Notes'],
+                    ].map(([key, la, le]) => {
+                      const cfNow = tenant?.checkoutFields || {}
+                      const on = cfNow[key] !== false
+                      return (
+                        <button
+                          key={key}
+                          className={`chip ${on ? 'active' : ''}`}
+                          style={{ borderRadius: 10 }}
+                          onClick={async () => {
+                            const next = { ...cfNow, [key]: !on }
+                            try { await saveNow({ checkoutFields: next }); updateTenantLocal({ checkoutFields: next }); toast.success(t('saved')) } catch (_) { toast.error(t('error')) }
+                          }}
+                        >
+                          <Icon name={on ? 'check' : 'close'} size={12} /> {ar ? la : le}
+                        </button>
+                      )
+                    })}
+                  </div>
+                  <span className="xs faint">
+                    {ar
+                      ? 'تنبيه: إخفاء رقم الجوال يعطّل تجميع نقاط الولاء والتعرف على أعضاء VIP عند الطلب، ويظل الرقم ظاهراً ومطلوباً لطلبات التوصيل.'
+                      : 'Note: hiding the phone disables loyalty accrual and VIP recognition at checkout; it still shows (required) for delivery orders.'}
+                  </span>
                 </div>
 
                 </div>
@@ -4590,6 +4763,37 @@ export default function Settings() {
                     />
                   </div>
 
+                  {/* «سطح الطبق» — the horizontal perspective tabletop INSIDE the
+                      photo box, the surface the cutout sits on (menuTable.topUrl).
+                      Separate from the panel paint above: this one lives under
+                      the plate itself. Reachable even on kind:'none' — landing a
+                      surface auto-opens the material panel. */}
+                  <div className="stack" style={{ gap: 8, borderTop: '1px solid var(--border)', paddingTop: 10 }}>
+                    <span className="xs faint bold">{ar ? 'سطح الطبق — طاولة أفقية يجلس عليها الصنف داخل الصورة' : 'Dish surface — a horizontal tabletop the dish sits on inside the photo'}</span>
+                    <div className="row wrap" style={{ gap: 8, alignItems: 'center' }}>
+                      <button type="button" className="btn btn-sm" disabled={tblTopBusy} onClick={genTopAi}>
+                        {tblTopBusy ? <span className="spinner" /> : <Icon name="sparkles" size={13} />} {ar ? 'ولّد سطح الطبق بالذكاء' : 'Generate the dish surface with AI'}
+                      </button>
+                      <label className={`chip${uploading === 'tabletop' ? ' on' : ''}`} style={{ cursor: 'pointer' }}>
+                        {uploading === 'tabletop' ? (ar ? 'يرفع…' : 'Uploading…') : (ar ? 'ارفع صورة سطحك' : 'Upload your surface')}
+                        <input type="file" accept="image/*" hidden onChange={onTopFile} />
+                      </label>
+                      {tblCfg.topUrl ? (
+                        <>
+                          <img src={tblCfg.topUrl} alt="" style={{ height: 40, aspectRatio: '8 / 3', objectFit: 'cover', borderRadius: 8, border: '1px solid var(--border)' }} />
+                          <button type="button" className="btn btn-sm btn-outline" onClick={() => writeTable({ topUrl: '' })}>{ar ? 'إزالة' : 'Remove'}</button>
+                        </>
+                      ) : null}
+                    </div>
+                    {tblCfg.topUrl ? (
+                      <span className="xs faint">
+                        {ar
+                          ? 'منزلقات السطح تجدها مع بقية منزلقات الطاولة أدناه، وتتبع «أين تضبط الآن؟» — فيمكنك ضبط سطح نافذة الصنف المفتوح باستقلال. الشفافية والتعتيم والتمويه والصبغة تعمل كلها على السطح الكامل.'
+                          : 'The surface sliders live with the table sliders below and follow the place switcher — the opened-item surface tunes independently. Opacity, darkening, blur and tint act on the whole surface.'}
+                      </span>
+                    ) : null}
+                  </div>
+
                   {tblCfg.kind === 'none' ? (
                     <p className="xs faint" style={{ margin: 0 }}>{ar ? 'بدون طاولة — اللوحة تبقى داكنة سادة كما كانت.' : 'No table — the panel stays plain dark as before.'}</p>
                   ) : (
@@ -4658,6 +4862,29 @@ export default function Settings() {
                             <input type="range" min={TABLE_RANGE.scale.min} max={TABLE_RANGE.scale.max} step={TABLE_RANGE.scale.step} value={Number(tblValueAt('scale')) || 1} onChange={(e3) => writeTableAt({ scale: Number(e3.target.value) }, true)} style={{ width: '100%' }} />
                           </div>
                         )}
+                        {/* «سطح الطبق» — with the rest so they follow the place
+                            switcher: topH/topSeat are TABLE_STAGE_KEYS, so the
+                            opened-item surface tunes independently */}
+                        {tblCfg.topUrl ? (
+                          <>
+                            {TABLE_TOP_SLIDERS.map(([key, la, le, unit]) => {
+                              const R = TABLE_RANGE[key]
+                              const v = Number(tblValueAt(key))
+                              const overridden = tblPlace === 'stage' && tblStageOver[key] != null
+                              return (
+                                <div key={key} className="field" style={{ gap: 2 }}>
+                                  <label>{ar ? la : le} · <span className="num">{wallSliderText(unit, v)}</span>{overridden ? <span className="xs" style={{ color: 'var(--brand)' }}> · {ar ? 'مخصص للنافذة' : 'window only'}</span> : null}</label>
+                                  <input type="range" min={R.min} max={R.max} step={R.step} value={v} onChange={(e3) => writeTableAt({ [key]: Number(e3.target.value) }, true)} style={{ width: '100%' }} />
+                                </div>
+                              )
+                            })}
+                            <span className="xs faint">
+                              {ar
+                                ? 'ظل التماس تحت الطبق يتبع منزلق «ظل التماس». إن غاص الطبق كثيراً قلّل «جلوس الطبق على الطاولة». ولإخفاء الظل أسفل الطاولة صفّر «تعتيم الطاولة نحو الأسفل» أو استخدم «تدرج الاختفاء» لنهاية إبداعية.'
+                                : 'The seat pool follows the contact slider. If the plate digs in, lower the lift. To kill the dark foot, zero the downward darkening — or use the bottom fade-out.'}
+                            </span>
+                          </>
+                        ) : null}
                       </div>
 
                       {/* FREE PLACEMENT — move and size the table against its
@@ -4743,8 +4970,26 @@ export default function Settings() {
                       <div className="stack" style={{ gap: 6 }}>
                         <span className="xs faint bold">{ar ? 'المعاينة — الطبق جالس على الطاولة' : 'Preview — the dish seated on the table'}</span>
                         <div className="mtbl-stage">
+                          {/* the band under the preview dish — an honest
+                              approximation (240px stage, 46% panel → the photo
+                              area is ~54%); fine seating is judged in the live
+                              menu, as the stage-keys note already says */}
+                          {tblResolved?.topUrl ? (
+                            <span
+                              className="mtbl-top" aria-hidden="true"
+                              style={{
+                                backgroundImage: `url(${tblResolved.topUrl})`,
+                                backgroundPosition: 'top center',
+                                // COMPLETE-table photos run continuously down
+                                // behind the panel; band-only photos stop at it
+                                ...(tblResolved.kind === 'image' && tblResolved.url === tblResolved.topUrl
+                                  ? { bottom: 0, height: `${Math.round(46 + tblResolved.topH * 0.54)}%`, backgroundSize: 'cover' }
+                                  : { height: `${Math.round(tblResolved.topH * 0.54)}%`, backgroundSize: `100% ${Math.round(10000 / (tblResolved.topEdge || 100))}%` }),
+                              }}
+                            />
+                          ) : null}
                           {wallSample?.imageUrl
-                            ? <img className="mtbl-dish" src={wallSample.imageUrl} alt="" style={{ transform: `translateY(${tblResolved ? tblResolved.lift : 0}%)` }} />
+                            ? <img className="mtbl-dish" src={wallSample.imageUrl} alt="" style={{ transform: `translateY(${(tblResolved ? tblResolved.lift : 0) - (tblResolved?.topUrl ? tblResolved.topSeat : 0)}%)` }} />
                             : <span className="mtbl-nodish">{ar ? 'أضف صورة لأي صنف لترى الجلوس' : 'Add a dish photo to see the seating'}</span>}
                           <div className="mtbl-panel">
                             {/* the SAME component the menu paints with — the
@@ -4767,22 +5012,29 @@ export default function Settings() {
                     defaults are today's exact DOM. */}
                 <div id="set-menustage" className="card card-pad stack" style={{ gap: 12 }}>
                   <div className="row-between wrap" style={{ gap: 8, alignItems: 'center' }}>
-                    <strong className="small"><Icon name="edit" size={14} style={{ verticalAlign: 'middle' }} /> {ar ? 'نصوص نافذة الصنف — الموضع والترتيب' : 'Item-window text — placement & order'}</strong>
+                    <strong className="small"><Icon name="edit" size={14} style={{ verticalAlign: 'middle' }} /> {ar ? 'نصوص الصنف — الموضع والترتيب' : 'Item text — placement & order'}</strong>
                     <button type="button" className="btn-link xs" onClick={resetStage}><Icon name="reload" size={12} /> {ar ? 'إرجاع الافتراضي' : 'Reset to default'}</button>
                   </div>
                   <p className="xs faint" style={{ margin: 0 }}>
                     {ar
-                      ? 'اسحب لترتيب كتل النافذة، واختر كتلة لضبط محاذاتها وإزاحتها — كل شيء يُحفظ فوراً ويظهر في المعاينة الكبيرة. يعمل في نافذة الصنف على ثيم editorial (مثل الطاولة تماماً).'
-                      : 'Drag to order the window blocks; pick one to align and nudge it — everything saves instantly and streams to the big preview. Editorial item window only (like the table).'}
+                      ? 'اسحب لترتيب الكتل، واختر كتلة لضبط محاذاتها وإزاحتها — كل شيء يُحفظ فوراً. تخصيصان مستقلان: الصنف في قائمة التصفح، والصنف في النافذة المفتوحة. يعمل على ثيم «المجلة الداكنة».'
+                      : 'Drag to order the blocks; pick one to align and nudge it — saved instantly. Two independent tunings: the item in the browsing list, and in the opened window. Dark-editorial theme.'}
                   </p>
+                  <div className="row wrap" style={{ gap: 8, alignItems: 'center' }}>
+                    <span className="xs faint bold">{ar ? 'أين تضبط الآن؟' : 'Tuning which place?'}</span>
+                    <div className="segmented">
+                      <button type="button" className={stgPlace === 'list' ? 'active' : ''} onClick={() => pickStgPlace('list')}>{ar ? 'قائمة التصفح' : 'Browsing list'}</button>
+                      <button type="button" className={stgPlace === 'stage' ? 'active' : ''} onClick={() => pickStgPlace('stage')}>{ar ? 'نافذة الصنف' : 'Opened item'}</button>
+                    </div>
+                  </div>
                   <DndContext sensors={homeSensors} collisionDetection={closestCenter} onDragEnd={onStageDragEnd}>
                     <SortableContext items={stgOrder} strategy={verticalListSortingStrategy}>
                       <div className="stack" style={{ gap: 6 }}>
                         {stgOrder.map((id) => {
-                          const b = STAGE_BLOCKS.find((x) => x.id === id)
+                          const b = stgBlockList.find((x) => x.id === id)
                           return (
                             <StageOrderRow key={id} id={id} ar={ar} label={b ? (ar ? b.ar : b.en) : id}
-                              active={stgBlockId === id} tuned={!!(stgCfg.blocks || {})[id]} onPick={() => setStgBlockId(id)} />
+                              active={stgBlockId === id} tuned={!!(stgAt.blocks || {})[id]} onPick={() => setStgBlockId(id)} />
                           )
                         })}
                       </div>
@@ -4791,27 +5043,27 @@ export default function Settings() {
                   <div className="stack" style={{ gap: 8, borderTop: '1px solid var(--border)', paddingTop: 10 }}>
                     <div className="row wrap" style={{ gap: 6, alignItems: 'center' }}>
                       <span className="xs faint bold">{ar ? 'الكتلة المحددة' : 'Selected block'}</span>
-                      {STAGE_BLOCKS.concat([{ id: 'ar', ar: 'زر ثلاثي الأبعاد', en: '3D button' }]).map((b) => (
+                      {(stgIsList ? stgBlockList : stgBlockList.concat([{ id: 'ar', ar: 'زر ثلاثي الأبعاد', en: '3D button' }])).map((b) => (
                         <button key={b.id} type="button" className={`chip${stgBlockId === b.id ? ' active' : ''}`} onClick={() => setStgBlockId(b.id)}>{ar ? b.ar : b.en}</button>
                       ))}
                     </div>
                     <div className="row wrap" style={{ gap: 8, alignItems: 'center' }}>
                       <span className="xs faint bold">{ar ? 'المحاذاة' : 'Align'}</span>
                       {[['', 'كما هي', 'Default'], ['start', 'البداية', 'Start'], ['center', 'الوسط', 'Center'], ['end', 'النهاية', 'End']].map(([v, la, le]) => (
-                        <button key={v || 'dflt'} type="button" className={`chip${(((stgCfg.blocks || {})[stgBlockId]?.align) || '') === v ? ' active' : ''}`} onClick={() => writeStageBlock(stgBlockId, { align: v })}>{ar ? la : le}</button>
+                        <button key={v || 'dflt'} type="button" className={`chip${(((stgAt.blocks || {})[stgBlockId]?.align) || '') === v ? ' active' : ''}`} onClick={() => writeStageBlock(stgBlockId, { align: v })}>{ar ? la : le}</button>
                       ))}
                     </div>
-                    {stgBlockId === 'ar' && (
+                    {stgBlockId === 'ar' && !stgIsList && (
                       <div className="row wrap" style={{ gap: 8, alignItems: 'center' }}>
                         <span className="xs faint bold">{ar ? 'موضع الزر' : 'Button position'}</span>
                         {[['', 'تحت الصورة', 'Under the photo'], ['wall', 'على الجدار فوق الصورة', 'On the wall above the photo']].map(([v, la, le]) => (
-                          <button key={v || 'flow'} type="button" className={`chip${(((stgCfg.blocks || {})[stgBlockId]?.pos) || '') === v ? ' active' : ''}`} onClick={() => writeStageBlock('ar', { pos: v })}>{ar ? la : le}</button>
+                          <button key={v || 'flow'} type="button" className={`chip${(((stgAt.blocks || {})[stgBlockId]?.pos) || '') === v ? ' active' : ''}`} onClick={() => writeStageBlock('ar', { pos: v })}>{ar ? la : le}</button>
                         ))}
                       </div>
                     )}
                     {[['dx', 'إزاحة أفقية — موجبها جهة بداية القراءة', 'Inline shift (logical)', '%'], ['dy', 'إزاحة رأسية', 'Vertical shift', 'px']].map(([key, la, le, unit]) => {
                       const R = STAGE_TEXT_RANGE[key]
-                      const v = Number((stgCfg.blocks || {})[stgBlockId]?.[key] ?? R.dflt)
+                      const v = Number((stgAt.blocks || {})[stgBlockId]?.[key] ?? R.dflt)
                       return (
                         <div key={key} className="field" style={{ gap: 2 }}>
                           <label>{ar ? la : le} · <span className="num">{v}{unit}</span></label>

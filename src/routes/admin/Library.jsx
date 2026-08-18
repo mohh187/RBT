@@ -50,7 +50,8 @@ const BACKDROPS = [
 const ENHANCE_PROMPT = 'Enhance this exact photo: keep the very same product, framing and composition, improve lighting, sharpness, white balance and appetite appeal, remove noise and distracting artifacts, professional food-photography retouch'
 
 // ---- upload plumbing (mirrors MediaLibrary/storage.js conventions) ----
-const LIB_LIMITS_MB = { image: 10, video: 150, audio: 40, file: 25 }
+// video = 1GB: in-store TV masters (/screen) live here, not just menu clips.
+const LIB_LIMITS_MB = { image: 10, video: 1024, audio: 40, file: 25 }
 const AUDIO_EXT = ['mp3', 'm4a', 'aac', 'wav', 'ogg', 'oga', 'opus', 'flac', 'weba', 'wma']
 const VIDEO_EXT = ['mp4', 'webm', 'mov', 'mkv', 'avi', 'ogv', 'm4v', '3gp']
 const IMAGE_EXT = ['jpg', 'jpeg', 'png', 'gif', 'webp', 'avif', 'svg', 'bmp', 'ico']

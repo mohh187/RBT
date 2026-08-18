@@ -33,20 +33,47 @@
     <link rel="manifest" href="/manifest.webmanifest" />
     <link rel="apple-touch-icon" href="/brand/apple-touch-icon.png" />
 
-    <!-- Fonts: Tajawal (app) + IBM Plex Sans Arabic (marketing/auth) -->
+    <!-- Warm the data/image connections before the app asks for them: the menu's
+         first Firestore read (crossorigin/CORS channel) and the dish photos
+         (no-cors <img>) each save a DNS+TLS round trip on the first scan. -->
+    <link rel="preconnect" href="https://firestore.googleapis.com" crossorigin />
+    <link rel="preconnect" href="https://firebasestorage.googleapis.com" />
+
+    <!-- Fonts: Tajawal (app) + IBM Plex Sans Arabic (marketing/auth).
+         preload+swap-to-stylesheet: fetched at HIGH priority immediately (the
+         media=print trick demoted them to lowest priority — fonts arrived
+         seconds late and every screen re-rendered, felt as «كل شيء بطيء»)
+         while still not blocking first paint; display=swap covers the gap. -->
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
     <link
       href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans+Arabic:wght@400;500;600;700&family=Montserrat:wght@700;800;900&family=Tajawal:wght@400;500;700;800;900&display=swap"
-      rel="stylesheet"
+      rel="preload"
+      as="style"
+      onload="this.onload=null;this.rel='stylesheet'"
     />
+    <noscript>
+      <link
+        href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans+Arabic:wght@400;500;600;700&family=Montserrat:wght@700;800;900&family=Tajawal:wght@400;500;700;800;900&display=swap"
+        rel="stylesheet"
+      />
+    </noscript>
 
     <!-- Prevent theme flash before React mounts -->
     <script>
       (function () {
         try {
-          // diner surfaces (menu/orders/events/screens) keep an independent mode key
-          var diner = ['/m/', '/order/', '/e/', '/book/', '/t/', '/screen', '/preview/menu'].some(function (p) { return location.pathname.indexOf(p) === 0; });
+          // diner surfaces (menu/orders/events/screens) keep an independent mode key.
+          // /preview/* is the admin's live MENU preview iframe (/preview/:slug) —
+          // it must read the DINER key or an admin in dark mode sees the customer
+          // menu painted dark for a flash before React corrects it. The two staff
+          // previews under the same prefix (/preview/pos, /preview/pinlock) are
+          // carved out first — they genuinely are staff surfaces.
+          var p = location.pathname;
+          // EXACT segments (a venue slug like "positano" must not match "pos")
+          var seg = function (x) { return p === x || p.indexOf(x + '/') === 0; };
+          var staffPrev = seg('/preview/pos') || seg('/preview/pinlock');
+          var diner = !staffPrev && ['/m/', '/order/', '/e/', '/book/', '/t/', '/screen', '/preview/'].some(function (x) { return p.indexOf(x) === 0; });
           var t = localStorage.getItem(diner ? 'ml.theme.menu' : 'ml.theme');
           if (!t) t = diner ? 'light' : (window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light');
           document.documentElement.setAttribute('data-theme', t);
@@ -55,6 +82,13 @@
           document.documentElement.setAttribute('dir', lang === 'ar' ? 'rtl' : 'ltr');
         } catch (e) {}
       })();
+      // APP-LIKE: no native page zoom, ever (user 2026-08-18). The viewport
+      // meta covers Chrome/Android, but iOS Safari IGNORES user-scalable=no —
+      // its proprietary gesture events are the only reliable off switch there.
+      // Custom in-app zoom (photo lightbox, viewer, AR) uses pointer events and
+      // is untouched. touch-action: pan-x pan-y in index.css handles the rest.
+      document.addEventListener('gesturestart', function (e) { e.preventDefault(); }, { passive: false });
+      document.addEventListener('gesturechange', function (e) { e.preventDefault(); }, { passive: false });
     </script>
 
     <title>RBT 360</title>

@@ -1400,6 +1400,19 @@
   color: rgba(255, 255, 255, .5);
   font-size: var(--fs-xs, 11px);
 }
+/* «سطح الطبق» in the card preview — the perspective band sitting on the panel
+   top; z1 before the panel in tree order paints it under the dish (z2) */
+.mtbl-top {
+  position: absolute;
+  z-index: 1;
+  inset-inline: 0;
+  bottom: 46%;
+  background-size: cover;
+  background-position: bottom center;
+  background-repeat: no-repeat;
+  -webkit-mask-image: linear-gradient(180deg, transparent 0, #000 40%);
+  mask-image: linear-gradient(180deg, transparent 0, #000 40%);
+}
 .mtbl-panel {
   position: relative;
   z-index: 1;

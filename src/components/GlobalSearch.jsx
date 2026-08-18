@@ -153,6 +153,11 @@ export default function GlobalSearch({ open, onClose }) {
           className="input"
           value={q}
           autoFocus
+          type="search"
+          name="global-search"
+          autoComplete="off"
+          data-lpignore="true"
+          data-1p-ignore="true"
           dir="auto"
           onChange={(e) => setQ(e.target.value)}
           onKeyDown={onKeyDown}

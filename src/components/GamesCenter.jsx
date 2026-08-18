@@ -14,7 +14,7 @@
 // Rewards are never invented: everything shown comes from gameRewards.js, which
 // drops any rule that is not fully, validly configured by the venue.
 import '../styles/gameshub.css'
-import { Suspense, lazy, useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { Suspense, useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import Icon from './Icon.jsx'
 import GamePromo, { gameName, gameHook } from './games/GamePromo.jsx'
 import { gamesFor, gameById, NEW_GAME_IDS } from '../lib/games.js'
@@ -40,7 +40,18 @@ import TableVsTable from './social/TableVsTable.jsx'
 import TableChampions from './social/TableChampions.jsx'
 import HappyHourBanner from './social/HappyHourBanner.jsx'
 import PlayedWith from './social/PlayedWith.jsx'
-const RoomLobby = lazy(() => import('./games/RoomLobby.jsx'))
+import { lazyOverlay } from './ErrorBoundary.jsx'
+const RoomLobby = lazyOverlay(() => import('./games/RoomLobby.jsx'), { label: 'room-lobby', variant: 'inline' })
+
+// One loader component per game, created on first pick and kept for the whole
+// session (a Map, NOT a per-render lazy()): re-rendering the hub must not
+// remount a running game, and a failed board chunk shows an inline retry card
+// inside the stage instead of rejecting through Suspense into a page reload.
+const GAME_COMPS = new Map()
+function gameComp(g) {
+  if (!GAME_COMPS.has(g.id)) GAME_COMPS.set(g.id, lazyOverlay(() => g.load(), { label: `game:${g.id}`, variant: 'inline' }))
+  return GAME_COMPS.get(g.id)
+}
 import {
   rewardsFor, rewardsNote, evaluateReward, claimReward, readClaims,
   claimText, conditionText, perGuestText, HOW_TO_CLAIM,
@@ -1574,7 +1585,7 @@ export default function GamesCenter({
   }, [tenantId])
 
   const active = activeId ? enabled.find((g) => g.id === activeId) : null
-  const Comp = useMemo(() => (active ? lazy(() => active.load()) : null), [active])
+  const Comp = active ? gameComp(active) : null
 
   // ---- grouping ----
   const groups = useMemo(() => {

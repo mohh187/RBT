@@ -518,15 +518,21 @@ export default function ScreenPlayer() {
   //   'tournament'  while one is running (or was announced in the last day)
   //   'gamesjoin'   whenever this venue runs table games at all — the idle
   //                 invitation, so «العب معنا» is on the wall between boards
+  //
+  // `screen.gamesJoin === false` silences the invitation on THIS screen only: a
+  // storefront or a drive-thru wall runs the venue's own reel and nothing else,
+  // while the hall screen keeps inviting. Games stay ON for diners either way —
+  // this hides a slide, it does not disable a feature.
+  const gamesJoinOn = screen?.gamesJoin !== false
   const slides = useMemo(() => {
     const extra = []
     if (cup) extra.push({ type: 'tournament', id: `__cup_${cup.id}` })
     // A screen with NOTHING configured and no tournament keeps its «أضف محتوى»
     // setup hint: a fresh screen must still tell the person pairing it what to
     // do next, instead of looking finished because a games poster filled it.
-    if (hasPartyGames && (baseSlides.length > 0 || cup)) extra.push({ type: 'gamesjoin', id: '__join' })
+    if (gamesJoinOn && hasPartyGames && (baseSlides.length > 0 || cup)) extra.push({ type: 'gamesjoin', id: '__join' })
     return extra.length ? [...baseSlides, ...extra] : baseSlides
-  }, [baseSlides, cup, hasPartyGames])
+  }, [baseSlides, cup, hasPartyGames, gamesJoinOn])
 
   const slide = slides.length ? slides[idx % slides.length] : null
 

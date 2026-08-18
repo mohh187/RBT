@@ -1,8 +1,9 @@
 import { initializeApp } from 'firebase/app'
 import { getAuth } from 'firebase/auth'
-import { getFirestore, initializeFirestore, persistentLocalCache, persistentMultipleTabManager } from 'firebase/firestore'
+import { getFirestore, initializeFirestore, persistentLocalCache, persistentMultipleTabManager, memoryLocalCache } from 'firebase/firestore'
 import { getStorage } from 'firebase/storage'
 import { getFunctions } from 'firebase/functions'
+import { isEmbedded } from './embedded.js'
 
 const config = {
   apiKey: import.meta.env.VITE_FIREBASE_API_KEY,
@@ -25,10 +26,26 @@ let functions = null
 if (firebaseReady) {
   app = initializeApp(config)
   auth = getAuth(app)
-  // Firestore with multi-tab offline persistence.
+  // Firestore cache strategy — THE ROOT FIX for the "INTERNAL ASSERTION FAILED
+  // (ca9/b815) → page breaks and reloads" incidents.
+  //
+  // The admin embeds this same app in iframes all over (Settings menu preview,
+  // the item editor's live preview, the platform Design gallery — one frame
+  // per venue —, LandingStudio, StaffPreview). Each frame is its own JS realm
+  // that used to run initializeFirestore against the SAME IndexedDB, bypassing
+  // the multi-tab leader election (which coordinates tabs, not realms) — the
+  // known trigger of the assertion that permanently bricks the async queue.
+  //
+  // So: an EMBEDDED realm gets a memory-only cache (live onSnapshot streams
+  // work identically — it only loses offline persistence, meaningless for a
+  // preview), and only top-level documents share the persistent multi-tab
+  // cache (real multi-tab usage — admin + cashier — is what the manager is
+  // actually designed for).
   try {
     db = initializeFirestore(app, {
-      localCache: persistentLocalCache({ tabManager: persistentMultipleTabManager() }),
+      localCache: isEmbedded
+        ? memoryLocalCache()
+        : persistentLocalCache({ tabManager: persistentMultipleTabManager() }),
     })
   } catch (_) {
     db = getFirestore(app)

@@ -22,7 +22,7 @@
 // blend, filter, blur, tint and opacity over the top. See "THE WALL" below and
 // styles/menuwall.css. The stylesheet's own --edt-wall tile survives only as the
 // fallback for a venue that has never opened the editor.
-import { Fragment, lazy, Suspense, useEffect, useMemo, useRef, useState } from 'react'
+import { Fragment, lazy, Suspense, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
 import { createPortal } from 'react-dom'
 import { useI18n, pickLang } from '../../lib/i18n.jsx'
 import Icon from '../Icon.jsx'
@@ -30,6 +30,7 @@ import ItemFx from '../ItemFx.jsx'
 import { Stepper, Empty } from '../ui.jsx'
 import { Price } from '../Riyal.jsx'
 import { usePortalRoot } from '../PortalRoot.jsx'
+import GalleryZoom from '../GalleryZoom.jsx'
 import { useScrollLock, usePinnedX } from '../../lib/scrollLock.js'
 import { hasStory } from '../DishStory.jsx'
 import { offerForItem, discountedPrice, itemOfferLabel } from '../../lib/offers.js'
@@ -42,11 +43,11 @@ import {
   resolveComposition, bgStyle, imgStyle, imgTiltBoxStyle,
   resolveWall, wallStyle, layerStyle,
   resolveSections, resolveDecor, decorStyle,
-  resolveTable, tableStageVars,
+  resolveTable, tableStageVars, tableTopVars,
   resolveMenuHeader, resolveButtons,
   resolveShadows, shadowVars, scaleDishShadow,
   resolveInk, inkVars, inkModeFor,
-  decorSpinRate, resolveStageBlocks, stageBlockProps, STAGE_BLOCK_IDS,
+  decorSpinRate, resolveStageBlocks, stageBlockProps, STAGE_BLOCK_IDS, LIST_BLOCK_IDS,
 } from '../../lib/dishComposition.js'
 import TablePaint from './TablePaint.jsx'
 // One shared trim engine for every uploaded video (lib/useVideoTrim.js): seeks
@@ -56,7 +57,7 @@ import { useVideoTrim } from '../../lib/useVideoTrim.js'
 import ARViewer from '../ARViewer.jsx'
 import { basePrice, variantHasOwnPrice } from '../../lib/pricing.js'
 import { scrollSectionIntoView, scrollSectionToTop, stuckOffset } from '../../lib/scrollToSection.js'
-import { hasWebGL, preferLightweight, heavyLayerBudget } from '../../lib/deviceCaps.js'
+import { hasWebGL, preferLightweight, heavyLayerBudget, MENU_3D_ENABLED, isLowEndDevice } from '../../lib/deviceCaps.js'
 import '../../styles/menuwall.css'
 
 // Built by a parallel agent — lazy + catch so a missing module never crashes
@@ -1233,8 +1234,25 @@ function EdtDish({ comp, src, anim = '', bind = null, onLoad = null, fallback = 
   // loaded, so the settled layout is byte-identical.
   if (src && ratio > 0) style.aspectRatio = String(ratio)
   const has = Object.keys(style).length > 0
+  // data-ld marks decode completion ON THE NODE (no re-render): the CSS keeps
+  // filters (drop-shadow/blur) off until the pixels are whole — a progressively
+  // decoding image is a growing RECTANGLE, and shadowing it painted a square
+  // shadow that snapped away when the decode finished («ظل الصحن ظاهر مربع»).
+  const markLd = (el) => { if (el && el.complete && el.naturalWidth > 0) el.setAttribute('data-ld', '1') }
   const dish = src
-    ? <img className="edt-dish" ref={bind} onLoad={onLoad} src={src} alt="" decoding="async" loading={loading || undefined} style={has ? style : undefined} />
+    // The first dishes on screen load EAGER + high priority: the old blanket
+    // lazy meant the opening plate raced every below-the-fold asset and the
+    // menu opened as an empty stage that filled in late.
+    ? (
+      <img
+        className="edt-dish"
+        ref={(el) => { markLd(el); if (typeof bind === 'function') bind(el); else if (bind) bind.current = el }}
+        onLoad={(e) => { try { e.currentTarget.setAttribute('data-ld', '1') } catch (_) { /* detached */ } if (onLoad) onLoad(e) }}
+        src={src} alt="" decoding="async" loading={loading || undefined}
+        {...(loading === 'eager' ? { fetchpriority: 'high' } : {})}
+        style={has ? style : undefined}
+      />
+    )
     : <span className="edt-noimg"><Icon name="coffee" size={fallback} /></span>
   const fx = comp.fx ? (
     <span className="edt-fx" aria-hidden="true" style={style.transform ? { transform: style.transform } : undefined}>
@@ -1273,6 +1291,51 @@ function EdtTable({ tb }) {
   return <TablePaint tb={tb} />
 }
 
+// «سطح الطبق» — the photographed dish surface (menuTable.topUrl), two modes:
+//
+//   FULL TABLE (topUrl === url, kind:'image' — what the generator writes): the
+//   photograph is a COMPLETE table (surface in perspective + front face), and
+//   splitting it across two boxes broke it — so .edt-topfull paints it as ONE
+//   continuous element that starts inside the photo box and runs down behind
+//   the details panel, full screen width. It lives in .edt-main at z:-1: under
+//   the dish (photo box is z2), under the panel text, over the room wall. The
+//   in-photo span then carries ONLY the contact-shadow ellipse (edt-top-bare).
+//
+//   BAND (an older band-only photograph): the original in-photo band, unchanged.
+//
+// No CSS 3D — the perspective is baked in the photograph.
+const isTopFull = (tb) => !!(tb && tb.topUrl && tb.kind === 'image' && tb.url === tb.topUrl)
+function EdtTop({ tb }) {
+  if (!tb || !tb.topUrl) return null
+  const full = isTopFull(tb)
+  return (
+    <span className={`edt-top${full ? ' edt-top-bare' : ''}`} aria-hidden="true" style={full ? undefined : { backgroundImage: `url(${tb.topUrl})` }}>
+      {tb.contact > 0 ? <span className="edt-top-contact" style={{ opacity: tb.contact }} /> : null}
+    </span>
+  )
+}
+function EdtTopFull({ tb }) {
+  if (!isTopFull(tb)) return null
+  // The table dials act on the WHOLE piece of furniture here, not just the
+  // panel: opacity/filter/blur/blend inline, then tint → dim → shade as
+  // overlay children (the same order TablePaint uses). The panel's own
+  // tint/dim layers are suppressed under [data-topfull] so nothing doubles;
+  // melt/veil stay panel-only — they exist for the text.
+  const filters = []
+  if (tb.filter) filters.push(tb.filter)
+  if (tb.blur) filters.push(`blur(${tb.blur}px)`)
+  const style = { backgroundImage: `url(${tb.topUrl})`, opacity: tb.opacity }
+  if (filters.length) style.filter = filters.join(' ')
+  if (tb.blend && tb.blend !== 'normal') style.mixBlendMode = tb.blend
+  return (
+    <span className="edt-topfull" aria-hidden="true" style={style}>
+      {tb.tint && tb.tintAmount > 0 ? <span className="edt-topfull-lay" style={{ background: tb.tint, opacity: tb.tintAmount }} /> : null}
+      {tb.dim > 0 ? <span className="edt-topfull-lay" style={{ background: '#000', opacity: tb.dim }} /> : null}
+      {tb.shade > 0 ? <span className="edt-topfull-lay" style={{ background: 'linear-gradient(180deg, transparent 30%, rgba(0, 0, 0, 0.92) 100%)', opacity: tb.shade }} /> : null}
+    </span>
+  )
+}
+
 // '' is the theme's own default (no photo entrance, exactly as before) and
 // 'none' is the venue asking for stillness — neither mounts an animation.
 const animAttr = (comp) => (comp.anim && comp.anim !== 'none' ? comp.anim : '')
@@ -1288,7 +1351,7 @@ const animAttr = (comp) => (comp.anim && comp.anim !== 'none' ? comp.anim : '')
 // allItems / onQuickAdd are OPTIONAL — with them the venue's curated «يُطلب معه»
 // pairings become tappable straight from the LIST row; without them the list
 // still renders everything else, so an un-patched caller degrades quietly.
-export default function EditorialLayout({ tenant = null, cats, itemsByCat, visibleItems, filtered, activeCat, onPickCat, currency, offers, stickyTop, onOpen, allItems = [], onQuickAdd = null, showPairings = true }) {
+export default function EditorialLayout({ tenant = null, cats, itemsByCat, visibleItems, filtered, activeCat, onPickCat, currency, offers, stickyTop, onOpen, allItems = [], onQuickAdd = null, showPairings = true, quickAddOn = false, hidePrep = false, hideServes = false }) {
   const { t, lang, dir, theme } = useI18n()
   const rtl = dir === 'rtl'
   const stageRef = useRef(null)
@@ -1373,7 +1436,11 @@ export default function EditorialLayout({ tenant = null, cats, itemsByCat, visib
     }
     return ok
   }, [decor, narrow3dBudget])
-  const mv = useModelViewer(decor.all.some((d) => d.kind === 'model') && (!isNarrow() || narrow3dBudget > 0))
+  // isLowEndDevice() closes the iPad hole: a wide-viewport TOUCH device passed
+  // the isNarrow() gate and hot-loaded model-viewer + three (~1.1 MB + a WebGL
+  // context) mid-browse for venue decor — on WKWebView that is tab-kill fuel.
+  // Desktops (fine pointer / reported memory) keep their decor models.
+  const mv = useModelViewer(decor.all.some((d) => d.kind === 'model') && !isLowEndDevice() && (!isNarrow() || narrow3dBudget > 0))
 
   // The venue's button skin — vars stamped on the wrap, index.css dresses the
   // buttons themselves.
@@ -1385,6 +1452,7 @@ export default function EditorialLayout({ tenant = null, cats, itemsByCat, visib
   // venue's menuHeader.scrim reaches the brick veil only once it is actually
   // saved (null keeps the fixed original — untouched venues byte-identical),
   // and the menuShadows.header dial rides along as --edt-hd-sh. The memo key
+
   // carries the wall AND both new inputs, or the dials lag until a reload.
   const headOn = headerBrickOn(tenant)
   const hdScrim = tenant && tenant.menuHeader && tenant.menuHeader.scrim != null ? resolveMenuHeader(tenant).scrim : null
@@ -1418,6 +1486,103 @@ export default function EditorialLayout({ tenant = null, cats, itemsByCat, visib
   // Category order when browsing everything; the filtered list when searching
   // or when a single category chip is active.
   const flat = useMemo(() => (filtered ? visibleItems : orderAll), [filtered, visibleItems, orderAll])
+
+  // ONE TABLE FOR EVERY DISH.
+  //
+  // The wooden plank is drawn against `.edt-main`, so its height IS that box's
+  // height. `.edt-main` sits in a `1fr` row, which SHOULD make it uniform — but
+  // the row only fills whatever the section has spare, and the section's floor
+  // is the venue's own «ارتفاع الصنف» dial. Measured on the live menu that dial
+  // is 53svh (447px) while the dishes need 476-719px, so the floor never binds
+  // and every section falls back to its own content height. Result: a bare item
+  // drew a 157px table and an item with three add-ons drew a 400px one.
+  //
+  // No CSS floor can fix that, because the right floor is "as tall as the
+  // tallest panel in THIS menu" — a data question, not a style one. So it is
+  // measured: clear the floor, read every panel's natural height, and publish
+  // the maximum back as a custom property. Every table then matches the richest
+  // dish, which is exactly the one the venue pointed at as correct.
+  //
+  // Runs after layout and re-runs when the dish set or the viewport changes.
+  // The clear-then-measure order matters: reading while the floor is applied
+  // would measure the floor and ratchet it upward on every pass.
+  const listLen = flat.length
+  // «حجم الطاولة في البداية غير كامل ثم يرجع»: the measured floor used to land
+  // only AFTER the first paint (two rAFs in), so every open showed the short
+  // content-height panel for a beat and then the table visibly grew. The last
+  // measurement is cached per venue + viewport bucket and re-applied BEFORE
+  // the first paint — from the second visit on, the table opens at its final
+  // size and never moves. (The very first visit on a device still measures
+  // once; there is nothing to know the tallest panel from before layout.)
+  const mainMinKey = `edtMainMin:${tenant?.id || 'x'}:${typeof window !== 'undefined' ? Math.round(window.innerWidth / 80) : 0}`
+  useLayoutEffect(() => {
+    const stage = stageRef.current
+    if (!stage || !table) return
+    try {
+      const cached = localStorage.getItem(mainMinKey)
+      if (cached && /^\d+px$/.test(cached)) stage.style.setProperty('--edt-main-min', cached)
+    } catch (_) { /* private mode — the measure below still lands */ }
+  }, [mainMinKey, table])
+  useEffect(() => {
+    const stage = stageRef.current
+    if (!stage || !table) return undefined
+    let raf = 0
+    let lastW = 0 // viewport width of the last completed measure
+    let lastPx = 0 // last applied floor, for the ±1px churn guard
+    const measure = () => {
+      lastW = stage.clientWidth
+      // query BEFORE clearing the floor: a pass that lands while the section
+      // list is empty must not strip the applied floor and bail
+      const mains = stage.querySelectorAll('.edt-main')
+      if (!mains.length) return
+      stage.style.removeProperty('--edt-main-min')
+      let max = 0
+      // offsetHeight, not getBoundingClientRect: the sections carry
+      // `content-visibility: auto`, and an off-screen one reports its intrinsic
+      // placeholder rather than its content. offsetHeight forces the layout we
+      // actually need, and the loop is over one node per dish — cheap enough
+      // ONCE, which is why the width guard below matters: forcing it on every
+      // resize frame materialized all 50+ content-visibility sections at once,
+      // the exact memory spike content-visibility exists to prevent (WKWebView
+      // tab-kill «الشاشة تنطفئ وتُحمَّل من جديد»).
+      mains.forEach((m) => { if (m.offsetHeight > max) max = m.offsetHeight })
+      if (max > 0) {
+        const next = Math.ceil(max)
+        if (Math.abs(next - lastPx) <= 1) {
+          // same floor — re-apply without touching localStorage (churn guard)
+          stage.style.setProperty('--edt-main-min', `${lastPx || next}px`)
+          return
+        }
+        lastPx = next
+        const px = `${next}px`
+        stage.style.setProperty('--edt-main-min', px)
+        // remembered for the next open — applied pre-paint by the layout
+        // effect above, so the size settle happens once per device, ever
+        try { localStorage.setItem(mainMinKey, px) } catch (_) { /* full/private */ }
+      }
+    }
+    // after paint, so the first pass reads real boxes rather than zeros.
+    // The INNER handle must be captured too — an anonymous inner rAF cannot be
+    // cancelled, so the observer's cancel-and-reschedule (and the unmount
+    // cleanup) silently doubled the full-materialization measure pass.
+    raf = requestAnimationFrame(() => { raf = requestAnimationFrame(measure) })
+    const ro = new ResizeObserver(() => {
+      // WIDTH-GUARDED. The floor written by measure() feeds min-height, which
+      // grows the stage, which re-fires this observer — a feedback loop that
+      // re-measured (and re-materialized every section) on each pass. Height
+      // deltas are exactly that echo, plus iOS URL-bar show/hide storms during
+      // scroll; only a WIDTH change (rotate, maximize, split-view) can actually
+      // change what the floor should be, so only width re-measures.
+      if (stage.clientWidth === lastW) return
+      cancelAnimationFrame(raf)
+      raf = requestAnimationFrame(measure)
+    })
+    ro.observe(stage)
+    // Late font swaps change section heights without any width change — one
+    // extra pass when the fonts settle keeps the floor honest.
+    try { document.fonts?.ready?.then(() => { cancelAnimationFrame(raf); raf = requestAnimationFrame(measure) }) } catch (_) { /* older engines */ }
+    return () => { cancelAnimationFrame(raf); ro.disconnect() }
+  }, [table, listLen, lang, mainMinKey])
 
   // Progress: which section currently owns the viewport. Sections ride the
   // PAGE scroll (no inner scroller — it trapped the scroll under the hero),
@@ -1519,7 +1684,11 @@ export default function EditorialLayout({ tenant = null, cats, itemsByCat, visib
       data-btnshape={btn && btn.shape ? btn.shape : undefined}
       data-roombg={roomOn ? '1' : undefined}
       data-edt-dark={edtDark ? '1' : undefined}
-      style={{ '--edt-top': stickyTop, ...secVars, ...(wall ? { '--edt-panel': wall.panel, '--edt-vig': wall.vignette } : {}), ...(btnVars || {}), ...(shadowVars(shadows) || {}), ...(inkStyle || {}) }}
+      /* tableStageVars is spread here too, not only on the opened stage: it
+         carries --edt-main-min, the floor that keeps the wooden plank the same
+         height on a bare dish and an option-rich one. Without it the venue's
+         «شكل ثابت للطاولة» setting silently applied to one screen out of two. */
+      style={{ '--edt-top': stickyTop, ...secVars, ...(tableStageVars(table) || {}), ...(wall ? { '--edt-panel': wall.panel, '--edt-vig': wall.vignette } : {}), ...(btnVars || {}), ...(shadowVars(shadows) || {}), ...(inkStyle || {}) }}
     >
       {roomOn ? null : <EdtWall wall={wall} />}
       <EdtDecorZones anchors={PAGE_ANCHORS} byAnchor={decor.byAnchor} mv={mv} rtl={rtl} allow3d={allow3d} />
@@ -1543,12 +1712,13 @@ export default function EditorialLayout({ tenant = null, cats, itemsByCat, visib
         <div className="edt-empty"><Empty icon="menu" title={lang === 'ar' ? 'لا توجد أصناف' : 'No items'} /></div>
       ) : (
         <>
-          <div className="edt-stage" ref={stageRef} data-sec={sections.mode}>
+          <div className="edt-stage" ref={stageRef} data-sec={sections.mode} data-table={table ? '1' : undefined}>
             {flat.map((it, i) => (
               <EdtSection
                 key={it.id} it={it} idx={i} catLabel={catName(it.categoryId)}
                 currency={currency} offers={offers} lang={lang} t={t} onOpen={onOpen}
                 allItems={allItems} onQuickAdd={onQuickAdd} showPairings={showPairings}
+                quickAddOn={quickAddOn} hidePrep={hidePrep} hideServes={hideServes}
                 table={table} dishShadow={shadows ? shadows.dish : 1} tenant={tenant}
               />
             ))}
@@ -1560,17 +1730,28 @@ export default function EditorialLayout({ tenant = null, cats, itemsByCat, visib
   )
 }
 
-function EdtSection({ it, idx, catLabel, currency, offers, lang, t, onOpen, allItems = [], onQuickAdd = null, showPairings = true, table = null, dishShadow = 1, tenant = null }) {
+function EdtSection({ it, idx, catLabel, currency, offers, lang, t, onOpen, allItems = [], onQuickAdd = null, showPairings = true, quickAddOn = false, hidePrep = false, hideServes = false, table = null, dishShadow = 1, tenant = null }) {
   // «التحكم في الطاولة بشكل مستقل لكل صنف»: a dish carrying item.table gets
   // its own resolve (every key falling back to the room's), everyone else
   // shares the room table the parent resolved once.
+  // «تخصيصان»: the list panel takes the SAME block system as the opened
+  // window, tuned independently under menuStage.list. Null for untouched
+  // venues — the nodes then render in today's exact order, attribute-free.
+  const sbList = useMemo(() => resolveStageBlocks(tenant, 'list'), [tenant])
   const ownTblKey = it.table && typeof it.table === 'object' ? JSON.stringify(it.table) : ''
   const secTable = useMemo(
     () => (ownTblKey ? resolveTable(tenant, { variant: 'list', item: it }) : table),
     [ownTblKey, table] // eslint-disable-line react-hooks/exhaustive-deps
   )
   const ref = useRef(null)
-  const { fit, bind, nodeRef, onLoad } = useImgFit()
+  // SIZED BEFORE DECODE, like the opened stage already is.
+  //
+  // Called bare, useImgFit starts with fit = '' and only resolves to wide/tall
+  // once the photo decodes. Since data-fit drives the image cap, the section
+  // height AND the panel's vertical alignment, the wooden plank visibly JUMPED
+  // as each photo landed. The stored ratio is the same hint the stage uses, so
+  // the box is reserved from first paint instead.
+  const { fit, ratio, bind, nodeRef, onLoad } = useImgFit(it.imageUrl, Number(it.imageRatio) || 0)
   const [inview, setInview] = useState(false)
   // THE MEMORY GATE. A dish's heavy media — the photo, the video backdrop, the
   // WebGL/3D props, the effect layers — is mounted only while the section is
@@ -1642,16 +1823,23 @@ function EdtSection({ it, idx, catLabel, currency, offers, lang, t, onOpen, allI
   const pickPair = (p) => {
     if (isOut(p)) return
     if (!onQuickAdd) { onOpen(p, null); return }
-    onQuickAdd(p)
+    // the ✓ only when a line actually landed — quickAdd returns false when it
+    // opened the detail instead (required choices / quick-add hidden)
+    if (onQuickAdd(p) === false) return
     setAdded(p.id)
     clearTimeout(addedTimer.current)
     addedTimer.current = setTimeout(() => setAdded(''), 1500)
   }
 
+  const listNodes = buildListNodes()
   return (
-    <section ref={ref} data-idx={idx} data-item-id={it.id} data-fit={fit || undefined} data-table={secTable ? '1' : undefined} className={`edt-sec ${inview ? 'in' : ''} ${out ? 'is-out' : ''}`}>
+    <section ref={ref} data-idx={idx} data-item-id={it.id} data-fit={fit || undefined} data-table={secTable ? '1' : undefined} data-top={secTable && secTable.topUrl ? '1' : undefined} data-topfull={isTopFull(secTable) ? '1' : undefined} style={tableTopVars(secTable) || undefined} className={`edt-sec ${inview ? 'in' : ''} ${out ? 'is-out' : ''}`}>
       <span className="edt-side" aria-hidden="true">{catLabel}</span>
       <div className="edt-photo" data-fit={fit || undefined} data-dp-contact={dpShadow(it)} data-dp-reflect={dpReflect(it)}>
+        {/* the surface band stays OUTSIDE the `near` gate: one shared image
+            across every section (one decode), and like the glow/vignette it
+            must never blink during the memory-gate swap */}
+        <EdtTop tb={secTable} />
         <span className="edt-glow" aria-hidden="true" />
         {/* the material the dish stands on + its garnish scatter: the behind
             layer paints under the photo, the front layer over it. Arrival is
@@ -1665,7 +1853,7 @@ function EdtSection({ it, idx, catLabel, currency, offers, lang, t, onOpen, allI
             <DishProps item={dpItem} active={inview} catName={catLabel} />
             <EdtBackdrop bg={comp.bg} active={inview} />
             <EdtLayers list={comp.layers.behind} />
-            <EdtDish comp={comp} src={it.imageUrl} anim={animAttr(comp)} bind={bind} onLoad={onLoad} fallback={64} lift={secTable ? secTable.lift : 0} loading="lazy" />
+            <EdtDish comp={comp} src={it.imageUrl} ratio={ratio} anim={animAttr(comp)} bind={bind} onLoad={onLoad} fallback={64} lift={secTable ? secTable.lift : 0} loading={idx < 2 ? 'eager' : 'lazy'} />
             <EdtLayers list={comp.layers.front} />
           </>
         ) : null}
@@ -1674,70 +1862,114 @@ function EdtSection({ it, idx, catLabel, currency, offers, lang, t, onOpen, allI
         {near && it.hotspots?.length ? <Suspense fallback={null}><DishHotspots hotspots={it.hotspots} /></Suspense> : null}
       </div>
       <div className="edt-main">
+        <EdtTopFull tb={secTable} />
         <EdtTable tb={secTable} />
-        <h2 className="edt-name">{name}</h2>
-        <div className="edt-price">
+        {/* The panel's text as ORDERABLE blocks (menuStage.list) — same block
+            system as the opened window, tuned independently. listNodes holds
+            today's exact markup; with no tuning the order IS today's order and
+            stageBlockProps spreads nothing. */}
+        {(sbList?.order || LIST_BLOCK_IDS).map((blkId) => (
+          <Fragment key={blkId}>{listNodes[blkId] || null}</Fragment>
+        ))}
+      </div>
+    </section>
+  )
+
+  function buildListNodes() {
+    return {
+      name: <h2 className="edt-name" {...(stageBlockProps(sbList, 'name') || {})}>{name}</h2>,
+      price: (
+        <div className="edt-price" {...(stageBlockProps(sbList, 'price') || {})}>
           <Price value={price} currency={currency} lang={lang} />
           {offer && <span className="edt-was"><Price value={it.price} currency={currency} lang={lang} /></span>}
           {offerTag && <span className="edt-tag edt-tag-offer">{offerTag}</span>}
           {out && <span className="edt-tag edt-tag-out">{t('soldOut')}</span>}
           {!out && low ? <span className="edt-tag edt-tag-low">{lang === 'ar' ? `آخر ${low}` : `Only ${low} left`}</span> : null}
         </div>
-        <div className="edt-facts">
+      ),
+      facts: (
+        <div className="edt-facts" {...(stageBlockProps(sbList, 'facts') || {})}>
           {it.calories ? <span className="edt-fact"><i>{lang === 'ar' ? 'سعرات' : 'Calories'}</i><b>{it.calories}</b></span> : null}
-          {it.prepTime ? <span className="edt-fact"><i>{lang === 'ar' ? 'التحضير' : 'Prep'}</i><b>{it.prepTime} {t('minutesShort')}</b></span> : null}
-          {it.serves ? <span className="edt-fact"><i>{lang === 'ar' ? 'يكفي' : 'Serves'}</i><b>{it.serves}</b></span> : null}
+          {!hidePrep && it.prepTime ? <span className="edt-fact"><i>{lang === 'ar' ? 'التحضير' : 'Prep'}</i><b>{it.prepTime} {t('minutesShort')}</b></span> : null}
+          {!hideServes && it.serves ? <span className="edt-fact"><i>{lang === 'ar' ? 'يكفي' : 'Serves'}</i><b>{it.serves}</b></span> : null}
           {it.rating ? <span className="edt-fact"><i>{lang === 'ar' ? 'التقييم' : 'Rating'}</i><b>{it.rating}</b></span> : null}
         </div>
-        {ings.length > 0 && (
-          <div className="edt-ing">
-            <span className="edt-ing-title">{lang === 'ar' ? 'المكونات' : 'Ingredients'}</span>
-            <ul>
-              {ings.slice(0, 6).map((g, i) => (
-                <li key={i} style={{ transitionDelay: `${(0.18 + i * 0.05).toFixed(2)}s` }}><AmberAmounts text={pickLang(g, 'name', lang)} /></li>
-              ))}
-            </ul>
-          </div>
-        )}
-        {desc && <p className="edt-desc">{desc}</p>}
-        {pairs.length > 0 && (
-          <div className="edt-lpairs">
-            <span className="edt-ing-title">{lang === 'ar' ? 'يُطلب معه' : 'Goes well with'}</span>
-            <div className="edt-lpair-row">
-              {pairs.map((p) => {
-                const pOut = isOut(p)
-                const pOffer = offerForItem(p, offers)
-                const done = added === p.id
-                const label = pickLang(p, 'name', lang)
-                const act = onQuickAdd ? t('addToCart') : (lang === 'ar' ? 'اعرض الطبق' : 'View dish')
-                return (
-                  <button
-                    key={p.id} type="button" disabled={pOut}
-                    className={`edt-lpair ${done ? 'done' : ''} ${pOut ? 'is-out' : ''}`}
-                    onClick={() => pickPair(p)} aria-label={`${act} ${label}`}
-                  >
-                    <span className="edt-lpair-media">
-                      {p.imageUrl ? <img src={p.imageUrl} alt="" loading="lazy" decoding="async" /> : <Icon name="coffee" size={16} />}
-                    </span>
-                    <span className="edt-lpair-txt">
-                      <b>{label}</b>
-                      <i>{pOut ? t('soldOut') : <Price value={pOffer ? discountedPrice(p.price, pOffer) : p.price} currency={currency} lang={lang} />}</i>
-                    </span>
-                    {!pOut && (
-                      <span className="edt-lpair-add" aria-hidden="true"><Icon name={done ? 'check' : (onQuickAdd ? 'add' : (lang === 'ar' ? 'back' : 'next'))} size={13} /></span>
-                    )}
-                  </button>
-                )
-              })}
-            </div>
-          </div>
-        )}
-        <button type="button" className="edt-open-btn" onClick={open} disabled={out}>
+      ),
+      ing: ings.length > 0 ? (
+        <div className="edt-ing" {...(stageBlockProps(sbList, 'ing') || {})}>
+          <span className="edt-ing-title">{lang === 'ar' ? 'المكونات' : 'Ingredients'}</span>
+          <ul>
+            {ings.slice(0, 6).map((g, i) => (
+              <li key={i} style={{ transitionDelay: `${(0.18 + i * 0.05).toFixed(2)}s` }}><AmberAmounts text={pickLang(g, 'name', lang)} /></li>
+            ))}
+          </ul>
+        </div>
+      ) : null,
+      desc: desc ? <p className="edt-desc" {...(stageBlockProps(sbList, 'desc') || {})}>{desc}</p> : null,
+      pairs: pairs.length > 0 ? buildListPairs() : null,
+      open: (
+        <button type="button" className="edt-open-btn" onClick={open} disabled={out} {...(stageBlockProps(sbList, 'open') || {})}>
           {lang === 'ar' ? 'اعرض الطبق' : 'View dish'} <Icon name={lang === 'ar' ? 'back' : 'next'} size={15} />
         </button>
+      ),
+      // quick add-to-cart straight from the browsing page (owner request):
+      // MenuView's quickAdd decides — instant line or the full stage when the
+      // item carries required choices. Hidden via the element matrix (quickAdd).
+      // Compact icon-only circle («+»), separated from «اعرض الطبق»; the tapped
+      // element rides along so quickAdd's fly-to-cart ghost launches from it.
+      add: quickAddOn && onQuickAdd ? (
+        <button
+          type="button" className="edt-open-btn edt-add-btn edt-add-mini"
+          onClick={(e) => { e.stopPropagation(); onQuickAdd(it, e.currentTarget) }} disabled={out}
+          aria-label={t('addToCart')} title={t('addToCart')}
+          {...(stageBlockProps(sbList, 'add') || {})}
+        >
+          <Icon name="add" size={18} />
+        </button>
+      ) : null,
+    }
+  }
+
+  function buildListPairs() {
+    return (
+      <div className="edt-lpairs" {...(stageBlockProps(sbList, 'pairs') || {})}>
+        <span className="edt-ing-title">{lang === 'ar' ? 'يُطلب معه' : 'Goes well with'}</span>
+        <div className="edt-lpair-row">
+          {pairs.map((p) => {
+            const pOut = isOut(p)
+            const pOffer = offerForItem(p, offers)
+            const done = added === p.id
+            const label = pickLang(p, 'name', lang)
+            return (
+              <button
+                key={p.id} type="button" disabled={pOut}
+                className={`edt-lpair ${done ? 'done' : ''} ${pOut ? 'is-out' : ''}`}
+                onClick={() => onOpen(p, null)} aria-label={`${lang === 'ar' ? 'اعرض الطبق' : 'View dish'} ${label}`}
+              >
+                <span className="edt-lpair-media">
+                  {p.imageUrl ? <img src={p.imageUrl} alt="" loading="lazy" decoding="async" /> : <Icon name="coffee" size={16} />}
+                </span>
+                <span className="edt-lpair-txt">
+                  <b>{label}</b>
+                  <i>{pOut ? t('soldOut') : <Price value={pOffer ? discountedPrice(p.price, pOffer) : p.price} currency={currency} lang={lang} />}</i>
+                </span>
+                {/* the chip OPENS the dish; the brick + is the direct add */}
+                {!pOut && onQuickAdd && (
+                  <span className="edt-lpair-add" role="button" aria-label={`${t('addToCart')} ${label}`}
+                    onClick={(e) => { e.stopPropagation(); pickPair(p) }}>
+                    <Icon name={done ? 'check' : 'add'} size={13} />
+                  </span>
+                )}
+                {!pOut && !onQuickAdd && (
+                  <span className="edt-lpair-add" aria-hidden="true"><Icon name={lang === 'ar' ? 'back' : 'next'} size={13} /></span>
+                )}
+              </button>
+            )
+          })}
+        </div>
       </div>
-    </section>
-  )
+    )
+  }
 }
 
 // Full-screen item stage — detail mode 'editorial'. The tapped photo expands
@@ -1748,7 +1980,7 @@ function EdtSection({ it, idx, catLabel, currency, offers, lang, t, onOpen, allI
 // allItems + onQuickAdd are OPTIONAL: with them the venue's curated «يُطلب معه»
 // pairings become tappable; without them the stage still renders everything
 // else, so an un-patched caller degrades instead of crashing.
-export function EditorialItemStage({ item, tenant = null, currency, onClose, onAdd, originRect: originRectProp = null, allItems = [], offers = null, onQuickAdd = null }) {
+export function EditorialItemStage({ item, tenant = null, currency, onClose, onAdd, originRect: originRectProp = null, allItems = [], offers = null, onQuickAdd = null, onOpenItem = null, initialLine = null, hidePrep = false, hideServes = false }) {
   // NO FLIP ON A PHONE. The open animation places the dish photo at the CARD's
   // on-screen rect and then flies it into place over 300ms, while the panel and
   // the painted table below do not move with it. On a desktop that reads as the
@@ -1759,8 +1991,9 @@ export function EditorialItemStage({ item, tenant = null, currency, onClose, onA
   // the two look out of sync, and a viewport-sized transform over a wall with
   // shadows drops frames until a scroll forces WebKit to recomposite (the same
   // stale-composite behaviour the room backdrop is already kicked for).
-  // The stage still animates in — it just does not fly.
-  const originRect = isNarrow() ? null : originRectProp
+  // The stage still animates in — it just does not fly. (The effective
+  // originRect is computed below, after the table resolve: a COMPLETE table
+  // disables the fly too.)
   const { t, lang, theme } = useI18n()
   const ar = lang === 'ar'
   const portalRoot = usePortalRoot()
@@ -1772,6 +2005,12 @@ export function EditorialItemStage({ item, tenant = null, currency, onClose, onA
   const [err, setErr] = useState('')
   const [added, setAdded] = useState('')
   const [storyOpen, setStoryOpen] = useState(false)
+  // Photo lightbox over the stage («تكبير الصورة») — the shared GalleryZoom.
+  // The ref mirrors the state for the stage's own Escape handler (deps locked
+  // at []): with the lightbox open, Escape must close IT only, never both.
+  const [stgZoom, setStgZoom] = useState(false)
+  const stgZoomRef = useRef(false)
+  stgZoomRef.current = stgZoom
   const reduced = prefersReduced()
   const variants = item.variants || []
   const groups = item.modifierGroups || []
@@ -1864,6 +2103,11 @@ export function EditorialItemStage({ item, tenant = null, currency, onClose, onA
     () => resolveTable(tenant, { variant: 'stage', item }),
     [JSON.stringify(tenant && tenant.menuTable) || '', JSON.stringify(item && item.table) || ''] // eslint-disable-line react-hooks/exhaustive-deps
   )
+  // No FLIP over a complete table either: on desktop the photo used to fly in
+  // from the card rect across a table already parked at its final position —
+  // the one visible tear the motion audit found. The no-origin path below is
+  // the phones' own, already-proven entrance.
+  const originRect = (isNarrow() || isTopFull(table)) ? null : originRectProp
   // The venue's ordering + placement of the panel's text blocks (menuStage).
   // Null for untouched venues -> stageBlockProps returns null for every id and
   // the order IS the source sequence: today's exact DOM, attribute-free.
@@ -1891,9 +2135,26 @@ export function EditorialItemStage({ item, tenant = null, currency, onClose, onA
   // exactly one live context, and tears it down on close). We only track its
   // coarse phase so the "drag to rotate" hint hides when there is no live model.
   const [arPhase, setArPhase] = useState('')
+
+  // Same reason as the sheet in MenuView: this stage survives a dish change, and
+  // feeding a new src to a live viewer made the model's scale oscillate.
+  // The lightbox closes too: dish B must never open zoomed on dish A's photos.
+  useEffect(() => { setArOpen(false); setArPhase(''); setStgZoom(false) }, [item?.id])
+  // Opened from a CART ROW → seed the line's qty/variant/mods so the stage
+  // shows what was actually ordered (MenuView then REPLACES the line on add);
+  // also re-seed when navigating between dishes inside the stage.
+  useEffect(() => {
+    const line = initialLine && initialLine.itemId === item?.id ? initialLine : null
+    setVariant((line?.variantKey && variants.find((v) => v.key === line.variantKey)) || variants[0] || null)
+    setQty(line?.qty || 1)
+    setSelected(groups.map((g) => line ? (g.options || []).filter((o) => (line.modifiers || []).some((m) => m.nameAr === o.nameAr)) : []))
+  }, [item?.id]) // eslint-disable-line react-hooks/exhaustive-deps
   const glbSrc = item.model3dUrl && !/\.usdz(\?|$)/i.test(item.model3dUrl) ? item.model3dUrl : (item.arStandeeUrl || '')
   const usdzSrc = item.model3dUsdzUrl || (/\.usdz(\?|$)/i.test(item.model3dUrl || '') ? item.model3dUrl : '')
-  const arOk = (tenant ? tenant.ar?.enabled !== false : true) && !!(glbSrc || usdzSrc)
+  // MENU_3D_ENABLED first: with 3D off for guests this is false before any
+  // source is even inspected, so neither the button nor the viewer can mount and
+  // the model-viewer chunk is never requested.
+  const arOk = MENU_3D_ENABLED && (tenant ? tenant.ar?.enabled !== false : true) && !!(glbSrc || usdzSrc)
   // The FLIP is the stage's own entrance. When there is no origin rect (opened
   // from a pairing chip) there is no FLIP, so the dish plays the entrance the
   // venue chose for it instead of simply appearing.
@@ -1973,9 +2234,13 @@ export function EditorialItemStage({ item, tenant = null, currency, onClose, onA
     const el = heroRef.current
     if (el && originRect && !reduced) {
       const r = el.getBoundingClientRect()
-      el.style.transition = `transform 280ms ${EASE_OUT_QUART}`
-      el.style.transformOrigin = '0 0'
-      el.style.transform = `translate(${originRect.left - r.left}px, ${originRect.top - r.top}px) scale(${originRect.width / r.width}, ${originRect.height / r.height})`
+      // same zero-rect guard as the open path: a display:none/unlaid hero
+      // yields width 0, and dividing by it writes Infinity into the transform
+      if (r.width && r.height) {
+        el.style.transition = `transform 280ms ${EASE_OUT_QUART}`
+        el.style.transformOrigin = '0 0'
+        el.style.transform = `translate(${originRect.left - r.left}px, ${originRect.top - r.top}px) scale(${originRect.width / r.width}, ${originRect.height / r.height})`
+      }
     }
     setTimeout(onClose, reduced ? 180 : 280)
   }
@@ -1986,7 +2251,9 @@ export function EditorialItemStage({ item, tenant = null, currency, onClose, onA
   useScrollLock(true)
   usePinnedX(scrollRef, true)
   useEffect(() => {
-    const onKey = (e) => { if (e.key === 'Escape') close() }
+    // with the photo lightbox up, Escape belongs to GalleryZoom (its own
+    // listener) — skipping here keeps one press from closing both layers
+    const onKey = (e) => { if (e.key === 'Escape' && !stgZoomRef.current) close() }
     window.addEventListener('keydown', onKey)
     return () => window.removeEventListener('keydown', onKey)
   }, []) // eslint-disable-line react-hooks/exhaustive-deps
@@ -2042,7 +2309,7 @@ export function EditorialItemStage({ item, tenant = null, currency, onClose, onA
   }
   const quickAdd = (p) => {
     if (!onQuickAdd) return
-    onQuickAdd(p)
+    if (onQuickAdd(p) === false) return // opened the detail instead — no false ✓
     setAdded(p.id)
     clearTimeout(addedTimer.current)
     addedTimer.current = setTimeout(() => setAdded(''), 1500)
@@ -2074,8 +2341,8 @@ export function EditorialItemStage({ item, tenant = null, currency, onClose, onA
     facts: (
       <div key="facts" className="edt-facts" {...blk('facts')}>
         {item.calories ? <span className="edt-fact"><i>{ar ? 'سعرات' : 'Calories'}</i><b>{item.calories}</b></span> : null}
-        {item.prepTime ? <span className="edt-fact"><i>{ar ? 'التحضير' : 'Prep'}</i><b>{item.prepTime} {t('minutesShort')}</b></span> : null}
-        {item.serves ? <span className="edt-fact"><i>{ar ? 'يكفي' : 'Serves'}</i><b>{item.serves}</b></span> : null}
+        {!hidePrep && item.prepTime ? <span className="edt-fact"><i>{ar ? 'التحضير' : 'Prep'}</i><b>{item.prepTime} {t('minutesShort')}</b></span> : null}
+        {!hideServes && item.serves ? <span className="edt-fact"><i>{ar ? 'يكفي' : 'Serves'}</i><b>{item.serves}</b></span> : null}
         {item.rating ? <span className="edt-fact"><i>{ar ? 'التقييم' : 'Rating'}</i><b>{item.rating}{item.reviewsCount ? ` (${item.reviewsCount})` : ''}</b></span> : null}
       </div>
     ),
@@ -2153,12 +2420,17 @@ export function EditorialItemStage({ item, tenant = null, currency, onClose, onA
           {pairs.map((p) => {
             const pOut = isOut(p)
             const pOffer = offerForItem(p, offers)
-            const tappable = !!onQuickAdd && !pOut
+            const canAdd = !!onQuickAdd && !pOut
+            // the CHIP opens the paired dish (owner request: «عند الضغط عليه
+            // يضاف على طول» — tapping should let the guest SEE it first); the
+            // small brick + is the direct add, isolated by stopPropagation
+            const canOpen = !!onOpenItem && !pOut
+            const tappable = canOpen || canAdd
             const Tag = tappable ? 'button' : 'div'
             const done = added === p.id
             return (
               <Tag key={p.id} className={`edt-pair ${done ? 'done' : ''} ${pOut ? 'is-out' : ''}`}
-                {...(tappable ? { type: 'button', onClick: () => quickAdd(p), 'aria-label': `${t('addToCart')} ${pickLang(p, 'name', lang)}` } : {})}>
+                {...(tappable ? { type: 'button', onClick: () => (canOpen ? onOpenItem(p) : quickAdd(p)), 'aria-label': `${canOpen ? (ar ? 'اعرض' : 'View') : t('addToCart')} ${pickLang(p, 'name', lang)}` } : {})}>
                 <span className="edt-pair-media">
                   {p.imageUrl ? <img src={p.imageUrl} alt="" loading="lazy" decoding="async" /> : <Icon name="coffee" size={18} />}
                 </span>
@@ -2166,8 +2438,11 @@ export function EditorialItemStage({ item, tenant = null, currency, onClose, onA
                   <b>{pickLang(p, 'name', lang)}</b>
                   <i>{pOut ? t('soldOut') : <Price value={pOffer ? discountedPrice(p.price, pOffer) : p.price} currency={currency} lang={lang} />}</i>
                 </span>
-                {tappable && (
-                  <span className="edt-pair-add" aria-hidden="true"><Icon name={done ? 'check' : 'add'} size={14} /></span>
+                {canAdd && (
+                  <span className="edt-pair-add" role="button" aria-label={`${t('addToCart')} ${pickLang(p, 'name', lang)}`}
+                    onClick={(e) => { e.stopPropagation(); quickAdd(p) }}>
+                    <Icon name={done ? 'check' : 'add'} size={14} />
+                  </span>
                 )}
               </Tag>
             )
@@ -2185,9 +2460,11 @@ export function EditorialItemStage({ item, tenant = null, currency, onClose, onA
       data-btnscope={btn && btn.scope === 'all' ? 'all' : undefined}
       data-btnshape={btn && btn.shape ? btn.shape : undefined}
       data-table={table ? '1' : undefined}
+      data-top={table && table.topUrl ? '1' : undefined}
+      data-topfull={isTopFull(table) ? '1' : undefined}
       data-tbl-extend={table && table.extend ? '1' : undefined}
       data-edt-dark={edtDark ? '1' : undefined}
-      style={{ ...secVars, ...(tableStageVars(table) || {}), ...(wall ? { '--edt-panel': wall.panel, '--edt-vig': wall.vignette } : {}), ...(btnVars || {}), ...(shadowVars(shadows) || {}), ...(inkStyle || {}) }}
+      style={{ ...secVars, ...(tableStageVars(table) || {}), ...(tableTopVars(table) || {}), ...(wall ? { '--edt-panel': wall.panel, '--edt-vig': wall.vignette } : {}), ...(btnVars || {}), ...(shadowVars(shadows) || {}), ...(inkStyle || {}) }}
       role="dialog" aria-modal="true" aria-label={name}
     >
       <EdtWall wall={wall} />
@@ -2200,6 +2477,7 @@ export function EditorialItemStage({ item, tenant = null, currency, onClose, onA
       <div className="edt-stg-scroll" ref={scrollRef}>
         <div className="edt-stg-media">
           <div className="edt-stg-hero" ref={heroRef} data-fit={fit || undefined} data-dp-contact={dpShadow(item)} data-dp-reflect={dpReflect(item)}>
+            <EdtTop tb={table} />
             <span className="edt-glow" aria-hidden="true" />
             {/* quieter here: the stage variant caps the scatter and shortens
                 the surface, so the full dish record stays the subject */}
@@ -2208,6 +2486,12 @@ export function EditorialItemStage({ item, tenant = null, currency, onClose, onA
             <EdtLayers list={comp.layers.behind} />
             <EdtDish comp={comp} src={heroSrc} anim={stageAnim} bind={bind} onLoad={onHeroLoad} fallback={72} lift={table ? table.lift : 0} ratio={ratio} />
             <EdtLayers list={comp.layers.front} />
+            {/* transparent tap-to-zoom cover over the dish photo (z 2) — BEFORE
+                the hotspots so their dots (z 3) stay tappable above it; the
+                thumbs strip is a hero SIBLING, so it is never covered */}
+            {gallery.length > 0 && (
+              <button type="button" className="edt-stg-zoom" onClick={() => setStgZoom(true)} aria-label={ar ? 'تكبير الصورة' : 'Zoom photo'} />
+            )}
             {item.hotspots?.length ? <Suspense fallback={null}><DishHotspots hotspots={item.hotspots} /></Suspense> : null}
           </div>
           {/* IN FLOW, under the photo — not floated over it. The absolute
@@ -2230,6 +2514,7 @@ export function EditorialItemStage({ item, tenant = null, currency, onClose, onA
           )}
         </div>
         <div className="edt-stg-body" data-table={table ? '1' : undefined}>
+          <EdtTopFull tb={table} />
           <EdtTable tb={table} />
           {blkOrder.map((id) => stageNodes[id])}
           {err && <p className="edt-stg-err" role="alert">{err}</p>}
@@ -2263,6 +2548,11 @@ export function EditorialItemStage({ item, tenant = null, currency, onClose, onA
             </p>
           )}
         </div>
+      )}
+      {/* photo lightbox — its own portal appends after the stage's, so it
+          paints above (.img-zoom is z 9999 over the stage's 310 anyway) */}
+      {stgZoom && gallery.length > 0 && (
+        <GalleryZoom gallery={gallery} startIdx={imgIdx} onClose={() => setStgZoom(false)} />
       )}
     </div>,
     portalRoot,

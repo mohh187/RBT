@@ -34,7 +34,7 @@ function variantRange(it) {
   return { min: Math.min(...list), max: Math.max(...list), count: list.length }
 }
 
-export default function CompareItems({ open, onClose, items = [], preselected = [], lang = 'ar', currency = 'SAR', onOpenItem }) {
+export default function CompareItems({ open, onClose, items = [], preselected = [], lang = 'ar', currency = 'SAR', onOpenItem, hidden = [] }) {
   const ar = lang === 'ar'
   const root = usePortalRoot()
   const [picked, setPicked] = useState([])
@@ -88,6 +88,8 @@ export default function CompareItems({ open, onClose, items = [], preselected = 
   }
 
   // Row model: `value` drives winner/equality logic, `cell` draws it.
+  // Rows the venue hid from the menu (element matrix: prepTime/serves) are
+  // dropped here too — the compare sheet must not leak what the menu hides.
   const rows = useMemo(() => [
     {
       key: 'price',
@@ -169,7 +171,7 @@ export default function CompareItems({ open, onClose, items = [], preselected = 
       value: (it) => (it.allergens ? String(it.allergens) : null),
       cell: (it) => (it.allergens ? <span className="cmp-allerg"><Icon name="warning" size={13} /> {it.allergens}</span> : null),
     },
-  ], [ar, lang, currency])
+  ].filter((r) => !(Array.isArray(hidden) && hidden.includes(r.key))), [ar, lang, currency, hidden])
 
   if (!open || !root) return null
 

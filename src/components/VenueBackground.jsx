@@ -1,12 +1,17 @@
 import { createPortal } from 'react-dom'
 import { normalizeVideoTrim } from '../lib/dishComposition.js'
 import { useVideoTrim } from '../lib/useVideoTrim.js'
+import { isLowEndDevice, prefersReduced } from '../lib/deviceCaps.js'
 
 // Per-venue ambient background: a video (Linktree-style), an image, and/or a
 // tiled watermark/logo — all behind the content with a venue-controlled opacity.
 // Renders nothing unless the venue configured at least one.
 export default function VenueBackground({ tenant, inline = false }) {
-  const bgVideoUrl = tenant?.bgVideoUrl || ''
+  // A looping full-screen video decoder on a memory-tight phone (or under
+  // reduced motion) is exactly the WKWebView tab-kill class deviceCaps guards
+  // against — those clients get the still image / gradient instead.
+  const videoOk = !isLowEndDevice() && !prefersReduced()
+  const bgVideoUrl = videoOk ? (tenant?.bgVideoUrl || '') : ''
   const bgImageUrl = tenant?.bgImageUrl || ''
   const watermarkUrl = tenant?.watermarkUrl || ''
   const bgGradient = tenant?.bgGradient || ''
@@ -31,5 +36,7 @@ export default function VenueBackground({ tenant, inline = false }) {
       {watermarkUrl && <div className="venue-watermark" style={{ opacity: Math.min(0.6, opacity + 0.1), backgroundImage: `url(${watermarkUrl})` }} />}
     </div>
   )
-  return inline ? layer : createPortal(layer, document.body)
+  // document.body guard matches every other portal call site (usePortalRoot):
+  // render nothing rather than throw if the body is somehow not there yet.
+  return inline ? layer : (document.body ? createPortal(layer, document.body) : null)
 }

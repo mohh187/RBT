@@ -31,12 +31,59 @@ async function multicastChunked(docs, message) {
 }
 
 // Push a notification to a tenant's staff devices; prunes dead tokens.
-async function pushToStaff(db, tid, notification, data) {
+//
+// RECIPIENT FILTERING (opts.cap / opts.managersOnly): admin notifications must
+// not land on a waiter's tablet. Owner/manager devices always qualify; other
+// staff qualify by the rules-enforced caps mirror on staff/{uid}.caps (falling
+// back to tenant.roleCaps / the role defaults for unseeded rows). Legacy token
+// docs with no uid receive only UNFILTERED pushes — initPush re-saves the uid
+// on every login, so that gap closes by itself.
+const PUSH_ROLE_CAPS = require('./staffSecurity')._ROLE_CAPS || null
+async function pushToStaff(db, tid, notification, data, opts = {}) {
   const snap = await db.collection(`tenants/${tid}/pushTokens`).get()
   if (!snap.docs.length) return
-  await multicastChunked(snap.docs, {
+  let docs = snap.docs
+  if (opts.cap || opts.managersOnly) {
+    try {
+      const staffSnap = await db.collection(`tenants/${tid}/staff`).get()
+      let roleCaps = null
+      if (opts.cap && !opts.managersOnly) {
+        try { const t = await db.doc(`tenants/${tid}`).get(); roleCaps = t.exists ? (t.data() || {}).roleCaps : null } catch (_) { /* defaults */ }
+      }
+      const allowed = new Set()
+      staffSnap.docs.forEach((d) => {
+        const s = d.data() || {}
+        if (s.active === false) return
+        const managerish = s.role === 'owner' || s.role === 'manager'
+        if (managerish) { allowed.add(d.id); return }
+        if (opts.managersOnly) return
+        const caps = Array.isArray(s.caps) ? s.caps
+          : (roleCaps && Array.isArray(roleCaps[s.role])) ? roleCaps[s.role]
+            : (PUSH_ROLE_CAPS && PUSH_ROLE_CAPS[s.role]) || []
+        if (caps.includes(opts.cap)) allowed.add(d.id)
+      })
+      docs = snap.docs.filter((d) => {
+        const uid = (d.data() || {}).uid
+        return uid && allowed.has(uid)
+      })
+    } catch (_) {
+      // Filter failure tradeoff: a managersOnly push may carry sensitive figures
+      // (revenue summary, billing), so on a transient staff-read error it fails
+      // CLOSED (better a missed manager ping than leaking money to the floor).
+      // Fail-open is granted to take_orders ONLY — that cap is held by
+      // essentially every floor/kitchen role, and dropping the single most
+      // time-critical alert (a new order) on a Firestore hiccup is worse than
+      // briefly over-notifying. Every OTHER cap fails closed: a manage_events
+      // push carries the guest's name and booking (PII), manage_inventory
+      // carries stock detail — those must never land on a cleaner's lock
+      // screen because a staff read blinked.
+      docs = (!opts.managersOnly && opts.cap === 'take_orders') ? snap.docs : []
+    }
+  }
+  if (!docs.length) return
+  await multicastChunked(docs, {
     notification, data: data || {},
-    webpush: { fcmOptions: { link: (data && data.url) || '/admin' }, notification: { icon: '/brand/favicon.png' } },
+    webpush: { fcmOptions: { link: (data && data.url) || '/admin' }, notification: { icon: (data && data.icon) || '/brand/favicon.png' } },
   })
 }
 
@@ -299,42 +346,28 @@ exports.onNewOrder = onDocumentCreated('tenants/{tid}/orders/{oid}', async (even
   // Nothing to announce for a held order: there is no ticket until it is paid.
   if (held) return
 
-  const tokensSnap = await db.collection(`tenants/${tid}/pushTokens`).get()
-  const docs = tokensSnap.docs
-  const tokens = docs.map((d) => d.data().token).filter(Boolean)
-  if (!tokens.length) return
+  // The floor learns instantly: a live dine-in ticket marks its table occupied.
+  // Guests cannot write tables (rules) — the server is their hand. Cashier
+  // orders already stamped this client-side; skip the duplicate write.
+  if (order.tableId && order.source !== 'cashier') {
+    await db.doc(`tenants/${tid}/tables/${order.tableId}`).set({
+      occupancy: { state: 'occupied', since: Date.now(), byName: '', byUid: '', orderId: event.params.oid },
+      updatedAt: FieldValue.serverTimestamp(),
+    }, { merge: true }).catch(() => {})
+  }
 
   const code = order.code ? `#${order.code}` : ''
   const table = order.tableLabel || (order.orderType === 'takeaway' ? 'سفري' : 'طلب')
 
-  // THE LINK CARRIES THE ORDER. This sent a bare '/cashier' while the order id
-  // sat in scope on the line above — so a staffer who tapped the push landed on
-  // the board and had to find the order that had just rung, which on a busy
-  // floor is the whole cost of the alert. The cashier already understands
-  // ?order=<id> (it opens that order's detail sheet); the push simply never
-  // used it.
+  // THE LINK CARRIES THE ORDER (?order=<id> opens the detail sheet directly).
+  // Routed through pushToStaff with cap take_orders: the kitchen and the floor
+  // get it; the marketing hire's phone does not.
   const deep = `/cashier?order=${event.params.oid}`
-  const res = await getMessaging().sendEachForMulticast({
-    tokens,
-    notification: { title: 'طلب جديد', body: `${table} ${code} · ${order.total || 0}` },
-    data: { url: deep, tag: 'order' },
-    webpush: {
-      fcmOptions: { link: deep },
-      notification: { icon: '/brand/favicon.png', requireInteraction: true },
-    },
-  })
-
-  // Remove tokens that are no longer valid.
-  const dels = []
-  res.responses.forEach((r, i) => {
-    if (!r.success) {
-      const code = (r.error && r.error.code) || ''
-      if (code.includes('not-registered') || code.includes('invalid-argument') || code.includes('invalid-registration')) {
-        dels.push(docs[i].ref.delete())
-      }
-    }
-  })
-  await Promise.all(dels)
+  await pushToStaff(db, tid,
+    { title: 'طلب جديد', body: `${table} ${code} · ${order.total || 0}` },
+    { url: deep, tag: 'order' },
+    { cap: 'take_orders' },
+  ).catch(() => {})
 })
 
 // Notify staff when a diner requests a table booking (advance reservation).
@@ -343,7 +376,7 @@ exports.onNewReservation = onDocumentCreated('tenants/{tid}/reservations/{rid}',
   if (!r || r.kind !== 'table' || r.status !== 'requested') return
   const db = getFirestore()
   const when = [r.date, r.time].filter(Boolean).join(' ')
-  await pushToStaff(db, event.params.tid, { title: 'حجز طاولة جديد', body: `${r.name || 'ضيف'} · ${r.partySize || 1} · ${r.tableLabel || 'أي طاولة'}${when ? ' · ' + when : ''}` }, { url: '/admin/operations', tag: 'booking' }).catch(() => {})
+  await pushToStaff(db, event.params.tid, { title: 'حجز طاولة جديد', body: `${r.name || 'ضيف'} · ${r.partySize || 1} · ${r.tableLabel || 'أي طاولة'}${when ? ' · ' + when : ''}` }, { url: '/admin/operations', tag: 'booking' }, { cap: 'manage_events' }).catch(() => {})
 })
 
 // ---------- scheduled automation (Cron) — needs Blaze + Cloud Scheduler ----------
@@ -360,7 +393,8 @@ exports.dailySummary = onSchedule({ schedule: '0 22 * * *', timeZone: 'Asia/Riya
     const orders = snap.docs.map((d) => d.data())
     const settled = orders.filter((o) => ['paid', 'served', 'refunded'].includes(o.status))
     const revenue = Math.round(settled.reduce((s, o) => s + (o.total || 0) - (o.status === 'refunded' ? ((o.refund && o.refund.amount) || 0) : 0), 0))
-    await pushToStaff(db, tid, { title: 'ملخّص اليوم', body: `${orders.length} طلب · المبيعات ${revenue} ${t.data().currency || ''}` }, { url: '/admin', tag: 'summary' }).catch(() => {})
+    // revenue figures — managers only, never a waiter's phone
+    await pushToStaff(db, tid, { title: 'ملخّص اليوم', body: `${orders.length} طلب · المبيعات ${revenue} ${t.data().currency || ''}` }, { url: '/admin', tag: 'summary' }, { managersOnly: true }).catch(() => {})
   }
 })
 
@@ -397,7 +431,7 @@ exports.lowStockCheck = onSchedule({ schedule: '0 8 * * *', timeZone: 'Asia/Riya
     const low = snap.docs.map((d) => d.data()).filter((m) => (m.stockQty || 0) <= (Number(m.reorderLevel) || 0))
     if (!low.length) continue
     const names = low.slice(0, 5).map((m) => m.nameAr).join('، ')
-    await pushToStaff(db, tid, { title: 'تنبيه: نقص مخزون', body: `${low.length} مادة منخفضة: ${names}` }, { url: '/admin/inventory', tag: 'lowstock' }).catch(() => {})
+    await pushToStaff(db, tid, { title: 'تنبيه: نقص مخزون', body: `${low.length} مادة منخفضة: ${names}` }, { url: '/admin/inventory', tag: 'lowstock' }, { cap: 'manage_inventory' }).catch(() => {})
   }
 })
 
@@ -717,6 +751,27 @@ exports.onOrderStatusActivity = onDocumentUpdated('tenants/{tid}/orders/{oid}', 
     amount: ['paid', 'served'].includes(after.status) ? (Number(after.total) || 0) : 0,
     ref: event.params.oid, orderStatus: after.status,
   }).catch(() => {})
+
+  // TABLE OCCUPANCY FOLLOWS THE ORDER (stored field on tables/{id}, composite
+  // index tableId+status). all served → 'billed'; last order settles/cancels →
+  // 'free' (owner decision: payment releases the table; the waiter also has a
+  // manual toggle client-side). Best-effort — the client derives live state
+  // from the orders themselves, so a missed write here never shows a lie.
+  if (after.tableId) {
+    try {
+      const activeSnap = await db.collection(`tenants/${event.params.tid}/orders`)
+        .where('tableId', '==', after.tableId)
+        .where('status', 'in', ['pending', 'accepted', 'preparing', 'ready', 'served'])
+        .get()
+      const active = activeSnap.docs.map((d) => d.data())
+      const tableRef = db.doc(`tenants/${event.params.tid}/tables/${after.tableId}`)
+      if (active.length === 0) {
+        await tableRef.set({ occupancy: { state: 'free', since: Date.now(), byName: '', byUid: '', orderId: '' } }, { merge: true })
+      } else if (active.every((o) => o.status === 'served')) {
+        await tableRef.set({ occupancy: { state: 'billed', since: Date.now(), byName: '', byUid: '', orderId: event.params.oid } }, { merge: true })
+      }
+    } catch (_) { /* occupancy mirror is best-effort */ }
+  }
 })
 
 // Guest complaint → platform feed + push (venues with unhappy guests need attention).
@@ -835,6 +890,7 @@ exports.onPlatformChatMessage = onDocumentCreated('platformChats/{tid}/messages/
     await pushToStaff(db, tid,
       { title: 'رسالة من إدارة المنصة', body: (m.text || '').slice(0, 120) },
       { url: '/admin/support', tag: 'chat' },
+      { managersOnly: true }, // /admin/support is a management surface
     ).catch(() => {})
   }
 })
@@ -1030,6 +1086,7 @@ exports.subscriptionSweep = onSchedule({ schedule: '0 3 * * *', timeZone: 'Asia/
     await pushToStaff(db, t.id,
       { title: 'انتهى اشتراك المنشأة', body: 'انتهت صلاحية الباقة — يرجى التجديد للاستمرار بكامل المزايا.' },
       { url: '/admin/support', tag: 'subscription' },
+      { managersOnly: true }, // billing is the owner's problem, not the floor's
     ).catch(() => {})
     await pushToPlatform(db,
       { title: 'اشتراك منتهي', body: `${d.name || t.id} — انتهت صلاحية الباقة` },

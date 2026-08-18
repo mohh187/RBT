@@ -17,6 +17,7 @@ import {
   serverTimestamp,
   runTransaction,
   increment,
+  arrayUnion,
   deleteField,
   Timestamp,
 } from 'firebase/firestore'
@@ -449,6 +450,13 @@ export async function createTable(tid, { label, seats, shape = 'round', zone = '
 export async function saveTable(tid, id, data) {
   return updateDoc(subDoc(tid, 'tables', id), data)
 }
+// STORED occupancy — the floor's memory. Live unpaid orders always outrank it
+// (Tables.jsx derives from them first); this field is what keeps a table
+// «مشغولة» across the midnight query re-anchor and what a waiter toggles by
+// hand. { state: 'occupied'|'billed'|'free', since, byName, byUid, orderId }
+export async function setTableOccupancy(tid, tableId, occupancy) {
+  return updateDoc(subDoc(tid, 'tables', tableId), { occupancy, updatedAt: serverTimestamp() })
+}
 export async function deleteTable(tid, id) {
   return deleteDoc(subDoc(tid, 'tables', id))
 }
@@ -549,14 +557,25 @@ export function stripUndefined(v) {
 export async function createOrder(tid, payload, opts = {}) {
   const code = String(Date.now()).slice(-4)
   const status = opts.hold ? 'awaiting_payment' : 'pending'
-  const ref = await addDoc(sub(tid, 'orders'), {
+  const data = {
     ...stripUndefined(payload),
     code,
     status,
     statusHistory: [{ status, at: Date.now() }],
     createdAt: serverTimestamp(),
     updatedAt: serverTimestamp(),
-  })
+  }
+  // opts.fast (counter path): mint the id LOCALLY and let the write settle in
+  // the background — the local snapshot shows the ticket instantly and the
+  // cashier's screen is never held hostage to a network round-trip. The caller
+  // gets { done } to attach failure recovery to. The guest flow keeps the
+  // awaited addDoc: a diner must not see "sent" for an order that never left.
+  if (opts.fast) {
+    const ref = doc(sub(tid, 'orders'))
+    const done = setDoc(ref, data)
+    return { id: ref.id, code, done }
+  }
+  const ref = await addDoc(sub(tid, 'orders'), data)
   return { id: ref.id, code }
 }
 
@@ -570,14 +589,31 @@ export function watchActiveOrders(tid, cb) {
   // blank an already-populated board with a false "no tickets" all-clear (a
   // kitchen would miss live orders), and a dead listener must resubscribe. Only
   // surface empty if nothing has loaded yet (avoids an infinite spinner).
+  //
+  // EXPONENTIAL backoff (3s → 6s → 12s → 30s cap; reset by any successful
+  // snapshot). The old flat 3s retry hammered a permanently-failed async queue
+  // (the INTERNAL ASSERTION brick) every 3 seconds forever — a KDS must keep
+  // trying, but a dead queue only recovers via the main.jsx heal, so pounding
+  // it is pure churn.
   let got = false
   let unsub = null
   let stopped = false
+  let delay = 3000
   const start = () => {
     unsub = onSnapshot(
       q,
-      (s) => { got = true; cb(s.docs.map((d) => ({ id: d.id, ...d.data() }))) },
-      () => { if (!got) cb([]); if (!stopped) setTimeout(() => { if (!stopped) start() }, 3000) },
+      (s) => { got = true; delay = 3000; cb(s.docs.map((d) => ({ id: d.id, ...d.data() }))) },
+      () => {
+        // fromError marks this "empty" as a placeholder (liveBoard keeps its
+        // cached board instead of blanking a populated one on a fresh
+        // listener's first failure)
+        if (!got) cb(Object.assign([], { fromError: true }))
+        if (!stopped) {
+          const wait = delay
+          delay = Math.min(delay * 2, 30000)
+          setTimeout(() => { if (!stopped) start() }, wait)
+        }
+      },
     )
   }
   start()
@@ -667,20 +703,26 @@ export async function settleCod(tid, orderId) {
 
 export async function updateOrderStatus(tid, id, status, extra = {}) {
   const ref = subDoc(tid, 'orders', id)
-  const { _actor, ...rest } = extra // _actor → audit only, not persisted as a field
-  const result = await runTransaction(db, async (tx) => {
-    const snap = await tx.get(ref)
-    if (!snap.exists()) return null
-    const orderData = snap.data()
-    const hist = orderData.statusHistory || []
-    tx.update(ref, {
-      status,
-      statusHistory: [...hist, { status, at: Date.now(), by: _actor || '' }],
-      updatedAt: serverTimestamp(),
-      ...rest,
-    })
-    return orderData
+  const { _actor, _code, ...rest } = extra // _actor → audit only; _code → signage mirror, no read
+  // ONE updateDoc, NOT a transaction. The old runTransaction here forced a
+  // server round-trip on EVERY status change — transactions bypass the local
+  // cache, so the kanban card would not move until the server echoed back,
+  // which is the whole "every tap waits a second" complaint. updateDoc applies
+  // to the local snapshot in ~0ms (offline included) and reconciles later.
+  // What the transaction was protecting:
+  //   · statusHistory append — arrayUnion does this atomically without a read
+  //     (entries are unique by their `at` millisecond).
+  //   · reading `code` for the signage mirror — callers pass `_code` (they all
+  //     hold the order object), else the mirror fetches it off the critical path.
+  //   · exclusivity — it never had any (last-writer-wins by design). The one
+  //     path that needs a real compare-and-set is claimOrder() above.
+  await updateDoc(ref, {
+    status,
+    statusHistory: arrayUnion({ status, at: Date.now(), by: _actor || '' }),
+    updatedAt: serverTimestamp(),
+    ...rest,
   })
+  const result = true
 
   // THE PAYMENT IS THE TRANSACTION ABOVE. NOTHING ELSE IS ON THE CRITICAL PATH.
   //
@@ -702,18 +744,74 @@ export async function updateOrderStatus(tid, id, status, extra = {}) {
   // trigger retries on failure, so the flag finally means what it says.
   //
   // Signage mirror: keep a PUBLIC doc of ready-order codes so paired TVs
-  // (anonymous readers) can flash "order ready". Its own comment always said
-  // "non-critical, never throws" — and it was awaited anyway, so a cashier paid
-  // for it on every single status change. Detached to match what it claims.
+  // (anonymous readers) can flash "order ready". Best-effort, fully detached —
+  // if the caller didn't pass _code, the lazy fetch happens off the hot path.
   if (result) {
-    const mirror = status === 'ready'
-      ? setDoc(subDoc(tid, 'public', 'readyOrders'), { [id]: { code: result.code || '', at: Date.now() } }, { merge: true })
-      : ['served', 'paid', 'cancelled', 'preparing'].includes(status)
-        ? setDoc(subDoc(tid, 'public', 'readyOrders'), { [id]: deleteField() }, { merge: true })
-        : null
-    if (mirror) mirror.catch(() => { /* signage mirror is best-effort */ })
+    if (status === 'ready') {
+      const writeMirror = async () => {
+        let code = _code
+        // falsy, not `== null`: every call site passes `o.code || ''`, so a
+        // missing code arrives as '' — the old null-only gate made the lazy
+        // fetch unreachable and the signage TV flashed a blank order number
+        if (!code) {
+          try { const s = await getDoc(ref); code = s.exists() ? (s.data().code || '') : '' } catch (_) { code = '' }
+        }
+        return setDoc(subDoc(tid, 'public', 'readyOrders'), { [id]: { code: code || '', at: Date.now() } }, { merge: true })
+      }
+      writeMirror().catch(() => { /* signage mirror is best-effort */ })
+    } else if (['served', 'paid', 'cancelled', 'preparing'].includes(status)) {
+      setDoc(subDoc(tid, 'public', 'readyOrders'), { [id]: deleteField() }, { merge: true })
+        .catch(() => { /* signage mirror is best-effort */ })
+    }
   }
   return result
+}
+
+// EXCLUSIVE ACCEPT — the one place a compare-and-set transaction is genuinely
+// required. Every staff screen shows the same incoming order; two staffers WILL
+// tap accept in the same second, and updateOrderStatus is last-writer-wins by
+// design. This claim succeeds for exactly one of them; the losers get {ok:false,
+// by} to show "so-and-so took it", and the modal vanishes everywhere on the
+// snapshot echo. Nothing else should route acceptance around this.
+export async function claimOrder(tid, id, { name = '', uid = '' } = {}) {
+  const ref = subDoc(tid, 'orders', id)
+  try {
+    return await runTransaction(db, async (tx) => {
+      const snap = await tx.get(ref)
+      if (!snap.exists()) return { ok: false, gone: true }
+      const d = snap.data()
+      if (d.status !== 'pending' || d.acceptedByUid) return { ok: false, by: d.acceptedByName || '' }
+      tx.update(ref, {
+        status: 'accepted',
+        acceptedByName: name,
+        acceptedByUid: uid,
+        statusHistory: [...(d.statusHistory || []), { status: 'accepted', at: Date.now(), by: name }],
+        updatedAt: serverTimestamp(),
+      })
+      return { ok: true }
+    })
+  } catch (e) {
+    return { ok: false, error: e?.code || 'failed' }
+  }
+}
+
+// Same exclusivity for a waiter call: only an 'open' call can be claimed. The
+// plain ackWaiterCall stays for non-competitive paths; the accept modal and the
+// cashier's "On it" both come through here so the guest sees ONE name coming.
+export async function claimWaiterCall(tid, id, { name = '', uid = '' } = {}) {
+  const ref = subDoc(tid, 'waiterCalls', id)
+  try {
+    return await runTransaction(db, async (tx) => {
+      const snap = await tx.get(ref)
+      if (!snap.exists()) return { ok: false, gone: true }
+      const d = snap.data()
+      if (d.status !== 'open') return { ok: false, by: d.ackByName || '' }
+      tx.update(ref, { status: 'ack', ackAt: serverTimestamp(), ackByName: name, ackByUid: uid })
+      return { ok: true }
+    })
+  } catch (e) {
+    return { ok: false, error: e?.code || 'failed' }
+  }
 }
 
 // signage TVs watch this public doc for ready-order codes
@@ -882,9 +980,12 @@ export async function payPartial(tid, id, { amount = 0, method = 'cash', actor =
     const snap = await tx.get(ref)
     if (!snap.exists()) return { completed: false }
     const d = snap.data()
-    const paid = (d.amountPaid || 0) + (Number(amount) || 0)
+    // round to halalas: raw float addition (8.2 + 0.1 = 8.299999…) left orders
+    // a binary-representation hair short of total — permanently "partially
+    // paid" with «متبقّي 0.00» and no way to close them from the UI
+    const paid = Math.round(((d.amountPaid || 0) + (Number(amount) || 0)) * 100) / 100
     const fields = { amountPaid: paid, lastPaymentMethod: method, updatedAt: serverTimestamp() }
-    const completed = paid >= (d.total || 0)
+    const completed = paid >= (d.total || 0) - 0.005
     if (completed) {
       const hist = d.statusHistory || []
       fields.status = 'paid'
@@ -1343,6 +1444,13 @@ export async function upsertCustomerOnOrder(
 }
 export function watchCustomers(tid, cb) {
   const q = query(sub(tid, 'customers'), orderBy('lastOrderAt', 'desc'), limit(200))
+  return onSnapshot(q, (s) => cb(s.docs.map((d) => ({ id: d.id, ...d.data() }))), () => cb([]))
+}
+// Only the flagged (tagged) customers — the cashier board needs nothing more
+// to warn on incoming orders, so it must not stream the whole CRM for it.
+// Single equality → no composite index.
+export function watchFlaggedCustomers(tid, cb) {
+  const q = query(sub(tid, 'customers'), where('flagged', '==', true))
   return onSnapshot(q, (s) => cb(s.docs.map((d) => ({ id: d.id, ...d.data() }))), () => cb([]))
 }
 // Staff-set flag / rating on a customer (keyed by phone). Merges onto the customer doc.

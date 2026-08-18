@@ -59,7 +59,9 @@
   --fs-md: 0.9375rem;    /* 15 */
   --fs-lg: 1.0625rem;    /* 17 — page title */
   --fs-xl: 1.25rem;      /* 20 */
-  --fs-2xl: 1.5rem;      /* 24 — the one big number on a stat tile */
+  --fs-2xl: 1.875rem;    /* 30 — the ONE big number on a stat tile reads as an
+                            app headline, not a table cell; still the only 30px
+                            on the page, so density elsewhere is untouched */
 
   /* space — the 4px grid, halved */
   --sp-1: 2px;  --sp-2: 4px;  --sp-3: 6px;  --sp-4: 8px;
@@ -72,12 +74,14 @@
      changes the read more than any colour choice does. */
   --r-sm: 3px; --r-md: 4px; --r-lg: 5px; --r-xl: 8px; --r-pill: 4px;
 
-  /* elevation — an ERP separates with LINES, not with shadows. Every card in
-     the admin carries --sh-1 by default, so a list of records reads as a stack
-     of floating objects instead of a column to scan. */
-  --sh-1: none;
-  --sh-2: 0 1px 3px rgba(33, 25, 19, 0.12);
-  --sh-3: 0 6px 20px rgba(33, 25, 19, 0.16);
+  /* elevation — an ERP separates with LINES first, but a card with ZERO shadow
+     on a near-white ground dissolves into the page. Give --sh-1 a whisper of
+     real depth (two ~4-5% layers) so a record reads as a distinct surface
+     without floating like a full-app card; the heavier tiers stay for menus
+     and dialogs. Paired with a --border-strong edge on .card below. */
+  --sh-1: 0 1px 2px rgba(33, 25, 19, 0.05), 0 1px 3px rgba(33, 25, 19, 0.045);
+  --sh-2: 0 2px 6px rgba(33, 25, 19, 0.1), 0 1px 3px rgba(33, 25, 19, 0.08);
+  --sh-3: 0 8px 24px rgba(33, 25, 19, 0.16);
 
   --tap: 36px;
   --appbar-h: 48px;
@@ -162,10 +166,25 @@
    4 · SURFACES
    ============================================================ */
 
+/* Ground↔surface gap — PLAIN CLASSIC LIGHT ONLY. A cooler, slightly darker
+   ground makes the white cards read as raised planes instead of melting into
+   an all-#fafafa field. Every other identity keeps its own ground, hence the
+   guards: dark mode owns its palette (html OR body can carry data-theme),
+   systhemes (wood/paper/glass…) declare their own --bg, custom themes pin
+   theirs, and an ambient background (data-appbg) needs transparent shells.
+   The shells paint the ground themselves so the body's #fafafa never shows. */
+html:not([data-theme='dark']) body:not([data-systheme]):not([data-theme='dark']):not([data-custheme]):not([data-appbg]) .admin-shell:not(.platform-scope),
+html:not([data-theme='dark']) body:not([data-systheme]):not([data-theme='dark']):not([data-custheme]):not([data-appbg]) .cashier-shell,
+html:not([data-theme='dark']) body:not([data-systheme]):not([data-theme='dark']):not([data-custheme]):not([data-appbg]) .kds-shell {
+  --bg: #f3f4f6;
+  --bg-2: #e9eaee;
+  background: var(--bg);
+}
+
 .admin-shell:not(.platform-scope) .card {
   border-radius: var(--r-md);
-  box-shadow: none;
-  border: 1px solid var(--border);
+  box-shadow: var(--sh-1);
+  border: 1px solid var(--border-strong);
 }
 .admin-shell:not(.platform-scope) .card-pad { padding: var(--sp-6); }
 
@@ -175,6 +194,33 @@
 .admin-shell:not(.platform-scope) .card .card {
   border-radius: var(--r-sm);
   background: var(--surface-2);
+}
+
+/* THE PRIMARY ACTION AND THE SELECTED TAB — the two spots the eye should snap
+   to. With --sh-1 now a whisper (cards read as flat planes), lift the primary
+   button on a brand-tinted shadow and the active segment on a firmer neutral
+   one, so "the button to press" and "the tab I'm on" sit visibly above the
+   record plane.
+   ALLOWLIST, not a blocklist: classic (no data-systheme) and airy are the only
+   themes with no button-shadow identity of their own. Every other systheme
+   styles these itself — glass/neon glow, wood/noir inset rims, sharp/paper
+   deliberately FLAT (`box-shadow: none` is their identity) — and this
+   high-specificity rule loading later would clobber all of them. */
+body:not([data-systheme]) .admin-shell:not(.platform-scope) .btn-primary,
+body:not([data-systheme]) .cashier-shell .btn-primary,
+body:not([data-systheme]) .kds-shell .btn-primary,
+body[data-systheme='airy'] .admin-shell:not(.platform-scope) .btn-primary,
+body[data-systheme='airy'] .cashier-shell .btn-primary,
+body[data-systheme='airy'] .kds-shell .btn-primary {
+  box-shadow: 0 1px 2px rgba(33, 25, 19, 0.14), 0 2px 9px color-mix(in srgb, var(--brand) 30%, transparent);
+}
+body:not([data-systheme]) .admin-shell:not(.platform-scope) .segmented button.active,
+body:not([data-systheme]) .cashier-shell .segmented button.active,
+body:not([data-systheme]) .kds-shell .segmented button.active,
+body[data-systheme='airy'] .admin-shell:not(.platform-scope) .segmented button.active,
+body[data-systheme='airy'] .cashier-shell .segmented button.active,
+body[data-systheme='airy'] .kds-shell .segmented button.active {
+  box-shadow: 0 1px 3px rgba(33, 25, 19, 0.18);
 }
 
 /* ============================================================
@@ -312,6 +358,19 @@
    2. .pdoc / .pdoc-page — an A4 tax invoice or quotation. It is paper.
    3. .pos-preview / .kds-preview — the same argument as (1) for the till and
       kitchen mockups in Settings.
+   4. .pos-fullscreen — the LIVE till itself. It is an operator TOUCH surface,
+      not a record table: halved gutters and 4px radii made the item cards read
+      as a cramped spreadsheet on the very tablet they were built for. The till
+      gets the full app scale back wherever its shell mounts it.
+   5. .board (cashier order board) / .kds-wrap (kitchen display) — the SAME
+      argument as (4). These are glance-and-tap operator surfaces staff work on
+      a tablet all shift, yet they wore the flat 4px-radius ERP skin: tickets
+      read as spreadsheet rows, not tap targets. They get the full app scale so
+      a ticket is a real card with rounding, depth and a 44px bump button. Lane
+      COUNT is fixed by each board's own grid (3 cashier lanes / KDS minmax), so
+      the restore cannot thin the board — it only makes each ticket touchable.
+      The admin Orders page (.ord-lane) is a MANAGEMENT table, not an operator
+      board, and intentionally stays at the dense record scale.
 
    Restores the :root values verbatim. */
 .admin-shell:not(.platform-scope) [data-menu-layout],
@@ -319,7 +378,12 @@
 .admin-shell:not(.platform-scope) .pdoc,
 .admin-shell:not(.platform-scope) .pdoc-page,
 .admin-shell:not(.platform-scope) .pos-preview,
-.admin-shell:not(.platform-scope) .kds-preview {
+.admin-shell:not(.platform-scope) .kds-preview,
+.admin-shell:not(.platform-scope) .pos-fullscreen,
+.cashier-shell .pos-fullscreen,
+.kds-shell .pos-fullscreen,
+.cashier-shell .board,
+.kds-shell .kds-wrap {
   --fs-xs: 0.75rem; --fs-sm: 0.8125rem; --fs-base: 0.9375rem;
   --fs-md: 1.0625rem; --fs-lg: 1.375rem; --fs-xl: 1.75rem; --fs-2xl: 2.25rem;
   --sp-1: 4px; --sp-2: 8px; --sp-3: 12px; --sp-4: 16px;

@@ -248,7 +248,7 @@ export default function Dashboard() {
 
       <div className="row" style={{ gap: 'var(--sp-2)' }}>
         <Link to="/cashier" className="btn btn-primary grow"><Icon name="cashier" size={18} /> {t('cashier')}</Link>
-        <Link to="/admin/items" className="btn btn-outline grow"><Icon name="menu" size={18} /> {t('menu')}</Link>
+        <Link to="/admin/items" className="btn btn-outline grow"><Icon name="menu" size={18} /> {t('menu')}{Array.isArray(items) && items.length ? ` (${items.length})` : ''}</Link>
       </div>
 
       {tpl !== 'min' && <LowStockAlert />}

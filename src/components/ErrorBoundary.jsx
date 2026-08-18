@@ -1,4 +1,4 @@
-import { Component, lazy } from 'react'
+import { Component, lazy, useEffect, useState } from 'react'
 import { reportBoundaryError } from '../lib/monitor.js'
 
 // ---------------------------------------------------------------------------
@@ -16,9 +16,10 @@ import { reportBoundaryError } from '../lib/monitor.js'
 // Two render-failure classes, handled differently:
 //   1. A stale-deploy / flaky-network chunk load. Every deploy renames the
 //      hashed chunk files, so a tab opened before it asks for a module URL that
-//      no longer exists the moment it lazy-loads its next route. The only cure
-//      is ONE reload to fetch the fresh index.html + module graph — we never
-//      show a card for this, we self-heal with a throttled reload.
+//      no longer exists the moment it lazy-loads its next route. The cure is
+//      ONE reload to fetch the fresh index.html + module graph — self-healed
+//      with a throttled reload, HARD-CAPPED at 2 per session; past the cap the
+//      quiet update card renders with a manual button (never a reload loop).
 //   2. A genuine render error. No reload fixes a real bug, so we show a
 //      bilingual recovery card and report it to the platform monitor (render
 //      errors never reach window.onerror). At the route level the card is
@@ -27,7 +28,19 @@ import { reportBoundaryError } from '../lib/monitor.js'
 // ---------------------------------------------------------------------------
 
 // A chunk failure that FAILED TO FETCH. These are the textbook signatures.
-const CHUNK_RE = /Loading chunk|Loading CSS chunk|dynamically imported module|Importing a module script failed|Failed to fetch|Load failed|css chunk/i
+//
+// DELIBERATELY ABSENT: bare `Failed to fetch` (Chrome) and `Load failed`
+// (Safari). Those are the generic TypeError texts for ANY failed fetch() —
+// a Firestore stream, a Storage image, an API call — not just module loads.
+// Matching them classified ordinary network hiccups as "stale deploy" and
+// converted them into silent page reloads (with the old re-arm timer, into a
+// 30-second reload LOOP — the reported «تنكسر وتحدث من جديد»). Every real
+// dynamic-import failure carries an import-specific phrase on every engine:
+//   Chrome/Edge  "Failed to fetch dynamically imported module"
+//   Safari       "Importing a module script failed"
+//   Firefox      "error loading dynamically imported module"
+// so dropping the generic forms loses nothing.
+const CHUNK_RE = /Loading chunk|Loading CSS chunk|dynamically imported module|error loading dynamically|Importing a module script failed|css chunk/i
 
 // A chunk failure that SUCCEEDED, and that is the whole problem.
 //
@@ -86,17 +99,54 @@ export function lazyRoute(factory) {
   }))
 }
 
-// Throttled one-shot reload, shared at module scope so nested boundaries and the
-// vite:preloadError listener in main.jsx can't double-reload, and a genuine
-// outage (offline, host down) can't reload-loop the tab.
+// Throttled + CAPPED reload, shared at module scope so nested boundaries and
+// the vite:preloadError listener in main.jsx can't double-reload.
+//
+// Two independent guards:
+//   · 30s throttle — bursts of chunk errors right after a reload count as one.
+//   · HARD CAP of 2 automatic reloads per tab session (sessionStorage counter
+//     survives the reloads themselves). One reload refreshes the entire module
+//     graph; needing a third in the same session means reloading is NOT the
+//     cure — from then on the quiet «يجري تحديث النسخة» card renders with its
+//     manual button, and a reload loop is structurally impossible.
 const RELOAD_KEY = 'ml.chunk.reload.at'
+const RELOAD_N_KEY = 'ml.chunk.reload.n'
+const RELOAD_WINDOW = 30000
+const RELOAD_MAX = 2
 export function reloadOnceForStaleChunk() {
   let last = 0
-  try { last = Number(sessionStorage.getItem(RELOAD_KEY) || 0) } catch (_) { /* ignore */ }
-  if (Date.now() - last < 30000) return false
-  try { sessionStorage.setItem(RELOAD_KEY, String(Date.now())) } catch (_) { /* ignore */ }
+  let n = 0
+  try {
+    last = Number(sessionStorage.getItem(RELOAD_KEY) || 0)
+    n = Number(sessionStorage.getItem(RELOAD_N_KEY) || 0)
+  } catch (_) { /* ignore */ }
+  if (n >= RELOAD_MAX) return false
+  if (Date.now() - last < RELOAD_WINDOW) return false
+  try {
+    sessionStorage.setItem(RELOAD_KEY, String(Date.now()))
+    sessionStorage.setItem(RELOAD_N_KEY, String(n + 1))
+  } catch (_) { /* ignore */ }
   try { window.location.reload() } catch (_) { /* ignore */ }
   return true
+}
+
+// Has the session cap been spent? A capped chunk error is no longer routine
+// self-healing — it is a recurring failure wearing a chunk costume, and the
+// one case on this path worth reporting to /platform/health.
+function chunkReloadsExhausted() {
+  try { return Number(sessionStorage.getItem(RELOAD_N_KEY) || 0) >= RELOAD_MAX } catch (_) { return false }
+}
+
+// The last crash, kept for one session so it can be read after the fact.
+//
+// A guest is not going to press «نسخ التفاصيل» and send it — they press Reload
+// and move on, and the evidence is gone. Stashing the message and the component
+// stack means the next person to open the console (or the /platform/health page)
+// can still see what actually threw, which is the difference between fixing the
+// cause and guessing at it.
+const LAST_ERR_KEY = 'ml.lastError'
+export function readLastBoundaryError() {
+  try { return JSON.parse(sessionStorage.getItem(LAST_ERR_KEY) || 'null') } catch (_) { return null }
 }
 
 const TXT = {
@@ -105,12 +155,17 @@ const TXT = {
     body: 'جرّب تحديث الصفحة — إن تكرر الخلل فسيصل تقريره لنا تلقائياً.',
     reload: 'حدّث',
     retry: 'إعادة المحاولة',
+    // Deploy-moved files: not a fault, and already self-healing.
+    staleTitle: 'يجري تحديث النسخة',
+    staleBody: 'صدر تحديث للنظام أثناء فتحك للصفحة — تُحمَّل النسخة الجديدة الآن.',
   },
   en: {
     title: 'Something went wrong',
     body: 'Refreshing usually fixes it. A report reaches us automatically.',
     reload: 'Reload',
     retry: 'Try again',
+    staleTitle: 'Updating',
+    staleBody: 'A new version shipped while this page was open. Loading it now.',
   },
 }
 
@@ -180,7 +235,7 @@ function styles(variant) {
 export default class ErrorBoundary extends Component {
   constructor(props) {
     super(props)
-    this.state = { err: null, componentStack: '', copied: false }
+    this.state = { err: null, stale: false, componentStack: '', copied: false }
     this.onReload = this.onReload.bind(this)
     this.onRetry = this.onRetry.bind(this)
     this.onCopy = this.onCopy.bind(this)
@@ -228,7 +283,10 @@ export default class ErrorBoundary extends Component {
   }
 
   static getDerivedStateFromError(err) {
-    return { err }
+    // A stale chunk is classified HERE, in the same commit that records the
+    // error, so render() can never paint the alarming recovery card for what is
+    // really just a deploy that moved the files.
+    return { err, stale: isChunkError(err) }
   }
 
   // REACT'S SECOND ARGUMENT IS THE DIAGNOSIS, and this used to drop it.
@@ -242,10 +300,48 @@ export default class ErrorBoundary extends Component {
   // null for half a dozen unrelated reasons. The component stack is the only
   // thing that separates them.
   componentDidCatch(err, info) {
-    // A stale chunk self-heals with one reload; never report it or paint a card.
-    if (isChunkError(err) && reloadOnceForStaleChunk()) return
+    // A stale chunk self-heals with a capped reload; no alarming card either way.
+    //
+    // When the reload is blocked (throttle window or the 2-per-session cap),
+    // we DELIBERATELY do nothing more here: getDerivedStateFromError already
+    // set `stale: true`, so render() paints the quiet «يجري تحديث النسخة» card
+    // with its manual reload button. An earlier version re-armed a timer to
+    // reload again after the throttle window — combined with the then-broad
+    // CHUNK_RE that matched any 'Failed to fetch', a recurring NON-chunk error
+    // became a silent permanent 30-second reload loop. The timer is gone for
+    // good; past the cap the user always gets a visible card, never a loop.
+    // Only ROUTE-LEVEL boundaries may convert a chunk-shaped error into a page
+    // reload. A 'soft' widget or 'silent' ambient boundary reloading the page
+    // would destroy the diner's in-progress cart over a failure the guest was
+    // never even meant to see — those variants fall through to their own
+    // rendering (compact card / nothing) and report like any other error.
+    const variant = this.props.variant || 'route'
+    if ((variant === 'route' || variant === 'fullscreen') && isChunkError(err)) {
+      if (!reloadOnceForStaleChunk() && chunkReloadsExhausted()) {
+        // A third chunk-shaped failure in one session is not a deploy — report
+        // it once so /platform/health sees what keeps failing.
+        try {
+          reportBoundaryError(
+            { message: `[chunk-loop] ${(err && (err.message || err.code)) || String(err || '')}`, stack: err && err.stack },
+            (info && info.componentStack) || '',
+          )
+        } catch (_) { /* the monitor must never itself break the boundary */ }
+      }
+      return
+    }
     const componentStack = (info && info.componentStack) || ''
     this.setState({ componentStack })
+    // Keep the evidence for the session even if nobody presses «نسخ التفاصيل».
+    try {
+      sessionStorage.setItem(LAST_ERR_KEY, JSON.stringify({
+        at: new Date().toISOString(),
+        message: (err && (err.message || err.code)) || String(err || ''),
+        screen: this.props.label || '',
+        url: (() => { try { return location.href } catch (_) { return '' } })(),
+        stack: (err && err.stack) || '',
+        componentStack,
+      }))
+    } catch (_) { /* storage full or blocked — the monitor still has it */ }
     try {
       const label = this.props.label
       if (label && err && typeof err === 'object') {
@@ -266,7 +362,7 @@ export default class ErrorBoundary extends Component {
     // react/no-did-update-set-state here, but eslint-plugin-react is not in
     // this config, and a disable naming an unknown rule is itself an error.)
     if (this.state.err && prev.resetKey !== this.props.resetKey) {
-      this.setState({ err: null, componentStack: '', copied: false })
+      this.setState({ err: null, stale: false, componentStack: '', copied: false })
     }
   }
 
@@ -279,18 +375,40 @@ export default class ErrorBoundary extends Component {
     // a widget that can recover; a lazy route cannot (React marks a rejected
     // payload permanently and re-throws it), which is why route-level cards show
     // reload, not retry.
-    this.setState({ err: null, componentStack: '', copied: false })
+    this.setState({ err: null, stale: false, componentStack: '', copied: false })
     try { this.props.onReset && this.props.onReset() } catch (_) { /* ignore */ }
   }
 
   render() {
-    const { err } = this.state
+    const { err, stale } = this.state
     const { children, variant = 'route', lang = 'ar' } = this.props
     if (!err) return children
+
+    // 'silent': an ambient widget (ad popup, venue memory) that crashed simply
+    // disappears — reported to the monitor above, but never painted as a card
+    // inside the guest menu.
+    if (variant === 'silent') return null
 
     const t = TXT[lang] || TXT.ar
     const s = styles(variant)
     const soft = variant === 'soft'
+
+    // A moved file after a deploy is not a fault the guest should be alarmed by,
+    // and it is about to fix itself. Say only that, and say it quietly.
+    if (stale) {
+      return (
+        <div style={{ ...s.wrap, minHeight: soft ? 0 : '40dvh' }} role="status" dir="rtl">
+          <div style={{ ...s.card, gap: 8 }}>
+            <strong style={s.title}>{TXT.ar.staleTitle}</strong>
+            <p style={s.body}>{TXT.ar.staleBody}</p>
+            <p dir="ltr" style={s.en}>{TXT.en.staleBody}</p>
+            <button type="button" style={s.btnPrimary} onClick={this.onReload}>
+              {t.reload} · {TXT[lang === 'en' ? 'ar' : 'en'].reload}
+            </button>
+          </div>
+        </div>
+      )
+    }
 
     return (
       <div style={s.wrap} role="alert" dir={lang === 'en' ? 'ltr' : 'rtl'}>
@@ -330,4 +448,137 @@ export default class ErrorBoundary extends Component {
 // screen — import { SoftBoundary } and wrap the risky block.
 export function SoftBoundary(props) {
   return <ErrorBoundary variant="soft" {...props} />
+}
+
+// ---------------------------------------------------------------------------
+// lazyOverlay() — the lazy loader for OVERLAY features (games hub, voice
+// waiter, AR, compare, wrapped…), and the reason it is NOT React.lazy:
+//
+//   1. React.lazy caches a REJECTED import forever — the only recovery is a
+//      page navigation or reload. An overlay is a bonus feature; its chunk
+//      failing to arrive (offline blip, stale deploy) must cost a small retry
+//      card INSIDE the overlay, never the page.
+//   2. A rejected lazy() propagates through Suspense to the route boundary.
+//      Before this helper, the games tab used raw lazy() + fallback={null}:
+//      the rejection bubbled up, matched the chunk classifier, and RELOADED
+//      the whole page — the reported «الضغط على الألعاب يعيد تحميل الصفحة».
+//   3. fallback={null} also meant zero feedback while a 100kB+ chunk loaded.
+//
+// So this is a stateful loader: it absorbs the import promise entirely (one
+// silent retry after 800ms), shows an immediate shimmer, renders an inline
+// bilingual retry card on failure, and wraps the loaded component in a
+// SoftBoundary so even a crash INSIDE the overlay stays inside the overlay.
+// The loaded component is cached per factory (module scope) so reopening an
+// overlay never refetches or flickers. StrictMode-safe: the effect is
+// idempotent and guards setState-after-unmount with `on`.
+// ---------------------------------------------------------------------------
+function OverlaySpin({ size = 30, tone = '#ffffff' }) {
+  // SMIL-animated so it spins with zero CSS dependencies (this file must render
+  // even when the stylesheet is the thing that failed).
+  return (
+    <svg width={size} height={size} viewBox="0 0 24 24" fill="none" aria-hidden="true">
+      <circle cx="12" cy="12" r="9" stroke={tone} strokeOpacity="0.22" strokeWidth="2.4" />
+      <path d="M12 3a9 9 0 0 1 9 9" stroke={tone} strokeWidth="2.4" strokeLinecap="round">
+        <animateTransform attributeName="transform" type="rotate" from="0 12 12" to="360 12 12" dur="0.9s" repeatCount="indefinite" />
+      </path>
+    </svg>
+  )
+}
+
+function OverlayShimmer({ variant, onClose }) {
+  // 'silent': ambient self-deciding widgets (ad popup, venue memory) rendered
+  // eagerly in the page flow — they must never flash a spinner or scrim into
+  // the guest menu; parity with the old fallback={null}, minus the crash.
+  if (variant === 'silent') return null
+  if (variant === 'inline') {
+    return (
+      <div style={{ display: 'grid', placeItems: 'center', padding: '38px 16px' }} role="status" aria-label="loading">
+        <OverlaySpin tone="var(--text-muted, #8a8a94)" />
+      </div>
+    )
+  }
+  // 'scrim': instant full-screen feedback where the overlay is about to appear.
+  // Tapping it cancels (calls onClose) so a slow network never traps the user.
+  return (
+    <div
+      role="status"
+      aria-label="loading"
+      onClick={() => { try { onClose && onClose() } catch (_) { /* ignore */ } }}
+      style={{ position: 'fixed', inset: 0, zIndex: 1300, display: 'grid', placeItems: 'center', background: 'rgba(8, 9, 12, 0.45)' }}
+    >
+      <OverlaySpin size={36} />
+    </div>
+  )
+}
+
+function OverlayLoadFail({ variant, onRetry, onClose }) {
+  // An ambient widget failing to load is a non-event — its whole contract is
+  // "appear only when there is something to show". Fail silently.
+  if (variant === 'silent') return null
+  const card = (
+    <div dir="rtl" style={{ maxWidth: 340, textAlign: 'center', display: 'grid', gap: 10, justifyItems: 'center', padding: '22px 20px', borderRadius: 16, background: '#16171c', color: '#f5f6f8', border: '1px solid rgba(255,255,255,0.12)' }}>
+      <WarnGlyph color="#f5b74e" />
+      <strong style={{ fontSize: 15.5, fontWeight: 800 }}>تعذّر تحميل هذه الميزة</strong>
+      <p style={{ margin: 0, fontSize: 13, lineHeight: 1.65, opacity: 0.75 }}>تحقّق من الاتصال ثم أعد المحاولة.</p>
+      <p dir="ltr" style={{ margin: 0, fontSize: 11.5, lineHeight: 1.5, opacity: 0.55 }}>This feature failed to load. Check the connection and retry.</p>
+      <div style={{ display: 'flex', gap: 8, marginTop: 2 }}>
+        <button type="button" onClick={onRetry} style={{ padding: '9px 20px', borderRadius: 10, border: '1px solid transparent', background: 'rgba(255,255,255,0.14)', color: 'inherit', font: 'inherit', fontWeight: 700, fontSize: 13.5, cursor: 'pointer' }}>
+          إعادة المحاولة · Retry
+        </button>
+        {onClose && (
+          <button type="button" onClick={onClose} style={{ padding: '9px 16px', borderRadius: 10, border: '1px solid rgba(255,255,255,0.16)', background: 'transparent', color: 'inherit', font: 'inherit', fontWeight: 600, fontSize: 13, cursor: 'pointer', opacity: 0.85 }}>
+            إغلاق · Close
+          </button>
+        )}
+      </div>
+    </div>
+  )
+  if (variant === 'inline') {
+    return <div style={{ display: 'grid', placeItems: 'center', padding: '26px 14px' }}>{card}</div>
+  }
+  return (
+    <div style={{ position: 'fixed', inset: 0, zIndex: 1300, display: 'grid', placeItems: 'center', padding: 20, background: 'rgba(8, 9, 12, 0.55)' }}>
+      {card}
+    </div>
+  )
+}
+
+export function lazyOverlay(factory, { label = 'overlay', variant = 'scrim' } = {}) {
+  let Cached = null // per-factory: survives close/reopen, shared by all mounts
+  function Overlay(props) {
+    const [Comp, setComp] = useState(() => Cached)
+    const [failed, setFailed] = useState(false)
+    useEffect(() => {
+      if (Comp || failed) return undefined
+      let on = true
+      factory()
+        .catch(() => new Promise((res) => setTimeout(res, 800)).then(factory)) // one silent retry
+        .then((m) => {
+          if (!on) return
+          if (m && m.default) { Cached = m.default; setComp(() => m.default) }
+          else setFailed(true)
+        })
+        .catch(() => { if (on) setFailed(true) })
+      return () => { on = false }
+    }, [Comp, failed])
+    // Some overlays close via onExit rather than onClose (game boards, lobby)
+    const onClose = typeof props.onClose === 'function' ? props.onClose
+      : typeof props.onExit === 'function' ? props.onExit : null
+    if (Comp) {
+      return (
+        <ErrorBoundary variant={variant === 'silent' ? 'silent' : 'soft'} label={label}>
+          <Comp {...props} />
+        </ErrorBoundary>
+      )
+    }
+    // A permanently-MOUNTED overlay driven by an `open` prop (NotificationSettings
+    // stays mounted for its close animation) must not paint the scrim/fail card
+    // while it is closed — without this, a failed load became an undismissable
+    // full-screen scrim: onClose set open=false but the component stayed mounted.
+    if (props.open === false) return null
+    if (failed) return <OverlayLoadFail variant={variant} onRetry={() => setFailed(false)} onClose={onClose} />
+    return <OverlayShimmer variant={variant} onClose={onClose} />
+  }
+  Overlay.displayName = `lazyOverlay(${label})`
+  return Overlay
 }

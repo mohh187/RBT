@@ -137,6 +137,56 @@ export function applyVenueManifest(tenant, slug) {
   } catch (_) { /* keep the static platform manifest on any failure */ }
 }
 
+// STAFF surfaces (/admin, /cashier, /kds, /portal): point the manifest at the
+// server-rendered STAFF identity (/app/:slug/*) so "Install app" from the
+// console produces the venue-logo tablet app that starts at /app/:slug —
+// session → /admin behind the PIN lock; cold device → /lock. This was THE
+// missing call: AdminLayout only ever swapped the favicon, so installing from
+// /admin installed the PLATFORM manifest (generic icon, landing start_url).
+export function applyStaffManifest(tenant, slug) {
+  if (typeof document === 'undefined' || !tenant || !slug) return
+  try {
+    let link = document.querySelector('link[rel="manifest"]')
+    if (originalManifestHref === null && link) originalManifestHref = link.getAttribute('href')
+    if (import.meta.env.PROD) {
+      if (!link) { link = document.createElement('link'); link.setAttribute('rel', 'manifest'); document.head.appendChild(link) }
+      link.setAttribute('href', `/app/${encodeURIComponent(slug)}/manifest.webmanifest`)
+      setMeta('apple-mobile-web-app-title', tenant.name || 'RBT360')
+      // RASTER, not the /icon.svg route: Safari's apple-touch-icon has never
+      // supported SVG — with it, the shop iPad's home-screen tile fell back to
+      // a page screenshot, the exact thing this link exists to prevent.
+      setLink('apple-touch-icon', tenant.logoUrl || '/brand/icon-512.png')
+      applyVenueFavicon(tenant, slug)
+      return
+    }
+    // dev fallback: vite serves no function rewrite — blob manifest
+    const origin = window.location.origin
+    const startUrl = new URL(`/app/${slug}`, origin).href
+    const name = tenant.name || 'RBT360'
+    const manifest = {
+      id: startUrl,
+      name,
+      short_name: name.slice(0, 24),
+      start_url: startUrl,
+      scope: new URL('/', origin).href,
+      display: 'standalone',
+      orientation: 'any',
+      dir: 'rtl',
+      lang: 'ar',
+      background_color: '#ffffff',
+      theme_color: safeColor(tenant.themeColor, '#171717'),
+      icons: [{ src: tenant.logoUrl || '/brand/favicon.png', sizes: 'any', purpose: 'any' }],
+    }
+    const blob = new Blob([JSON.stringify(manifest)], { type: 'application/manifest+json' })
+    if (currentBlobUrl) { try { URL.revokeObjectURL(currentBlobUrl) } catch (_) { /* ignore */ } }
+    currentBlobUrl = URL.createObjectURL(blob)
+    if (!link) { link = document.createElement('link'); link.setAttribute('rel', 'manifest'); document.head.appendChild(link) }
+    link.setAttribute('href', currentBlobUrl)
+    setMeta('apple-mobile-web-app-title', name)
+    applyVenueFavicon(tenant, slug)
+  } catch (_) { /* keep whatever manifest was there */ }
+}
+
 // Restore the platform's static manifest when leaving a venue surface (SPA nav)
 // so the platform's own "Add to Home Screen" identity isn't left as the last venue.
 export function restorePlatformManifest() {

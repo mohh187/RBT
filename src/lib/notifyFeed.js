@@ -11,13 +11,20 @@ import { orderNumber } from './format.js'
 
 const ms = (ts) => ts?.toMillis?.() ?? (typeof ts === 'number' ? ts : 0)
 
-// ---- per-tenant "last seen" marker (device-local) ----
-const seenKey = (tid) => `notifyv2Seen_${tid}`
-export function getLastSeen(tid) {
-  try { return Number(localStorage.getItem(seenKey(tid))) || 0 } catch (_) { return 0 }
+// ---- "last seen" marker, PER USER — on a shared tablet one staffer marking
+// read must not clear a coworker's badge. Falls back to the old device-wide
+// key once so nobody's history resets on upgrade. ----
+const seenKey = (tid, uid) => (uid ? `notifyv2Seen_${tid}_${uid}` : `notifyv2Seen_${tid}`)
+export function getLastSeen(tid, uid = '') {
+  try {
+    const v = Number(localStorage.getItem(seenKey(tid, uid)))
+    if (v) return v
+    // one-time migration: inherit the pre-upgrade device-wide marker
+    return uid ? (Number(localStorage.getItem(seenKey(tid))) || 0) : 0
+  } catch (_) { return 0 }
 }
-export function markSeen(tid, at = Date.now()) {
-  try { localStorage.setItem(seenKey(tid), String(at)) } catch (_) { /* ignore */ }
+export function markSeen(tid, at = Date.now(), uid = '') {
+  try { localStorage.setItem(seenKey(tid, uid), String(at)) } catch (_) { /* ignore */ }
 }
 
 const orderTypeLabel = (o) =>
@@ -26,12 +33,20 @@ const orderTypeLabel = (o) =>
     : o.orderType === 'delivery' ? 'توصيل'
     : 'داخل المقهى')
 
-// buildNotifyFeed(db, tenantId, cb): subscribes to the last ~20 of each source
-// and calls cb with the merged, newest-first feed:
+// buildNotifyFeed(db, tenantId, cb, caps): subscribes to the last ~20 of each
+// source and calls cb with the merged, newest-first feed:
 //   [{ id, type, at, title, body, to }]
+// caps = { takeOrders, viewComplaints, manageEvents, viewCustomers } — a source
+// the caller has no capability for is NEVER SUBSCRIBED. This is what keeps
+// admin notifications (complaints / reservations / new customers) off a
+// waiter's bell: before, every staffer streamed every source and got dead-end
+// rows whose deep links bounced off RequireCap. Rules remain the server truth;
+// this stops the read (and the noise) at the source.
 // Returns a single unsubscribe for all listeners.
-export function buildNotifyFeed(db, tenantId, cb) {
+export function buildNotifyFeed(db, tenantId, cb, caps = null) {
   if (!db || !tenantId) { cb([]); return () => {} }
+  // null caps (legacy caller) = old behavior: subscribe everything
+  const allow = caps || { takeOrders: true, viewComplaints: true, manageEvents: true, viewCustomers: true }
   const sub = (name) => collection(db, 'tenants', tenantId, name)
   const src = { order: [], call: [], complaint: [], reservation: [], customer: [] }
 
@@ -50,59 +65,67 @@ export function buildNotifyFeed(db, tenantId, cb) {
 
   // New (pending) orders → the exact order on the cashier screen.
   // Mirrors the proven (status, createdAt) index of watchActiveOrders.
-  listen('order',
-    query(sub('orders'), where('status', '==', 'pending'), orderBy('createdAt', 'desc'), limit(20)),
-    (d) => {
-      const o = d.data()
-      return { id: 'order_' + d.id, type: 'order', at: ms(o.createdAt), to: `/cashier?order=${d.id}`,
-        title: `طلب جديد · ${orderNumber(o.code)}`, body: orderTypeLabel(o) }
-    })
+  if (allow.takeOrders) {
+    listen('order',
+      query(sub('orders'), where('status', '==', 'pending'), orderBy('createdAt', 'desc'), limit(20)),
+      (d) => {
+        const o = d.data()
+        return { id: 'order_' + d.id, type: 'order', at: ms(o.createdAt), to: `/cashier?order=${d.id}`,
+          title: `طلب جديد · ${orderNumber(o.code)}`, body: orderTypeLabel(o) }
+      })
 
-  // Waiter calls + curbside arrivals (tenants/{tid}/waiterCalls, status 'open').
-  listen('call',
-    query(sub('waiterCalls'), where('status', '==', 'open'), orderBy('createdAt', 'desc'), limit(20)),
-    (d) => {
-      const c = d.data()
-      const arrived = c.reason === 'arrived'
-      // The BODY is what the guest asked for, then where they are. It used to be
-      // the table alone, so this row told a waiter that somebody wanted
-      // something. callSummary is shared with the cashier card and the OS alert
-      // so the three cannot drift apart again.
-      return { id: 'call_' + d.id, type: 'call', at: ms(c.createdAt), to: '/cashier',
-        title: arrived ? 'وصل العميل' : 'نداء نادل',
-        body: callSummary({ ...c, id: d.id }, 'ar') }
-    })
+    // Waiter calls + curbside arrivals (tenants/{tid}/waiterCalls, status 'open').
+    listen('call',
+      query(sub('waiterCalls'), where('status', '==', 'open'), orderBy('createdAt', 'desc'), limit(20)),
+      (d) => {
+        const c = d.data()
+        const arrived = c.reason === 'arrived'
+        // The BODY is what the guest asked for, then where they are. It used to be
+        // the table alone, so this row told a waiter that somebody wanted
+        // something. callSummary is shared with the cashier card and the OS alert
+        // so the three cannot drift apart again.
+        return { id: 'call_' + d.id, type: 'call', at: ms(c.createdAt), to: '/cashier',
+          title: arrived ? 'وصل العميل' : 'نداء نادل',
+          body: callSummary({ ...c, id: d.id }, 'ar') }
+      })
+  }
 
   // Open complaints → the exact complaint (Complaints.jsx already handles ?focus=).
-  listen('complaint',
-    query(sub('complaints'), orderBy('createdAt', 'desc'), limit(20)),
-    (d) => {
-      const c = d.data()
-      if ((c.status || 'open') !== 'open') return null
-      return { id: 'complaint_' + d.id, type: 'complaint', at: ms(c.createdAt), to: `/admin/complaints?focus=${d.id}`,
-        title: `شكوى جديدة${c.orderCode ? ` · #${c.orderCode}` : ''}`, body: (c.message || '').slice(0, 80) }
-    })
+  if (allow.viewComplaints) {
+    listen('complaint',
+      query(sub('complaints'), orderBy('createdAt', 'desc'), limit(20)),
+      (d) => {
+        const c = d.data()
+        if ((c.status || 'open') !== 'open') return null
+        return { id: 'complaint_' + d.id, type: 'complaint', at: ms(c.createdAt), to: `/admin/complaints?focus=${d.id}`,
+          title: `شكوى جديدة${c.orderCode ? ` · #${c.orderCode}` : ''}`, body: (c.message || '').slice(0, 80) }
+      })
+  }
 
   // Reservation requests → the reservations screen (?id carried for future focus).
-  listen('reservation',
-    query(sub('reservations'), orderBy('createdAt', 'desc'), limit(20)),
-    (d) => {
-      const r = d.data()
-      if (r.kind === 'table' || (r.status || 'requested') !== 'requested') return null
-      return { id: 'resv_' + d.id, type: 'reservation', at: ms(r.createdAt), to: `/admin/reservations?id=${d.id}`,
-        title: `حجز جديد${r.code ? ` · ${orderNumber(r.code)}` : ''}`,
-        body: [r.name, r.partySize ? `${r.partySize} أشخاص` : ''].filter(Boolean).join(' · ') }
-    })
+  if (allow.manageEvents) {
+    listen('reservation',
+      query(sub('reservations'), orderBy('createdAt', 'desc'), limit(20)),
+      (d) => {
+        const r = d.data()
+        if (r.kind === 'table' || (r.status || 'requested') !== 'requested') return null
+        return { id: 'resv_' + d.id, type: 'reservation', at: ms(r.createdAt), to: `/admin/reservations?id=${d.id}`,
+          title: `حجز جديد${r.code ? ` · ${orderNumber(r.code)}` : ''}`,
+          body: [r.name, r.partySize ? `${r.partySize} أشخاص` : ''].filter(Boolean).join(' · ') }
+      })
+  }
 
   // NEW customers self-registering ("join the family"): registerCustomer() stamps
   // registeredAt (number) — ordering on it inherently selects self-registered docs.
-  listen('customer',
-    query(sub('customers'), orderBy('registeredAt', 'desc'), limit(20)),
-    (d) => {
-      const c = d.data()
-      return { id: 'cust_' + d.id, type: 'customer', at: ms(c.registeredAt), to: `/admin/customers?id=${d.id}`,
-        title: 'عميل جديد سجّل بياناته', body: [c.name, c.phone].filter(Boolean).join(' · ') }
-    })
+  if (allow.viewCustomers) {
+    listen('customer',
+      query(sub('customers'), orderBy('registeredAt', 'desc'), limit(20)),
+      (d) => {
+        const c = d.data()
+        return { id: 'cust_' + d.id, type: 'customer', at: ms(c.registeredAt), to: `/admin/customers?id=${d.id}`,
+          title: 'عميل جديد سجّل بياناته', body: [c.name, c.phone].filter(Boolean).join(' · ') }
+      })
+  }
 
   return () => unsubs.forEach((u) => { try { u() } catch (_) { /* ignore */ } })
 }

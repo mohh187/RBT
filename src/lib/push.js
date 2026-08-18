@@ -8,7 +8,11 @@ import { showNotification } from './notify.js'
 import { registerSW } from './notify.js'
 
 const VAPID = import.meta.env.VITE_FIREBASE_VAPID_KEY
-let started = false
+// Guard by WHO registered, not a boolean: a PIN session-swap on a shared
+// tablet must re-save the token doc under the NEW uid, or cap-filtered pushes
+// keep landing on whoever signed in first.
+let startedFor = null
+let messageHooked = false
 
 // Diagnostic for the notification settings UI — tells the user (and support)
 // exactly which layer of background push is missing. `vapid` false = the build
@@ -20,13 +24,18 @@ export function pushDiag() {
     supported: notif && 'serviceWorker' in navigator,
     vapid: !!VAPID,
     permission: notif ? Notification.permission : 'unsupported',
-    registered: started,
+    registered: !!startedFor,
   }
 }
 
 export async function initPush(tenantId, uid) {
   try {
-    if (started) return
+    // Preview iframes boot the full app (auth included) — without this guard
+    // every Settings/Design-gallery frame re-registered the SW, minted an FCM
+    // token and re-wrote the pushTokens doc, bypassing main.jsx's embed skip.
+    const { isEmbedded } = await import('./embedded.js')
+    if (isEmbedded) return
+    if (startedFor === uid) return
     if (!app || !VAPID || !tenantId) return
     if (!('serviceWorker' in navigator)) return
     if (!('Notification' in window) || Notification.permission !== 'granted') return
@@ -35,13 +44,18 @@ export async function initPush(tenantId, uid) {
     const reg = await registerSW()
     const messaging = getMessaging(app)
     const token = await getToken(messaging, { vapidKey: VAPID, serviceWorkerRegistration: reg })
+    // token-doc id derives from the token itself, so re-saving after a user
+    // swap OVERWRITES the uid in place — the device follows its current user.
     if (token) await savePushToken(tenantId, token, uid)
 
-    onMessage(messaging, (payload) => {
-      const n = payload.notification || {}
-      showNotification(n.title || 'RBT360', { body: n.body || '', tag: 'push', url: payload.data?.url || '/cashier' })
-    })
-    started = true
+    if (!messageHooked) {
+      onMessage(messaging, (payload) => {
+        const n = payload.notification || {}
+        showNotification(n.title || 'RBT360', { body: n.body || '', tag: 'push', url: payload.data?.url || '/cashier' })
+      })
+      messageHooked = true
+    }
+    startedFor = uid
   } catch (_) {
     /* ignore */
   }

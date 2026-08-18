@@ -12,6 +12,8 @@
 // numbers the DOM uses, so the PNG matches the editor and the print output.
 import { fontStacks } from '../../lib/skins.js'
 import { shapeById, renderShapeSvg } from '../../lib/printShapes.js'
+import { applyVars, qrKeyOf } from '../../lib/printVars.js'
+import { paintIconSvg, curvedTextSvg } from '../PrintCanvas.jsx'
 
 // Official Saudi Riyal symbol paths (same geometry as components/Riyal.jsx).
 const RIYAL_VB = { w: 1124.14, h: 1256.39 }
@@ -117,19 +119,119 @@ function setTextStyle(ctx, el, k) {
   ctx.textBaseline = 'middle'
 }
 
+// Canvas twin of textFillStyle(): a gradient or pattern assigned to fillStyle
+// where CSS uses background-clip:text. Falls back to the solid colour whenever
+// the fill cannot be built, so a missing image degrades to readable text rather
+// than an invisible one.
+//
+// The IMAGE fill is deliberately absent here: canvas patterns need the bitmap
+// decoded before fillText, which would make this function async and reshape the
+// whole draw loop. The DOM shows it; the exporter prints the solid colour, and
+// the properties panel says so. An honest gap beats a silent mismatch.
+function textFillOf(ctx, el, w, h) {
+  const solid = el.color || '#1c1c1e'
+  const kind = el.fill2 || 'solid'
+  if (kind === 'solid' || kind === 'image') return solid
+  const b = el.fillColor2 || '#b4632c'
+  try {
+    if (kind === 'radial') {
+      const g = ctx.createRadialGradient(w / 2, h / 2, 0, w / 2, h / 2, Math.max(w, h) / 2)
+      g.addColorStop(0, solid); g.addColorStop(1, b)
+      return g
+    }
+    // CSS angles run clockwise from "to top"; canvas wants two points.
+    const a = ((el.fillAngle ?? 90) - 90) * (Math.PI / 180)
+    const r = Math.max(w, h) / 2
+    const cx = w / 2, cy = h / 2
+    const g = ctx.createLinearGradient(cx - Math.cos(a) * r, cy - Math.sin(a) * r, cx + Math.cos(a) * r, cy + Math.sin(a) * r)
+    g.addColorStop(0, solid); g.addColorStop(1, b)
+    return g
+  } catch (_) { return solid }
+}
+
 // Mirrors .ps-text: wrapped, top-aligned, CLIPPED to the element box.
-function drawTextBox(ctx, el, k) {
+//
+// The effect layers here MUST stay in lockstep with textFxStyle() in
+// PrintCanvas.jsx. They are two implementations of one spec — CSS for the screen,
+// canvas for the export — and the only thing keeping a printed sticker honest to
+// its preview is that these two agree. Draw order is identical in both:
+// extrude behind, shadow behind, outline stroked under the fill.
+function drawTextBox(ctx, el, k, vars) {
   const w = el.w * k, h = el.h * k
   ctx.save()
   ctx.beginPath()
   ctx.rect(0, 0, w, h)
   ctx.clip()
   setTextStyle(ctx, el, k)
-  ctx.fillStyle = el.color || '#1c1c1e'
   const lineH = (el.size || 18) * (el.lineHeight || 1.4) * k
-  const lines = wrapLines(ctx, el.text, w)
+  const lines = wrapLines(ctx, applyVars(el.text, vars), w)
   const tx = el.align === 'center' ? w / 2 : el.align === 'left' ? 0 : w
-  lines.forEach((line, i) => ctx.fillText(line, tx, i * lineH + lineH / 2))
+
+  const fx = el.fx || 'none'
+  const fxCol = el.fxColor || '#ffffff'
+  const depth = (el.fxDepth ?? 6) * k
+  const blur = (el.fxBlur ?? 4) * k
+  const ang = ((el.fxAngle ?? 45) * Math.PI) / 180
+  const dx = Math.cos(ang) * depth
+  const dy = Math.sin(ang) * depth
+
+  const eachLine = (fn) => lines.forEach((line, i) => fn(line, i * lineH + lineH / 2))
+
+  // 1. extrude — stacked offsets behind the glyph, nearest drawn last
+  if (fx === 'extrude') {
+    const steps = Math.max(1, Math.round(el.fxDepth ?? 6))
+    ctx.fillStyle = fxCol
+    for (let s = steps; s >= 1; s--) {
+      const ox = (dx / Math.max(depth, 0.0001)) * s * k
+      const oy = (dy / Math.max(depth, 0.0001)) * s * k
+      eachLine((line, y) => ctx.fillText(line, tx + ox, y + oy))
+    }
+  }
+
+  // 2. glow — the CSS side stacks TWO shadows (blur and 2×blur), which reads
+  //    denser than a single pass. Canvas cannot stack shadows in one draw, so it
+  //    draws the glyph twice to reproduce the same build-up.
+  if (fx === 'glow') {
+    ctx.shadowColor = fxCol
+    ctx.shadowOffsetX = 0
+    ctx.shadowOffsetY = 0
+    ctx.fillStyle = el.color || '#1c1c1e'
+    ctx.shadowBlur = Math.max(1, blur) * 2
+    eachLine((line, y) => ctx.fillText(line, tx, y))
+    ctx.shadowBlur = Math.max(1, blur)
+    eachLine((line, y) => ctx.fillText(line, tx, y))
+  }
+
+  // 3. shadow — a single offset blur, applied to the fill pass below
+  if (fx === 'shadow') {
+    ctx.shadowColor = fxCol
+    ctx.shadowBlur = blur
+    ctx.shadowOffsetX = dx
+    ctx.shadowOffsetY = dy
+  }
+
+  // 4. outline — stroked first so the fill lands on top, matching
+  //    `paint-order: stroke fill` on the CSS side.
+  //
+  //    WIDTHS MUST MATCH, and the two APIs measure the same way: both
+  //    -webkit-text-stroke-width and canvas lineWidth are the TOTAL width,
+  //    centred on the glyph outline, half of which the fill then covers. So the
+  //    canvas value is the CSS value — not double it. Setting lineWidth = depth
+  //    against a CSS width of depth/2 printed every outline at twice the
+  //    thickness of its preview.
+  if (fx === 'outline') {
+    ctx.strokeStyle = fxCol
+    ctx.lineWidth = depth / 2
+    ctx.lineJoin = 'round'
+    eachLine((line, y) => ctx.strokeText(line, tx, y))
+  }
+
+  // 5. the glyph itself — glow already painted it, and repainting under a live
+  //    shadow would double the halo.
+  if (fx !== 'glow') {
+    ctx.fillStyle = textFillOf(ctx, el, w, h)
+    eachLine((line, y) => ctx.fillText(line, tx, y))
+  }
   ctx.restore()
 }
 
@@ -258,7 +360,7 @@ async function preloadFonts(design, k) {
 
 // Renders the design onto a canvas at `scale`x and returns { blob, skipped }.
 // skipped = Arabic labels of elements that could not be rasterized (told honestly).
-export async function exportDesignPng({ design, items = [], currency = 'SAR', qrSrc = '', scale = 2 }) {
+export async function exportDesignPng({ design, items = [], currency = 'SAR', qrSrc = '', qrMap = null, vars = null, scale = 2 }) {
   const k = scale
   const page = design.page
   const canvas = document.createElement('canvas')
@@ -298,7 +400,12 @@ export async function exportDesignPng({ design, items = [], currency = 'SAR', qr
     ctx.translate(-w / 2, -h / 2)
     try {
       if (el.type === 'text') {
-        drawTextBox(ctx, el, k)
+        if (el.curve) {
+          // One implementation for both renderers — the arc is SVG either way,
+          // which also keeps Arabic shaping intact (per-glyph spans would not).
+          const img = await svgToImage(curvedTextSvg(el, applyVars(el.text, vars)), w, h)
+          ctx.drawImage(img, 0, 0, w, h)
+        } else drawTextBox(ctx, el, k, vars)
       } else if (el.type === 'image' && el.url) {
         const img = await loadImg(el.url)
         if (el.shadow) {
@@ -334,9 +441,15 @@ export async function exportDesignPng({ design, items = [], currency = 'SAR', qr
         if (!sh) throw new Error('shape missing')
         const img = await svgToImage(renderShapeSvg(sh, el), w, h)
         ctx.drawImage(img, 0, 0, w, h)
+      } else if (el.type === 'icon') {
+        if (!el.svg) throw new Error('no icon')
+        const img = await svgToImage(paintIconSvg(el), w, h)
+        ctx.drawImage(img, 0, 0, w, h)
       } else if (el.type === 'qr') {
-        if (!qrSrc) throw new Error('no qr')
-        const img = await loadImg(qrSrc)
+        const qsrc = (qrMap && qrMap[qrKeyOf(el, vars)])
+          || (el.kind === 'table' ? (vars?.tableQr || '') : qrSrc)
+        if (!qsrc) throw new Error('no qr')
+        const img = await loadImg(qsrc)
         ctx.drawImage(img, 0, 0, w, h)
       } else if (el.type === 'itemcard') {
         await drawItemCard(ctx, el, k, itemsMap.get(el.itemId), currency, skipped)

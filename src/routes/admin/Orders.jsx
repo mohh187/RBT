@@ -309,10 +309,13 @@ export default function Orders() {
         /* kanban: columns by status, oldest first inside each — operations flow */
         <div className="ord-lanes">
           {[
-            ['pending', ar ? 'بانتظار القبول' : 'Pending', 'warning'],
-            ['accepted', ar ? 'مقبولة' : 'Accepted', 'info'],
-            ['preparing', ar ? 'قيد التحضير' : 'Preparing', 'brand'],
-            ['ready', ar ? 'جاهزة' : 'Ready', 'success'],
+            /* lane labels come from the shared status vocabulary (i18n status_*)
+               so the admin board speaks the same words as the cashier and the
+               order-detail sheet; only the synthetic "done" lane names itself */
+            ['pending', t('status_pending'), 'warning'],
+            ['accepted', t('status_accepted'), 'info'],
+            ['preparing', t('status_preparing'), 'brand'],
+            ['ready', t('status_ready'), 'success'],
             ['done', ar ? 'منتهية' : 'Done', ''],
           ].map(([st, lbl, tone]) => {
             const lane = filteredOrders

@@ -299,6 +299,14 @@ export default function ScreensAdmin() {
                   onBlur={(e) => { const v = e.target.value.trim(); if (v !== (s.group || '')) updateScreen(s.id, { group: v }).catch(() => toast.error(t('error'))) }} />
                 <input className="input input-sm grow" style={{ minWidth: 160 }} placeholder={ar ? 'شريط أخبار متحرك أسفل الشاشة (اختياري)' : 'News ticker (optional)'} defaultValue={s.ticker || ''}
                   onBlur={(e) => { if ((e.target.value || '') !== (s.ticker || '')) updateScreen(s.id, { ticker: e.target.value.trim() }).catch(() => toast.error(t('error'))) }} />
+                {/* «العب من جوالك» is injected into every screen's rotation while the
+                    venue runs table games. Off = this wall shows the venue's own
+                    slides only; diners keep the games on their phones regardless. */}
+                <button className={`btn btn-sm ${s.gamesJoin === false ? 'btn-outline' : 'btn-primary'}`} style={{ flex: 'none' }}
+                  title={ar ? 'شريحة دعوة الألعاب («العب الآن من جوالك» مع الباركود) ضمن دورة هذه الشاشة' : 'The games invitation slide in this screen’s rotation'}
+                  onClick={() => updateScreen(s.id, { gamesJoin: s.gamesJoin === false }).catch(() => toast.error(t('error')))}>
+                  <Icon name={s.gamesJoin === false ? 'eyeOff' : 'eye'} size={14} /> {ar ? 'دعوة الألعاب' : 'Games invite'}
+                </button>
               </div>
               <div className="row" style={{ gap: 8, flexWrap: 'wrap', alignItems: 'center', padding: '8px 10px', background: s.alert?.on ? 'color-mix(in srgb, var(--danger) 12%, transparent)' : 'var(--surface-2)', borderRadius: 10 }}>
                 <span className="xs bold" style={{ color: s.alert?.on ? 'var(--danger)' : undefined }}>{ar ? 'رسالة طوارئ (تغطي الشاشة فوراً)' : 'Emergency override'}</span>

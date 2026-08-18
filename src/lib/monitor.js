@@ -1,8 +1,12 @@
 // Global client error monitor → platformErrors (code monitoring for the
-// platform console). Captures uncaught errors + unhandled promise rejections
-// from EVERY venue's devices (staff and diners alike), tagged with the current
-// tenant/user when known. Deduped per message and capped per session so a
-// render loop can't flood Firestore. Rules allow anonymous bounded creates.
+// platform console). Captures uncaught errors + unhandled promise rejections,
+// tagged with the current tenant/user when known. Deduped per message and
+// capped per session so a render loop can't flood Firestore.
+// NOTE: firestore.rules requires isSignedIn() for platformErrors creates, and
+// there is no anonymous auth — so reports from SIGNED-IN surfaces (admin,
+// cashier, KDS, portal) land; diner-menu reports fail silently (the .catch
+// swallows the denial). Known limitation, not a bug: opening the collection
+// to anonymous writes would be an unbounded spam surface.
 import { addDoc, collection, serverTimestamp } from 'firebase/firestore'
 import { db, firebaseReady } from './firebase.js'
 

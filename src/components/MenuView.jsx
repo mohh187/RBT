@@ -1,11 +1,11 @@
-import { Fragment, lazy, Suspense, useEffect, useMemo, useRef, useState } from 'react'
-import { createPortal } from 'react-dom'
+import { Fragment, Suspense, useEffect, useMemo, useRef, useState } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
 import { useI18n, pickLang } from '../lib/i18n.jsx'
 import { useToast } from './Toast.jsx'
 import Sheet from './Sheet.jsx'
 import { usePortalRoot } from './PortalRoot.jsx'
 import Icon from './Icon.jsx'
+import GalleryZoom from './GalleryZoom.jsx'
 import DinerNav from './DinerNav.jsx'
 import SocialLinks from './SocialLinks.jsx'
 import Stories from './Stories.jsx'
@@ -24,22 +24,32 @@ import { initTracking, identify, trackItemView, trackItemClose, trackCartAdd, tr
 import ItemFx from './ItemFx.jsx'
 import { RANGE, filterCss, BLEND_IDS, resolveWall, resolveButtons, resolveBanner, resolveFeatured, resolveHomeOrder, resolveChrome, resolveInk, inkModeFor, chromeInkVars, imgTiltBoxStyle } from '../lib/dishComposition.js'
 import { useVideoTrim } from '../lib/useVideoTrim.js'
+import { MENU_3D_ENABLED } from '../lib/deviceCaps.js'
 import GamesIcon from './GamesIcon.jsx'
+import { lazyOverlay } from './ErrorBoundary.jsx'
 import '../styles/tactile.css'
 import '../styles/scrollfix.css'
 import { initScrollAffordance } from '../lib/scrollAffordance.js'
 // Interactive guest experience — each lazily loaded so a diner who never opens
 // them pays no bytes (speech, vision, WebGL and Firestore-session code).
-const VoiceWaiter = lazy(() => import('./VoiceWaiter.jsx'))
-const PhotoOrder = lazy(() => import('./PhotoOrder.jsx'))
-const VoiceMenuReader = lazy(() => import('./VoiceMenuReader.jsx'))
-const Menu3DWorld = lazy(() => import('./Menu3DWorld.jsx'))
-const CompareItems = lazy(() => import('./CompareItems.jsx'))
-const SharedCart = lazy(() => import('./SharedCart.jsx'))
-const DishStoryReader = lazy(() => import('./DishStory.jsx'))
-const GamesCenter = lazy(() => import('./GamesCenter.jsx'))
-const AdPopup = lazy(() => import('./AdPopup.jsx'))
-const VenueMemory = lazy(() => import('./VenueMemory.jsx'))
+//
+// lazyOverlay, NOT React.lazy: a raw lazy() whose chunk fails to arrive
+// (offline blip, stale deploy) REJECTS through Suspense into the route
+// boundary, which classified it as a stale chunk and reloaded the whole page —
+// that was the «الضغط على الألعاب يعيد تحميل الصفحة» bug. lazyOverlay absorbs
+// the import (retry + inline error card inside the overlay), shows an instant
+// scrim spinner instead of fallback={null}'s dead silence, and isolates render
+// crashes to the overlay. 'silent' = ambient widgets that must never flash UI.
+const VoiceWaiter = lazyOverlay(() => import('./VoiceWaiter.jsx'), { label: 'voice-waiter' })
+const PhotoOrder = lazyOverlay(() => import('./PhotoOrder.jsx'), { label: 'photo-order' })
+const VoiceMenuReader = lazyOverlay(() => import('./VoiceMenuReader.jsx'), { label: 'voice-reader' })
+const Menu3DWorld = lazyOverlay(() => import('./Menu3DWorld.jsx'), { label: 'menu-3d' })
+const CompareItems = lazyOverlay(() => import('./CompareItems.jsx'), { label: 'compare' })
+const SharedCart = lazyOverlay(() => import('./SharedCart.jsx'), { label: 'shared-cart' })
+const DishStoryReader = lazyOverlay(() => import('./DishStory.jsx'), { label: 'dish-story' })
+const GamesCenter = lazyOverlay(() => import('./GamesCenter.jsx'), { label: 'games-center' })
+const AdPopup = lazyOverlay(() => import('./AdPopup.jsx'), { label: 'ad-popup', variant: 'silent' })
+const VenueMemory = lazyOverlay(() => import('./VenueMemory.jsx'), { label: 'venue-memory', variant: 'silent' })
 // tiny sync helpers (no heavy deps) so the item sheet can decide instantly
 import { hasStory, StoryBadge } from './DishStory.jsx'
 import { getLocalCustomer, setLocalCustomer, isRegisterDismissed, dismissRegister, fetchIp, getMyOrders, addMyOrder, getMemberToken, setMemberToken } from '../lib/customer.js'
@@ -78,6 +88,20 @@ export default function MenuView({ tenant, tenantId, items, categories, offers =
   const { t, lang, theme } = useI18n()
   const toast = useToast()
   const currency = tenant?.currency || 'SAR'
+  // «يجب أن تظهر كل الأشياء مع فتحة المنيو»: warm the room's critical images
+  // (wall, table, header, logo, decor) the instant the tenant doc lands, and
+  // the first dishes the instant items land — parallel fetches ahead of the
+  // layout mounting, into the SW/HTTP cache, so the room paints assembled
+  // instead of piece by piece.
+  useEffect(() => {
+    if (!tenant) return
+    import('../lib/preload.js').then(({ warmImages, tenantCriticalImages }) => warmImages(tenantCriticalImages(tenant))).catch(() => {})
+  }, [tenant])
+  useEffect(() => {
+    if (!items || !items.length) return
+    const first = items.slice(0, 8).map((it) => it && it.imageUrl).filter(Boolean)
+    import('../lib/preload.js').then(({ warmImages }) => warmImages(first, { priority: 2 })).catch(() => {})
+  }, [items])
   // The active skin's menu layout drives how items are presented (Phase 2).
   const menuLayout = resolveSkin(tenant, 'menu')?.layout?.menuLayout || 'list'
   const catNav = tenant?.catNavStyle || resolveSkin(tenant, 'menu')?.layout?.nav || 'chips' // category-bar style (chips/tabs/pill/segmented) — venue override wins
@@ -343,6 +367,10 @@ export default function MenuView({ tenant, tenantId, items, categories, offers =
   // Follow the skin's layout (so switching themes in the live preview re-renders).
   useEffect(() => { setViewMode(SHOWCASE_LAYOUTS.includes(menuLayout) ? 'gallery' : 'list') }, [menuLayout]) // eslint-disable-line react-hooks/exhaustive-deps
   const [viewItem, setViewItem] = useState(null)
+  // The cart line this detail was opened FROM (tap on a cart row). It seeds the
+  // detail with the line's qty/variant/mods — without it the sheet opened at
+  // qty 1 «كأنني لم أطلبه» — and flips the add into a REPLACE of that line.
+  const [viewLine, setViewLine] = useState(null)
   // editorial detail: viewport rect of the tapped photo — the FLIP animation origin.
   const [openRect, setOpenRect] = useState(null)
   const [cart, setCart] = useState([])
@@ -761,7 +789,7 @@ export default function MenuView({ tenant, tenantId, items, categories, offers =
     // Gate the world/compare chips on the FULL active menu, never the
     // search/category-filtered `visibleItems` — otherwise the chip set changes
     // as the guest searches or switches tabs, and the bar reflows mid-browse.
-    if (on('menu3dEnabled') && allActive.some((i) => i.model3dUrl || i.arStandeeUrl)) out.push({ id: 'world', icon: 'shapes', label: lang === 'ar' ? 'عالم ثلاثي الأبعاد' : '3D world' })
+    if (MENU_3D_ENABLED && on('menu3dEnabled') && allActive.some((i) => i.model3dUrl || i.arStandeeUrl)) out.push({ id: 'world', icon: 'shapes', label: lang === 'ar' ? 'عالم ثلاثي الأبعاد' : '3D world' })
     if (on('compareEnabled') && allActive.length > 1) out.push({ id: 'compare', icon: 'scale', label: lang === 'ar' ? 'قارن الأصناف' : 'Compare' })
     if (orderingEnabled && on('sharedCartEnabled') && table?.id) out.push({ id: 'table', icon: 'customers', label: lang === 'ar' ? 'طلب الطاولة معاً' : 'Table order' })
     if (on('voiceMenuEnabled')) out.push({ id: 'read', icon: 'sound', label: lang === 'ar' ? 'اقرأ المنيو صوتياً' : 'Read aloud' })
@@ -796,6 +824,37 @@ export default function MenuView({ tenant, tenantId, items, categories, offers =
 
   const setQty = (key, qty) => setCart((c) => (qty <= 0 ? c.filter((l) => l.key !== key) : c.map((l) => (l.key === key ? { ...l, qty } : l))))
 
+  // QUICK ADD straight from the card (owner request): one tap puts a
+  // no-decisions item in the cart; anything with a REQUIRED choice (2+ sizes,
+  // required modifier group) opens the sheet instead — same rule the POS
+  // tapItem uses and the same `missing` maths the sheet enforces, so a quick
+  // add can never smuggle an incomplete line past the options.
+  const needsSheet = (it) => {
+    if ((it.variants || []).length > 1) return true
+    return (it.modifierGroups || []).some((g) => g.required || Number(g.min) > 0)
+  }
+  const quickAddOn = !isHidden('quickAdd')
+  // Returns TRUE only when a line actually landed in the cart — the pairing
+  // chips flash their ✓ off this, and flashing it while we merely OPENED the
+  // detail (required choices) lied to the guest.
+  const quickAdd = (it, fromEl = null) => {
+    const out = it.available === false || (it.trackStock && (it.stock || 0) <= 0)
+    if (out) return false
+    if (!quickAddOn || needsSheet(it)) { setViewItem(it); return false }
+    addLine(it, (it.variants && it.variants[0]) || null, [], 1)
+    try { navigator.vibrate?.(12) } catch (_) { /* no haptics */ }
+    if (fromEl) spotFlyToCart(fromEl, it.imageUrl || '')
+    return true
+  }
+  // the add badge lives INSIDE a <button> card root — a nested <button> is
+  // invalid HTML, so it's a keyboard-accessible role=button span that stops
+  // the card's own open-sheet click
+  const quickAddProps = (it) => ({
+    role: 'button', tabIndex: 0, 'aria-label': t('addToCart'),
+    onClick: (e) => { e.stopPropagation(); quickAdd(it, e.currentTarget.closest('[data-item-id]')?.querySelector('img') || e.currentTarget) },
+    onKeyDown: (e) => { if (e.key === 'Enter' || e.key === ' ') { e.stopPropagation(); e.preventDefault(); quickAdd(it) } },
+  })
+
   const renderCard = (it) => {
     const out = it.available === false || (it.trackStock && (it.stock || 0) <= 0)
     const offer = offerForItem(it, offers)
@@ -808,7 +867,7 @@ export default function MenuView({ tenant, tenantId, items, categories, offers =
           <div className="name" style={nameStyle}>{pickLang(it, 'name', lang)}</div>
           <div className="row" style={{ gap: 12 }}>
             {it.rating ? <span className="rating"><Icon name="star" size={14} fill="currentColor" strokeWidth={1.5} /> {it.rating}</span> : null}
-            {it.prepTime ? <span className="time-chip"><Icon name="clock" size={13} /> {it.prepTime} {t('minutesShort')}</span> : null}
+            {!isHidden('prepTime') && it.prepTime ? <span className="time-chip"><Icon name="clock" size={13} /> {it.prepTime} {t('minutesShort')}</span> : null}
           </div>
           {!isAlternating ? (
             <div className="row-between">
@@ -816,7 +875,7 @@ export default function MenuView({ tenant, tenantId, items, categories, offers =
                 <Price value={offer ? discountedPrice(it.price, offer) : it.price} currency={currency} lang={lang} />
                 {offer && <span className="price-was"><Price value={it.price} currency={currency} lang={lang} /></span>}
               </span>
-              {out ? <span className="badge badge-danger">{t('soldOut')}</span> : offer ? <span className="badge badge-gold">{offer.type === 'percent' ? `−${offer.value}%` : `−${offer.value}`}</span> : <span className="food-add menu-grad"><Icon name="add" size={18} /></span>}
+              {out ? <span className="badge badge-danger">{t('soldOut')}</span> : offer ? <span className="badge badge-gold">{offer.type === 'percent' ? `−${offer.value}%` : `−${offer.value}`}</span> : quickAddOn ? <span className="food-add menu-grad" {...quickAddProps(it)}><Icon name="add" size={18} /></span> : null}
             </div>
           ) : (
             <div className="row">
@@ -833,9 +892,9 @@ export default function MenuView({ tenant, tenantId, items, categories, offers =
               <span className="badge badge-danger">{t('soldOut')}</span>
             ) : offer ? (
               <span className="badge badge-gold">{offer.type === 'percent' ? `−${offer.value}%` : `−${offer.value}`}</span>
-            ) : (
-              <span className="food-add menu-grad"><Icon name="add" size={18} /></span>
-            )}
+            ) : quickAddOn ? (
+              <span className="food-add menu-grad" {...quickAddProps(it)}><Icon name="add" size={18} /></span>
+            ) : null}
           </div>
         )}
       </button>
@@ -863,8 +922,8 @@ export default function MenuView({ tenant, tenantId, items, categories, offers =
             <Price value={priceVal} currency={currency} lang={lang} />
             {offer && <span className="price-was"><Price value={it.price} currency={currency} lang={lang} /></span>}
           </span>
-          {menuLayout === 'coffeepan' && !out && (
-            <span className="coffeepan-add-btn"><Icon name="add" size={14} /></span>
+          {menuLayout === 'coffeepan' && !out && quickAddOn && (
+            <span className="coffeepan-add-btn" {...quickAddProps(it)}><Icon name="add" size={14} /></span>
           )}
         </div>
         {out && <span className="badge badge-danger" style={{ position: 'absolute', top: 8, insetInlineEnd: 8 }}>{t('soldOut')}</span>}
@@ -885,7 +944,7 @@ export default function MenuView({ tenant, tenantId, items, categories, offers =
           {pickLang(it, 'desc', lang) && <div className="cl-desc">{pickLang(it, 'desc', lang)}</div>}
         </div>
         <div className="cl-price" style={priceStyle}><Price value={offer ? discountedPrice(it.price, offer) : it.price} currency={currency} lang={lang} />{offer && <span className="price-was"><Price value={it.price} currency={currency} lang={lang} /></span>}</div>
-        {out ? <span className="badge badge-danger">{t('soldOut')}</span> : <span className="cl-add"><Icon name="add" size={16} /></span>}
+        {out ? <span className="badge badge-danger">{t('soldOut')}</span> : quickAddOn ? <span className="cl-add" {...quickAddProps(it)}><Icon name="add" size={16} /></span> : null}
       </button>
     )
   }
@@ -907,7 +966,7 @@ export default function MenuView({ tenant, tenantId, items, categories, offers =
         <span className="store-card-media" data-imgstyle={it.imageStyle || ''}>{it.imageUrl ? <img src={it.imageUrl} alt="" loading="lazy" decoding="async" /> : <Icon name="coffee" size={40} />}</span>
         <div className="store-card-name" style={nameStyle}>{pickLang(it, 'name', lang)}</div>
         <div className="store-card-price" style={priceStyle}><Price value={offer ? discountedPrice(it.price, offer) : it.price} currency={currency} lang={lang} />{offer && <span className="price-was"><Price value={it.price} currency={currency} lang={lang} /></span>}</div>
-        {!out && <span className="store-add"><Icon name="add" size={16} /></span>}
+        {!out && quickAddOn && <span className="store-add" {...quickAddProps(it)}><Icon name="add" size={16} /></span>}
       </button>
     )
   }
@@ -1130,13 +1189,18 @@ export default function MenuView({ tenant, tenantId, items, categories, offers =
         </div>
         <div className="special-row">
           {special.map((it, idx) => (
-            <button key={it.id} className="special-card" onClick={() => setViewItem(it)}>
+            <button key={it.id} className="special-card" data-item-id={it.id} onClick={() => setViewItem(it)}>
               {featuredMode === 'auto'
                 ? <span className="special-badge special-rank">{idx + 1}</span>
                 : <span className="special-badge special-star" aria-hidden="true"><Icon name="star" size={11} /></span>}
               {it.imageUrl ? <img src={it.imageUrl} alt="" loading="lazy" decoding="async" /> : <span className="special-ph" aria-hidden="true"><Icon name="image" size={26} /></span>}
               <div className="bold small" style={{ whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{pickLang(it, 'name', lang)}</div>
-              <div className="price small" style={{ color: 'var(--brand)' }}><Price value={it.price} currency={currency} lang={lang} /></div>
+              <div className="row" style={{ gap: 6, alignItems: 'center', justifyContent: 'space-between', width: '100%' }}>
+                <div className="price small" style={{ color: 'var(--brand)' }}><Price value={it.price} currency={currency} lang={lang} /></div>
+                {/* gated like every other layout: no badge when quick-add is
+                    hidden, and no dead tap on a sold-out best-seller */}
+                {quickAddOn && !(it.available === false || (it.trackStock && (it.stock || 0) <= 0)) && <span className="special-add" {...quickAddProps(it)}><Icon name="add" size={13} /></span>}
+              </div>
             </button>
           ))}
         </div>
@@ -1202,9 +1266,10 @@ export default function MenuView({ tenant, tenantId, items, categories, offers =
                 : [...sortedCats.map((c) => ({ cat: c, items: itemsByCat[c.id] || [] })).filter((g) => g.items.length), ...((itemsByCat._uncat || []).length ? [{ cat: null, items: itemsByCat._uncat }] : [])]}
               allItems={allActive} currency={currency} offers={offers}
               onAdd={addLine} onOpen={setViewItem}
-              onQuickAdd={(s) => addLine(s, (s.variants && s.variants[0]) || null, [], 1)}
+              onQuickAdd={quickAdd}
               cartCount={cartCount} onCart={() => setCartOpen(true)} lang={lang}
               showCovers={!isHidden('covers')} showPairings={!isHidden('pairings')}
+              hidePrep={isHidden('prepTime')}
             />
           )}
         </div>
@@ -1218,7 +1283,9 @@ export default function MenuView({ tenant, tenantId, items, categories, offers =
           activeCat={activeCat} onPickCat={pickCat}
           currency={currency} offers={offers} stickyTop={stickyTop}
           allItems={allActive} showPairings={!isHidden('pairings')}
-          onQuickAdd={(s) => addLine(s, (s.variants && s.variants[0]) || null, [], 1)}
+          onQuickAdd={quickAdd}
+          quickAddOn={quickAddOn}
+          hidePrep={isHidden('prepTime')} hideServes={isHidden('serves')}
           onOpen={(it, rect) => { setOpenRect(rect || null); setViewItem(it) }}
         />
       ) : menuLayout === 'oceanart' ? (
@@ -1228,7 +1295,7 @@ export default function MenuView({ tenant, tenantId, items, categories, offers =
           filtered={!!search.trim()}
           activeCat={activeCat} onPickCat={pickCat}
           currency={currency} offers={offers} stickyTop={stickyTop}
-          onOpen={setViewItem}
+          onOpen={setViewItem} onQuickAdd={quickAdd} hidePrep={isHidden('prepTime')}
         />
       ) : menuLayout === 'storefront' ? (
         /* storefront — brand-app carbon copy: brand-colored page, sections, floating product cards (#Starbucks) */
@@ -1485,12 +1552,26 @@ export default function MenuView({ tenant, tenantId, items, categories, offers =
         <EditorialItemStage
           item={viewItem} tenant={tenant} currency={currency} originRect={openRect}
           allItems={allActive} offers={offers}
-          onQuickAdd={(s) => addLine(s, (s.variants && s.variants[0]) || null, [], 1)}
-          onClose={() => { setViewItem(null); setOpenRect(null) }}
-          onAdd={(variant, mods, qty) => { addLine(viewItem, variant, mods, qty); setViewItem(null); setOpenRect(null) }}
+          onQuickAdd={quickAdd}
+          initialLine={viewLine && viewLine.itemId === viewItem.id ? viewLine : null}
+          onOpenItem={(p) => { setViewLine(null); setOpenRect(null); setViewItem(p) }}
+          hidePrep={isHidden('prepTime')} hideServes={isHidden('serves')}
+          onClose={() => { setViewItem(null); setOpenRect(null); setViewLine(null) }}
+          onAdd={(variant, mods, qty) => {
+            // opened from a cart row → REPLACE that line (drop then re-add);
+            // plain addLine would MERGE by key and double the quantity
+            if (viewLine && viewLine.itemId === viewItem.id) setQty(viewLine.key, 0)
+            addLine(viewItem, variant, mods, qty); setViewItem(null); setOpenRect(null); setViewLine(null)
+          }}
         />
       ) : (
-        <ItemSheet item={viewItem} tenant={tenant} currency={currency} tenantId={tenantId} detail={itemDetail} siblings={visibleItems} onNavigate={setViewItem} onClose={() => setViewItem(null)} onOpenStory={(it) => setStoryItem(it)} onAdd={(variant, mods, qty) => { addLine(viewItem, variant, mods, qty); setViewItem(null) }} />
+        <ItemSheet item={viewItem} tenant={tenant} currency={currency} tenantId={tenantId} detail={itemDetail} siblings={visibleItems}
+          initialLine={viewLine && viewLine.itemId === viewItem.id ? viewLine : null}
+          onNavigate={(it) => { setViewLine(null); setViewItem(it) }} onClose={() => { setViewItem(null); setViewLine(null) }} onOpenStory={(it) => setStoryItem(it)}
+          onAdd={(variant, mods, qty) => {
+            if (viewLine && viewLine.itemId === viewItem.id) setQty(viewLine.key, 0)
+            addLine(viewItem, variant, mods, qty); setViewItem(null); setViewLine(null)
+          }} />
       ))}
 
       {/* Venue ad / welcome popup. It decides for itself whether anything is
@@ -1565,6 +1646,7 @@ export default function MenuView({ tenant, tenantId, items, categories, offers =
           {fxOpen === 'compare' && (
             <CompareItems
               open items={visibleItems} lang={lang} currency={currency}
+              hidden={hiddenEls}
               onClose={() => setFxOpen('')}
               onOpenItem={(it) => { setFxOpen(''); setViewItem(it) }}
             />
@@ -1604,6 +1686,11 @@ export default function MenuView({ tenant, tenantId, items, categories, offers =
           initialProfile={savedCustomer} preview={preview}
           onProfileSaved={setSavedCustomer}
           onQty={setQty} onClose={() => setCartOpen(false)}
+          // cart line → its full item record. Resolved against the RAW items
+          // prop, not allActive: a line added before its time-window closed
+          // must still open. The detail mounts after the cart's portal, so it
+          // paints above and closing it returns to the intact cart.
+          onOpenItem={(l) => { const it = (items || []).find((i) => i.id === l.itemId); if (it) { setViewLine(l); setViewItem(it) } }}
           onPlaced={(id) => { setCart([]); setCartOpen(false); onPlaced?.(id) }}
         />
       )}
@@ -1653,7 +1740,7 @@ function spotFlyToCart(fromEl, src) {
 // One full-viewport product "slide": big image (tilt + float + entrance),
 // color-adaptive halo, ambient steam/ice, nutrition flip, inline size + qty,
 // direct add (flies to cart), "customize", and "goes well with" pairings.
-function SpotSlide({ it, slideId, currency, offers, catName, suggestions = [], onAdd, onOpen, onQuickAdd }) {
+function SpotSlide({ it, slideId, currency, offers, catName, suggestions = [], onAdd, onOpen, onQuickAdd, hidePrep = false }) {
   const { t, lang } = useI18n()
   const ref = useRef(null)
   const tiltRef = useRef(null)
@@ -1734,7 +1821,7 @@ function SpotSlide({ it, slideId, currency, offers, catName, suggestions = [], o
         {desc && <p className="spot-desc">{desc}</p>}
         <div className="spot-meta">
           {it.calories ? <span><Icon name="flame" size={14} /> {it.calories} {lang === 'ar' ? 'سعرة حرارية' : 'cal'}</span> : null}
-          {it.prepTime ? <span><Icon name="clock" size={14} /> {it.prepTime} {t('minutesShort')}</span> : null}
+          {!hidePrep && it.prepTime ? <span><Icon name="clock" size={14} /> {it.prepTime} {t('minutesShort')}</span> : null}
           {it.rating ? <span><Icon name="star" size={14} fill="currentColor" strokeWidth={1.5} /> {it.rating}</span> : null}
         </div>
         {hasSizes && (
@@ -1806,7 +1893,7 @@ function SpotCover({ cat, item, lang }) {
 
 // Orchestrates the spotlight scroll: category covers + product slides, a
 // side progress rail (dot per product, tap to jump), and the final cart CTA.
-function SpotlightStage({ groups, allItems, currency, offers, onAdd, onOpen, onQuickAdd, cartCount, onCart, lang, showCovers = true, showPairings = true }) {
+function SpotlightStage({ groups, allItems, currency, offers, onAdd, onOpen, onQuickAdd, cartCount, onCart, lang, showCovers = true, showPairings = true, hidePrep = false }) {
   const stageRef = useRef(null)
   const [activeId, setActiveId] = useState('')
   const flat = groups.flatMap((g) => g.items)
@@ -1847,7 +1934,7 @@ function SpotlightStage({ groups, allItems, currency, offers, onAdd, onOpen, onQ
           {g.items.map((it) => (
             <SpotSlide key={it.id} it={it} slideId={it.id} currency={currency} offers={offers}
               catName={g.cat ? pickLang(g.cat, 'name', lang) : ''} suggestions={pairFor(it)}
-              onAdd={(v, m, q) => onAdd(it, v, m, q)} onOpen={() => onOpen(it)} onQuickAdd={onQuickAdd} />
+              onAdd={(v, m, q) => onAdd(it, v, m, q)} onOpen={() => onOpen(it)} onQuickAdd={onQuickAdd} hidePrep={hidePrep} />
           ))}
         </div>
       ))}
@@ -1923,10 +2010,9 @@ function RegisterSheet({ tenantId, tenantName, onClose, onSaved }) {
   )
 }
 
-export function ItemSheet({ item, tenant, currency, tenantId, onClose, onAdd, detail = 'sheet', siblings = [], onNavigate, onOpenStory }) {
+export function ItemSheet({ item, tenant, currency, tenantId, onClose, onAdd, detail = 'sheet', siblings = [], onNavigate, onOpenStory, initialLine = null }) {
   const { t, lang } = useI18n()
   const toast = useToast()
-  const portalRoot = usePortalRoot()
   const variants = item.variants || []
   const groups = item.modifierGroups || []
   const ingredients = item.ingredients || []
@@ -1955,9 +2041,21 @@ export function ItemSheet({ item, tenant, currency, tenantId, onClose, onAdd, de
   const [tab, setTab] = useState('info')
   const [reviews, setReviews] = useState(null)
   const [zoom, setZoom] = useState(false)
+  // which zoom slide is in view — drives the ±1 decode window below
+  const [zoomIdx, setZoomIdx] = useState(0)
   const [imgIdx, setImgIdx] = useState(0)
   const [arOpen, setArOpen] = useState(false)
-  const hasAr = (item.model3dUrl || item.arStandeeUrl) && tenant?.ar?.enabled !== false
+  const hasAr = MENU_3D_ENABLED && (item.model3dUrl || item.arStandeeUrl) && tenant?.ar?.enabled !== false
+
+  // CLOSE THE 3D STAGE WHEN THE DISH CHANGES.
+  //
+  // The sheet is reused across dishes (chevrons and the «يُطلب معه» chips swap
+  // `item` without remounting), so leaving `arOpen` true handed a NEW model
+  // source to the SAME live <model-viewer>. The viewer then re-measured a mesh
+  // that still carried the previous dish's scale, and the size flip-flopped
+  // between passes. Reopening per dish is also what a guest expects: the model
+  // is a deliberate action, not a mode you stay in while browsing.
+  useEffect(() => { setArOpen(false) }, [item?.id])
 
   // Immersive screen: chevrons / horizontal swipe move to the adjacent dish.
   const navEnabled = detail === 'immersive' && typeof onNavigate === 'function' && siblings.length > 1
@@ -1995,7 +2093,15 @@ export function ItemSheet({ item, tenant, currency, tenantId, onClose, onAdd, de
 
   // Reset per-item selections when navigating to an adjacent dish (the component stays mounted).
   useEffect(() => {
-    setVariant(variants[0] || null); setQty(1); setSelected(groups.map(() => [])); setTab('info'); setImgIdx(0); setZoom(false)
+    // zoomIdx too: carrying dish A's slide index into dish B's shorter gallery
+    // put every real image outside the ±1 decode window — a blank lightbox.
+    // Opened from a CART ROW → seed the line's qty/variant/mods so the sheet
+    // shows what was actually ordered (add then REPLACES the line upstream).
+    const line = initialLine && initialLine.itemId === item.id ? initialLine : null
+    setVariant((line?.variantKey && variants.find((v) => v.key === line.variantKey)) || variants[0] || null)
+    setQty(line?.qty || 1)
+    setSelected(groups.map((g) => line ? (g.options || []).filter((o) => (line.modifiers || []).some((m) => m.nameAr === o.nameAr)) : []))
+    setTab('info'); setImgIdx(0); setZoom(false); setZoomIdx(0)
   }, [item.id]) // eslint-disable-line react-hooks/exhaustive-deps
 
   const toggle = (gi, opt) => {
@@ -2073,7 +2179,8 @@ export function ItemSheet({ item, tenant, currency, tenantId, onClose, onAdd, de
             <div className="dish-carousel" onScroll={(e) => { const w = e.currentTarget.clientWidth || 1; setImgIdx(Math.min(gallery.length - 1, Math.round(Math.abs(e.currentTarget.scrollLeft) / w))) }}>
               {gallery.map((src, i) => (
                 <div key={i} className="dish-slide" style={{ position: 'relative', ...(tiltBox || {}) }}>
-                  <img className="dish-circle" data-imgstyle={imgStyle} src={src} alt="" decoding="async" onClick={() => setZoom(true)} style={{ cursor: 'zoom-in', ...scaleStyle }} />
+                  {/* zoom starts on the slide being viewed, not always the first photo */}
+                  <img className="dish-circle" data-imgstyle={imgStyle} src={src} alt="" decoding="async" onClick={() => { setZoomIdx(imgIdx); setZoom(true) }} style={{ cursor: 'zoom-in', ...scaleStyle }} />
                   {i === imgIdx && <ItemFx kind={item.effect} />}
                 </div>
               ))}
@@ -2081,22 +2188,18 @@ export function ItemSheet({ item, tenant, currency, tenantId, onClose, onAdd, de
             <div className="dish-dots">{gallery.map((_, i) => <span key={i} className={i === imgIdx ? 'on' : ''} />)}</div>
           </div>
         ) : null}
-        {zoom && gallery.length > 0 && portalRoot && createPortal(
-          <div className="img-zoom" onClick={() => setZoom(false)} role="dialog" aria-modal="true">
-            <div className="img-zoom-track" onClick={(e) => e.stopPropagation()}>
-              {gallery.map((src, i) => <img key={i} src={src} alt="" loading="lazy" decoding="async" />)}
-            </div>
-            <button className="img-zoom-x" onClick={() => setZoom(false)} aria-label={t('close')}><Icon name="close" size={22} /></button>
-          </div>,
-          portalRoot,
+        {/* fullscreen swipeable lightbox — shared GalleryZoom (the ±1 decode
+            window and the Escape handling live inside the component now) */}
+        {zoom && gallery.length > 0 && (
+          <GalleryZoom gallery={gallery} startIdx={zoomIdx} onClose={() => { setZoom(false); setZoomIdx(0) }} />
         )}
         <div className="dish-details-pane grow stack" style={{ gap: 'var(--sp-4)' }}>
           <div className="text-center stack" style={{ gap: 6, alignItems: 'center' }}>
             <strong style={{ fontSize: 'var(--fs-lg)' }}>{pickLang(item, 'name', lang)}</strong>
             <div className="row wrap" style={{ gap: 12, justifyContent: 'center' }}>
               {displayRating ? <span className="rating"><Icon name="star" size={15} fill="currentColor" strokeWidth={1.5} /> {displayRating}{displayCount ? ` (${displayCount})` : ''}</span> : null}
-              {item.prepTime ? <span className="time-chip"><Icon name="clock" size={14} /> {item.prepTime} {t('minutesShort')}</span> : null}
-              {item.serves ? <span className="time-chip"><Icon name="customers" size={14} /> {item.serves}</span> : null}
+              {!(resolveSkin(tenant, 'menu')?.hidden || []).includes('prepTime') && item.prepTime ? <span className="time-chip"><Icon name="clock" size={14} /> {item.prepTime} {t('minutesShort')}</span> : null}
+              {!(resolveSkin(tenant, 'menu')?.hidden || []).includes('serves') && item.serves ? <span className="time-chip"><Icon name="customers" size={14} /> {item.serves}</span> : null}
               {item.calories ? <span className="time-chip"><Icon name="flame" size={14} /> {item.calories}</span> : null}
             </div>
             {onOpenStory && hasStory(item) && <StoryBadge lang={lang} onClick={() => onOpenStory(item)} />}
@@ -2399,7 +2502,7 @@ function NotificationsSheet({ open, onClose, items, lastSeen, onMarkRead, slug, 
   )
 }
 
-function CartSheet({ cart, subtotal, currency, offers, tenant, tenantId, table, partySize, orderType, setOrderType, car, setCar, curbsideEnabled, initialProfile, onProfileSaved, onQty, onClose, onPlaced, preview }) {
+function CartSheet({ cart, subtotal, currency, offers, tenant, tenantId, table, partySize, orderType, setOrderType, car, setCar, curbsideEnabled, initialProfile, onProfileSaved, onQty, onOpenItem = null, onClose, onPlaced, preview }) {
   const { t, lang } = useI18n()
   const toast = useToast()
   const [name, setName] = useState(initialProfile?.name || '')
@@ -2417,6 +2520,10 @@ function CartSheet({ cart, subtotal, currency, offers, tenant, tenantId, table, 
   const onlinePayEnabled = tenant?.onlinePayment?.enabled === true
   // Browse-only menu: the cart is a "show the waiter" list — no order submission.
   const browseOnly = tenant?.menuMode === 'browse'
+  // Venue-controlled checkout fields (tenant.checkoutFields — absent = shown).
+  // The phone force-shows for delivery: place() hard-requires it there.
+  const cf = tenant?.checkoutFields || {}
+  const showField = (k) => cf[k] !== false
   const ordering = orderingState(tenant)
   // Marketing control: how loudly the cart TOTAL is displayed.
   // 'normal' | 'bold' (big & clear) | 'small' | 'faint' | 'hidden'.
@@ -2744,21 +2851,37 @@ function CartSheet({ cart, subtotal, currency, offers, tenant, tenantId, table, 
           )}
 
           <div className="stack" style={{ gap: 'var(--sp-2)' }}>
-            {cart.map((l) => (
-              <div key={l.key} className="list-row">
+            {cart.map((l) => {
+              // thumb + text: tapping them reopens the item's detail view (when
+              // the host wires onOpenItem) so a guest can review what a line IS
+              // without hunting the menu again; the Stepper stays a sibling so
+              // qty taps never trigger the open.
+              const thumb = l.image
+                ? <img className="cart-thumb" src={l.image} alt="" loading="lazy" />
+                : <span className="cart-thumb cart-thumb-ph"><Icon name="coffee" size={18} /></span>
+              const body = (
                 <div className="grow">
                   <div className="bold">{lang === 'en' && l.nameEn ? l.nameEn : l.nameAr}</div>
                   {l.variantLabel && <div className="xs faint">{l.variantLabel}</div>}
                   {l.modifiers?.length ? <div className="xs faint">{l.modifiers.map((m) => (lang === 'en' && m.nameEn ? m.nameEn : m.nameAr)).join('، ')}</div> : null}
                   <div className="price small"><Price value={l.unitPrice * l.qty} currency={currency} lang={lang} /></div>
                 </div>
-                <Stepper value={l.qty} min={0} onChange={(q) => onQty(l.key, q)} />
-              </div>
-            ))}
+              )
+              return (
+                <div key={l.key} className="list-row">
+                  {onOpenItem ? (
+                    <button type="button" className="cart-line-open" onClick={() => onOpenItem(l)}>{thumb}{body}</button>
+                  ) : (
+                    <>{thumb}{body}</>
+                  )}
+                  <Stepper value={l.qty} min={0} onChange={(q) => onQty(l.key, q)} />
+                </div>
+              )
+            })}
           </div>
 
           {/* coupon */}
-          {!browseOnly && (
+          {!browseOnly && showField('coupon') && (
           <div className="field">
             <label>{t('couponCode')} <span className="faint">({t('optional')})</span></label>
             <input className="input" dir="ltr" value={coupon} onChange={(e) => setCoupon(e.target.value)} placeholder="WELCOME10" />
@@ -2809,18 +2932,25 @@ function CartSheet({ cart, subtotal, currency, offers, tenant, tenantId, table, 
 
           {!browseOnly && (
           <>
+          {showField('name') && (
           <div className="field">
             <label>{t('yourName')} <span className="faint">({t('optional')})</span></label>
             <input className="input" value={name} onChange={(e) => setName(e.target.value)} />
           </div>
+          )}
+          {/* delivery force-shows the phone: place() refuses delivery without it */}
+          {(showField('phone') || isDelivery) && (
           <div className="field">
-            <label>{t('phone')} <span className="faint">({lang === 'ar' ? 'للولاء' : 'for loyalty'})</span></label>
+            <label>{t('phone')} <span className="faint">({isDelivery ? (lang === 'ar' ? 'مطلوب للتوصيل' : 'required for delivery') : (lang === 'ar' ? 'للولاء' : 'for loyalty')})</span></label>
             <input className="input num" dir="ltr" inputMode="tel" value={phone} onChange={(e) => setPhone(e.target.value)} />
           </div>
+          )}
+          {showField('email') && (
           <div className="field">
             <label>{lang === 'ar' ? 'البريد الإلكتروني' : 'Email'} <span className="faint">({lang === 'ar' ? 'اختياري — لاستلام الفاتورة' : 'optional — for your invoice'})</span></label>
             <input className="input" dir="ltr" type="email" inputMode="email" value={email} onChange={(e) => setEmail(e.target.value)} />
           </div>
+          )}
 
           {/* loyalty status */}
           {loyaltyEnabled && customer && (
@@ -2840,10 +2970,12 @@ function CartSheet({ cart, subtotal, currency, offers, tenant, tenantId, table, 
             </div>
           )}
 
+          {showField('notes') && (
           <div className="field">
             <label>{t('notes')}</label>
             <textarea className="textarea" placeholder={t('notesPlaceholder')} value={notes} onChange={(e) => setNotes(e.target.value)} />
           </div>
+          )}
           </>
           )}
         </div>

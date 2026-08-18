@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
+import { Link } from 'react-router-dom'
 import { useAuth } from '../../lib/auth.jsx'
 import { useI18n } from '../../lib/i18n.jsx'
 import { useToast } from '../../components/Toast.jsx'
@@ -10,7 +11,7 @@ import FloorMap, { TableShape } from '../../components/FloorMap.jsx'
 import CashierPOS from '../../components/CashierPOS.jsx'
 import OrderDetail from '../../components/OrderDetail.jsx'
 import PaymentSheet from '../../components/PaymentSheet.jsx'
-import { watchTables, createTable, saveTable, deleteTable, watchOrdersSince, watchReservations, createReservation, setReservationStatus, payOrder } from '../../lib/db.js'
+import { watchTables, createTable, saveTable, deleteTable, setTableOccupancy, watchOrdersSince, watchReservations, createReservation, setReservationStatus, payOrder } from '../../lib/db.js'
 import { tableUrl, qrDataUrl, printQrCard, printAllTableQrs, publicBaseUrl } from '../../lib/qr.js'
 import { alertParty } from '../../lib/notify.js'
 import { CAP } from '../../lib/permissions.js'
@@ -21,7 +22,7 @@ const startOfToday = () => { const d = new Date(); d.setHours(0, 0, 0, 0); retur
 
 export default function Tables() {
   const { t, lang } = useI18n()
-  const { tenantId, tenant, profile, isManager, can } = useAuth()
+  const { tenantId, tenant, profile, user, isManager, can } = useAuth()
   const ar = lang === 'ar'
   const actorName = profile?.displayName || profile?.email || ''
   const toast = useToast()
@@ -41,6 +42,14 @@ export default function Tables() {
   // Same gate the cashier and OrderDetail use — a waiter who can take orders
   // still cannot settle them.
   const canPay = isManager || can?.(CAP.REFUND)
+  // Floor control: who may flip a table's stored occupancy by hand. Order-taking
+  // staff qualify — seating a walk-in IS their job (rules mirror this exactly:
+  // take_orders may touch only the occupancy field, manage_tables everything).
+  const canFloor = isManager || can?.(CAP.MANAGE_TABLES) || can?.(CAP.TAKE_ORDERS)
+  const setOccupancy = (tb, state) => {
+    setTableOccupancy(tenantId, tb.id, { state, since: Date.now(), byName: actorName, byUid: user?.uid || '' })
+      .catch(() => toast.error(ar ? 'تعذّر تحديث حالة الطاولة' : 'Could not update table'))
+  }
   const [detailId, setDetailId] = useState(null)
   // COLLECTING FROM THE FLOOR PLAN. The tables sheet offered «تحصيل الدفع» and
   // then opened a read-only detail — OrderDetail had no payment action at all
@@ -93,13 +102,32 @@ export default function Tables() {
   const activeByTable = useMemo(() => { const m = {}; orders.forEach((o) => { if (o.tableId && !['paid', 'cancelled', 'refunded'].includes(o.status)) (m[o.tableId] = m[o.tableId] || []).push(o) }); return m }, [orders])
   const orderByTable = useMemo(() => { const m = {}; Object.entries(activeByTable).forEach(([k, list]) => { m[k] = list[0] }); return m }, [activeByTable])
   const reservedIds = useMemo(() => { const s = new Set(); tableBookings.forEach((r) => { if (r.tableId && (!r.date || r.date === todayStr())) s.add(r.tableId) }); return s }, [tableBookings])
-  const statusOf = (tb) => { const list = activeByTable[tb.id]; if (list?.length) return list.every((o) => o.status === 'served') ? 'billed' : 'occupied'; return reservedIds.has(tb.id) ? 'reserved' : 'free' }
+  // Live orders are the truth; the STORED occupancy field is the fallback that
+  // (a) survives the midnight query re-anchor (a table with last night's unpaid
+  // order no longer silently frees at 00:00) and (b) lets a waiter mark a table
+  // busy/free by hand — walk-ins who sit before ordering, or a table held for
+  // cleaning. Payment auto-frees via the server trigger (owner decision).
+  const statusOf = (tb) => {
+    const list = activeByTable[tb.id]
+    if (list?.length) return list.every((o) => o.status === 'served') ? 'billed' : 'occupied'
+    const st = tb.occupancy?.state
+    if (st === 'occupied' || st === 'billed') return st
+    return reservedIds.has(tb.id) ? 'reserved' : 'free'
+  }
 
   // elapsed-time + running-bill chip shown under occupied/billed tables
   const toDate = (ts) => (ts?.toDate ? ts.toDate() : ts?.seconds ? new Date(ts.seconds * 1000) : null)
   const metaOf = (tb) => {
     const list = activeByTable[tb.id]
-    if (!list?.length) return ''
+    if (!list?.length) {
+      // manually-held table: show how long it has been held, no bill yet
+      const occ = tb.occupancy
+      if (occ?.state === 'occupied' && occ.since) {
+        const m = Math.max(0, Math.round((Date.now() - occ.since) / 60000))
+        return m >= 60 ? `${Math.floor(m / 60)}${ar ? 'س' : 'h'} ${m % 60}${ar ? 'د' : 'm'}` : `${m}${ar ? 'د' : 'm'}`
+      }
+      return ''
+    }
     const times = list.map((o) => toDate(o.createdAt)).filter(Boolean).map((d) => d.getTime())
     const m = times.length ? Math.max(0, Math.round((Date.now() - Math.min(...times)) / 60000)) : 0
     const dur = m >= 60 ? `${Math.floor(m / 60)}${ar ? 'س' : 'h'} ${m % 60}${ar ? 'د' : 'm'}` : `${m}${ar ? 'د' : 'm'}`
@@ -203,7 +231,12 @@ export default function Tables() {
       )}
 
       {tables.length > 0 && (
-        <div className="row" style={{ gap: 6 }}>
+        <div className="row" style={{ gap: 6, flexWrap: 'wrap' }}>
+          {(isManager || can?.(CAP.MANAGE_STICKERS)) && (
+            <Link to="/admin/table-stickers" className="btn btn-primary grow" title={ar ? 'ثلاثة ملصقات لكل طاولة: الوجه الأوسط والجانبان' : 'Three stickers per table'}>
+              <Icon name="qr" size={16} /> {ar ? 'ملصقات استاند الطاولة' : 'Table stand stickers'}
+            </Link>
+          )}
           <button className="btn btn-outline grow" onClick={() => printAllTableQrs(tables, tenant?.slug, { venueName: tenant?.name, lang })}><Icon name="print" size={16} /> {ar ? 'طباعة رموز الطاولات' : 'Print QR codes'}</button>
           {tenant?.slug && <button className="btn btn-outline grow" onClick={() => { navigator.clipboard?.writeText(`${publicBaseUrl()}/reserve/${tenant.slug}`); toast.success(ar ? 'تم نسخ رابط الحجز' : 'Booking link copied') }}><Icon name="reservations" size={16} /> {ar ? 'رابط الحجز المسبق' : 'Booking link'}</button>}
         </div>
@@ -284,6 +317,26 @@ export default function Tables() {
                   </>
                 )}
               </div>
+
+              {/* MANUAL OCCUPANCY — the waiter's hand on the floor. A live
+                  unpaid order always outranks this (derived-first in statusOf),
+                  so the toggle only shows when the table has no active orders:
+                  hold a table for walk-ins who sat before ordering, or free one
+                  the system still remembers as busy. */}
+              {canFloor && activeOrdersForSel.length === 0 && (
+                statusOf(sel) === 'occupied' ? (
+                  <button className="btn btn-success btn-block" style={{ minHeight: 44, fontWeight: 800 }} onClick={() => { setOccupancy(sel, 'free'); setSel(null); toast.success(ar ? 'الطاولة متاحة الآن' : 'Table is free') }}>
+                    <Icon name="check" size={16} /> {ar ? 'تحرير الطاولة (متاحة)' : 'Free the table'}
+                  </button>
+                ) : (
+                  <button className="btn btn-outline btn-block" style={{ minHeight: 44, fontWeight: 700 }} onClick={() => { setOccupancy(sel, 'occupied'); setSel(null); toast.success(ar ? 'وُسمت الطاولة مشغولة' : 'Table marked occupied') }}>
+                    <Icon name="tables" size={16} /> {ar ? 'إشغال الطاولة (جلس ضيوف)' : 'Mark occupied (guests seated)'}
+                  </button>
+                )
+              )}
+              {canFloor && activeOrdersForSel.length > 0 && (
+                <p className="xs faint">{ar ? 'الطاولة مشغولة بطلبات نشطة — تتحرر تلقائياً بعد التحصيل أو الإلغاء.' : 'Held by active orders — frees automatically on settle or cancel.'}</p>
+              )}
 
               <div className="row" style={{ gap: 6 }}>
                 <button className="btn btn-outline grow" onClick={() => { setQrFor(sel); setSel(null) }}><Icon name="qr" size={15} /> {t('qrCode')}</button>

@@ -1,4 +1,4 @@
-import { lazy, Suspense, useEffect, useRef, useState } from 'react'
+import { Suspense, useEffect, useRef, useState } from 'react'
 import { useParams, Link } from 'react-router-dom'
 import { resolveSlug, watchOrder, createReview, createComplaint, notifyArrival, getTenant, listItems } from '../../lib/db.js'
 import SocialLinks, { socialHref } from '../../components/SocialLinks.jsx'
@@ -19,19 +19,23 @@ import { getPrefs } from '../../lib/notifyPrefs.js'
 import { isRated, markRated, isArrived, markArrived, getMyOrders, getLocalCustomer } from '../../lib/customer.js'
 import { startPayment } from '../../lib/payments.js'
 import { createVenueReview } from '../../lib/reviewImport.js'
+import { lazyOverlay } from '../../components/ErrorBoundary.jsx'
 // NotificationSettings -> push.js -> firebase/messaging + installations (~85 kB)
 // for a panel most diners never open. Loaded on first open instead; it stays
 // mounted afterwards so the sheet keeps its close animation.
-const NotificationSettings = lazy(() => import('../../components/NotificationSettings.jsx'))
+// lazyOverlay (not React.lazy): absorbs a failed chunk into an inline retry
+// card instead of rejecting through Suspense into a full page reload, and
+// shows an instant scrim spinner while the chunk loads.
+const NotificationSettings = lazyOverlay(() => import('../../components/NotificationSettings.jsx'), { label: 'notif-settings' })
 import { deviceKey } from '../../lib/device.js'
 import { gamesFor, resolveWaitGame } from '../../lib/games.js'
 // heavy/rarely-opened guest overlays
-const Leaderboard = lazy(() => import('../../components/Leaderboard.jsx'))
-const KitchenTwin = lazy(() => import('../../components/KitchenTwin.jsx'))
-const YearWrapped = lazy(() => import('../../components/YearWrapped.jsx'))
+const Leaderboard = lazyOverlay(() => import('../../components/Leaderboard.jsx'), { label: 'leaderboard' })
+const KitchenTwin = lazyOverlay(() => import('../../components/KitchenTwin.jsx'), { label: 'kitchen-twin' })
+const YearWrapped = lazyOverlay(() => import('../../components/YearWrapped.jsx'), { label: 'year-wrapped' })
 // The full games hub — reused verbatim so a wait-game launch goes through the
 // exact same registration gate, lobby and scoring as «ركن الألعاب».
-const GamesCenter = lazy(() => import('../../components/GamesCenter.jsx'))
+const GamesCenter = lazyOverlay(() => import('../../components/GamesCenter.jsx'), { label: 'games-center' })
 
 const STEPS = ['pending', 'accepted', 'preparing', 'ready', 'served']
 const STEP_LABEL = {

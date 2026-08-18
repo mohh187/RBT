@@ -641,6 +641,22 @@ export const TABLE_RANGE = {
   // same on a bare item as on an option-rich one. 0 = today: height from
   // content alone.
   minBody: { min: 0, max: 90, step: 1, dflt: 0 },    // dvh
+  // «سطح الطبق»: the photographed perspective tabletop band INSIDE the photo
+  // box — the surface the cutout actually sits on. Active only while
+  // menuTable.topUrl is non-empty (no separate on/off key, no invalid states).
+  topH: { min: 20, max: 70, step: 1, dflt: 44 },       // band height, % of the dish box
+  topSeat: { min: 0, max: 30, step: 0.5, dflt: 12 },   // dish raise above the near edge, % of the dish box
+  topFeather: { min: 0, max: 1, step: 0.05, dflt: 0.35 }, // far-edge melt into the wall
+  // «تدرج اختفاء الطاولة من الأسفل»: the table's BOTTOM dissolves to nothing
+  // instead of stopping on a hard dark edge — the creative fade the owner
+  // asked for. 0 = today's hard edge.
+  topFade: { min: 0, max: 1, step: 0.05, dflt: 0 },
+  // Where the table's NEAR EDGE sits inside the topUrl image, % from its top.
+  // The generator now writes a COMPLETE table (surface + front face in one
+  // photograph); the band shows rows [0..topEdge] and the panel shows the rest,
+  // so the two read as one piece of furniture. 100 = the whole image is the
+  // surface (the earlier band-only photographs keep painting unchanged).
+  topEdge: { min: 15, max: 100, step: 1, dflt: 100 },
 }
 
 // The keys a venue may override FOR THE OPENED-ITEM WINDOW alone
@@ -649,7 +665,7 @@ export const TABLE_RANGE = {
 // cannot fit both: the owner reported the table «لا تظهر بشكل مناسب عند فتح
 // الصنف». Geometry and strength may differ per place; the material may not —
 // it is one room with one table.
-export const TABLE_STAGE_KEYS = ['x', 'y', 'w', 'h', 'lift', 'opacity', 'shade', 'dim', 'melt', 'meltBottom', 'veil', 'extend', 'heroPad', 'heroMax', 'textPad', 'minBody', 'contact', 'scale']
+export const TABLE_STAGE_KEYS = ['x', 'y', 'w', 'h', 'lift', 'opacity', 'shade', 'dim', 'melt', 'meltBottom', 'veil', 'extend', 'heroPad', 'heroMax', 'textPad', 'minBody', 'contact', 'scale', 'topH', 'topSeat', 'topFade']
 
 /**
  * The table under the dish details. Reads the TENANT document, because it is one
@@ -719,6 +735,13 @@ export function resolveTable(tenant, options) {
     melt: num(t.melt, R.melt.dflt, 0, 1),
     meltBottom: num(t.meltBottom, R.meltBottom.dflt, 0, 1),
     veil: num(t.veil, R.veil.dflt, 0, R.veil.max),
+    // «سطح الطبق» — the perspective tabletop band inside the photo box.
+    topUrl: String(t.topUrl || ''),
+    topH: num(t.topH, R.topH.dflt, R.topH.min, R.topH.max),
+    topSeat: num(t.topSeat, R.topSeat.dflt, R.topSeat.min, R.topSeat.max),
+    topFeather: num(t.topFeather, R.topFeather.dflt, 0, 1),
+    topFade: num(t.topFade, R.topFade.dflt, 0, 1),
+    topEdge: num(t.topEdge, R.topEdge.dflt, R.topEdge.min, R.topEdge.max),
     // «مدّ الطاولة حتى أسفل النافذة» — stage engine only (data-tbl-extend).
     // A boolean, never num-clamped.
     extend: t.extend === true,
@@ -796,20 +819,49 @@ export function tableStageVars(tb) {
     // changes while the mobile URL bar animates — the same unit that made the
     // table shift on every scroll (see --edt-hero-cap in index.css).
     if (tb.minBody) v['--edt-stg-bodymin'] = `${tb.minBody}svh`
+  // ONE DIAL, BOTH SURFACES. The control is labelled «شكل ثابت للطاولة في كل
+  // الأصناف» — a consistent table on every item — but it only ever reached the
+  // OPENED dish. In the pager the plank is drawn against `.edt-main`, which
+  // hugs its content, so a dish with three add-ons drew a taller table than a
+  // bare one and the promise was broken exactly where the guest scrolls. Same
+  // number, same unit, now also emitted for the list.
+  if (tb.minBody) v['--edt-main-min'] = `${tb.minBody}svh`
   if (tb.heroPad !== TABLE_RANGE.heroPad.dflt) v['--edt-stg-padtop'] = `min(${tb.heroPad}px, 14vw)`
   if (tb.heroMax !== TABLE_RANGE.heroMax.dflt) {
-    v['--edt-stg-heromax'] = `min(${tb.heroMax}dvh, ${tb.heroMax * 10}px)`
+    // svh, not dvh — the same URL-bar rule as minBody above: a dvh hero cap
+    // resized the stage photo while the phone scrolled.
+    v['--edt-stg-heromax'] = `min(${tb.heroMax}svh, ${tb.heroMax * 10}px)`
     const mn = Math.min(30, tb.heroMax)
-    v['--edt-stg-heromin'] = `min(${mn}dvh, ${mn * 10}px)`
+    v['--edt-stg-heromin'] = `min(${mn}svh, ${mn * 10}px)`
   }
   return Object.keys(v).length ? v : null
+}
+
+/**
+ * «سطح الطبق» band vars. Null while no band (topUrl empty) — untouched venues
+ * stamp nothing and [data-top] never exists, so their paint stays byte-identical.
+ */
+export function tableTopVars(tb) {
+  if (!tb || !tb.topUrl) return null
+  return {
+    '--edt-toph': n3(tb.topH / 100),
+    '--edt-topseat': n3(tb.topSeat / 100),
+    '--edt-topfeather': n3(tb.topFeather),
+    '--edt-topfade': n3(tb.topFade),
+    '--edt-topedge': n3(tb.topEdge),
+  }
 }
 
 /** Inline style for the table panel itself. */
 export function tableStyle(tb) {
   if (!tb) return null
   const s = { opacity: tb.opacity }
-  if (tb.kind === 'image' && tb.url) {
+  if (tb.kind === 'image' && tb.url && tb.topUrl === tb.url) {
+    // COMPLETE-table mode: .edt-topfull paints the photograph as one
+    // continuous element from inside the photo box down behind the panel —
+    // the art layer here must NOT paint it a second time. The panel keeps
+    // contributing its readability layers (melt/veil/dim) on top.
+  } else if (tb.kind === 'image' && tb.url) {
     s.backgroundImage = `url(${tb.url})`
     s.backgroundSize = tb.scale === 1 ? 'cover' : `${Math.round(tb.scale * 100)}%`
     s.backgroundPosition = 'center'
@@ -1425,6 +1477,22 @@ export const STAGE_BLOCKS = [
   { id: 'pairs', ar: 'يُطلب معه', en: 'Pairings' },
 ]
 export const STAGE_BLOCK_IDS = STAGE_BLOCKS.map((b) => b.id)
+// The browsing-LIST panel carries fewer blocks than the opened window — its
+// own catalogue, so the card offers only what the pager actually renders.
+// Stored under menuStage.list ({blocks, order}) beside the stage's own keys.
+export const LIST_BLOCKS = [
+  { id: 'name', ar: 'اسم الصنف', en: 'Item name' },
+  { id: 'price', ar: 'السعر', en: 'Price' },
+  { id: 'facts', ar: 'الحقائق (سعرات/تحضير/يكفي)', en: 'Facts' },
+  { id: 'ing', ar: 'المكونات', en: 'Ingredients' },
+  { id: 'desc', ar: 'الوصف', en: 'Description' },
+  { id: 'pairs', ar: 'يُطلب معه', en: 'Pairings' },
+  { id: 'open', ar: 'زر «اعرض الطبق»', en: 'View-dish button' },
+  // quick add-to-cart from the browsing pager — mergeOrder appends unknown ids,
+  // so venues with a saved order get it after 'open' automatically
+  { id: 'add', ar: 'زر «أضف للسلة»', en: 'Add-to-cart button' },
+]
+export const LIST_BLOCK_IDS = LIST_BLOCKS.map((b) => b.id)
 // Placeable but NOT orderable: the AR button lives in the media column under
 // the photo, outside the panel's flow.
 export const STAGE_PLACE_ONLY_IDS = ['ar']
@@ -1442,14 +1510,21 @@ export const STAGE_TEXT_RANGE = {
 /**
  * Null when menuStage is absent or entirely default, so the untouched path
  * renders today's exact DOM — attribute-free.
+ * `place` 'stage' (default — the opened window, menuStage's own keys) or
+ * 'list' (the browsing pager, menuStage.list) — two independent tunings of
+ * the same block system, each against its own catalogue.
  */
-export function resolveStageBlocks(tenant) {
-  const s = tenant && tenant.menuStage
-  if (!s || typeof s !== 'object') return null
+export function resolveStageBlocks(tenant, place = 'stage') {
+  const root = tenant && tenant.menuStage
+  if (!root || typeof root !== 'object') return null
+  const s = place === 'list' ? (root.list && typeof root.list === 'object' ? root.list : null) : root
+  if (!s) return null
+  const IDS = place === 'list' ? LIST_BLOCK_IDS : STAGE_BLOCK_IDS
+  const EXTRA = place === 'list' ? [] : STAGE_PLACE_ONLY_IDS
   const R = STAGE_TEXT_RANGE
   const src = s.blocks && typeof s.blocks === 'object' ? s.blocks : {}
   const blocks = {}
-  STAGE_BLOCK_IDS.concat(STAGE_PLACE_ONLY_IDS).forEach((id) => {
+  IDS.concat(EXTRA).forEach((id) => {
     const b = src[id]
     if (!b || typeof b !== 'object') return
     const align = str(b.align, STAGE_ALIGN_IDS, '')
@@ -1462,10 +1537,10 @@ export function resolveStageBlocks(tenant) {
   const raw = Array.isArray(s.order) ? s.order : []
   const saved = raw
     .map((k) => String(k || ''))
-    .filter((k, i, a) => STAGE_BLOCK_IDS.includes(k) && a.indexOf(k) === i)
+    .filter((k, i, a) => IDS.includes(k) && a.indexOf(k) === i)
     .slice(0, 16)
-  const order = saved.length ? mergeOrder(saved, STAGE_BLOCK_IDS) : [...STAGE_BLOCK_IDS]
-  const moved = order.some((id, i) => id !== STAGE_BLOCK_IDS[i])
+  const order = saved.length ? mergeOrder(saved, IDS) : [...IDS]
+  const moved = order.some((id, i) => id !== IDS[i])
   if (!Object.keys(blocks).length && !moved) return null
   return { blocks, order }
 }

@@ -65,7 +65,8 @@ export async function requestNotifyPermission() {
 // can confuse with the previous one. A query string does not change the SW's
 // scope, so this is transparent to everything else.
 // BUMP THIS whenever public/sw.js's CACHE constant changes.
-export const SW_VERSION = 'v6'
+// KEEP IN SYNC with CACHE in public/sw.js — bump BOTH in the same commit.
+export const SW_VERSION = 'v9'
 export const SW_URL = `/sw.js?v=${SW_VERSION}`
 
 export async function registerSW() {
@@ -103,11 +104,22 @@ export async function showNotification(title, { body = '', tag, url = '/', requi
 
 // High-level: alert this device's user (sound + vibration + system notification),
 // gated by the per-device "enabled" preference.
+//
+// The CHIME is throttled per tag (2s): several raisers watch the same shared
+// stream (AdminLayout/Cashier raiser + StaffBell's feed) and land in the same
+// React commit, so one new order fired two overlapping sounds on one device.
+// The OS notification is NOT throttled — it already collapses by `tag`.
+const lastChimeAt = new Map()
 export async function alertParty({ title, body, tag, url = '/', requireInteraction = false } = {}) {
   const p = getPrefs()
   if (!p.enabled) return
-  try { playFromPrefs(p) } catch (_) { /* ignore */ }
-  vibrate()
+  const now = Date.now()
+  const key = tag || 'x'
+  if (now - (lastChimeAt.get(key) || 0) > 2000) {
+    lastChimeAt.set(key, now)
+    try { playFromPrefs(p) } catch (_) { /* ignore */ }
+    vibrate()
+  }
   showNotification(title, { body, tag, url, requireInteraction })
 }
 

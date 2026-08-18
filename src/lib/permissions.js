@@ -13,6 +13,7 @@ export const CAP = {
   MANAGE_OFFERS: 'manage_offers',
   MANAGE_EVENTS: 'manage_events', // events + reservations
   MANAGE_TABLES: 'manage_tables',
+  MANAGE_STICKERS: 'manage_stickers', // table-stand sticker studio (design/print) — SEPARATE from floor control
   VIEW_REPORTS: 'view_reports',
   VIEW_CUSTOMERS: 'view_customers',
   VIEW_COMPLAINTS: 'view_complaints',
@@ -40,9 +41,16 @@ const ALL = Object.values(CAP)
 export const ROLE_CAPS = {
   owner: ALL,
   manager: ALL,
-  supervisor: [CAP.TAKE_ORDERS, CAP.CANCEL_ORDER, CAP.REFUND, CAP.PRINT, CAP.SCAN_TICKETS, CAP.KITCHEN, CAP.VIEW_REPORTS, CAP.VIEW_REVENUE, CAP.VIEW_CUSTOMERS, CAP.VIEW_COMPLAINTS, CAP.VIEW_PERFORMANCE, CAP.ATTENDANCE],
+  // Supervisor runs the floor — table control included (the user scenario this
+  // fixes: floor control WITHOUT the sticker print studio, which stays
+  // MANAGE_STICKERS = managers-only by default).
+  supervisor: [CAP.TAKE_ORDERS, CAP.CANCEL_ORDER, CAP.REFUND, CAP.PRINT, CAP.SCAN_TICKETS, CAP.KITCHEN, CAP.MANAGE_TABLES, CAP.VIEW_REPORTS, CAP.VIEW_REVENUE, CAP.VIEW_CUSTOMERS, CAP.VIEW_COMPLAINTS, CAP.VIEW_PERFORMANCE, CAP.ATTENDANCE],
   // Marketing hire: campaigns/offers/stories/customers/assistant — NO settings, payroll, or revenue.
   marketing: [CAP.MANAGE_CAMPAIGNS, CAP.MANAGE_OFFERS, CAP.MANAGE_STORIES, CAP.VIEW_CUSTOMERS, CAP.USE_ASSISTANT, CAP.EXPORT_DATA, CAP.ATTENDANCE],
+  // Accountant owns the money: revenue, reports, payroll, refunds, exports —
+  // NOT the floor, the menu, or settings. Broader (manager-like) access is a
+  // per-staffer grant via the caps editor, or simply the manager role.
+  accountant: [CAP.VIEW_REVENUE, CAP.VIEW_REPORTS, CAP.EXPORT_DATA, CAP.MANAGE_PAYROLL, CAP.VIEW_PERFORMANCE, CAP.REFUND, CAP.VIEW_CUSTOMERS, CAP.USE_ASSISTANT, CAP.ATTENDANCE],
   cashier: [CAP.TAKE_ORDERS, CAP.CANCEL_ORDER, CAP.REFUND, CAP.PRINT, CAP.SCAN_TICKETS, CAP.ATTENDANCE],
   barista: [CAP.TAKE_ORDERS, CAP.KITCHEN, CAP.ATTENDANCE],
   waiter: [CAP.TAKE_ORDERS, CAP.ATTENDANCE],
@@ -58,6 +66,7 @@ export const ROLE_LABELS = {
   manager: { ar: 'مدير', en: 'Manager' },
   supervisor: { ar: 'مشرف', en: 'Supervisor' },
   marketing: { ar: 'مسؤول تسويق', en: 'Marketing' },
+  accountant: { ar: 'محاسب', en: 'Accountant' },
   cashier: { ar: 'كاشير', en: 'Cashier' },
   barista: { ar: 'باريستا', en: 'Barista' },
   waiter: { ar: 'نادل', en: 'Waiter' },
@@ -66,11 +75,11 @@ export const ROLE_LABELS = {
   cleaner: { ar: 'عامل نظافة', en: 'Cleaner' },
   staff: { ar: 'موظف', en: 'Staff' },
 }
-export const ASSIGNABLE_ROLES = ['manager', 'supervisor', 'marketing', 'cashier', 'barista', 'waiter', 'kitchen', 'driver', 'cleaner']
+export const ASSIGNABLE_ROLES = ['manager', 'supervisor', 'accountant', 'marketing', 'cashier', 'barista', 'waiter', 'kitchen', 'driver', 'cleaner']
 export function roleName(role, lang) { return (ROLE_LABELS[role] && (lang === 'ar' ? ROLE_LABELS[role].ar : ROLE_LABELS[role].en)) || role }
 
 // Capabilities a manager may toggle per role (owner is always all; manager is fixed all).
-export const EDITABLE_ROLES = ['supervisor', 'marketing', 'cashier', 'barista', 'waiter', 'kitchen', 'cleaner']
+export const EDITABLE_ROLES = ['supervisor', 'accountant', 'marketing', 'cashier', 'barista', 'waiter', 'kitchen', 'cleaner']
 
 export const CAP_LABELS = {
   [CAP.TAKE_ORDERS]: { ar: 'استقبال الطلبات', en: 'Take orders' },
@@ -83,6 +92,7 @@ export const CAP_LABELS = {
   [CAP.MANAGE_OFFERS]: { ar: 'إدارة العروض', en: 'Manage offers' },
   [CAP.MANAGE_EVENTS]: { ar: 'الفعاليات والحجوزات', en: 'Events & reservations' },
   [CAP.MANAGE_TABLES]: { ar: 'إدارة الطاولات', en: 'Manage tables' },
+  [CAP.MANAGE_STICKERS]: { ar: 'ملصقات استاند الطاولة', en: 'Table stickers' },
   [CAP.VIEW_REPORTS]: { ar: 'التقارير', en: 'Reports' },
   [CAP.VIEW_CUSTOMERS]: { ar: 'العملاء', en: 'Customers' },
   [CAP.VIEW_COMPLAINTS]: { ar: 'الشكاوى', en: 'Complaints' },
@@ -106,7 +116,7 @@ export const CAP_LABELS = {
 
 // Caps grouped for a cleaner Roles/Staff editor UI. Keys are section headers.
 export const CAP_GROUPS = [
-  { ar: 'التشغيل', en: 'Operations', caps: [CAP.TAKE_ORDERS, CAP.CANCEL_ORDER, CAP.REFUND, CAP.PRINT, CAP.KITCHEN, CAP.SCAN_TICKETS, CAP.MANAGE_TABLES, CAP.DELIVER] },
+  { ar: 'التشغيل', en: 'Operations', caps: [CAP.TAKE_ORDERS, CAP.CANCEL_ORDER, CAP.REFUND, CAP.PRINT, CAP.KITCHEN, CAP.SCAN_TICKETS, CAP.MANAGE_TABLES, CAP.MANAGE_STICKERS, CAP.DELIVER] },
   { ar: 'المنيو والمخزون', en: 'Menu & stock', caps: [CAP.MANAGE_MENU, CAP.EDIT_PRICES, CAP.MANAGE_OFFERS, CAP.MANAGE_INVENTORY, CAP.MANAGE_EVENTS] },
   { ar: 'التسويق والعملاء', en: 'Marketing & CRM', caps: [CAP.MANAGE_CAMPAIGNS, CAP.MANAGE_STORIES, CAP.MANAGE_LOYALTY, CAP.VIEW_CUSTOMERS, CAP.VIEW_COMPLAINTS, CAP.USE_ASSISTANT] },
   { ar: 'التقارير والمال', en: 'Reports & money', caps: [CAP.VIEW_REPORTS, CAP.VIEW_REVENUE, CAP.VIEW_PERFORMANCE, CAP.EXPORT_DATA] },

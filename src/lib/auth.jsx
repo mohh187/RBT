@@ -14,6 +14,7 @@ import { auth, db, firebaseReady } from './firebase.js'
 import { getUserProfile, createUserProfile, getTenant, claimInviteFor, upsertStaffMember, getStaffMember } from './db.js'
 import { applyTheme, resolveTenantTheme } from './themes.js'
 import { effectiveCan } from './permissions.js'
+import { pinSignIn as pinSignInCall, rememberDeviceVenue, markUnlocked, setPinActor, rememberQuickUnlock } from './pin.js'
 import { checkPlatformAdmin } from './platform.js'
 import { setMonitorContext } from './monitor.js'
 
@@ -79,6 +80,9 @@ export function AuthProvider({ children }) {
       setTenant(t)
       applyBrand(t)
       setMonitorContext({ tenantName: t?.name || '' })
+      // Device memory: the /lock cold-start screen needs the venue identity
+      // before anyone is signed in — stamp it while a member IS signed in.
+      rememberDeviceVenue(t)
       // Self-register membership under THIS tenant (strictly tenant-scoped via rules).
       // Await so the staff doc exists before we read its capability override below.
       await upsertStaffMember(prof.tenantId, fbUser.uid, {
@@ -155,6 +159,37 @@ export function AuthProvider({ children }) {
     setTenant(null)
   }, [])
 
+  // PIN sign-in: the PIN identifies the staffer server-side; when it belongs to
+  // someone other than the current Firebase user, the session is genuinely
+  // SWAPPED via signInWithCustomToken — onAuthStateChanged then rebuilds
+  // profile/tenant/caps and re-registers push for the new identity. The unlock
+  // markers are stamped BEFORE the swap so the remounted PinLock doesn't
+  // re-lock mid-transition.
+  const pinLogin = useCallback(async (tid, pin, staffId = null) => {
+    const res = await pinSignInCall(tid, pin, staffId)
+    if (res.ok && res.uid) {
+      // SWAP FIRST, then stamp. Stamping markUnlocked/setPinActor before awaiting
+      // the token sign-in meant a swap that threw (offline, revoked/expired
+      // token, clock skew) left the device marked "unlocked as the new staffer"
+      // while Firebase was still the PREVIOUS user — the tablet then ran under
+      // one identity but attributed every order to another. Now a failed swap
+      // surfaces as { ok:false, swapFailed } so the pad shows a retry instead.
+      if (res.token && res.uid !== auth.currentUser?.uid) {
+        try {
+          const { signInWithCustomToken } = await import('firebase/auth')
+          await signInWithCustomToken(auth, res.token)
+        } catch (_) {
+          return { ok: false, swapFailed: true, error: true }
+        }
+      }
+      markUnlocked(tid)
+      setPinActor(tid, { id: res.uid, name: res.name || '' })
+      // arm the same-user instant re-unlock for this tab (fire-and-forget)
+      rememberQuickUnlock(tid, res.uid, pin)
+    }
+    return res
+  }, [])
+
   const refreshProfile = useCallback(async () => {
     if (user) await loadContext(user)
   }, [user, loadContext])
@@ -228,6 +263,7 @@ export function AuthProvider({ children }) {
     signup,
     login,
     logout,
+    pinLogin,
     refreshProfile,
     updateTenantLocal,
     // These were defined but never exported — every staff photo upload and

@@ -1,6 +1,7 @@
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
 import { fontStacks } from '../lib/skins.js'
 import { shapeById, renderShapeSvg } from '../lib/printShapes.js'
+import { applyVars, qrKeyOf } from '../lib/printVars.js'
 import { Price } from './Riyal.jsx'
 import Icon from './Icon.jsx'
 
@@ -39,6 +40,25 @@ export function aabbOf(el) {
   return { x: el.x + (el.w - w) / 2, y: el.y + (el.h - h) / 2, w, h }
 }
 
+// GROUPS.
+//
+// A group is not a saved selection — touching ONE member must bring the whole
+// group with it, on click, on marquee, and on drag. That rule lives here, in the
+// one place selection is decided, so there is no path that can pick up half a
+// group and move it away from the rest.
+//
+// Membership is a flat `groupId` on the element rather than a nested tree: the
+// document model, undo history, z-ordering and the export loop are all flat
+// lists, and a tree would have to be flattened at every one of them.
+export function expandGroups(ids, elements) {
+  const want = new Set(ids)
+  const groups = new Set()
+  for (const el of elements || []) if (want.has(el.id) && el.groupId) groups.add(el.groupId)
+  if (!groups.size) return ids
+  for (const el of elements || []) if (el.groupId && groups.has(el.groupId)) want.add(el.id)
+  return [...want]
+}
+
 export function bboxOfMany(els) {
   if (!els.length) return null
   let x0 = Infinity, y0 = Infinity, x1 = -Infinity, y1 = -Infinity
@@ -58,6 +78,108 @@ function priceOf(it) {
   return vs.length ? Math.min(...vs) : 0
 }
 
+// Icons ship with stroke="currentColor" and a stroke-width; both are overridable
+// per element. Kept beside textStyleOf so the export rasterizer can import the
+// identical function and cannot drift from what the screen shows.
+export function paintIconSvg(el) {
+  let s = String(el.svg || '')
+  const col = el.color || '#1c1c1e'
+  if (el.strokeW > 0) s = s.replace(/stroke-width="[0-9.]+"/g, `stroke-width="${el.strokeW}"`)
+  if (el.fill && el.fill !== 'none') s = s.replace(/<svg /, `<svg fill="${el.fill}" `)
+  // The captured markup carries lucide's own width="24" height="24". Those must be
+  // REMOVED, not just overridden: a later duplicate attribute wins in HTML, so
+  // prepending width="100%" alone left every icon stuck at 24px inside its box.
+  s = s.replace(/\s(?:width|height)="[^"]*"/g, '')
+  s = s.replace(/<svg /, '<svg width="100%" height="100%" ')
+  return s.split('currentColor').join(col)
+}
+
+// TEXT EFFECTS.
+//
+// Four independent layers, each expressible on canvas as well as in CSS — that
+// constraint is why they look the way they do. `-webkit-text-stroke` for example
+// has no canvas equivalent that matches, so the outline is built from
+// paint-order stroke instead, which strokeText() reproduces exactly.
+//
+// Order matters: the 3D extrude sits BEHIND the glyph, the shadow behind that,
+// and the outline is part of the glyph's own paint. Anything that changes here
+// must change identically in exportPng.drawTextBox or a printed sticker stops
+// matching its preview.
+export const TEXT_FX = [
+  { id: 'none', ar: 'بلا تأثير' },
+  { id: 'shadow', ar: 'ظل' },
+  { id: 'outline', ar: 'حدّ خارجي' },
+  { id: 'glow', ar: 'توهّج' },
+  { id: 'extrude', ar: 'ثلاثي الأبعاد' },
+]
+
+// FILLS.
+//
+// A gradient or image fill replaces the glyph's colour, so it is orthogonal to
+// the effect layers above and stacks with them. In CSS it is a background
+// clipped to the text; on canvas it is a createLinearGradient / createPattern
+// assigned to fillStyle — different mechanisms, same result, which is the same
+// deal the effects make.
+//
+// It cannot combine with `outline`, because background-clip:text paints only
+// inside the glyph and leaves -webkit-text-stroke unfilled. The properties panel
+// says so rather than shipping a combination that looks broken.
+export const TEXT_FILLS = [
+  { id: 'solid', ar: 'لون واحد' },
+  { id: 'linear', ar: 'تدرّج خطّي' },
+  { id: 'radial', ar: 'تدرّج شعاعي' },
+  { id: 'image', ar: 'صورة داخل النص' },
+]
+
+export function textFillStyle(el) {
+  const kind = el.fill2 || 'solid'
+  if (kind === 'solid') return {}
+  const a = el.color || '#1c1c1e'
+  const b = el.fillColor2 || '#b4632c'
+  const ang = el.fillAngle ?? 90
+  let bg = ''
+  if (kind === 'linear') bg = `linear-gradient(${ang}deg, ${a}, ${b})`
+  else if (kind === 'radial') bg = `radial-gradient(circle at 50% 50%, ${a}, ${b})`
+  else if (kind === 'image' && el.fillImageUrl) bg = `url("${el.fillImageUrl}") center/cover`
+  if (!bg) return {}
+  return {
+    backgroundImage: bg,
+    WebkitBackgroundClip: 'text',
+    backgroundClip: 'text',
+    color: 'transparent',
+    WebkitTextFillColor: 'transparent',
+  }
+}
+
+// The CSS half. Returns only the effect-related properties so callers can spread
+// it over the base text style.
+export function textFxStyle(el) {
+  const fx = el.fx || 'none'
+  const c = el.fxColor || '#ffffff'
+  const d = el.fxDepth ?? 6
+  const blur = el.fxBlur ?? 4
+  const ang = ((el.fxAngle ?? 45) * Math.PI) / 180
+  const dx = Math.cos(ang) * d
+  const dy = Math.sin(ang) * d
+  if (fx === 'shadow') return { textShadow: `${round(dx)}px ${round(dy)}px ${blur}px ${c}` }
+  if (fx === 'glow') return { textShadow: `0 0 ${Math.max(1, blur)}px ${c}, 0 0 ${Math.max(1, blur) * 2}px ${c}` }
+  if (fx === 'outline') {
+    // paint-order lets the stroke sit UNDER the fill so the glyph keeps its
+    // weight; -webkit-text-stroke would eat into it and has no canvas twin.
+    return { WebkitTextStrokeWidth: `${d / 2}px`, WebkitTextStrokeColor: c, paintOrder: 'stroke fill' }
+  }
+  if (fx === 'extrude') {
+    // Stacked offsets fake the extrusion; canvas draws the same stack.
+    const layers = []
+    const steps = Math.max(1, Math.round(d))
+    for (let i = 1; i <= steps; i++) layers.push(`${round((dx / d) * i)}px ${round((dy / d) * i)}px 0 ${c}`)
+    return { textShadow: layers.join(', ') }
+  }
+  return {}
+}
+
+const round = (v) => Math.round(v * 100) / 100
+
 export function textStyleOf(el) {
   const fonts = fontStacks(el.fontKey || 'tajawal')
   return {
@@ -69,11 +191,66 @@ export function textStyleOf(el) {
     lineHeight: el.lineHeight || 1.4,
     letterSpacing: `${el.letterSpacing || 0}px`,
     direction: el.dir || 'rtl',
+    ...textFxStyle(el),
+    // Fill last: it overrides `color`, and an outline's stroke colour is set by
+    // the effect layer, so order matters.
+    ...textFillStyle(el),
   }
 }
 
+// CURVED TEXT.
+//
+// Rendered as SVG <textPath>, which is the only way to get real per-glyph
+// rotation along an arc — and, critically, the only one that keeps Arabic
+// shaping and bidi intact, because the browser still lays the run out as one
+// string. Splitting into per-character spans (the usual trick) would disconnect
+// every Arabic word.
+//
+// The SAME markup is handed to the export rasterizer via svgToImage, so this
+// needs no canvas twin: the arc is one implementation used by both.
+export function curvedTextSvg(el, text) {
+  const w = el.w || 100
+  const h = el.h || 40
+  const curve = el.curve || 0            // -100..100, negative arcs downward
+  const fonts = fontStacks(el.fontKey || 'tajawal')
+  const size = el.size || 18
+  // A quadratic arc whose sagitta is the curve amount, inset so descenders and
+  // the stroke of an outline stay inside the box.
+  const pad = size * 0.55
+  const sag = (curve / 100) * (h / 2 - pad)
+  const y0 = curve >= 0 ? h - pad : pad
+  const d = `M ${pad} ${y0} Q ${w / 2} ${y0 - sag * 2} ${w - pad} ${y0}`
+  const id = `cp${el.id || '0'}`
+  const anchor = el.align === 'left' ? 'start' : el.align === 'center' ? 'middle' : 'end'
+  const offset = anchor === 'middle' ? '50%' : anchor === 'start' ? '0%' : '100%'
+  const stroke = el.fx === 'outline'
+    ? ` stroke="${el.fxColor || '#fff'}" stroke-width="${(el.fxDepth ?? 6) / 2}" paint-order="stroke"`
+    : ''
+  return `<svg xmlns="http://www.w3.org/2000/svg" width="100%" height="100%" viewBox="0 0 ${w} ${h}">`
+    + `<defs><path id="${id}" d="${d}" fill="none"/></defs>`
+    + `<text font-family="${escXml(fonts.display)}" font-size="${size}" font-weight="${el.weight || 400}"`
+    + ` fill="${el.color || '#1c1c1e'}"${stroke} letter-spacing="${el.letterSpacing || 0}" direction="${el.dir || 'rtl'}">`
+    + `<textPath href="#${id}" startOffset="${offset}" text-anchor="${anchor}">${escXml(text)}</textPath>`
+    + '</text></svg>'
+}
+
+const escXml = (s) => String(s ?? '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;')
+
+// VARIABLE DATA (`vars`).
+//
+// A design is a template, and the same template is printed once per table: the
+// QR has to resolve to THAT table's token and the number has to read THAT
+// table's label. `qrSrc` was a single shared string, so every QR element in
+// every copy encoded the one venue-menu URL — which made per-table stickers
+// impossible to build here at all.
+//
+// `vars` carries the row being rendered. A QR element with kind 'table' takes
+// vars.tableQr; text elements interpolate {{table}} / {{venue}}. Both fall back
+// to the shared/blank values, so a design with no table binding renders exactly
+// as it did before and the gallery preview needs no table at all.
 export default function PrintCanvas({
-  design, items, currency = 'SAR', qrSrc = '',
+  design, items, currency = 'SAR', qrSrc = '', qrMap = null, vars = null,
+  bleedMm = 0, safeMm = 0,
   selectedIds = [], onSelect, onPatchMany, onCommit,
   zoom = 'fit', onScale, onZoom, showGrid = false,
 }) {
@@ -211,7 +388,8 @@ export default function PrintCanvas({
       const b = aabbOf(el)
       return b.x < r.x + r.w && b.x + b.w > r.x && b.y < r.y + r.h && b.y + b.h > r.y
     }).map((el) => el.id)
-    onSelect?.(g.additive ? [...new Set([...g.baseIds, ...hits])] : hits)
+    const fam = expandGroups(hits, design.elements)
+    onSelect?.(g.additive ? [...new Set([...g.baseIds, ...fam])] : fam)
   }
 
   // snap the moving selection bbox to page thirds/centre AND to other elements
@@ -349,13 +527,16 @@ export default function PrintCanvas({
     const additive = e.shiftKey || e.ctrlKey || e.metaKey
     let ids = selectedIds
     if (additive) {
-      ids = selSet.has(el.id) ? selectedIds.filter((i) => i !== el.id) : [...selectedIds, el.id]
+      const fam = expandGroups([el.id], design.elements)
+      ids = selSet.has(el.id)
+        ? selectedIds.filter((i) => !fam.includes(i))
+        : [...new Set([...selectedIds, ...fam])]
       onSelect?.(ids)
       e.stopPropagation()
       e.preventDefault()
       return // a modifier click toggles selection; it never starts a drag
     }
-    if (!selSet.has(el.id)) { ids = [el.id]; onSelect?.(ids) }
+    if (!selSet.has(el.id)) { ids = expandGroups([el.id], design.elements); onSelect?.(ids) }
     const movers = (design.elements || []).filter((x) => ids.includes(x.id) && !x.locked && !x.hidden)
     if (!movers.length) { e.stopPropagation(); return }
     beginGesture(e, {
@@ -413,12 +594,16 @@ export default function PrintCanvas({
   // ---------- element renderers ----------
   const renderInner = (el) => {
     if (el.type === 'text') {
+      // A curved run is one SVG string, identical to what the exporter draws.
+      if (el.curve) {
+        return <div className="ps-shape" dangerouslySetInnerHTML={{ __html: curvedTextSvg(el, applyVars(el.text, vars)) }} />
+      }
       return (
         <div
           className="ps-text"
           style={{ ...textStyleOf(el), width: '100%', minHeight: '100%', whiteSpace: 'pre-wrap', wordBreak: 'break-word' }}
         >
-          {el.text || ''}
+          {applyVars(el.text, vars)}
         </div>
       )
     }
@@ -442,9 +627,19 @@ export default function PrintCanvas({
       if (!sh) return <div className="ps-ph"><Icon name="shapes" size={20} /></div>
       return <div className="ps-shape" dangerouslySetInnerHTML={{ __html: renderShapeSvg(sh, el) }} />
     }
+    // An icon element carries its own captured markup, so rendering is a
+    // recolour of a stored string — no icon library at render time.
+    if (el.type === 'icon') {
+      if (!el.svg) return <div className="ps-ph"><Icon name="sparkles" size={20} /></div>
+      return <div className="ps-shape" dangerouslySetInnerHTML={{ __html: paintIconSvg(el) }} />
+    }
     if (el.type === 'qr') {
-      return qrSrc
-        ? <img src={qrSrc} alt="QR" draggable={false} style={{ width: '100%', height: '100%', display: 'block' }} />
+      // qrMap is keyed per style+palette+table; qrSrc is the pre-styles fallback
+      // so designs saved before styled codes existed still render.
+      const src = (qrMap && qrMap[qrKeyOf(el, vars)])
+        || (el.kind === 'table' ? (vars?.tableQr || '') : qrSrc)
+      return src
+        ? <img src={src} alt="QR" draggable={false} style={{ width: '100%', height: '100%', display: 'block' }} />
         : <div className="ps-ph"><Icon name="qr" size={22} /></div>
     }
     if (el.type === 'itemcard') {
@@ -496,6 +691,20 @@ export default function PrintCanvas({
           ) : null}
 
           {showGrid ? <div className="ps-grid no-print" style={{ '--gs': `${GRID_STEP}px` }} /> : null}
+
+          {/* Bleed + safe-area guides. Page units are CSS px at 96dpi, so a
+              millimetre is 96/25.4 of them. Screen-only (.no-print) — these are
+              instructions to the designer, not artwork, and a printer receiving
+              them on the sheet would trim to the wrong line. */}
+          {bleedMm > 0 ? (
+            <div className="ps-bleed no-print" style={{
+              '--bleed': `${bleedMm * (96 / 25.4)}px`,
+              '--safe': `${safeMm * (96 / 25.4)}px`,
+            }}>
+              <span className="ps-bleed-out" />
+              <span className="ps-bleed-safe" />
+            </div>
+          ) : null}
 
           {sorted.map((el) => {
             const sel = selSet.has(el.id)

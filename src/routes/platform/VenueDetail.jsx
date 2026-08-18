@@ -10,7 +10,8 @@ import { Link, useNavigate, useParams } from 'react-router-dom'
 import {
   collection, doc, getCountFromServer, getDoc, getDocs, limit, orderBy, query, where,
 } from 'firebase/firestore'
-import { db } from '../../lib/firebase.js'
+import { db, functions } from '../../lib/firebase.js'
+import { httpsCallable } from 'firebase/functions'
 import Icon from '../../components/Icon.jsx'
 import { Spinner, Empty } from '../../components/ui.jsx'
 import { useToast } from '../../components/Toast.jsx'
@@ -878,6 +879,27 @@ function AdvancedTab({ tid, tenant, toast, impersonate, toggleActive, toggling }
   const [newKey, setNewKey] = useState('')
   const [newJson, setNewJson] = useState('')
   const [newErr, setNewErr] = useState('')
+  // owner login-credentials editor (platform-admin path of updateStaffCredentials)
+  const [credEmail, setCredEmail] = useState('')
+  const [credPass, setCredPass] = useState('')
+  const [credBusy, setCredBusy] = useState(false)
+  const saveOwnerCredentials = async () => {
+    if (credBusy || !tenant.ownerUid || (!credEmail.trim() && !credPass)) return
+    const ok = window.confirm(`تغيير بيانات دخول مالك «${tenant.name || tid}» — يسري فوراً على تسجيل الدخول. متابعة؟`)
+    if (!ok) return
+    setCredBusy(true)
+    try {
+      await httpsCallable(functions, 'updateStaffCredentials')({
+        tenantId: tid, staffId: tenant.ownerUid,
+        ...(credEmail.trim() ? { newEmail: credEmail.trim() } : {}),
+        ...(credPass ? { newPassword: credPass } : {}),
+      })
+      toast.success('تم تحديث بيانات دخول المالك')
+      setCredEmail(''); setCredPass('')
+    } catch (e) {
+      toast.error(String(e?.message || '').includes('email-taken') ? 'هذا البريد مستخدم لحساب آخر' : 'تعذّر التحديث')
+    } finally { setCredBusy(false) }
+  }
 
   const pick = (k) => {
     setSel(k)
@@ -972,6 +994,17 @@ function AdvancedTab({ tid, tenant, toast, impersonate, toggleActive, toggling }
         <button className="btn btn-outline" disabled={busy} onClick={saveNew} style={{ color: 'var(--danger)' }}>
           <Icon name="add" size={16} /> {busy ? 'جارٍ الحفظ…' : 'إضافة الحقل'}
         </button>
+      </Section>
+
+      <Section icon="mail" title="تغيير بيانات دخول المالك" danger>
+        <p className="xs faint">تغيير بريد أو كلمة مرور دخول مالك المنشأة (عبر دالة updateStaffCredentials — يسري فوراً، ويُسجَّل في سجل النشاط ويصل إشعار بريدي للنظام المركزي).</p>
+        <div className="row" style={{ gap: 8, flexWrap: 'wrap' }}>
+          <input className="input" style={{ minWidth: 220 }} type="email" autoComplete="off" dir="ltr" placeholder="بريد جديد (اختياري)" value={credEmail} onChange={(e) => setCredEmail(e.target.value)} />
+          <input className="input" style={{ minWidth: 220 }} type="password" autoComplete="new-password" dir="ltr" placeholder="كلمة مرور جديدة (اختياري، 6+)" value={credPass} onChange={(e) => setCredPass(e.target.value)} />
+          <button className="btn btn-outline" disabled={credBusy || (!credEmail.trim() && !credPass) || !tenant.ownerUid} style={{ color: 'var(--danger)' }} onClick={saveOwnerCredentials}>
+            <Icon name="mail" size={16} /> {credBusy ? 'جارٍ الحفظ…' : 'تحديث بيانات المالك'}
+          </button>
+        </div>
       </Section>
 
       <Section icon="lock" title="إجراءات الدعم والخطر" danger>

@@ -17,6 +17,43 @@ const FONTS = {
   reem: { body: 'Cairo', display: 'Reem Kufi', label: 'Reem Kufi', families: ['Reem+Kufi:wght@500;600;700', 'Cairo:wght@400;500;700'] },
   rubik: { body: 'Rubik', display: 'Rubik', label: 'Rubik', families: ['Rubik:wght@400;500;600;700;800'] },
   changa: { body: 'Tajawal', display: 'Changa', label: 'Changa', families: ['Changa:wght@500;600;700', 'Tajawal:wght@400;500;700'] },
+
+  // ---- extended set, for the print studio's display type ----
+  //
+  // AN HONEST COUNT. Arabic does not have hundreds of production-quality
+  // families the way Latin does — Google Fonts carries roughly forty that
+  // actually support the script, and these are them. A picker advertising "500
+  // fonts" would be counting Latin faces that cannot render a single Arabic
+  // word, which is worse than useless on an Arabic menu. Display faces are
+  // paired with a readable body face, because most of them are unreadable at
+  // paragraph size.
+  notoKufi: { body: 'Tajawal', display: 'Noto Kufi Arabic', label: 'Noto Kufi', families: ['Noto+Kufi+Arabic:wght@400;600;700;900', 'Tajawal:wght@400;500;700'] },
+  notoNaskh: { body: 'Noto Naskh Arabic', display: 'Noto Naskh Arabic', label: 'Noto Naskh', families: ['Noto+Naskh+Arabic:wght@400;500;600;700'] },
+  notoSansAr: { body: 'Noto Sans Arabic', display: 'Noto Sans Arabic', label: 'Noto Sans Arabic', families: ['Noto+Sans+Arabic:wght@300;400;500;700;900'] },
+  markazi: { body: 'Tajawal', display: 'Markazi Text', label: 'Markazi', families: ['Markazi+Text:wght@400;500;600;700', 'Tajawal:wght@400;500;700'] },
+  mada: { body: 'Mada', display: 'Mada', label: 'Mada', families: ['Mada:wght@300;400;500;700;900'] },
+  harmattan: { body: 'Tajawal', display: 'Harmattan', label: 'Harmattan', families: ['Harmattan:wght@400;700', 'Tajawal:wght@400;500;700'] },
+  scheherazade: { body: 'Tajawal', display: 'Scheherazade New', label: 'Scheherazade', families: ['Scheherazade+New:wght@400;700', 'Tajawal:wght@400;500;700'] },
+  lateef: { body: 'Tajawal', display: 'Lateef', label: 'Lateef', families: ['Lateef:wght@400;700', 'Tajawal:wght@400;500;700'] },
+  mirza: { body: 'Tajawal', display: 'Mirza', label: 'Mirza', families: ['Mirza:wght@400;500;600;700', 'Tajawal:wght@400;500;700'] },
+  arefRuqaa: { body: 'Tajawal', display: 'Aref Ruqaa', label: 'Aref Ruqaa', families: ['Aref+Ruqaa:wght@400;700', 'Tajawal:wght@400;500;700'] },
+  lalezar: { body: 'Tajawal', display: 'Lalezar', label: 'Lalezar', families: ['Lalezar', 'Tajawal:wght@400;500;700'] },
+  jomhuria: { body: 'Tajawal', display: 'Jomhuria', label: 'Jomhuria', families: ['Jomhuria', 'Tajawal:wght@400;500;700'] },
+  rakkas: { body: 'Tajawal', display: 'Rakkas', label: 'Rakkas', families: ['Rakkas', 'Tajawal:wght@400;500;700'] },
+  katibeh: { body: 'Tajawal', display: 'Katibeh', label: 'Katibeh', families: ['Katibeh', 'Tajawal:wght@400;500;700'] },
+  vibes: { body: 'Tajawal', display: 'Vibes', label: 'Vibes', families: ['Vibes', 'Tajawal:wght@400;500;700'] },
+  baloo: { body: 'Tajawal', display: 'Baloo Bhaijaan 2', label: 'Baloo Bhaijaan', families: ['Baloo+Bhaijaan+2:wght@400;500;600;700;800', 'Tajawal:wght@400;500;700'] },
+  kufam: { body: 'Tajawal', display: 'Kufam', label: 'Kufam', families: ['Kufam:wght@400;500;600;700;900', 'Tajawal:wght@400;500;700'] },
+  marhey: { body: 'Tajawal', display: 'Marhey', label: 'Marhey', families: ['Marhey:wght@300;400;500;600;700', 'Tajawal:wght@400;500;700'] },
+  gulzar: { body: 'Tajawal', display: 'Gulzar', label: 'Gulzar', families: ['Gulzar', 'Tajawal:wght@400;500;700'] },
+  blaka: { body: 'Tajawal', display: 'Blaka', label: 'Blaka', families: ['Blaka', 'Tajawal:wght@400;500;700'] },
+  qahiri: { body: 'Tajawal', display: 'Qahiri', label: 'Qahiri', families: ['Qahiri', 'Tajawal:wght@400;500;700'] },
+  alkalami: { body: 'Tajawal', display: 'Alkalami', label: 'Alkalami', families: ['Alkalami', 'Tajawal:wght@400;500;700'] },
+  handjet: { body: 'Tajawal', display: 'Handjet', label: 'Handjet', families: ['Handjet:wght@400;600;800', 'Tajawal:wght@400;500;700'] },
+  reemFun: { body: 'Cairo', display: 'Reem Kufi Fun', label: 'Reem Kufi Fun', families: ['Reem+Kufi+Fun:wght@400;600;700', 'Cairo:wght@400;500;700'] },
+  reemInk: { body: 'Cairo', display: 'Reem Kufi Ink', label: 'Reem Kufi Ink', families: ['Reem+Kufi+Ink', 'Cairo:wght@400;500;700'] },
+  amiriQuran: { body: 'Tajawal', display: 'Amiri Quran', label: 'Amiri Quran', families: ['Amiri+Quran', 'Tajawal:wght@400;500;700'] },
+  notoNastaliq: { body: 'Tajawal', display: 'Noto Nastaliq Urdu', label: 'Nastaliq', families: ['Noto+Nastaliq+Urdu:wght@400;700', 'Tajawal:wght@400;500;700'] },
 }
 export const fontLabel = (key) => (FONTS[key] || FONTS.tajawal).label
 // css font stacks for a key — used by the SYSTEM font (back-office) mechanism

@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { NavLink, Outlet, useNavigate, useLocation, Link } from 'react-router-dom'
 import { useAuth } from '../lib/auth.jsx'
 import { useI18n } from '../lib/i18n.jsx'
@@ -7,7 +7,8 @@ import Icon from './Icon.jsx'
 import BranchSwitcher from './BranchSwitcher.jsx'
 import StaffBell from './StaffBell.jsx'
 import InstallButton from './InstallButton.jsx'
-import { watchActiveOrders, healMemberMirrors, healStaffCapsMirrors, healRegisteredCustomers, healImageRatios } from '../lib/db.js'
+import { watchComplaints, healMemberMirrors, healStaffCapsMirrors, healRegisteredCustomers, healImageRatios } from '../lib/db.js'
+import { useActiveOrders } from '../lib/liveBoard.js'
 import { migrateStaffPins } from '../lib/pin.js'
 import { CAP } from '../lib/permissions.js'
 import { planAllows, planExpired, EXPIRED_GRACE_DAYS } from '../lib/plans.js'
@@ -15,14 +16,16 @@ import { alertParty } from '../lib/notify.js'
 import { orderNumber } from '../lib/format.js'
 import { useCompactUI } from '../lib/useCompactUI.js'
 import { systemThemeAttr, useSystemThemeBody } from '../lib/systemThemes.js'
-import { applyVenueFavicon, restorePlatformFavicon } from '../lib/pwa.js'
+import { applyStaffManifest, restorePlatformManifest } from '../lib/pwa.js'
 import PinLock from './PinLock.jsx'
+import IncomingAlerts from './IncomingAlerts.jsx'
 import AppBackground from './AppBackground.jsx'
 import { requestLock } from '../lib/pin.js'
 import { menuUrl } from '../lib/qr.js'
 import Tour from './Tour.jsx'
 import { TOURS } from '../lib/tours.js'
 import GlobalSearch from './GlobalSearch.jsx'
+import AssistantQuick from './AssistantQuick.jsx'
 import PageGuide from './PageGuide.jsx'
 import { initScrollAffordance } from '../lib/scrollAffordance.js'
 import '../styles/scrollfix.css'
@@ -41,30 +44,18 @@ const navItems = [
 
 // Secondary, grouped under the "More" sheet — organized by job-to-be-done so a
 // staffer finds their world in one group (marketing / operations / analytics / system).
+// GROUP ORDER is frequency-of-use, not alphabet: the screens a shift opens every
+// hour (cashier/kitchen/inventory) come first, the morning read (reports) second,
+// campaign work third — nobody should scroll past thirteen marketing studios to
+// reach the kitchen. Group TITLES are load-bearing: the collapse memory
+// (rbt_nav_closed) keys on title.en, so reordering must never rename a group.
 const moreGroups = [
-  { title: { ar: 'التسويق والعملاء', en: 'Marketing & customers' }, items: [
-    { to: '/admin/customers', icon: 'customers', label: { ar: 'العملاء', en: 'Customers' }, cap: CAP.VIEW_CUSTOMERS },
-    { to: '/admin/campaigns', icon: 'bellRing', label: { ar: 'الإعلانات والحملات', en: 'Campaigns' }, cap: CAP.MANAGE_CAMPAIGNS },
-    { to: '/admin/offers', icon: 'offers', label: { ar: 'العروض والخصومات', en: 'Offers' }, cap: CAP.MANAGE_OFFERS },
-    { to: '/admin/reviews-studio', icon: 'star', label: { ar: 'استوديو التقييمات', en: 'Reviews studio' }, cap: CAP.MANAGE_CAMPAIGNS },
-    { to: '/admin/posts-studio', icon: 'camera', label: { ar: 'استوديو المنشورات', en: 'Post studio' }, cap: CAP.MANAGE_CAMPAIGNS },
-    { to: '/admin/messages', icon: 'message', label: { ar: 'سجل الرسائل والتحليلات', en: 'Messages log' }, cap: CAP.MANAGE_CAMPAIGNS },
-    { to: '/admin/library', icon: 'folder', label: { ar: 'المكتبة', en: 'Library' }, anyOf: [CAP.MANAGE_MENU, CAP.MANAGE_CAMPAIGNS, CAP.MANAGE_STORIES, CAP.MANAGE_APPEARANCE] },
-    { to: '/admin/ads', icon: 'image', label: { ar: 'استوديو الإعلانات', en: 'Ads studio' }, cap: CAP.MANAGE_CAMPAIGNS },
-    { to: '/admin/gen-history', icon: 'sparkles', label: { ar: 'سجل التوليد', en: 'Generation log' }, anyOf: [CAP.MANAGE_CAMPAIGNS, CAP.MANAGE_MENU, CAP.MANAGE_APPEARANCE] },
-    { to: '/admin/stories', icon: 'camera', label: { ar: 'الاستوري', en: 'Stories' }, cap: CAP.MANAGE_STORIES },
-    { to: '/admin/posts', icon: 'events', label: { ar: 'البروفايل والأخبار', en: 'Profile & news' }, cap: CAP.MANAGE_STORIES },
-  ] },
   { title: { ar: 'التشغيل اليومي', en: 'Daily operations' }, items: [
     { to: '/cashier', icon: 'cashier', label: { ar: 'الكاشير', en: 'Cashier' }, cap: CAP.TAKE_ORDERS, feature: 'cashier' },
     { to: '/kds', icon: 'kitchen', label: { ar: 'المطبخ', en: 'Kitchen' }, cap: CAP.KITCHEN, feature: 'kds' },
     { to: '/scan', icon: 'scan', label: { ar: 'مسح التذاكر', en: 'Scan tickets' }, cap: CAP.SCAN_TICKETS },
     { to: '/admin/inventory', icon: 'inventory', label: { ar: 'المخزون والموردون', en: 'Inventory' }, cap: CAP.MANAGE_INVENTORY },
     { to: '/admin/complaints', icon: 'message', label: { ar: 'الشكاوى', en: 'Complaints' }, cap: CAP.VIEW_COMPLAINTS },
-  ] },
-  { title: { ar: 'الفعاليات والحجوزات', en: 'Events & bookings' }, items: [
-    { to: '/admin/events', icon: 'events', label: { ar: 'الفعاليات والتذاكر', en: 'Events & tickets' }, cap: CAP.MANAGE_EVENTS },
-    { to: '/admin/reservations', icon: 'calendar', label: { ar: 'الحجوزات', en: 'Reservations' }, cap: CAP.MANAGE_EVENTS, feature: 'reservations' },
   ] },
   { title: { ar: 'التقارير والتحليلات', en: 'Reports & analytics' }, items: [
     { to: '/admin/reports', icon: 'reports', label: { ar: 'التقارير', en: 'Reports' }, cap: CAP.VIEW_REPORTS, feature: 'reports' },
@@ -74,6 +65,29 @@ const moreGroups = [
     { to: '/admin/games-hub', icon: 'games', label: { ar: 'مركز الألعاب', en: 'Games centre' }, cap: CAP.VIEW_REPORTS },
     { to: '/admin/guest-play', icon: 'chartBar', label: { ar: 'نشاط الألعاب', en: 'Play activity' }, cap: CAP.VIEW_REPORTS },
     { to: '/admin/growth', icon: 'trending', label: { ar: 'فرص النمو', en: 'Growth' }, cap: CAP.VIEW_REPORTS },
+  ] },
+  { title: { ar: 'التسويق والعملاء', en: 'Marketing & customers' }, items: [
+    { to: '/admin/customers', icon: 'customers', label: { ar: 'العملاء', en: 'Customers' }, cap: CAP.VIEW_CUSTOMERS },
+    { to: '/admin/offers', icon: 'offers', label: { ar: 'العروض والخصومات', en: 'Offers' }, cap: CAP.MANAGE_OFFERS },
+    { to: '/admin/campaigns', icon: 'bellRing', label: { ar: 'الإعلانات والحملات', en: 'Campaigns' }, cap: CAP.MANAGE_CAMPAIGNS },
+    { to: '/admin/library', icon: 'folder', label: { ar: 'المكتبة', en: 'Library' }, anyOf: [CAP.MANAGE_MENU, CAP.MANAGE_CAMPAIGNS, CAP.MANAGE_STORIES, CAP.MANAGE_APPEARANCE] },
+    { to: '/admin/stories', icon: 'camera', label: { ar: 'الاستوري', en: 'Stories' }, cap: CAP.MANAGE_STORIES },
+    { to: '/admin/posts', icon: 'events', label: { ar: 'البروفايل والأخبار', en: 'Profile & news' }, cap: CAP.MANAGE_STORIES },
+    { to: '/admin/reviews-studio', icon: 'star', label: { ar: 'استوديو التقييمات', en: 'Reviews studio' }, cap: CAP.MANAGE_CAMPAIGNS },
+    { to: '/admin/posts-studio', icon: 'camera', label: { ar: 'استوديو المنشورات', en: 'Post studio' }, cap: CAP.MANAGE_CAMPAIGNS },
+    // The print studio sat behind a button on /admin/print-menu and appeared in
+    // no menu at all, so nobody looking for it from the tables side could find
+    // it. It belongs beside the other studios.
+    { to: '/admin/print-studio', icon: 'penLine', label: { ar: 'استوديو التصميم والمطبوعات', en: 'Print design studio' }, anyOf: [CAP.MANAGE_MENU, CAP.MANAGE_APPEARANCE] },
+    // its OWN cap: floor control (manage_tables) must not drag the design studio along
+    { to: '/admin/table-stickers', icon: 'qr', label: { ar: 'ملصقات استاند الطاولة', en: 'Table stand stickers' }, cap: CAP.MANAGE_STICKERS, feature: 'tables' },
+    { to: '/admin/messages', icon: 'message', label: { ar: 'سجل الرسائل والتحليلات', en: 'Messages log' }, cap: CAP.MANAGE_CAMPAIGNS },
+    { to: '/admin/ads', icon: 'image', label: { ar: 'استوديو الإعلانات', en: 'Ads studio' }, cap: CAP.MANAGE_CAMPAIGNS },
+    { to: '/admin/gen-history', icon: 'sparkles', label: { ar: 'سجل التوليد', en: 'Generation log' }, anyOf: [CAP.MANAGE_CAMPAIGNS, CAP.MANAGE_MENU, CAP.MANAGE_APPEARANCE] },
+  ] },
+  { title: { ar: 'الفعاليات والحجوزات', en: 'Events & bookings' }, items: [
+    { to: '/admin/events', icon: 'events', label: { ar: 'الفعاليات والتذاكر', en: 'Events & tickets' }, cap: CAP.MANAGE_EVENTS },
+    { to: '/admin/reservations', icon: 'calendar', label: { ar: 'الحجوزات', en: 'Reservations' }, cap: CAP.MANAGE_EVENTS, feature: 'reservations' },
   ] },
   { title: { ar: 'النظام والمساعدة', en: 'System & help' }, items: [
     { to: '/admin/assistant', icon: 'sparkles', label: { ar: 'المساعد الذكي', en: 'AI assistant' }, cap: CAP.USE_ASSISTANT },
@@ -89,55 +103,35 @@ const moreGroups = [
 export default function AdminLayout() {
   useCompactUI()
 
-  // Prefetch admin sub-routes in background when browser is idle
+  // Prefetch ONLY the primary hubs, late and politely. The old list pulled 30
+  // chunks — Settings alone is a ~577KB source module — the moment the layout
+  // mounted, and on a tablet that parse/compile burst competed with the
+  // cashier's first interactions. These hubs cover the primary nav; everything
+  // else loads on demand (all routes are lazy anyway). ORDER mirrors the
+  // sidebar's most-used-first order — the browser fetches sequentially, so the
+  // daily-ops + reports chunks (what a shift opens next) land before the
+  // menu/marketing hubs. DailyReport rides along: it is a ~130-line chunk and
+  // the manager's first tap every morning.
   useEffect(() => {
-    const prefetchRoutes = () => {
-      const routes = [
-        () => import('../routes/admin/Dashboard.jsx'),
-        () => import('../routes/admin/Items.jsx'),
-        () => import('../routes/admin/Categories.jsx'),
-        () => import('../routes/admin/Tables.jsx'),
-        () => import('../routes/admin/Offers.jsx'),
-        () => import('../routes/admin/Customers.jsx'),
-        () => import('../routes/admin/StoriesAdmin.jsx'),
-        () => import('../routes/staff/PosPreviewPage.jsx'),
-        () => import('../routes/menu/VenueProfile.jsx'),
-        () => import('../routes/admin/PostsAdmin.jsx'),
-        () => import('../routes/admin/Inventory.jsx'),
-        () => import('../routes/admin/Complaints.jsx'),
-        () => import('../routes/admin/Performance.jsx'),
-        () => import('../routes/admin/Attendance.jsx'),
-        () => import('../routes/admin/StaffHub.jsx'),
-        () => import('../routes/admin/Roles.jsx'),
-        () => import('../routes/admin/Policies.jsx'),
-        () => import('../routes/admin/Reports.jsx'),
-        () => import('../routes/admin/DailyReport.jsx'),
-        () => import('../routes/admin/Staff.jsx'),
-        () => import('../routes/admin/Settings.jsx'),
-        () => import('../routes/admin/Assistant.jsx'),
-        () => import('../routes/admin/Events.jsx'),
-        () => import('../routes/admin/Reservations.jsx'),
-        () => import('../routes/admin/InsightsHub.jsx'),
-        () => import('../routes/admin/MenuHub.jsx'),
-        () => import('../routes/admin/OpsHub.jsx'),
-        () => import('../routes/admin/Orders.jsx'),
-        () => import('../routes/admin/CustomersHub.jsx'),
-        () => import('../routes/admin/Support.jsx'),
-      ]
-      
-      const triggerPrefetch = () => {
-        routes.forEach((r) => {
-          try { r() } catch (_) {}
-        })
-      }
-
-      if ('requestIdleCallback' in window) {
-        window.requestIdleCallback(triggerPrefetch)
-      } else {
-        setTimeout(triggerPrefetch, 2000)
-      }
-    }
-    prefetchRoutes()
+    if (navigator.connection?.saveData) return undefined
+    const routes = [
+      () => import('../routes/admin/Orders.jsx'),
+      () => import('../routes/admin/OpsHub.jsx'),
+      () => import('../routes/admin/Tables.jsx'),
+      () => import('../routes/admin/InsightsHub.jsx'),
+      () => import('../routes/admin/DailyReport.jsx'),
+      () => import('../routes/admin/Dashboard.jsx'),
+      () => import('../routes/admin/MenuHub.jsx'),
+      () => import('../routes/admin/CustomersHub.jsx'),
+      () => import('../routes/admin/StaffHub.jsx'),
+    ]
+    const trigger = () => routes.forEach((r) => { try { r() } catch (_) { /* chunk 404 mid-deploy */ } })
+    // wait 4s after mount, then ask for idle time (8s deadline) — first taps win
+    const timer = setTimeout(() => {
+      if ('requestIdleCallback' in window) window.requestIdleCallback(trigger, { timeout: 8000 })
+      else trigger()
+    }, 4000)
+    return () => clearTimeout(timer)
   }, [])
 
   const { t, toggleTheme, toggleLang, theme, lang } = useI18n()
@@ -151,8 +145,11 @@ export default function AdminLayout() {
     if (!tenant?.name) return
     const prevTitle = document.title
     document.title = tenant.name
-    applyVenueFavicon(tenant, tenant.slug)
-    return () => { document.title = prevTitle; restorePlatformFavicon() }
+    // Full INSTALL identity, not just the favicon: "Install app" from the
+    // console now produces the venue-logo staff app starting at /app/:slug
+    // (→ PIN lock), instead of the platform manifest and the landing page.
+    applyStaffManifest(tenant, tenant.slug)
+    return () => { document.title = prevTitle; restorePlatformManifest() }
   }, [tenant?.name, tenant?.logoUrl, tenant?.slug])
   const visibleNav = navItems.filter(allowed)
   const [moreOpen, setMoreOpen] = useState(false)
@@ -176,6 +173,8 @@ export default function AdminLayout() {
   })
   // Global search (everything in the system): topbar button or Ctrl/Cmd+K.
   const [searchOpen, setSearchOpen] = useState(false)
+  // Quick assistant sheet (the floating FAB) — see AssistantQuick.jsx.
+  const [aiQuickOpen, setAiQuickOpen] = useState(false)
   useEffect(() => {
     const onKey = (e) => {
       if ((e.ctrlKey || e.metaKey) && (e.key === 'k' || e.key === 'K')) { e.preventDefault(); setSearchOpen((v) => !v) }
@@ -183,8 +182,15 @@ export default function AdminLayout() {
     window.addEventListener('keydown', onKey)
     return () => window.removeEventListener('keydown', onKey)
   }, [])
-  // Collapsible + drag-resizable desktop sidebar (persisted). < 130px renders as an icon rail.
-  const [sideW, setSideW] = useState(() => { const v = Number(localStorage.getItem('adminSideW')); return v >= 66 && v <= 360 ? v : 248 })
+  // Collapsible + drag-resizable desktop sidebar (persisted). < 130px renders as
+  // an icon rail. FIRST-RUN DEFAULT is width-aware: on a ~1024px tablet a fixed
+  // 248px sidebar ate a third of the operations floor plan — those screens start
+  // as the icon rail; an explicit user choice (stored) always wins.
+  const [sideW, setSideW] = useState(() => {
+    const v = Number(localStorage.getItem('adminSideW'))
+    if (v >= 66 && v <= 360) return v
+    return window.innerWidth < 1280 ? 66 : 248
+  })
   const collapsed = sideW < 130
   const effW = collapsed ? 66 : sideW
   useEffect(() => { localStorage.setItem('adminSideW', String(sideW)) }, [sideW])
@@ -200,6 +206,54 @@ export default function AdminLayout() {
   }
   const prevPending = useRef(0)
   const seeded = useRef(false)
+  // «رقم مضيء على حسب الإشعارات»: live counts rendered as glowing badges on
+  // the nav rows OF THE SECTION they belong to — pending orders on the
+  // cashier/orders entries, working tickets on the kitchen, open complaints on
+  // the complaints row. Fed by the SAME order listener the sound alert already
+  // uses, so the badge costs nothing extra.
+  const [ordersPending, setOrdersPending] = useState(0)
+  const [kitchenBusy, setKitchenBusy] = useState(0)
+  const [complaintsOpen, setComplaintsOpen] = useState(0)
+  // EVERY bell notification lights its own section too («أي إشعار في أي مكان
+  // يظهر في قسمه»): StaffBell publishes its unread rows' deep links, and each
+  // one is charged to the nav route that owns it by LONGEST-prefix match — so
+  // «التقرير اليومي جاهز» lands on تقرير اليوم and a new registered customer
+  // on العملاء, without a hand-written map that goes stale.
+  const [unreadNotifs, setUnreadNotifs] = useState([])
+  const notifCounts = useMemo(() => {
+    const routes = [
+      ...navItems.map((n) => n.to),
+      ...moreGroups.flatMap((g) => g.items.map((l) => l.to)),
+    ]
+    const counts = {}
+    for (const u of unreadNotifs) {
+      const path = String(u.to || '').split(/[?#]/)[0]
+      if (!path) continue
+      let best = ''
+      for (const r of routes) {
+        // '/admin' is Home — it must not swallow every unmatched admin link
+        if (r === '/admin' && path !== '/admin') continue
+        if ((path === r || path.startsWith(`${r}/`)) && r.length > best.length) best = r
+      }
+      if (best) counts[best] = (counts[best] || 0) + 1
+    }
+    return counts
+  }, [unreadNotifs])
+  // Live operational counts OWN their four routes (a pending order is truer
+  // than its unread notification and never double-counts); unread bell items
+  // cover every other section.
+  const navBadges = {
+    '/cashier': ordersPending,
+    '/admin/orders': ordersPending,
+    '/kds': kitchenBusy,
+    '/admin/complaints': complaintsOpen,
+  }
+  const badgeFor = (to) => (navBadges[to] !== undefined ? navBadges[to] : (notifCounts[to] || 0))
+  const navBadge = (to) => {
+    const n = badgeFor(to)
+    if (!n) return null
+    return <span className="nav-badge">{n > 99 ? '99+' : n}</span>
+  }
   const navigate = useNavigate()
   const loc = useLocation()
   // When suspended, lock every admin screen EXCEPT the support page (so managers
@@ -223,29 +277,43 @@ export default function AdminLayout() {
     return () => navigator.serviceWorker.removeEventListener('message', onMsg)
   }, [navigate])
 
+  // Shared refcounted stream (lib/liveBoard.js) — the badge counter, the accept
+  // modal, the cashier board and the KDS all ride ONE snapshot per tenant now.
+  const activeOrders = useActiveOrders(tenantId)
   useEffect(() => {
-    if (!tenantId) return
-    return watchActiveOrders(tenantId, (orders) => {
-      const waiting = orders.filter((o) => o.status === 'pending')
-      const pending = waiting.length
-      if (seeded.current && pending > prevPending.current) {
-        // CARRY THE ORDER ID. This sent a bare '/cashier' with the venue name as
-        // the body — no way to know WHICH order arrived, and because all three
-        // new-order alerts share tag:'order' they collapse into one OS
-        // notification whose url is whichever raiser fired last. So the bell's
-        // correct deep link was being replaced at random by this one.
-        const fresh = waiting[0]
-        alertParty({
-          title: lang === 'ar' ? 'طلب جديد' : 'New order',
-          body: fresh ? `${orderNumber(fresh.code)} · ${fresh.tableLabel || tenant?.name || ''}` : (tenant?.name || ''),
-          tag: 'order',
-          url: fresh ? `/cashier?order=${fresh.id}` : '/cashier',
-        })
-      }
-      prevPending.current = pending
-      seeded.current = true
+    if (!activeOrders) return
+    const waiting = activeOrders.filter((o) => o.status === 'pending')
+    const pending = waiting.length
+    if (seeded.current && pending > prevPending.current) {
+      // CARRY THE ORDER ID. This sent a bare '/cashier' with the venue name as
+      // the body — no way to know WHICH order arrived, and because all three
+      // new-order alerts share tag:'order' they collapse into one OS
+      // notification whose url is whichever raiser fired last. So the bell's
+      // correct deep link was being replaced at random by this one.
+      const fresh = waiting[0]
+      alertParty({
+        title: lang === 'ar' ? 'طلب جديد' : 'New order',
+        body: fresh ? `${orderNumber(fresh.code)} · ${fresh.tableLabel || tenant?.name || ''}` : (tenant?.name || ''),
+        tag: 'order',
+        url: fresh ? `/cashier?order=${fresh.id}` : '/cashier',
+      })
+    }
+    prevPending.current = pending
+    seeded.current = true
+    setOrdersPending(pending)
+    setKitchenBusy(activeOrders.filter((o) => o.status === 'accepted' || o.status === 'preparing').length)
+  }, [activeOrders, lang, tenant])
+
+  // Open complaints count for the sidebar badge — CAP-GATED to match the
+  // firestore rule (view_complaints): an ungated listener here was a
+  // guaranteed permission-denied on every session for cashiers/waiters.
+  const canComplaints = isManager || can(CAP.VIEW_COMPLAINTS)
+  useEffect(() => {
+    if (!tenantId || !canComplaints) return undefined
+    return watchComplaints(tenantId, (list) => {
+      setComplaintsOpen((list || []).filter((c) => (c.status || 'open') === 'open').length)
     })
-  }, [tenantId, lang, tenant])
+  }, [tenantId, canComplaints])
 
   // One-time self-healing DB migration to restore items/categories missing sortOrder
   useEffect(() => {
@@ -362,6 +430,7 @@ export default function AdminLayout() {
     <div className="admin-shell" style={{ '--sidebar-w': `${effW}px` }} data-collapsed={collapsed ? 'true' : undefined} data-systheme={systemThemeAttr(tenant, 'admin')} data-sidebar={tenant?.sidebarStyle || undefined} data-sidetheme={tenant?.sidebarTheme || undefined}>
       <AppBackground tenant={tenant} />
       <PinLock tenant={tenant} tenantId={tenantId} />
+      <IncomingAlerts />
       {tourKey && TOURS[tourKey] && tenant?.toursEnabled !== false && <Tour key={tourKey} steps={TOURS[tourKey]} storageKey={tourKey} />}
       {searchOpen && <GlobalSearch open={searchOpen} onClose={() => setSearchOpen(false)} />}
       {/* desktop sidebar (hidden on mobile; bottom nav takes over) — collapsible + drag-resizable */}
@@ -384,6 +453,7 @@ export default function AdminLayout() {
           {visibleNav.map((n) => (
             <NavLink key={n.to} to={n.to} end={n.exact} className={({ isActive }) => (isActive ? 'active' : '')}>
               <Icon name={n.icon} size={18} /> <span>{lang === 'ar' ? n.label.ar : n.label.en}</span>
+              {navBadge(n.to)}
             </NavLink>
           ))}
           {/* COLLAPSIBLE GROUPS. Five groups, thirty-three destinations, all
@@ -419,6 +489,7 @@ export default function AdminLayout() {
                 {open && items.map((l) => (
                   <NavLink key={l.to} to={l.to} className={({ isActive }) => (isActive ? 'active' : '')}>
                     <Icon name={l.icon} size={18} /> <span>{lang === 'ar' ? l.label.ar : l.label.en}</span>
+                    {navBadge(l.to)}
                   </NavLink>
                 ))}
               </div>
@@ -442,6 +513,14 @@ export default function AdminLayout() {
 
       <div className="admin-main">
       <header className="app-bar">
+        {/* 44px sidebar toggle a FINGER can hit — the 28px one inside the
+            sidebar and the 8px drag rail are mouse furniture. Shows only where
+            the sidebar exists (≥980px, via .ab-side-toggle in index.css). */}
+        <button className="icon-btn ab-side-toggle" onClick={toggleSide}
+          title={lang === 'ar' ? (collapsed ? 'فتح القائمة الجانبية' : 'طي القائمة الجانبية') : (collapsed ? 'Expand sidebar' : 'Collapse sidebar')}
+          aria-label="toggle sidebar">
+          <Icon name="sidebar" size={20} />
+        </button>
         <Link to="/admin" className="row app-bar-brand" style={{ gap: 8 }}>
           {tenant?.logoUrl ? (
             <img src={tenant.logoUrl} alt="" style={{ width: 28, height: 28, borderRadius: '50%', objectFit: 'cover' }} />
@@ -474,7 +553,7 @@ export default function AdminLayout() {
             <Icon name="eye" size={18} />
           </a>
         )}
-        <StaffBell tenantId={tenantId} />
+        <StaffBell tenantId={tenantId} onUnread={setUnreadNotifs} />
         <button className="icon-btn ab-wide" onClick={toggleLang} aria-label={lang === 'ar' ? 'تغيير اللغة' : 'Change language'} style={{ fontWeight: 800, fontSize: 13 }}>
           {lang === 'ar' ? 'EN' : 'ع'}
         </button>
@@ -528,6 +607,7 @@ export default function AdminLayout() {
           <NavLink key={n.to} to={n.to} end={n.exact} className={({ isActive }) => (isActive ? 'active' : '')}>
             <Icon name={n.icon} size={22} />
             <span>{lang === 'ar' ? n.label.ar : n.label.en}</span>
+            {navBadge(n.to)}
           </NavLink>
         ))}
         {/* «المزيد» reads as ACTIVE on every secondary screen. Without this the
@@ -543,6 +623,19 @@ export default function AdminLayout() {
         </button>
       </nav>
       </div>
+
+      {/* Floating quick-assistant button — one tap to ask the AI a question
+          from ANY admin screen without abandoning the work in progress.
+          Cap-gated like the sidebar entry, and hidden on the full assistant
+          page itself (a FAB that opens a lesser copy of the page you are
+          already on is noise). z-index 250 keeps it under every backdrop/sheet
+          (300/310), so open sheets — including its own — cover it. */}
+      {can(CAP.USE_ASSISTANT) && loc.pathname !== '/admin/assistant' && (
+        <button className="ai-fab" onClick={() => setAiQuickOpen(true)} aria-label={lang === 'ar' ? 'المساعد' : 'Assistant'}>
+          <Icon name="sparkles" size={20} />
+        </button>
+      )}
+      <AssistantQuick open={aiQuickOpen} onClose={() => setAiQuickOpen(false)} />
 
       <Sheet open={moreOpen} onClose={() => { setMoreOpen(false); setMoreQ('') }} title={t('more')}>
         <div className="stack" style={{ gap: 'var(--sp-3)' }}>
@@ -587,6 +680,7 @@ export default function AdminLayout() {
                     <Icon name={l.icon} size={22} />
                     <span className="bold">{lang === 'ar' ? l.label.ar : l.label.en}</span>
                     <span className="grow" />
+                    {navBadge(l.to)}
                     <Icon name="next" size={18} className="faint" />
                   </Link>
                 ))}

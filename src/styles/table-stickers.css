@@ -20,11 +20,16 @@
   --ts-sw: 48mm;   /* side face width  */
   --ts-h: 132mm;   /* face height      */
   --ts-brand: #1f2a37;
+  /* Everything that INKS the brand (headline, kickers, chips, CTAs, the table
+     number) reads --ts-accent, never --ts-brand directly, so the dark treatment
+     below can lift it without touching the venue's chosen colour. */
+  --ts-accent: var(--ts-brand);
   --ts-ink: #16181d;
   --ts-sub: #5d6470;
   --ts-paper: #ffffff;
   --ts-line: #e2e5ec;
   --ts-zoom: 0.8;
+  --ts-fs: 1;   /* design scale, driven from the centre-face width */
 }
 
 /* ---------- toolbar / controls (never printed) ---------- */
@@ -59,43 +64,101 @@
 }
 .ts-pages { transform: scale(var(--ts-zoom)); transform-origin: top center; }
 
+/* One .ts-sheet per printed page. It is a wrapping flex row so a sheet big
+ * enough for several strips side by side (A3 landscape holding two 200mm sets,
+ * say) fills across before it fills down, and each page break lands between
+ * sheets rather than mid-strip. */
 .ts-sheet {
-  width: 210mm; background: #fff; padding: 8mm;
-  box-shadow: var(--sh-2); margin: 0 auto;
+  background: #fff;
+  box-shadow: var(--sh-2); margin: 0 auto 6mm;
+  display: flex; flex-wrap: wrap; align-content: flex-start; gap: 4mm;
   font-family: var(--font-body);
   color: var(--ts-ink);
+  break-after: page; page-break-after: always;
   -webkit-print-color-adjust: exact; print-color-adjust: exact;
 }
-.ts-sheet[data-size='A4L'] { width: 297mm; }
+.ts-sheet:last-child { break-after: auto; page-break-after: auto; margin-bottom: 0; }
+/* strip mode: the page IS the sticker set, so no gutter and no cut margin */
+.ts-sheet[data-strip='true'] { gap: 0; }
 
 /* one table = one row of three faces, kept whole across page breaks */
 .ts-set {
   display: flex; gap: 2mm; align-items: stretch;
-  margin-bottom: 4mm;
   break-inside: avoid; page-break-inside: avoid;
 }
-.ts-set:last-child { margin-bottom: 0; }
 
+/* Slack is DISTRIBUTED, not pooled. The first cut used `margin-top: auto` on the
+ * feature list, which meant a stand shorter or taller than the copy dumped all
+ * the leftover height into one gap in the middle of the face — a 40mm hole that
+ * read as a printing error. space-between spreads it between every block, so the
+ * same markup survives a 105mm stand and a 150mm one. */
 .ts-face {
   height: var(--ts-h);
   background: var(--ts-paper);
   color: var(--ts-ink);
   border-radius: 3mm;
-  padding: 5mm 4.5mm;
-  display: flex; flex-direction: column;
   overflow: hidden;
   position: relative;
   break-inside: avoid;
 }
 .ts-face--center { width: var(--ts-cw); }
-.ts-face--side { width: var(--ts-sw); padding: 4.5mm 3.5mm; }
+.ts-face--side { width: var(--ts-sw); }
+
+/* ONE SCALE FOR THE WHOLE DESIGN.
+ *
+ * Every size in here is authored against a 96mm centre face. Print the same
+ * markup on a real 200mm napkin stand and the type is proportionally half the
+ * size it should be — legible on screen at 1:1, unreadable across a table. All
+ * the pt/mm values could carry a calc() multiplier, but there are two dozen of
+ * them and one missed rule breaks the proportion silently. Scaling the whole
+ * layer instead keeps type, gaps, padding and QR locked in ratio by
+ * construction: the inner box is sized at 1/scale and then scaled back up, so it
+ * still fills the face exactly. Origin follows the writing direction so the
+ * scaled box stays pinned to the face's leading edge. */
+.ts-scale {
+  width: calc(100% / var(--ts-fs));
+  height: calc(100% / var(--ts-fs));
+  transform: scale(var(--ts-fs));
+  transform-origin: top right;
+  padding: 5mm 4.5mm;
+  display: flex; flex-direction: column;
+  justify-content: space-between;
+}
+[dir='ltr'] .ts-scale { transform-origin: top left; }
+.ts-face--side .ts-scale { padding: 4.5mm 3.5mm; }
+
+/* Tall panel: copy column and QR stack, .ts-col is transparent to the flow. */
+.ts-col { display: flex; flex-direction: column; justify-content: space-between; gap: 3mm; }
+
+/* Wide panel (a 200 × 145mm stand face): copy on the leading edge, code on the
+ * trailing one, both full height. The QR can afford to be much larger here —
+ * width is the surplus axis, so spend it on the thing guests aim a camera at. */
+.ts-face--center[data-wide='true'] .ts-scale { flex-direction: row; gap: 7mm; align-items: stretch; }
+.ts-face--center[data-wide='true'] .ts-col { flex: 1 1 auto; min-width: 0; }
+.ts-face--center[data-wide='true'] .ts-qrwrap { flex: 0 0 auto; justify-content: center; }
+.ts-face--center[data-wide='true'] .ts-qr { width: 54mm; height: 54mm; }
+.ts-face--center[data-wide='true'] .ts-qr-ph { width: 54mm; height: 54mm; }
+.ts-face--center[data-wide='true'] .ts-qrnote { max-width: 54mm; }
+/* two columns of features once the copy column is genuinely wide */
+.ts-face--center[data-wide='true'] .ts-feats { display: grid; grid-template-columns: 1fr 1fr; gap: 1.7mm 5mm; }
 
 /* cut guides — a hairline the scissors follow, hidden when the venue prints
    onto pre-cut label stock */
 .ts-sheet[data-guides='true'] .ts-face { outline: 0.3mm dashed var(--ts-line); outline-offset: 0; }
 
-/* dark treatment: premium on a stand, heavy on toner — the venue chooses */
-.ts-sheet[data-theme='dark'] { --ts-paper: #14161b; --ts-ink: #f4f1ea; --ts-sub: #a9afbb; --ts-line: #3a3f4a; }
+/* Dark treatment: premium on a stand, heavy on toner — the venue chooses.
+ *
+ * A venue brand is picked to look good on WHITE. Most of them are deep (the
+ * default here is #1f2a37), and on near-black paper that lands around 1.3:1 —
+ * which is exactly how the first dark render came out with an invisible
+ * headline, invisible kickers and an invisible table number. So the accent is
+ * lifted toward the paper's ink until it reads. A brand that is already light
+ * survives the mix; a near-black one degrades to a light neutral, which is the
+ * correct outcome because a near-black accent cannot exist on dark paper. */
+.ts-sheet[data-theme='dark'] {
+  --ts-paper: #14161b; --ts-ink: #f4f1ea; --ts-sub: #a9afbb; --ts-line: #3a3f4a;
+  --ts-accent: color-mix(in srgb, var(--ts-brand) 35%, #f4f1ea);
+}
 
 /* ---------- centre face ---------- */
 .ts-head { display: flex; align-items: flex-start; justify-content: space-between; gap: 3mm; }
@@ -106,81 +169,91 @@
 /* the table number. Latin digits, always — never an Arabic-Indic numeral. */
 .ts-table {
   flex-shrink: 0; text-align: center;
-  border: 0.5mm solid var(--ts-brand); border-radius: 2.4mm;
+  border: 0.5mm solid var(--ts-accent); border-radius: 2.4mm;
   padding: 1.2mm 2.6mm; min-width: 15mm;
-  background: color-mix(in srgb, var(--ts-brand) 8%, transparent);
+  background: color-mix(in srgb, var(--ts-accent) 12%, transparent);
 }
 .ts-table span { display: block; font-size: 5.6pt; font-weight: 600; color: var(--ts-sub); letter-spacing: 0.04em; }
-.ts-table strong { display: block; font-size: 15pt; font-weight: 700; line-height: 1.05; color: var(--ts-brand); font-variant-numeric: tabular-nums; }
+.ts-table strong { display: block; font-size: 15pt; font-weight: 700; line-height: 1.05; color: var(--ts-accent); font-variant-numeric: tabular-nums; }
 .ts-face--side .ts-table { min-width: 12mm; padding: 1mm 2mm; }
 .ts-face--side .ts-table strong { font-size: 12pt; }
 
 .ts-hook {
-  margin: 3.2mm 0 0;
-  font-size: 19pt; font-weight: 700; line-height: 1.14;
+  font-size: 19pt; font-weight: 700; line-height: 1.12;
   letter-spacing: -0.01em;
-  color: var(--ts-brand);
+  color: var(--ts-accent);
 }
-.ts-sub { margin-top: 1.4mm; font-size: 8pt; font-weight: 600; color: var(--ts-sub); line-height: 1.35; }
+.ts-sub { margin-top: 1.6mm; font-size: 8.2pt; font-weight: 600; color: var(--ts-sub); line-height: 1.34; }
 
-.ts-qrwrap { display: flex; align-items: center; gap: 4mm; margin: 3.4mm 0; }
+/* The QR is the whole point of the sticker, so on the centre face it is centred
+ * and oversized with its instruction directly beneath — a guest glancing at the
+ * stand from across the table should see one obvious target, not a code tucked
+ * beside a paragraph. */
+.ts-qrwrap { display: flex; flex-direction: column; align-items: center; gap: 1.5mm; }
 .ts-qr {
-  width: 34mm; height: 34mm; flex-shrink: 0;
-  background: #fff; border-radius: 1.6mm; padding: 1mm;
+  width: 36mm; height: 36mm; flex-shrink: 0;
+  background: #fff; border-radius: 1.6mm; padding: 1.2mm;
   display: block;
 }
-.ts-face--side .ts-qr { width: 27mm; height: 27mm; }
-.ts-qrnote { font-size: 7.5pt; line-height: 1.4; color: var(--ts-sub); }
-.ts-qrnote strong { display: block; font-size: 9.5pt; color: var(--ts-ink); margin-bottom: 0.8mm; }
+.ts-face--side .ts-qr { width: 34mm; height: 34mm; }
+.ts-qrnote { font-size: 7.4pt; line-height: 1.36; color: var(--ts-sub); text-align: center; }
+.ts-qrnote strong { display: block; font-size: 9.8pt; color: var(--ts-ink); margin-bottom: 0.7mm; }
 
-.ts-rule { height: 0.3mm; background: var(--ts-line); margin: 0 0 2.6mm; }
+.ts-rule { height: 0.3mm; background: var(--ts-line); }
 
-.ts-feats { display: flex; flex-direction: column; gap: 1.9mm; margin-top: auto; }
+.ts-feats { display: flex; flex-direction: column; gap: 1.7mm; }
 .ts-feat { display: flex; align-items: flex-start; gap: 2.2mm; }
-.ts-feat .ts-ico { flex-shrink: 0; color: var(--ts-brand); margin-top: 0.3mm; }
-.ts-feat b { display: block; font-size: 8.6pt; font-weight: 700; line-height: 1.2; }
-.ts-feat i { display: block; font-style: normal; font-size: 7pt; color: var(--ts-sub); line-height: 1.32; margin-top: 0.4mm; }
+.ts-feat .ts-ico { flex-shrink: 0; color: var(--ts-accent); margin-top: 0.3mm; }
+.ts-feat b { display: block; font-size: 8.8pt; font-weight: 700; line-height: 1.2; }
+.ts-feat i { display: block; font-style: normal; font-size: 7.1pt; color: var(--ts-sub); line-height: 1.28; margin-top: 0.35mm; }
 
 /* ---------- side faces ---------- */
 .ts-kicker {
   font-size: 6.4pt; font-weight: 700; letter-spacing: 0.1em;
-  color: var(--ts-brand); text-transform: uppercase;
+  color: var(--ts-accent); text-transform: uppercase;
 }
 .ts-stitle { font-size: 12.5pt; font-weight: 700; line-height: 1.16; margin-top: 1mm; color: var(--ts-ink); }
 
-.ts-names { display: flex; flex-wrap: wrap; gap: 1.1mm; margin-top: 2mm; }
+.ts-names { display: flex; flex-wrap: wrap; gap: 1.2mm; }
 .ts-names span {
-  font-size: 7pt; font-weight: 700; line-height: 1;
-  border: 0.28mm solid var(--ts-brand);
-  color: var(--ts-brand);
-  border-radius: var(--r-pill); padding: 1.1mm 2mm;
+  font-size: 7.2pt; font-weight: 700; line-height: 1;
+  border: 0.28mm solid var(--ts-accent);
+  color: var(--ts-accent);
+  border-radius: var(--r-pill); padding: 1.2mm 2.1mm;
 }
-.ts-more { font-size: 6.8pt; color: var(--ts-sub); line-height: 1.34; margin-top: 1.8mm; }
+.ts-more { font-size: 7pt; color: var(--ts-sub); line-height: 1.34; margin-top: 1.8mm; }
 
-.ts-rows { display: flex; flex-direction: column; gap: 1.6mm; margin-top: 2.4mm; }
-.ts-row { display: flex; align-items: flex-start; gap: 1.8mm; font-size: 7pt; line-height: 1.32; }
-.ts-row .ts-ico { flex-shrink: 0; color: var(--ts-brand); margin-top: 0.3mm; }
+.ts-rows { display: flex; flex-direction: column; gap: 1.9mm; }
+.ts-row { display: flex; align-items: flex-start; gap: 1.8mm; font-size: 7.3pt; line-height: 1.32; }
+.ts-row .ts-ico { flex-shrink: 0; color: var(--ts-accent); margin-top: 0.3mm; }
 
-.ts-foot { margin-top: auto; padding-top: 2.4mm; }
+.ts-foot { display: flex; flex-direction: column; align-items: center; gap: 1.8mm; }
 .ts-cta {
-  font-size: 8.4pt; font-weight: 700; color: var(--ts-brand);
-  display: flex; align-items: center; gap: 1.6mm; margin-bottom: 1.6mm;
+  font-size: 8.6pt; font-weight: 700; color: var(--ts-accent);
+  display: flex; align-items: center; gap: 1.6mm; text-align: center;
 }
 .ts-brandline { font-size: 5.6pt; color: var(--ts-sub); letter-spacing: 0.02em; }
 
+/* space-between distributes between the face's DIRECT children, so the blocks
+ * that must stay glued (a headline and its subline, a games title and its chips)
+ * are grouped under one wrapper rather than left as loose siblings. */
+.ts-top { display: flex; flex-direction: column; }
+
 /* placeholder while a QR rasterises */
 .ts-qr-ph {
-  width: 34mm; height: 34mm; border-radius: 1.6mm;
+  width: 36mm; height: 36mm; border-radius: 1.6mm;
   background: repeating-linear-gradient(45deg, var(--ts-line), var(--ts-line) 1mm, transparent 1mm, transparent 2mm);
 }
-.ts-face--side .ts-qr-ph { width: 27mm; height: 27mm; }
+.ts-face--side .ts-qr-ph { width: 34mm; height: 34mm; }
 
 /* ---------- print ---------- */
 @media print {
   .no-print, .ts-toolbar, .ts-panels { display: none !important; }
   .ts-backdrop { background: #fff !important; padding: 0 !important; overflow: visible !important; border-radius: 0 !important; }
   .ts-pages { transform: none !important; }
-  .ts-sheet { box-shadow: none !important; margin: 0 !important; width: auto !important; padding: 0 !important; }
+  /* Width/padding stay as the inline style set them — they ARE the paper geometry
+     the @page rule was built from, so flattening them here would desync the two. */
+  .ts-sheet { box-shadow: none !important; margin: 0 !important; }
   .ts-root { padding: 0 !important; }
 
   body.ts-print .app-bar,

@@ -525,8 +525,8 @@ const onStaffInviteEmail = onDocumentCreated('staffInvites/{id}', async (event) 
   const il = normLang(td.lang)
   const p = L(il)
   const role = (il === 'en'
-    ? { owner: 'owner', manager: 'manager', cashier: 'cashier', waiter: 'waiter', kitchen: 'kitchen' }
-    : { owner: 'مالك', manager: 'مدير', cashier: 'كاشير', waiter: 'نادل', kitchen: 'مطبخ' })[inv.role]
+    ? { owner: 'owner', manager: 'manager', supervisor: 'supervisor', accountant: 'accountant', marketing: 'marketing', cashier: 'cashier', barista: 'barista', waiter: 'waiter', kitchen: 'kitchen', driver: 'driver', cleaner: 'cleaner' }
+    : { owner: 'مالك', manager: 'مدير', supervisor: 'مشرف', accountant: 'محاسب', marketing: 'مسؤول تسويق', cashier: 'كاشير', barista: 'باريستا', waiter: 'نادل', kitchen: 'مطبخ', driver: 'مندوب توصيل', cleaner: 'عامل نظافة' })[inv.role]
     || p('موظف', 'staff member')
   await sendEmail({
     // A staff invite is the venue's own send — a manager triggers it, and a

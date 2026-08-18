@@ -9,6 +9,7 @@ import { aiQuick } from './aiBridge.js'
 import { venueType, venueAiContext, lex } from './venueTypes.js'
 import { brandVisualDirective } from './brandInsight.js'
 import { startGen } from './genLog.js'
+import { POSE_REF_LINE } from './photoDirection.js'
 
 export const IMAGE_MODEL = 'gemini-2.5-flash-image'
 
@@ -239,6 +240,61 @@ export async function generateFromInlineRefs({ inlineRefs = [], stylePrompt = ''
   const json = await sendGemini(IMAGE_MODEL, body)
   const img = json?.candidates?.[0]?.content?.parts?.find((p) => p.inlineData?.data)
   if (!img) throw new Error('لم يُرجع النموذج صورة — أعد المحاولة بوصف أوضح.')
+  return b64ToBlob(img.inlineData.data, img.inlineData.mimeType || 'image/png')
+}
+
+// Theme-fit re-shoot: ONE reference image (the owner's real dish photo) + a
+// photoDirection prompt (see lib/photoDirection.js). Deliberately NOT routed
+// through generatePostImage: its marketing preamble and brandContext palette
+// directive would tint the dish, its hardcoded square-1:1 line fights the
+// theme's aspect, and its skip-failed-refs policy silently degrades to
+// INVENTING a different dish — for a faithful re-shoot a wrong dish is worse
+// than an error, so a missing reference throws instead.
+export async function generateThemeFitImage({ srcFile = null, srcUrl = '', poseUrl = '', prompt = '', tenant = null, itemId = '' } = {}) {
+  if (!firebaseReady) throw new Error('الذكاء غير مهيأ — أكمل إعداد Firebase أولاً.')
+  let ref = null
+  if (srcFile) {
+    ref = await blobToInlineData(srcFile)
+  } else if (srcUrl) {
+    try {
+      ref = await urlToInlineData(srcUrl)
+    } catch (_) {
+      throw new Error('تعذر قراءة صورة الصنف الحالية من التخزين (إعداد CORS) — اختر الصورة من جهازك بدلاً من ذلك.')
+    }
+  }
+  if (!ref) throw new Error('لا توجد صورة مصدر — ارفع صورة الصنف أولاً.')
+  // The pose reference (the venue's last APPROVED cutout) is an ENHANCEMENT:
+  // it shows the model the target angle far more reliably than words do, but
+  // a CORS-blocked fetch must not kill the generation — unlike the source,
+  // a missing pose just means the prompt's camera block stands alone.
+  let pose = null
+  if (poseUrl) {
+    try { pose = await urlToInlineData(poseUrl) } catch (_) { /* words still direct the angle */ }
+  }
+  const text = pose ? `${POSE_REF_LINE}\n${prompt}` : prompt
+  const body = {
+    contents: [{ role: 'user', parts: [{ inlineData: ref }, ...(pose ? [{ inlineData: pose }] : []), { text }] }],
+    generationConfig: { responseModalities: ['TEXT', 'IMAGE'] },
+  }
+  const gen = startGen(tenant?.id, {
+    kind: 'image', section: 'item-editor', prompt: text, model: IMAGE_MODEL,
+    refUrls: [srcUrl, pose ? poseUrl : ''].filter(Boolean), itemId: itemId || null,
+  })
+  let json
+  try {
+    json = await sendGemini(IMAGE_MODEL, body)
+  } catch (e) {
+    gen.fail(String(e?.message || e))
+    throw e
+  }
+  const img = json?.candidates?.[0]?.content?.parts?.find((p) => p.inlineData?.data)
+  if (!img) {
+    const said = (json?.candidates?.[0]?.content?.parts || []).map((p) => p.text).filter(Boolean).join(' ').trim().slice(0, 140)
+    const msg = said ? `لم يُرجع النموذج صورة: ${said}` : 'لم يُرجع النموذج صورة — أعد المحاولة.'
+    gen.fail(msg)
+    throw new Error(msg)
+  }
+  gen.done({ meta: { mime: img.inlineData.mimeType || 'image/png' } })
   return b64ToBlob(img.inlineData.data, img.inlineData.mimeType || 'image/png')
 }
 

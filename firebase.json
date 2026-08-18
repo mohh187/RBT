@@ -4,6 +4,7 @@
     "ignore": ["firebase.json", "**/.*", "**/node_modules/**"],
     "rewrites": [
       { "source": "/m/**", "function": { "functionId": "venueShell", "region": "us-central1" } },
+      { "source": "/app/**", "function": { "functionId": "venueShell", "region": "us-central1" } },
       { "source": "/join/**", "function": { "functionId": "venueShell", "region": "us-central1" } },
       { "source": "**", "destination": "/index.html" }
     ],
@@ -24,6 +25,11 @@
       },
       {
         "source": "/join/**",
+        "headers": [{ "key": "Cache-Control", "value": "public, max-age=0, s-maxage=300, stale-while-revalidate=86400" }]
+      },
+      {
+        "//": "Staff-app surfaces (per-venue manifest/icon/shell) — same CDN policy as /m/**. Bare /app (no slug) stays on the SPA catch-all.",
+        "source": "/app/**",
         "headers": [{ "key": "Cache-Control", "value": "public, max-age=0, s-maxage=300, stale-while-revalidate=86400" }]
       },
       {

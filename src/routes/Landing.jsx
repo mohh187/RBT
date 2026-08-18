@@ -15,7 +15,7 @@
 // DESIGN: see landing.css. The short version — the brand gradient signs, it
 // does not decorate; one action colour carries every conversion button.
 import { useEffect, useState, Fragment } from 'react'
-import { Link } from 'react-router-dom'
+import { Link, Navigate } from 'react-router-dom'
 import { useAuth } from '../lib/auth.jsx'
 import { useI18n } from '../lib/i18n.jsx'
 import BrandMark, { RbtMark, RbtTagline } from '../components/BrandMark.jsx'
@@ -27,6 +27,7 @@ import { mergeLanding, watchLanding } from '../lib/landingContent.js'
 import { PLANS } from '../lib/plans.js'
 import { PLATFORM_SELLER, SELLER_ADDRESS_AR, SELLER_CONTACT } from '../lib/platformSeller.js'
 import { normalizePlanConfig, promoOf, watchPricing, yearlyTotal } from '../lib/platformPricing.js'
+import { getDeviceVenue } from '../lib/pin.js'
 import '../landing.css'
 
 // href-aware link: SPA routes via <Link>, anchors/external via <a>.
@@ -66,6 +67,18 @@ export default function Landing() {
   // Signed-in visitors are NOT auto-redirected — the landing stays browsable;
   // a slim banner offers the dashboard instead.
   const sessionTarget = !loading && user ? (tenantId ? '/admin' : '/onboarding') : ''
+
+  // …EXCEPT inside an INSTALLED app window. A tablet PWA installed before the
+  // /app start_url existed launches at '/', and its staff must never see the
+  // marketing page — a standalone display-mode with a live venue session goes
+  // straight to the console (where the PIN lock takes over).
+  const standalone = typeof window !== 'undefined' && (window.matchMedia?.('(display-mode: standalone)').matches || window.navigator.standalone === true)
+  if (standalone && !loading && user && tenantId) return <Navigate to="/admin" replace />
+  // …and the NO-session case (shift ended, staffer logged out): the shared
+  // tablet still remembers its venue, so route to the staff entry instead of
+  // rendering the marketing page inside the installed app window.
+  if (standalone && !loading && !user && getDeviceVenue()?.tid) return <Navigate to="/lock" replace />
+
 
   const secEnabled = Object.fromEntries((content.sections || []).map((s) => [s.key, s.enabled !== false]))
   const flowKeys = (content.sections || []).filter((s) => s.enabled !== false && s.key !== 'announcement').map((s) => s.key)

@@ -166,7 +166,7 @@ const STRINGS = {
     markPaid: 'تم الدفع',
     cancelOrder: 'إلغاء',
     newOrders: 'جديدة',
-    preparing: 'تحضير',
+    preparing: 'قيد التحضير',
     ready: 'جاهزة',
     // dashboard / reports
     todaysSales: 'مبيعات اليوم',

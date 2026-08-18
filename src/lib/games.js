@@ -432,6 +432,15 @@ export function unseenGames(tenant, enabledIds) {
 export function gamesFor(tenant) {
   const ids = tenant && Array.isArray(tenant.games) ? tenant.games : null
   if (!ids) return GAMES.filter((g) => DEFAULT_GAME_IDS.includes(g.id))
+  // AN EMPTY ARRAY IS AN ANSWER, NOT A GAP.
+  //
+  // The comment above this function has always said an explicitly empty array
+  // means the venue switched games off — but `[]` is truthy, so it slipped past
+  // the guard above and fell into the "new games you have not seen" bridge,
+  // which handed back seven titles to a venue that had deliberately turned every
+  // one of them off. Absence of configuration and a configured "none" are
+  // different states and only one of them deserves a default.
+  if (!ids.length) return []
   const fresh = unseenGames(tenant, ids)
 
   // WHOSE ORDER WINS.

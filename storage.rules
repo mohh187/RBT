@@ -52,11 +52,14 @@ service firebase.storage {
     // tenant-assets block below, ANY content type is allowed here (documents,
     // fonts, archives…) with per-kind ceilings, so the library can hold every
     // reusable asset. Media types get their own (larger) limits.
+    // Video ceiling is deliberately large (1GB): the library is where a venue
+    // parks the full-length promo clip that plays on its OWN in-store TV
+    // (/screen), not on a diner's phone — a 300-500MB master is normal there.
     match /tenants/{tid}/library/{allPaths=**} {
       allow read: if true;
       allow create, update: if (isTenantStaff(tid) || isPlatformAdmin()) && (
         (isImage() && underLimit(10)) ||
-        (isVideo() && underLimit(150)) ||
+        (isVideo() && underLimit(1024)) ||
         (isAudio() && underLimit(40)) ||
         (isModel() && underLimit(60)) ||
         (!isImage() && !isVideo() && !isAudio() && underLimit(25))
@@ -74,6 +77,21 @@ service firebase.storage {
       allow create, update: if (isTenantStaff(tid) || isPlatformAdmin())
         && (isImage() || request.resource.contentType == 'application/pdf')
         && underLimit(20);
+      allow delete: if isTenantStaff(tid) || isPlatformAdmin();
+    }
+
+    // Digital-signage assets (tenants/{tid}/signage/…): slides and playlists for
+    // the in-store TV. Same reasoning as the library block — the clip streams to
+    // a screen on the venue's own network, so it gets the 1GB video ceiling
+    // instead of the 100MB diner-facing one below. (Storage rules OR together,
+    // so this block simply widens what the generic tenant block allows here.)
+    match /tenants/{tid}/signage/{allPaths=**} {
+      allow read: if true;
+      allow create, update: if (isTenantStaff(tid) || isPlatformAdmin()) && (
+        (isImage() && underLimit(10)) ||
+        (isVideo() && underLimit(1024)) ||
+        (isAudio() && underLimit(40))
+      );
       allow delete: if isTenantStaff(tid) || isPlatformAdmin();
     }
 

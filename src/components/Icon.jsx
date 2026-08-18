@@ -13,6 +13,7 @@ import {
   Wrench, MessageCircle, Scale, KeyRound, FolderOpen, ArrowUpDown, ArrowLeftRight, Lock, Minus, Wifi, CreditCard,
   Zap, ArrowUp, NotepadText, Briefcase, Theater, PenLine, Package, ChartColumnBig,
   Palette, Layers, Type as TypeIcon, Shapes, Pause, RotateCw, Share, SquarePlus,
+  PanelRight,
 } from 'lucide-react'
 import GamesIcon from './GamesIcon.jsx'
 
@@ -24,6 +25,7 @@ const MAP = {
   games: GamesIcon,
   home: Home,
   menu: UtensilsCrossed,
+  sidebar: PanelRight, // sidebar toggle (RTL: the sidebar lives on the right)
   cashier: ReceiptText,
   reports: BarChart3,
   more: MoreHorizontal,

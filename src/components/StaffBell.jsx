@@ -1,6 +1,8 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useI18n } from '../lib/i18n.jsx'
+import { useAuth } from '../lib/auth.jsx'
+import { CAP } from '../lib/permissions.js'
 import Icon from './Icon.jsx'
 import NotificationSettings from './NotificationSettings.jsx'
 import { useNotificationFeed } from '../lib/notifications.js'
@@ -29,25 +31,35 @@ const LEGACY_DROP = new Set(['order', 'complaint'])
 // legacy hook — don't double up).
 const V2_ALERT = new Set(['order', 'customer', 'reservation'])
 
-export default function StaffBell({ tenantId }) {
+export default function StaffBell({ tenantId, onUnread = null }) {
   const { t, lang } = useI18n()
   const navigate = useNavigate()
   const ar = lang === 'ar'
+  const { user, isManager, can } = useAuth()
+  const uid = user?.uid || ''
   const { items: legacyItems, markAllRead } = useNotificationFeed(tenantId)
   const [v2Items, setV2Items] = useState([])
   const [open, setOpen] = useState(false)
   const [settingsOpen, setSettingsOpen] = useState(false)
   const [notifOn, setNotifOn] = useState(getPrefs().enabled)
-  const [lastSeen, setLastSeen] = useState(() => getLastSeen(tenantId))
+  const [lastSeen, setLastSeen] = useState(() => getLastSeen(tenantId, uid))
   const [tick, setTick] = useState(0)
 
-  useEffect(() => { setLastSeen(getLastSeen(tenantId)) }, [tenantId])
+  useEffect(() => { setLastSeen(getLastSeen(tenantId, uid)) }, [tenantId, uid])
 
-  // v2 precise feed (own onSnapshot listeners; error-guarded inside)
+  // v2 precise feed — CAP-GATED per source: a waiter's bell carries orders and
+  // calls, never complaints/reservations/new-customers (admin notifications).
+  // The unread marker is per-user, so a shared tablet keeps separate badges.
+  const capsKey = [isManager, can(CAP.TAKE_ORDERS), can(CAP.VIEW_COMPLAINTS), can(CAP.MANAGE_EVENTS), can(CAP.VIEW_CUSTOMERS)].join('|')
   useEffect(() => {
     if (!tenantId) return
-    return buildNotifyFeed(db, tenantId, setV2Items)
-  }, [tenantId])
+    return buildNotifyFeed(db, tenantId, setV2Items, {
+      takeOrders: isManager || can(CAP.TAKE_ORDERS),
+      viewComplaints: isManager || can(CAP.VIEW_COMPLAINTS),
+      manageEvents: isManager || can(CAP.MANAGE_EVENTS),
+      viewCustomers: isManager || can(CAP.VIEW_CUSTOMERS),
+    })
+  }, [tenantId, capsKey]) // eslint-disable-line react-hooks/exhaustive-deps
 
   // OS/sound alerts for brand-new v2 items (dedupe by id, skip the initial
   // snapshot) — same url as the row so a notification click lands on the object.
@@ -78,7 +90,20 @@ export default function StaffBell({ tenantId }) {
     return v2.concat(legacy).sort((a, b) => b.at - a.at).slice(0, 80)
   }, [v2Items, legacyItems])
 
-  const unread = feed.filter((i) => i.at > lastSeen).length
+  // Hold the count until auth resolves the uid. Before that, lastSeen is read
+  // under the device-wide fallback key, which is lower than a user's real
+  // per-uid marker — so the badge briefly flashed an inflated unread number on
+  // every load, then dropped a render later. No uid → no number yet.
+  const unread = uid ? feed.filter((i) => i.at > lastSeen).length : 0
+
+  // «أي إشعار يظهر على قسمه في القائمة الجانبية»: publish the UNREAD rows
+  // (their deep links) to the layout, which maps each link onto the nav row
+  // that owns it. Same items, same lastSeen — the sidebar badges and the bell
+  // counter can never disagree.
+  useEffect(() => {
+    if (typeof onUnread !== 'function') return
+    onUnread(feed.filter((i) => i.at > lastSeen).map((i) => ({ to: i.to || '', type: i.type || '' })))
+  }, [feed, lastSeen, onUnread])
 
   // recency groups: «الآن» (< 10 min) / «اليوم» / «أقدم»
   const groups = useMemo(() => {
@@ -117,9 +142,28 @@ export default function StaffBell({ tenantId }) {
 
   const markAll = () => {
     const now = Date.now()
-    markSeen(tenantId, now)
+    markSeen(tenantId, now, uid)
     setLastSeen(now)
     markAllRead() // keep the legacy per-user marker in sync
+  }
+  // AUTO-READ ON OPEN, with a FROZEN marker. Opening the panel IS reading it,
+  // so the badge (and the sidebar section badges, fed by the same lastSeen)
+  // should zero the moment it opens — but if the rows compared against the
+  // same live marker, every «جديد» highlight would vanish in the same instant
+  // and the staffer could no longer tell what was actually new. panelSeen
+  // freezes the pre-open marker for the lifetime of this open: the badge
+  // follows the LIVE lastSeen (cleared), the rows compare against the frozen
+  // one. No uid → skip marking entirely: before auth resolves, markSeen would
+  // write the device-wide fallback key and corrupt every user's own marker on
+  // a shared tablet.
+  const panelSeen = useRef(lastSeen)
+  const togglePanel = () => {
+    const next = !open
+    if (next && uid) {
+      panelSeen.current = lastSeen
+      markAll()
+    }
+    setOpen(next)
   }
   const onRow = (n) => {
     if (!n.to) return
@@ -129,7 +173,7 @@ export default function StaffBell({ tenantId }) {
 
   return (
     <div className="nfy-wrap" ref={wrapRef}>
-      <button className="icon-btn" onClick={() => setOpen((v) => !v)} aria-label={t('notificationsTitle')} style={{ position: 'relative' }}>
+      <button className="icon-btn" onClick={togglePanel} aria-label={t('notificationsTitle')} style={{ position: 'relative' }}>
         <Icon name={notifOn ? 'bell' : 'bellOff'} />
         {unread > 0 && <span className="bell-badge">{unread > 99 ? '99+' : unread}</span>}
       </button>
@@ -139,11 +183,6 @@ export default function StaffBell({ tenantId }) {
             <div className="nfy-head">
               <strong className="small">{t('notificationsTitle')}</strong>
               <div className="row" style={{ gap: 4, alignItems: 'center' }}>
-                {unread > 0 && (
-                  <button className="nfy-mark" onClick={markAll}>
-                    <Icon name="check" size={13} /> {ar ? 'تحديد الكل كمقروء' : 'Mark all read'}
-                  </button>
-                )}
                 <button className="icon-btn" onClick={() => { setOpen(false); setSettingsOpen(true) }} title={t('notifSettings')}><Icon name="settings" size={16} /></button>
               </div>
             </div>
@@ -159,7 +198,7 @@ export default function StaffBell({ tenantId }) {
                 <div key={g.key}>
                   <div className="nfy-group-label">{g.label}</div>
                   {g.items.map((n) => (
-                    <div key={n.id} className={`nfy-row ${n.at > lastSeen ? 'is-unread' : ''}`}
+                    <div key={n.id} className={`nfy-row ${n.at > panelSeen.current ? 'is-unread' : ''}`}
                       style={{ cursor: n.to ? 'pointer' : 'default' }} onClick={() => onRow(n)}>
                       <span className="nfy-ico" style={{ color: n.color }}><Icon name={n.icon} size={17} /></span>
                       <div className="grow" style={{ minWidth: 0 }}>

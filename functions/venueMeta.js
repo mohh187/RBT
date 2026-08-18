@@ -216,6 +216,83 @@ function buildManifest(tenant, slug, host) {
   }
 }
 
+// ---- STAFF app identity (/app/:slug) — the tablet's own install -----------------
+// The staff PWA must (a) carry the VENUE's name+logo as its launcher icon and
+// (b) start at /app/:slug (→ session ? /admin+PinLock : /lock|login). Scope is
+// '/' — staff navigate to /admin, /cashier, /kds; a narrow /app scope would
+// throw every post-login navigation out of the app window.
+function buildStaffManifest(tenant, slug) {
+  const name = tenant.name || slug
+  const iconUrl = `/app/${encodeURIComponent(slug)}/icon.svg`
+  return {
+    id: `/app/${slug}`,
+    name,
+    short_name: String(name).slice(0, 24),
+    start_url: `/app/${slug}`,
+    scope: '/',
+    display: 'standalone',
+    orientation: 'any',
+    dir: 'rtl',
+    lang: 'ar',
+    background_color: '#ffffff',
+    theme_color: safeColor(tenant.themeColor, '#171717'),
+    // One generated 512 SVG serves both purposes: the logo (inlined server-side
+    // as a data URI — external hrefs inside manifest-icon SVGs are not fetched)
+    // sits inside the maskable safe zone on the brand plate.
+    icons: [
+      { src: iconUrl, sizes: '512x512', type: 'image/svg+xml', purpose: 'any' },
+      { src: iconUrl, sizes: '512x512', type: 'image/svg+xml', purpose: 'maskable' },
+    ],
+  }
+}
+
+// Staff icon: venue logo INLINED (data URI) on the brand plate, letter beneath
+// as the always-renders fallback. Cached per tenant (icon URL itself is CDN-cached).
+const ICON_LOGO_MAX = 400 * 1024
+async function staffIconSvg(tenant, slug) {
+  const brand = safeColor(tenant && tenant.themeColor, '#171717')
+  const letter = String((tenant && tenant.name) || slug || '?').trim().charAt(0).toUpperCase() || '?'
+  const base = (inner) =>
+    `<svg xmlns="http://www.w3.org/2000/svg" width="512" height="512" viewBox="0 0 512 512">` +
+    `<rect width="512" height="512" fill="${esc(brand)}"/>` +
+    `<text x="256" y="256" fill="rgba(255,255,255,.9)" font-family="Tajawal, system-ui, sans-serif" font-size="240" font-weight="700" text-anchor="middle" dominant-baseline="central">${esc(letter)}</text>` +
+    inner +
+    `</svg>`
+  const logo = absUrl(tenant && tenant.logoUrl)
+  if (!logo) return base('')
+  try {
+    const r = await fetch(logo, { signal: AbortSignal.timeout(3500) })
+    const type = String(r.headers.get('content-type') || '')
+    if (!r.ok || !type.startsWith('image/')) return base('')
+    const buf = Buffer.from(await r.arrayBuffer())
+    if (!buf.length || buf.length > ICON_LOGO_MAX) return base('')
+    const dataUri = `data:${type};base64,${buf.toString('base64')}`
+    // logo covers the letter when it loads; rounded, inside the maskable safe zone
+    return base(
+      `<clipPath id="r"><rect x="88" y="88" width="336" height="336" rx="76"/></clipPath>` +
+      `<rect x="88" y="88" width="336" height="336" rx="76" fill="#ffffff"/>` +
+      `<image href="${esc(dataUri)}" x="88" y="88" width="336" height="336" preserveAspectRatio="xMidYMid slice" clip-path="url(#r)"/>`,
+    )
+  } catch (_) { return base('') }
+}
+
+// The staff shell's <head>: venue title/theme/manifest — no og (never shared).
+function staffHeadBlock(tenant, slug) {
+  const name = tenant.name || slug
+  const brand = safeColor(tenant.themeColor, '#171717')
+  const iconUrl = `/app/${encodeURIComponent(slug)}/icon.svg`
+  const lines = [
+    `<title>${esc(name)}</title>`,
+    `<meta name="description" content="${esc(`بوابة فريق العمل — ${name}`)}" />`,
+    `<meta name="theme-color" content="${esc(brand)}" />`,
+    `<meta name="apple-mobile-web-app-title" content="${esc(name)}" />`,
+    `<link rel="manifest" href="/app/${encodeURIComponent(slug)}/manifest.webmanifest" />`,
+    `<link rel="apple-touch-icon" href="${esc(iconUrl)}" />`,
+    `<link rel="icon" href="${esc(iconUrl)}" />`,
+  ]
+  return lines.join('\n')
+}
+
 // Generated fallback icon: the venue's first letter on its brand color.
 function letterIconSvg(tenant, slug) {
   const brand = safeColor(tenant && tenant.themeColor, '#171717')
@@ -252,6 +329,35 @@ async function handler(req, res) {
     const path = String(req.path || '/')
     const host = String(req.headers['x-forwarded-host'] || req.headers.host || PLATFORM_APEX).split(',')[0].trim()
     let m
+
+    // /app/:slug/manifest.webmanifest — the STAFF tablet's install identity
+    if ((m = path.match(/^\/app\/([^/]+)\/manifest\.webmanifest$/))) {
+      const slug = decodeURIComponent(m[1])
+      const tenant = await internals.tenantBySlug(slug)
+      if (!tenant) { res.set('Cache-Control', 'no-store').status(404).json({ error: 'venue not found' }); return }
+      res.set('Cache-Control', 'public, max-age=300, s-maxage=600')
+        .set('Content-Type', 'application/manifest+json; charset=utf-8')
+        .status(200).send(JSON.stringify(buildStaffManifest(tenant, slug)))
+      return
+    }
+
+    // /app/:slug/icon.svg — venue logo (inlined) on the brand plate
+    if ((m = path.match(/^\/app\/([^/]+)\/icon\.svg$/))) {
+      const slug = decodeURIComponent(m[1])
+      const tenant = await internals.tenantBySlug(slug).catch(() => null)
+      res.set('Cache-Control', 'public, max-age=600, s-maxage=3600')
+        .set('Content-Type', 'image/svg+xml; charset=utf-8')
+        .status(200).send(await staffIconSvg(tenant, slug))
+      return
+    }
+
+    // /app/:slug/** — the staff shell wearing the venue's install identity
+    if ((m = path.match(/^\/app\/([^/]+)/))) {
+      const slug = decodeURIComponent(m[1])
+      const tenant = await internals.tenantBySlug(slug).catch(() => null)
+      await sendShell(res, tenant ? staffHeadBlock(tenant, slug) : null, true)
+      return
+    }
 
     // /m/:slug/manifest.webmanifest — the venue's own install identity
     if ((m = path.match(/^\/m\/([^/]+)\/manifest\.webmanifest$/))) {

@@ -131,14 +131,31 @@ function demetalize(el) {
 //    to show a model. Scaling to a real height in metres makes the viewer
 //    honest, and makes AR placement land at the true size on the table.
 const DEFAULT_HEIGHT_CM = 11 // a standard cup with its saucer
-function fitRealScale(el, heightCm) {
+async function fitRealScale(el, heightCm) {
   const target = (Number(heightCm) || DEFAULT_HEIGHT_CM) / 100 // metres
   try {
+    // MEASURE FROM 1, ALWAYS. getDimensions() reports the model at its CURRENT
+    // scale, while `el.scale` is assigned ABSOLUTELY — so measuring a model that
+    // is already scaled and writing the ratio back is not idempotent. Swapping
+    // `src` on a live viewer made it oscillate: 0.11 → (measures 0.11, computes
+    // 1) → 1 → (measures 1, computes 0.11) → 0.11. Resetting first makes every
+    // pass compute against the model's natural size.
+    el.scale = '1 1 1'
     const d = el.getDimensions()
     if (!d || !(d.y > 0)) return
     const k = target / d.y
     if (!Number.isFinite(k) || k <= 0) return
     el.scale = `${k} ${k} ${k}`
+
+    // AND RE-FRAME THE CAMERA — the half that was missing.
+    //
+    // model-viewer recomputes the transform, bounding box and shadow when
+    // `scale` changes, but NOT the framing: updateFraming() runs once, inside
+    // setupScene(), i.e. before this shrink. The camera therefore stayed at the
+    // orbit radius computed for a model ~9x larger, so a correctly scaled dish
+    // rendered as a speck in the middle of an empty viewer — while the spinner
+    // had already been dismissed. That is the "3D never opens" report.
+    if (typeof el.updateFraming === 'function') await el.updateFraming()
   } catch (_) { /* getDimensions is unavailable until the model is parsed */ }
 }
 
@@ -155,6 +172,12 @@ export default function ARViewer({ glb, usdz, alt = '', lang = 'ar', heightCm, o
   const [phase, setPhase] = useState(supportedRef.current ? 'lib' : 'unsupported')
   const [modelLoaded, setModelLoaded] = useState(false)
   const elRef = useRef(null)
+  // The element, kept past React's ref detach so the unmount teardown can still
+  // reach it. See the cleanup below for why elRef alone is not enough.
+  const nodeRef = useRef(null)
+  // Latest height, read by the once-registered 'load' listener.
+  const heightRef = useRef(heightCm)
+  heightRef.current = heightCm
 
   // Publish a coarse phase up so the host can hide/adjust its own chrome (hints).
   useEffect(() => {
@@ -184,7 +207,14 @@ export default function ARViewer({ glb, usdz, alt = '', lang = 'ar', heightCm, o
     }
     return () => {
       LIVE_VIEWERS -= 1
-      const el = elRef.current
+      // READ THE NODE WE STASHED, NOT THE REF.
+      //
+      // React detaches host refs during the mutation phase, and passive effect
+      // cleanups run later — so by the time this executes `elRef.current` is
+      // ALWAYS null and the whole teardown below was dead code that never ran
+      // once. `nodeRef` is written by the ref callback and deliberately never
+      // cleared, so the element is still reachable here.
+      const el = nodeRef.current
       if (!el) return
       try {
         el.removeAttribute('src')
@@ -198,6 +228,9 @@ export default function ARViewer({ glb, usdz, alt = '', lang = 'ar', heightCm, o
 
   const bind = (el) => {
     elRef.current = el
+    // Survives React nulling the ref on unmount, so the GPU teardown above has
+    // something to clear.
+    if (el) nodeRef.current = el
     if (!el || el._rbtArvBound) return
     el._rbtArvBound = true
     el.addEventListener('load', () => {
@@ -205,7 +238,10 @@ export default function ARViewer({ glb, usdz, alt = '', lang = 'ar', heightCm, o
       // Both corrections need the parsed model, so they belong here and not on
       // the element's attributes.
       demetalize(el)
-      fitRealScale(el, heightCm)
+      // Read the height through a ref: this listener is registered ONCE (guarded
+      // by _rbtArvBound), so a `heightCm` captured from the closure would freeze
+      // at whatever the first render passed and never follow the item.
+      fitRealScale(el, heightRef.current)
     })
     el.addEventListener('error', () => setPhase('error'))
     if (onArStatus) el.addEventListener('ar-status', (e) => onArStatus(e && e.detail ? e.detail.status : ''))

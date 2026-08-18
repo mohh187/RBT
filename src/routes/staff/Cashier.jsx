@@ -5,9 +5,10 @@ import { useAuth } from '../../lib/auth.jsx'
 import { useI18n } from '../../lib/i18n.jsx'
 import { Spinner, Empty } from '../../components/ui.jsx'
 import {
-  watchActiveOrders, updateOrderStatus, watchOpenWaiterCalls, resolveWaiterCall, ackWaiterCall, watchOrdersSince, watchCustomers,
+  updateOrderStatus, resolveWaiterCall, claimWaiterCall, watchOrdersSince, watchFlaggedCustomers,
   payOrder, payPartial, cancelOrderWithReason, watchOpenCashierSession,
 } from '../../lib/db.js'
+import { useActiveOrders, useOpenWaiterCalls } from '../../lib/liveBoard.js'
 import { resolveMembershipPolicy } from '../../lib/membership.js'
 import { orderNumber, timeAgo, minutesSince } from '../../lib/format.js'
 import { callText, callState, callAgeMin, callSummary, CALL_LATE_MIN } from '../../lib/waiterCalls.js'
@@ -16,8 +17,12 @@ import { alertParty } from '../../lib/notify.js'
 import { printReceipt } from '../../lib/print.js'
 import StaffBell from '../../components/StaffBell.jsx'
 import { useToast } from '../../components/Toast.jsx'
+import DeviceCheck from '../../components/DeviceCheck.jsx'
+import { useDeviceHeartbeat } from '../../lib/staffDevice.js'
+import { applyStaffManifest } from '../../lib/pwa.js'
 import OrderDetail from '../../components/OrderDetail.jsx'
 import CashierPOS from '../../components/CashierPOS.jsx'
+import IncomingAlerts from '../../components/IncomingAlerts.jsx'
 import PaymentSheet from '../../components/PaymentSheet.jsx'
 import CancelReasonSheet from '../../components/CancelReasonSheet.jsx'
 import CustomerCard from '../../components/CustomerCard.jsx'
@@ -26,6 +31,7 @@ import Icon from '../../components/Icon.jsx'
 import { useCompactUI } from '../../lib/useCompactUI.js'
 import { systemThemeAttr, useSystemThemeBody } from '../../lib/systemThemes.js'
 import { getPinActor, requestLock } from '../../lib/pin.js'
+import { NEXT_STEP } from '../../lib/orderStatus.js'
 import { CAP } from '../../lib/permissions.js'
 import PinLock from '../../components/PinLock.jsx'
 import AppBackground from '../../components/AppBackground.jsx'
@@ -34,12 +40,6 @@ import Tour from '../../components/Tour.jsx'
 import { TOURS } from '../../lib/tours.js'
 import '../../styles/venue-console.css'
 
-const NEXT = {
-  pending: { to: 'accepted', key: 'accept', cls: 'btn-primary' },
-  accepted: { to: 'preparing', key: 'startPreparing', cls: 'btn-primary' },
-  preparing: { to: 'ready', key: 'markReady', cls: 'btn-success' },
-  ready: { to: 'served', key: 'markServed', cls: 'btn-success' },
-}
 const COL_STATUS = { new: 'pending', prep: 'preparing', done: 'ready' }
 const digits = (p) => (p || '').replace(/[^0-9]/g, '')
 
@@ -53,17 +53,30 @@ export default function Cashier() {
   const { tenantId, tenant, profile, user, isManager, can } = useAuth()
   const toast = useToast()
   useSystemThemeBody(tenant, 'cashier')
+  // This till announces itself in the venue's device registry (heartbeat every
+  // 5 min + on wake) — the manager's device-check sheet lists it as online.
+  useDeviceHeartbeat(tenantId)
+  // Venue-branded install identity for this staff surface — same guard as
+  // AdminLayout: "Install app" from the cashier must produce the venue-logo
+  // staff app (/app/:slug → PIN lock), never the platform manifest.
+  useEffect(() => {
+    if (!tenant?.slug) return
+    applyStaffManifest(tenant, tenant.slug)
+  }, [tenant?.name, tenant?.logoUrl, tenant?.slug])
   // Payment/refund and cancellation are capability-gated (a waiter with only
   // take_orders can build orders but not settle or void them) — matches OrderDetail.
   const canPay = isManager || can(CAP.REFUND)
   const canCancel = isManager || can(CAP.CANCEL_ORDER)
   const currency = tenant?.currency || 'SAR'
-  // PIN-unlocked staff (shared device) takes precedence for accountability
-  const actorName = getPinActor(tenantId)?.name || profile?.displayName || profile?.email || (lang === 'ar' ? 'موظف' : 'staff')
+  // The Firebase session IS the staffer now (PIN sign-in swaps it), so the
+  // profile name leads; the PIN actor stays as a fallback for devices that
+  // unlocked before the session-swap upgrade.
+  const actorName = profile?.displayName || getPinActor(tenantId)?.name || profile?.email || (lang === 'ar' ? 'موظف' : 'staff')
 
-  const [orders, setOrders] = useState(null)
+  // shared refcounted streams (one snapshot per tenant across all staff shells)
+  const orders = useActiveOrders(tenantId)
+  const calls = useOpenWaiterCalls(tenantId)
   const [todays, setTodays] = useState(null) // null = first snapshot not in yet (loading, not empty)
-  const [calls, setCalls] = useState([])
   const [view, setView] = useState('active')
   const [detailId, setDetailId] = useState(null)
   const [flagged, setFlagged] = useState({})
@@ -72,6 +85,7 @@ export default function Cashier() {
   const [cancelTarget, setCancelTarget] = useState(null)
   const [custTarget, setCustTarget] = useState(null) // { phone, name }
   const [posOpen, setPosOpen] = useState(false)
+  const [devOpen, setDevOpen] = useState(false) // device self-test sheet
   // One clock for the whole call list — a call that crosses the late threshold
   // must turn red on its own, without waiting for an unrelated re-render.
   const [callNow, setCallNow] = useState(() => Date.now())
@@ -100,16 +114,15 @@ export default function Cashier() {
 
   useEffect(() => {
     if (!tenantId) return
-    const u1 = watchActiveOrders(tenantId, setOrders)
-    const u2 = watchOpenWaiterCalls(tenantId, setCalls)
     const u3 = watchOrdersSince(tenantId, startOfToday(), setTodays)
-    const u4 = watchCustomers(tenantId, (list) => {
+    // flagged customers ONLY — the board used to stream the whole CRM for this
+    const u4 = watchFlaggedCustomers(tenantId, (list) => {
       const m = {}
-      list.forEach((c) => { if (c.flagged) m[c.id] = c })
+      list.forEach((c) => { m[c.id] = c })
       setFlagged(m)
     })
     const u5 = watchOpenCashierSession(tenantId, user?.uid || '', setSession)
-    return () => { u1(); u2(); u3(); u4(); u5() }
+    return () => { u3(); u4(); u5() }
   }, [tenantId])
 
   // Escalate orders that sit too long without progress (manager + party alert, once each).
@@ -203,9 +216,12 @@ export default function Cashier() {
     return extra
   }
   const advance = (o) => {
-    const n = NEXT[o.status]
+    const n = NEXT_STEP[o.status]
     if (!n) return
-    updateOrderStatus(tenantId, o.id, n.to, stampFor(n.to))
+    // fire-and-forget: the local snapshot moves the card instantly; the error
+    // path only matters if rules deny the write (surfaced as a toast).
+    updateOrderStatus(tenantId, o.id, n.to, { ...stampFor(n.to), _code: o.code || '' })
+      .catch(() => toast.error(lang === 'ar' ? 'تعذّر تحديث الحالة' : 'Status update failed'))
   }
   // Payment goes through the PaymentSheet (method + tip). markServed=true for a ready order.
   const askPay = (o, markServed) => setPayTarget({ order: o, markServed })
@@ -215,8 +231,13 @@ export default function Cashier() {
   const confirmPay = async ({ method, tip, amountPaid, breakdown }) => {
     if (!payTarget || payBusy.current) return
     payBusy.current = true
-    const o = payTarget.order
+    // LIVE order, not the snapshot captured when the sheet opened: a comp or a
+    // coworker's partial payment while the sheet is up changes the due amount,
+    // and collecting against the frozen copy over/under-charged the guest.
+    const o = (orders || []).find((x) => x.id === payTarget.order.id) || payTarget.order
     const markServed = payTarget.markServed
+    // 0.005 epsilon — float sums sit a hair under due and misrouted a full
+    // payment into payPartial, stranding the order as "partially paid"
     const due = Math.max(0, (o.total || 0) - (o.amountPaid || 0))
     // LOYALTY AND STOCK ARE NOT CALLED HERE. They used to be — a third copy, on
     // top of the one inside payOrder and the one on the server's onOrderPaid
@@ -225,7 +246,7 @@ export default function Cashier() {
     // owns this now; the cashier's job is to record the money and get out of
     // the way, which is one transaction.
     try {
-      if (amountPaid != null && amountPaid < due) {
+      if (amountPaid != null && amountPaid < due - 0.005) {
         await payPartial(tenantId, o.id, { amount: amountPaid, method, actor: actorName })
       } else {
         await payOrder(tenantId, o.id, { method, tip, actor: actorName, markServed, breakdown })
@@ -246,10 +267,14 @@ export default function Cashier() {
     setCancelTarget(null)
   }
   const openCustomer = (o) => { if (o.customerPhone) setCustTarget({ phone: o.customerPhone, name: o.customerName }) }
-  const print = (o) => printReceipt(o, { tenant, lang })
-  const printTable = (o) => {
+  // printReceipt reports popup-blocked (false) — inside the installed TWA/PWA
+  // window.open can be swallowed silently, and every "printer is broken" call
+  // from that path was really this. Say what actually happened, actionably.
+  const popupBlocked = () => toast.error(lang === 'ar' ? 'اسمح بالنوافذ المنبثقة لهذا الموقع لتعمل الطباعة' : 'Allow popups for this site so printing works')
+  const print = async (o) => { if (!(await printReceipt(o, { tenant, lang }))) popupBlocked() }
+  const printTable = async (o) => {
     const group = orders.filter((x) => x.tableId && x.tableId === o.tableId)
-    printReceipt(group, { tenant, lang, title: o.tableLabel })
+    if (!(await printReceipt(group, { tenant, lang, title: o.tableLabel }))) popupBlocked()
   }
   // Dragging a card between columns is the SAME act as pressing its button, so
   // it stamps the same way. It did not — `advance()` recorded acceptedByName and
@@ -261,7 +286,10 @@ export default function Cashier() {
     const status = COL_STATUS[over.id]
     if (!status) return
     const o = orders.find((x) => x.id === active.id)
-    if (o && o.status !== status) updateOrderStatus(tenantId, active.id, status, stampFor(status))
+    if (o && o.status !== status) {
+      updateOrderStatus(tenantId, active.id, status, { ...stampFor(status), _code: o.code || '' })
+        .catch(() => toast.error(lang === 'ar' ? 'تعذّر تحديث الحالة' : 'Status update failed'))
+    }
   }
 
   if (orders === null) return <Spinner />
@@ -280,6 +308,7 @@ export default function Cashier() {
       <AppBackground tenant={tenant} />
       <LandscapeGate enabled={tenant?.cashierLandscape === true} />
       <PinLock tenant={tenant} tenantId={tenantId} />
+      <IncomingAlerts />
       <Tour steps={TOURS.cashier} storageKey="cashier" />
       <header className="app-bar">
         <Link to="/admin" className="icon-btn"><Icon name="back" /></Link>
@@ -287,6 +316,7 @@ export default function Cashier() {
         <div className="grow" />
         {tenant?.pinLock?.enabled && <button className="icon-btn" onClick={requestLock} title={lang === 'ar' ? 'قفل الشاشة' : 'Lock'}><Icon name="key" size={18} /></button>}
         <StaffBell tenantId={tenantId} />
+        <button className="icon-btn ab-devcheck" onClick={() => setDevOpen(true)} aria-label={lang === 'ar' ? 'فحص الجهاز' : 'Device check'} title={lang === 'ar' ? 'فحص الجهاز' : 'Device check'}><Icon name="settings" size={18} /></button>
         <Link to="/scan" className="icon-btn" title={t('scan')}><Icon name="scan" /></Link>
         <Link to="/kds" className="icon-btn" title={t('kitchen')}><Icon name="kitchen" /></Link>
         <button className="icon-btn" onClick={toggleTheme}><Icon name={theme === 'dark' ? 'sun' : 'moon'} /></button>
@@ -332,7 +362,7 @@ export default function Cashier() {
                   </div>
                   <div className="row" style={{ gap: 6, flex: 'none' }}>
                     {c.status !== 'ack' && (
-                      <button className="btn btn-sm btn-outline" onClick={() => ackWaiterCall(tenantId, c.id, { by: actorName })}>
+                      <button className="btn btn-sm btn-outline" onClick={() => claimWaiterCall(tenantId, c.id, { name: actorName, uid: user?.uid || '' })}>
                         {lang === 'ar' ? 'في الطريق' : 'On it'}
                       </button>
                     )}
@@ -375,8 +405,9 @@ export default function Cashier() {
         ) : (
           <div className="stack done-list" style={{ gap: 'var(--sp-2)' }}>
             {completed.map((o) => (
-              <div key={o.id} className="list-row">
-                <div className="grow" style={{ cursor: 'pointer' }} onClick={() => setDetailId(o.id)}>
+              <div key={o.id} className="list-row" style={{ cursor: 'pointer' }}
+                onClick={(e) => { if (e.target.closest('button, a')) return; setDetailId(o.id) }}>
+                <div className="grow">
                   <div className="bold" style={{ display: 'inline-flex', alignItems: 'center', gap: 6, flexWrap: 'wrap' }}>
                     {orderNumber(o.code)}
                     <span className={`badge ${o.status === 'cancelled' ? 'badge-danger' : o.status === 'paid' ? 'badge-success' : ''}`}>{t(o.status === 'paid' ? 'statusPaid' : o.status === 'cancelled' ? 'statusCancelled' : 'statusServed')}</span>
@@ -400,10 +431,12 @@ export default function Cashier() {
       {detailId && <OrderDetail tid={tenantId} orderId={detailId} currency={currency} staffActions
         onCollect={canPay ? (o) => { setDetailId(null); setPayTarget({ order: o, markServed: o.status === 'ready' }) } : null}
         onClose={() => setDetailId(null)} />}
-      <PaymentSheet open={!!payTarget} order={payTarget?.order} currency={currency} lang={lang} onConfirm={confirmPay} onClose={() => setPayTarget(null)} />
+      {/* live doc so the due amount tracks comps/partials made while the sheet is open */}
+      <PaymentSheet open={!!payTarget} order={payTarget ? ((orders || []).find((x) => x.id === payTarget.order.id) || payTarget.order) : null} currency={currency} lang={lang} onConfirm={confirmPay} onClose={() => setPayTarget(null)} />
       <CancelReasonSheet open={!!cancelTarget} lang={lang} onConfirm={confirmCancel} onClose={() => setCancelTarget(null)} />
       {custTarget && <CustomerCard tid={tenantId} phone={custTarget.phone} name={custTarget.name} currency={currency} onClose={() => setCustTarget(null)} />}
       <CashierPOS open={posOpen} onClose={() => setPosOpen(false)} tenantId={tenantId} tenant={tenant} lang={lang} actorName={actorName} canPay={canPay} />
+      <DeviceCheck open={devOpen} onClose={() => setDevOpen(false)} tenant={tenant} tenantId={tenantId} />
     </div>
   )
 }
@@ -422,12 +455,25 @@ function Ticket({ order: o, currency, lang, t, orders, flag, isManager, canPay =
   const { attributes, listeners, setNodeRef, transform, isDragging } = useDraggable({ id: o.id })
   const mins = minutesSince(o.createdAt)
   const ageCls = mins >= 10 ? 'age-late' : mins >= 5 ? 'age-warn' : ''
-  const n = NEXT[o.status]
+  const n = NEXT_STEP[o.status]
   const sameTable = o.tableId ? orders.filter((x) => x.tableId === o.tableId).length : 0
   const style = transform ? { transform: `translate(${transform.x}px, ${transform.y}px)`, zIndex: 50, opacity: isDragging ? 0.85 : 1 } : undefined
+  // The browser still fires a click after a completed drag (pointerup lands on
+  // the card) — swallow exactly one click per drag so dropping never opens the sheet.
+  const dragged = useRef(false)
+  useEffect(() => { if (isDragging) dragged.current = true }, [isDragging])
+  const openFromCard = (e) => {
+    if (dragged.current) { dragged.current = false; return }
+    if (e.target.closest('button, a, input')) return // inner actions keep their own handlers
+    onOpen(o.id)
+  }
 
   return (
-    <div ref={setNodeRef} style={style} className={`order-ticket ${ageCls}`}>
+    <div
+      ref={setNodeRef} style={style} className={`order-ticket ${ageCls}`}
+      role="button" tabIndex={0} onClick={openFromCard}
+      onKeyDown={(e) => { if (e.key === 'Enter' && e.target === e.currentTarget) onOpen(o.id) }}
+    >
       <div className="row-between" style={{ touchAction: 'none', cursor: 'grab' }} {...listeners} {...attributes}>
         <strong style={{ display: 'inline-flex', alignItems: 'center', gap: 4 }}><Icon name="drag" size={15} className="faint" />{orderNumber(o.code)}</strong>
         <span className={`cash-timer ${ageCls}`}>{mins}{lang === 'ar' ? 'د' : 'm'}</span>

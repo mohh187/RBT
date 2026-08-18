@@ -6,10 +6,11 @@ import { Price } from './Riyal.jsx'
 import { useToast } from './Toast.jsx'
 import {
   watchItems, watchCategories, watchTables, watchMaterials, getCustomerByPhone, createOrder, updateOrderStatus,
-  upsertCustomerOnOrder, payOrder, processMembershipOnPaid, consumeForOrder,
+  upsertCustomerOnOrder, payOrder, processMembershipOnPaid, consumeForOrder, setTableOccupancy,
 } from '../lib/db.js'
 import { tierDiscountAmount, TIER_META, resolveMembershipPolicy } from '../lib/membership.js'
 import { sectionTemplate, templateOptions } from '../lib/systemTemplates.js'
+import { setPosBusy } from '../lib/alertsBus.js'
 import { useSectionTemplate } from '../lib/useSectionTemplate.js'
 import { systemThemeAttr } from '../lib/systemThemes.js'
 import { basePrice, variantHasOwnPrice } from '../lib/pricing.js'
@@ -74,15 +75,17 @@ function PosOptionCard({ it, currency, lang, ar, onAdd, onOpenFull, tid }) {
     }, 480)
   }
   const pressEnd = () => clearTimeout(pressT.current)
-  // critical sizing is INLINE on purpose: the card must render sane even if a
-  // stale dev-server ships new JS with old CSS (happened — giant raw images)
-  const imgBox = { width: 56, height: 56, borderRadius: 14, objectFit: 'cover', background: 'var(--surface-2)', flex: 'none' }
+  // A one-line inline SAFETY only (objectFit + background) so a stale
+  // dev-server shipping new JS with old CSS still can't show giant raw images;
+  // the SIZE itself now lives in .pos-opt-img (index.css) so stylesheet edits
+  // actually take effect.
+  const imgSafe = { objectFit: 'cover', background: 'var(--surface-2)', flex: 'none' }
   return (
-    <div className="pos-opt-card card" style={{ display: 'flex', flexDirection: 'column', gap: 10, padding: 12, minWidth: 0 }}>
+    <div className="pos-opt-card card" style={{ minWidth: 0 }}>
       <div className="row" style={{ gap: 10, alignItems: 'center' }}>
         {it.imageUrl
-          ? <img src={it.imageUrl} alt="" className="pos-opt-img" style={imgBox} />
-          : <div className="pos-opt-img" style={{ ...imgBox, display: 'grid', placeItems: 'center' }}><Icon name="coffee" size={20} className="faint" /></div>}
+          ? <img src={it.imageUrl} alt="" className="pos-opt-img" loading="lazy" decoding="async" style={imgSafe} />
+          : <div className="pos-opt-img" style={{ ...imgSafe, display: 'grid', placeItems: 'center' }}><Icon name="coffee" size={20} className="faint" /></div>}
         <div className="stack grow" style={{ gap: 2, minWidth: 0 }}>
           <span className="bold" style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{pickLang(it, 'name', lang)}</span>
           <span className="pos-price"><Price value={unit} currency={currency} lang={lang} /></span>
@@ -138,6 +141,20 @@ const heldKey = (tid) => `ml.held.${tid}`
 const getHeld = (tid) => { try { return JSON.parse(localStorage.getItem(heldKey(tid)) || '[]') } catch (_) { return [] } }
 const saveHeld = (tid, list) => { try { localStorage.setItem(heldKey(tid), JSON.stringify(list)) } catch (_) { /* ignore */ } }
 
+// Live cart draft, per venue, on this device: a PIN user-switch (real session
+// swap) or a crashed tab must never eat a half-built order. Restored on the
+// next POS open while fresh; cleared on send/hold/empty.
+const DRAFT_TTL_MS = 15 * 60 * 1000
+const draftKey = (tid) => `ml.posdraft.${tid}`
+const getDraft = (tid) => {
+  try {
+    const d = JSON.parse(localStorage.getItem(draftKey(tid)) || 'null')
+    return d && Array.isArray(d.cart) && d.cart.length && (Date.now() - (d.at || 0)) < DRAFT_TTL_MS ? d : null
+  } catch (_) { return null }
+}
+const saveDraft = (tid, d) => { try { localStorage.setItem(draftKey(tid), JSON.stringify(d)) } catch (_) { /* ignore */ } }
+const clearDraft = (tid) => { try { localStorage.removeItem(draftKey(tid)) } catch (_) { /* ignore */ } }
+
 // In-store POS: build a customized order for a walk-in / phone-in, identify the customer,
 // pick a table or take it to their car, and push it onto the board. Opens FULL-SCREEN as a
 // 3-pane POS (catalog + order) so the whole order is visible with no scrolling of the frame.
@@ -186,13 +203,46 @@ export default function CashierPOS({ open, onClose, tenantId, tenant, lang = 'ar
     const u1 = watchItems(tenantId, setItems)
     const u2 = watchCategories(tenantId, setCats)
     const u3 = watchTables(tenantId, setTables)
-    const u4 = watchMaterials(tenantId, setMaterials)
-    return () => { u1(); u2(); u3(); u4() }
+    return () => { u1(); u2(); u3() }
   }, [open, tenantId])
+
+  // Raw-material stream ONLY when the menu actually uses recipe stock — most
+  // venues don't, and the POS was pulling the whole inventory on every open
+  // just to compute outOfMaterial() over zero recipes.
+  const needsMaterials = useMemo(() => items.some((i) => i.stockMode === 'recipe'), [items])
+  useEffect(() => {
+    if (!open || !tenantId || !needsMaterials) { setMaterials([]); return undefined }
+    return watchMaterials(tenantId, setMaterials)
+  }, [open, tenantId, needsMaterials])
+
+  // Mid-checkout signal: while the POS is open, incoming alerts collapse to the
+  // top pill instead of covering a half-built cart (components/IncomingAlerts).
+  useEffect(() => {
+    setPosBusy(!!open)
+    return () => setPosBusy(false)
+  }, [open])
 
   // full reset ONLY when the POS opens — NOT on every tenant snapshot (a design
   // tweak from the studio mid-order must never wipe the cashier's active cart)
   useEffect(() => { if (open) { setCart([]); setPhone(''); setName(''); setCustomer(null); setActiveCat('all'); setOrderType(initialTable ? 'dine_in' : 'takeaway'); setTableId(initialTable?.id || ''); setCar({ model: '', color: '', plate: '' }); setQ(''); setPartySize(''); setDiscType('amount'); setDiscVal(''); setPayMethod('cash'); setOrderNote(''); setRush(false); setHeldState(getHeld(tenantId)) } }, [open, tenantId, initialTable]) // eslint-disable-line react-hooks/exhaustive-deps
+  // ...then restore a fresh draft (a user-switch/crash mid-order) — unless the
+  // POS was opened FOR a table, where the table context wins.
+  useEffect(() => {
+    if (!open || initialTable) return
+    const d = getDraft(tenantId)
+    if (!d) return
+    setCart(d.cart || []); setOrderType(d.orderType || 'takeaway'); setName(d.name || '')
+    setPhone(d.phone || ''); setPartySize(d.partySize || ''); setTableId(d.tableId || '')
+  }, [open, tenantId]) // eslint-disable-line react-hooks/exhaustive-deps
+  // keep the draft current while composing; an empty cart clears it — but a
+  // table-opened POS never TOUCHED the draft (the restore above skipped it),
+  // so it must not delete it either: opening the floor plan for table 5 used
+  // to silently destroy another staffer's parked takeaway draft.
+  useEffect(() => {
+    if (!open) return
+    if (!cart.length) { if (!initialTable) clearDraft(tenantId); return }
+    saveDraft(tenantId, { cart, orderType, name, phone, partySize, tableId, at: Date.now() })
+  }, [open, tenantId, cart, orderType, name, phone, partySize, tableId]) // eslint-disable-line react-hooks/exhaustive-deps
   // template follows the SAVED choice — resync only when that value itself changes
   // On a phone the compact board is forced regardless of the saved template —
   // the wide grid is unusable there. On anything larger useSectionTemplate owns
@@ -213,9 +263,19 @@ export default function CashierPOS({ open, onClose, tenantId, tenant, lang = 'ar
     const lines = [...(it.recipe || []), ...Object.values(it.variantRecipes || {}).flat()]
     return lines.some((l) => (matStock[l.materialId] ?? 0) < (Number(l.qty) || 0))
   }
+  // same serving-window rule the guest menu enforces (MenuView.inTimeWindow):
+  // a breakfast item outside its hours must not be POS-orderable either
+  const inTimeWindow = (i) => {
+    if (!i.availableFrom || !i.availableTo) return true
+    const parse = (s) => { const m = /^(\d{1,2}):(\d{2})$/.exec(s); return m ? Number(m[1]) * 60 + Number(m[2]) : null }
+    const from = parse(i.availableFrom); const to = parse(i.availableTo)
+    if (from == null || to == null) return true
+    const d = new Date(); const cur = d.getHours() * 60 + d.getMinutes()
+    return from <= to ? (cur >= from && cur < to) : (cur >= from || cur < to)
+  }
   const shownItems = useMemo(() => {
     const term = q.trim().toLowerCase()
-    return items.filter((i) => i.available !== false && !(i.trackStock && (i.stock || 0) <= 0) && !outOfMaterial(i) && (activeCat === 'all' || i.categoryId === activeCat) && (!term || `${i.nameAr || ''} ${i.nameEn || ''}`.toLowerCase().includes(term)))
+    return items.filter((i) => i.available !== false && !(i.trackStock && (i.stock || 0) <= 0) && !outOfMaterial(i) && inTimeWindow(i) && (activeCat === 'all' || i.categoryId === activeCat) && (!term || `${i.nameAr || ''} ${i.nameEn || ''}`.toLowerCase().includes(term)))
   }, [items, activeCat, q, matStock]) // eslint-disable-line react-hooks/exhaustive-deps
   // base price, or the lowest variant price ("from …") for variant-only items
   const priceOf = (it) => {
@@ -305,20 +365,53 @@ export default function CashierPOS({ open, onClose, tenantId, tenant, lang = 'ar
         memberCardToken: customer?.membership?.token || null, // server validates the member discount
         rush, drinkUnits, currency, source: 'cashier',
       }
-      const res = await createOrder(tenantId, payload)
-      // Finished-goods stock is decremented server-side by onNewOrder (single authority).
-      //
-      // PAY-NOW SETTLES IN ONE WRITE, not two. A counter sale used to chain
-      // create -> accepted -> paid, three sequential transactions on the same
-      // document with the cashier's screen frozen for all of them, to record a
-      // state ('accepted') the order occupied for a few milliseconds and that
-      // nobody ever saw. The acceptance is still stamped — it rides along on the
-      // settle — so the audit trail is unchanged and one round-trip is gone.
-      if (payNow) {
-        await payOrder(tenantId, res.id, { method: payMethod, actor: actorName, markServed: true, acceptedBy: actorName })
-      } else {
-        await updateOrderStatus(tenantId, res.id, 'accepted', { acceptedByName: actorName, _actor: actorName })
+      // OPTIMISTIC COUNTER PATH. The id is minted locally ({fast:true}); the
+      // create AND the settle ride the local cache and reconcile in the
+      // background, so the POS closes the instant the cashier taps — zero
+      // round-trips on the happy path. If the writes ultimately fail (rules
+      // denial, dead network past the cache), the cart is parked into Held so
+      // nothing is ever lost, with a loud toast to retry.
+      const res = await createOrder(tenantId, payload, { fast: true })
+      // The floor learns instantly: a dine-in order marks its table occupied
+      // (stored field; best-effort — the derived state covers a lost write).
+      if (orderType === 'dine_in' && tableId) {
+        setTableOccupancy(tenantId, tableId, { state: 'occupied', since: Date.now(), byName: actorName, byUid: '', orderId: res.id }).catch(() => {})
       }
+      // Finished-goods stock is decremented server-side by onNewOrder (single authority).
+      // PAY-NOW still settles in ONE write (acceptance rides along on the settle).
+      const settle = payNow
+        ? payOrder(tenantId, res.id, { method: payMethod, actor: actorName, markServed: true, acceptedBy: actorName })
+        : updateOrderStatus(tenantId, res.id, 'accepted', { acceptedByName: actorName, _actor: actorName, _code: res.code })
+      const recovery = {
+        id: `f_${res.id}`,
+        label: name || tables.find((x) => x.id === tableId)?.label || `${cart.reduce((s, l) => s + l.qty, 0)} ${ar ? 'صنف' : 'items'}`,
+        cart, orderType, name, phone, partySize, tableId, at: subtotal,
+      }
+      // Split the failure handling by WHICH write failed — parking to Held on a
+      // settle-only failure created DUPLICATES: the order document already
+      // committed (res.done resolved), so re-sending from Held wrote a second
+      // order. Only a CREATE failure means nothing landed → safe to park + retry.
+      // A settle-only failure means the order EXISTS as 'pending' on the board;
+      // the cashier just accepts it there, no re-create.
+      res.done.catch(() => {
+        const list = [recovery, ...getHeld(tenantId).filter((h) => h.id !== recovery.id)].slice(0, 20)
+        saveHeld(tenantId, list); setHeldState(list)
+        // Roll the optimistic occupancy stamp back: the order this table was
+        // marked occupied FOR never landed, and no server hook will ever free
+        // it (onOrderStatusChange has no order to see) — without this the
+        // table read «مشغولة» forever.
+        if (orderType === 'dine_in' && tableId) {
+          setTableOccupancy(tenantId, tableId, { state: 'free', since: Date.now(), byName: actorName, byUid: '', orderId: '' }).catch(() => {})
+        }
+        toast.error(ar ? 'تعذّر إرسال الطلب — حُفظ في «المعلّقة» لإعادة المحاولة' : 'Send failed — parked in Held, retry from there')
+      })
+      Promise.resolve(settle).catch(() => {
+        // create ok, settle failed: order is live but unaccepted — no Held (no dup)
+        res.done.then(() => {
+          toast.error(ar ? 'أُنشئ الطلب لكن لم يُقبل تلقائياً — اقبله من اللوحة' : 'Order created but not auto-accepted — accept it from the board')
+        }).catch(() => { /* create also failed → already parked above */ })
+      })
+      clearDraft(tenantId)
       toast.success(ar ? 'تم إنشاء الطلب' : 'Order created')
       onCreated?.()
       onClose?.()
@@ -392,25 +485,29 @@ export default function CashierPOS({ open, onClose, tenantId, tenant, lang = 'ar
               ))}
             </div>
           )}
-          <div className="pos-items" data-template={tpl}
-            style={tpl === 'options' ? { display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(300px, 1fr))', gap: 12, alignItems: 'stretch', alignContent: 'start' } : undefined}>
+          {/* grid/tile sizing lives ENTIRELY in index.css (container queries) —
+              no inline style here to shadow it (the old inline duplicate made
+              every stylesheet edit silently do nothing). */}
+          <div className="pos-items" data-template={tpl}>
             {shownItems.map((it) => { const p = priceOf(it); return tpl === 'options' ? (
               <PosOptionCard key={it.id} it={it} currency={currency} lang={lang} ar={ar} onAdd={addLine} tid={tenantId} onOpenFull={setViewItem} />
             ) : isGrid ? (
-              <button key={it.id} className="pos-tile card" style={{ overflow: 'hidden', cursor: 'pointer', padding: 0, textAlign: 'start' }} onClick={() => tapItem(it)}>
-                {it.imageUrl
-                  ? <img src={it.imageUrl} alt="" className="pos-tile-media" />
-                  : <div className="pos-tile-media" style={{ display: 'grid', placeItems: 'center' }}><Icon name="coffee" size={24} className="faint" /></div>}
-                <div className="stack" style={{ gap: 3, padding: '8px 10px' }}>
-                  <span className="bold" style={{ lineHeight: 1.25, fontSize: tpl === 'touch' ? 14 : 13, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{pickLang(it, 'name', lang)}</span>
-                  <span className="pos-price" style={{ fontSize: tpl === 'touch' ? 15 : 14 }}>{p.from ? (ar ? 'من ' : 'from ') : ''}<Price value={p.value} currency={currency} lang={lang} /></span>
+              <button key={it.id} className="pos-tile card" onClick={() => tapItem(it)}>
+                <div className="pos-tile-photo">
+                  {it.imageUrl
+                    ? <img src={it.imageUrl} alt="" className="pos-tile-media" loading="lazy" decoding="async" />
+                    : <div className="pos-tile-media pos-tile-media-empty"><Icon name="coffee" size={26} className="faint" /></div>}
+                  <span className="pos-tile-price">{p.from && <span className="pos-tile-from">{ar ? 'من' : 'from'}</span>}<Price value={p.value} currency={currency} lang={lang} /></span>
+                </div>
+                <div className="pos-tile-body">
+                  <span className="pos-tile-name">{pickLang(it, 'name', lang)}</span>
                 </div>
               </button>
             ) : (
               <button key={it.id} className="pos-row card" style={{ gap: 12, cursor: 'pointer', display: 'flex', alignItems: 'center', textAlign: 'start', padding: withThumb ? '8px 12px' : '11px 14px', minHeight: withThumb ? 52 : 46 }} onClick={() => tapItem(it)}>
                 {withThumb && (it.imageUrl
-                  ? <img src={it.imageUrl} alt="" style={{ width: 42, height: 42, borderRadius: 9, objectFit: 'cover', flex: 'none' }} />
-                  : <div style={{ width: 42, height: 42, borderRadius: 9, background: 'var(--surface-2)', display: 'grid', placeItems: 'center', flex: 'none' }}><Icon name="coffee" size={18} className="faint" /></div>)}
+                  ? <img src={it.imageUrl} alt="" loading="lazy" decoding="async" style={{ width: 44, height: 44, borderRadius: 10, objectFit: 'cover', flex: 'none' }} />
+                  : <div style={{ width: 44, height: 44, borderRadius: 10, background: 'var(--surface-2)', display: 'grid', placeItems: 'center', flex: 'none' }}><Icon name="coffee" size={18} className="faint" /></div>)}
                 <span className="bold grow" style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', fontSize: tpl === 'lite' ? 16 : 15 }}>{pickLang(it, 'name', lang)}</span>
                 <span className="pos-price" style={{ fontSize: 15 }}>{p.from ? (ar ? 'من ' : 'from ') : ''}<Price value={p.value} currency={currency} lang={lang} /></span>
               </button>

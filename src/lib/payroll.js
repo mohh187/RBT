@@ -1,5 +1,25 @@
 // Payroll helpers — overtime computed from attendance punches (the source of truth).
 
+// Total hours worked since a moment: pair in→out punches, count an open shift
+// up to now. Moved here from StaffPortal so the staffer's own portal and the
+// manager's daily report compute hours from the SAME pairing math — two local
+// copies is how the two screens end up disagreeing about a shift.
+// `untilMs` caps an OPEN shift: viewing a PAST day (daily report «الأمس») must
+// count a forgotten clock-out only to that day's end, not to this moment —
+// otherwise the summary reports a 29-hour shift.
+export function hoursIn(punches, sinceMs, untilMs = 0) {
+  const cap = Math.min(untilMs || Date.now(), Date.now())
+  const list = (punches || []).filter((p) => (p.at?.toMillis?.() || 0) >= sinceMs).slice().sort((a, b) => (a.at?.toMillis?.() || 0) - (b.at?.toMillis?.() || 0))
+  let ms = 0, lastIn = null
+  list.forEach((p) => {
+    const at = p.at?.toMillis?.() || 0
+    if (p.type === 'in') lastIn = at
+    else if (p.type === 'out' && lastIn) { ms += at - lastIn; lastIn = null }
+  })
+  if (lastIn && cap > lastIn) ms += cap - lastIn
+  return ms / 3600000
+}
+
 // Worked hours per calendar day from in→out punches (an open shift counts to now).
 export function hoursByDay(punches, sinceMs) {
   const list = (punches || []).filter((p) => (p.at?.toMillis?.() || 0) >= sinceMs)

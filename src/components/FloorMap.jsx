@@ -1,7 +1,10 @@
 import { useEffect, useRef, useState } from 'react'
 import Icon from './Icon.jsx'
 
-const STATUS_COLOR = { free: '#16a34a', occupied: '#dc2626', billed: '#2563eb', reserved: '#e0a82e' }
+// Status hues come from the semantic tokens, not fixed hex, so the floor map
+// tracks the active theme — including dark, where raw #16a34a/#dc2626 glared.
+// Each token carries its own light AND dark value ([data-theme='dark'] block).
+const STATUS_COLOR = { free: 'var(--success)', occupied: 'var(--danger)', billed: 'var(--info)', reserved: 'var(--warning)' }
 
 // A realistic table with chairs drawn around it, colored by status.
 // shape: 'round' | 'square' | 'rect'. `meta` renders as a small chip under the
@@ -35,7 +38,7 @@ export function TableShape({ seats = 4, shape = 'round', status = 'free', label 
           position: 'absolute',
           top: 4,
           right: 4,
-          background: '#ef4444',
+          background: 'var(--danger)',
           color: '#ffffff',
           borderRadius: '50%',
           minWidth: 18,
@@ -93,10 +96,12 @@ export default function FloorMap({ tables = [], statusOf, metaOf, edit, onMove, 
   }
   const needW = dims.current.w
   const needH = dims.current.h
-  // Floor the fit-to-width scale: below this the fixed 12px/10px labels shrank
-  // to ~6.8 effective px (unreadable, and far under the 11px floor). The canvas
-  // scrolls horizontally instead of shrinking the type into nothing.
-  const scale = cw > 0 && cw < needW ? Math.max(0.85, cw / needW) : 1
+  // Fit the whole floor into its column. The old 0.85 floor left the rightmost
+  // tables clipped at the sidebar edge on a ~1000px main column («القائمة
+  // الجانبية تغطي على الطاولات») because the canvas overflowed instead of
+  // shrinking. A lower floor (0.68) keeps labels legible while guaranteeing the
+  // last row of tables is always on screen without a hidden horizontal scroll.
+  const scale = cw > 0 && cw < needW ? Math.max(0.68, cw / needW) : 1
 
   const toLocal = (e) => {
     const rect = outer.current.getBoundingClientRect()

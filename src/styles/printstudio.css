@@ -234,7 +234,19 @@
 .ps-layer.sel .ps-layer-ico { color: var(--brand); }
 .ps-layer-name { flex: 1; min-width: 0; font-size: 12px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .ps-layer.off .ps-layer-name { opacity: .45; text-decoration: line-through; }
+/* Reordering by drag. The row is the drag handle — a dedicated grip would be a
+   24px target in a 12px-tall list, and the row already has explicit buttons for
+   every action that must NOT start a drag. */
+.ps-layer[draggable='true'] { cursor: grab; }
+.ps-layer.dragging { opacity: .45; cursor: grabbing; }
+.ps-layer.dragging + .ps-layer { border-top-color: var(--brand); }
+/* Buttons inside the row must stay clickable rather than initiating a drag. */
 .ps-layer-acts { display: flex; gap: 2px; flex: none; }
+.ps-layer-acts .icon-btn { -webkit-user-drag: none; }
+.ps-layer-grp {
+  flex: none; display: grid; place-items: center;
+  color: var(--brand); opacity: .8;
+}
 .ps-layer-acts .icon-btn { width: 24px; height: 24px; }
 .ps-layer-empty { font-size: 12px; color: var(--text-muted); text-align: center; padding: 12px 0; }
 
@@ -429,4 +441,69 @@
     -webkit-print-color-adjust: exact; print-color-adjust: exact;
   }
   .ps-sel-outline, .ps-h, .ps-h-rot, .ps-lockmark, .ps-guide { display: none !important; }
+  /* BATCH PAGES.
+     When a batch is staged, the interactive sheet must not also print — the
+     single #ps-sheet is positioned absolute at the page origin and would land
+     on top of page one. So the batch takes over the document entirely. */
+  .ps-batch { display: block !important; position: static !important; }
+  /* Driven by a body class rather than :has() — the interactive sheet MUST be
+     hidden for a batch (it is absolutely positioned at the page origin and would
+     print on top of page one), and that is too load-bearing to hang on a
+     selector whose support still varies. */
+  body.ps-batching #ps-sheet { display: none !important; }
+  .ps-batch-page {
+    display: block !important;
+    width: 100% !important; height: auto !important;
+    break-after: page; page-break-after: always;
+    -webkit-print-color-adjust: exact; print-color-adjust: exact;
+  }
+  .ps-batch-page:last-child { break-after: auto; page-break-after: auto; }
+}
+
+/* Screen: the staged batch is never visible — it exists only to be printed. */
+.ps-batch { display: none; }
+
+/* BLEED + SAFE-AREA GUIDES.
+   Screen-only advice for the designer: the outer line is where the artwork must
+   reach (so trim drift never exposes white paper), the inner line is where text
+   must stop (so trim drift never eats it). Both are removed from print by
+   .no-print — a printer that received them on the sheet would cut to the wrong
+   line. Pointer-events are off so they never intercept a drag. */
+.ps-bleed { position: absolute; inset: 0; pointer-events: none; z-index: 3; }
+.ps-bleed span { position: absolute; display: block; }
+.ps-bleed-out {
+  inset: var(--bleed);
+  outline: 1px dashed color-mix(in srgb, var(--danger) 70%, transparent);
+}
+.ps-bleed-safe {
+  inset: var(--safe);
+  outline: 1px dashed color-mix(in srgb, var(--success) 65%, transparent);
+}
+
+/* ---------------------------------------------------------------- embedded */
+/* The studio inside another page (the table-stickers tabs).
+   `.ps-edit-root` normally takes the viewport over with `position: fixed;
+   inset: 0` — necessary standalone, wrong inside a host page whose own header
+   and tabs must stay visible and scrollable.
+
+   The height stays EXPLICIT rather than becoming `auto`: PrintCanvas measures
+   its viewport to fit the sheet, so an auto-height editor would measure ~0 and
+   fit the page to nothing. 78dvh leaves the host's chrome on screen while
+   giving the canvas a real box to fit into. */
+.ps-root.ps-edit-root.ps-embed {
+  position: static;
+  inset: auto;
+  z-index: auto;
+  height: 78dvh;
+  max-height: 78dvh;
+  border: 1px solid var(--border);
+  border-radius: var(--r-lg);
+  overflow: hidden;
+}
+.ps-embed-gallery { padding: 0 !important; }
+
+@media (max-width: 720px) {
+  /* On a phone the host's tabs plus a 78dvh editor leaves too little canvas;
+     give it more of the screen but never all of it. */
+  .ps-root.ps-edit-root.ps-embed { height: 86dvh; max-height: 86dvh; }
 }

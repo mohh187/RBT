@@ -22,6 +22,9 @@ import Icon from '../../components/Icon.jsx'
 import { ItemSheet } from '../../components/MenuView.jsx'
 import ModelStudio from '../../components/ModelStudio.jsx'
 import DishHotspots from '../../components/DishHotspots.jsx'
+import MediaLibrary from '../../components/MediaLibrary.jsx'
+import Viewer, { useViewer } from '../../components/Viewer.jsx'
+import { limitsFor } from '../../lib/spend.js'
 // The LIVE preview pane: the real /preview/<slug> menu beside the form, fed the
 // unsaved draft over the studio's postMessage bus. It replaced the old inline
 // dark-canvas approximations (.dcx-stage / .dpx-stage), which showed neither
@@ -54,7 +57,7 @@ import '../../styles/appearance.css'
 // key as "default" and only writes what the owner actually moved.
 const blank = () => ({
   nameAr: '', nameEn: '', price: '', calories: '', categoryId: '',
-  descAr: '', descEn: '', kdsWarning: '', imageUrl: '', images: [], imageStyle: '', hotspots: [], story: null, arStandeeUrl: '', model3dUrl: '', model3dUsdzUrl: '', available: true, availableFrom: '', availableTo: '', countsForLoyalty: true, featured: false, promoNotify: 'default', trackStock: false, stock: '',
+  descAr: '', descEn: '', kdsWarning: '', imageUrl: '', images: [], imageStyle: '', hotspots: [], story: null, arStandeeUrl: '', model3dUrl: '', model3dUsdzUrl: '', realHeightCm: '', available: true, availableFrom: '', availableTo: '', countsForLoyalty: true, featured: false, promoNotify: 'default', trackStock: false, stock: '',
   prepTime: '', serves: '', rating: '', reviewsCount: '',
   ingredients: [], variants: [], modifierGroups: [], sortOrder: 0,
   recipe: [], variantRecipes: {},
@@ -441,6 +444,14 @@ export default function Items() {
     return () => { u1(); u2() }
   }, [tenantId])
 
+  // «كم صنفاً عندي؟» — the headline total plus a live count on every category
+  // chip, so the owner audits coverage at a glance without opening anything.
+  const catCount = useMemo(() => {
+    const m = {}
+    for (const it of items || []) m[it.categoryId] = (m[it.categoryId] || 0) + 1
+    return m
+  }, [items])
+
   const catName = (id) => {
     const c = cats.find((x) => x.id === id)
     return c ? pickLang(c, 'name', lang) : ''
@@ -495,6 +506,52 @@ export default function Items() {
   }
   const onDragEnd = ({ active, over }) => reorderList(shown, active, over)
   const sectionDragEnd = (list) => ({ active, over }) => reorderList(list, active, over)
+
+  // «استيراد أصناف من صور»: pick a folder's worth of dish photos at once —
+  // each file becomes an item named after its filename (price 0, chosen
+  // category) with the photo uploaded and measured. Names that already exist
+  // are SKIPPED, so re-running on the full folder only fills the gaps. Pure
+  // client SDK + the owner's own session — no AI, no server changes.
+  const impPickRef = useRef(null)
+  const [impFiles, setImpFiles] = useState([])
+  const [impCat, setImpCat] = useState('')
+  const [impBusy, setImpBusy] = useState(0)
+  const [impDone, setImpDone] = useState(null)
+  const onImpPick = (e) => {
+    const files = Array.from(e.target.files || []).filter((f) => /^image\//.test(f.type))
+    e.target.value = ''
+    if (!files.length) return
+    setImpFiles(files)
+    setImpDone(null)
+  }
+  const runImport = async () => {
+    if (impBusy || !impFiles.length) return
+    const catId = impCat || (cats[0]?.id ?? '')
+    const existing = new Set((items || []).flatMap((it) => [it.nameAr, it.nameEn].filter(Boolean).map(normName)))
+    let added = 0
+    let skipped = 0
+    let failed = 0
+    for (let i = 0; i < impFiles.length; i += 1) {
+      setImpBusy(i + 1)
+      const f = impFiles[i]
+      const name = f.name.replace(/\.[^.]+$/, '').trim()
+      try {
+        if (!name || existing.has(normName(name))) { skipped += 1; continue }
+        const url = await uploadImage(tenantId, f)
+        const ratio = await measureRatio(f)
+        await saveItem(tenantId, null, {
+          nameAr: name, nameEn: '', price: 0, categoryId: catId,
+          imageUrl: url, imageRatio: ratio, available: true,
+          sortOrder: (items?.length || 0) + i,
+        })
+        existing.add(normName(name))
+        added += 1
+      } catch (_) { failed += 1 }
+    }
+    setImpBusy(0)
+    setImpDone({ added, skipped, failed })
+    toast.success(lang === 'ar' ? `اكتمل الاستيراد: ${added} جديد، ${skipped} موجود مسبقاً${failed ? `، ${failed} فشل` : ''}` : `Import done: ${added} added, ${skipped} existed${failed ? `, ${failed} failed` : ''}`)
+  }
 
   const openNew = () => { setEditing(blank()); setOpen(true) }
   const openEdit = (it) => { setEditing({ ...blank(), ...it, ingredients: it.ingredients || [], variants: it.variants || [], modifierGroups: it.modifierGroups || [] }); setOpen(true) }
@@ -662,7 +719,10 @@ export default function Items() {
           action «إضافة صنف» was pushed past the edge and clipped away with no
           scroll rail: on a phone the owner could not add an item from here. */}
       <div className="row-between wrap" style={{ rowGap: 8 }}>
-        <h2 className="page-title">{t('items')}</h2>
+        <h2 className="page-title">
+          {t('items')}
+          {Array.isArray(items) ? <span className="faint" style={{ fontSize: 'var(--fs-md)', fontWeight: 700 }}> · {items.length}</span> : null}
+        </h2>
         <div className="row wrap" style={{ gap: 8, rowGap: 8, alignItems: 'center', justifyContent: 'flex-end', minWidth: 0 }}>
           <button className={`btn btn-sm ${selectMode ? 'btn-primary' : 'btn-outline'}`} onClick={toggleSelectMode}>
             <Icon name="check" size={14} /> {lang === 'ar' ? 'تحديد' : 'Select'}
@@ -683,16 +743,68 @@ export default function Items() {
               <Icon name="lock" size={11} /> 3D
             </span>
           )}
+          <button className="btn btn-sm btn-outline" onClick={() => { if (impPickRef.current) impPickRef.current.click() }}
+            title={lang === 'ar' ? 'حدد مجموعة صور — كل صورة تصبح صنفاً باسم ملفها، والموجود مسبقاً يُتخطى' : 'Pick a batch of photos — each becomes an item named after its file; existing names are skipped'}>
+            <Icon name="upload" size={13} /> {lang === 'ar' ? 'استيراد من صور' : 'Import from photos'}
+          </button>
+          <input ref={impPickRef} type="file" accept="image/*" multiple hidden onChange={onImpPick} />
           <button className="btn btn-primary btn-sm" onClick={openNew}>+ {t('addItem')}</button>
         </div>
       </div>
 
+      {impFiles.length > 0 && (
+        <Sheet
+          open
+          onClose={() => { if (!impBusy) { setImpFiles([]); setImpDone(null) } }}
+          title={lang === 'ar' ? 'استيراد أصناف من صور' : 'Import items from photos'}
+          footer={
+            <div className="row" style={{ gap: 'var(--sp-2)' }}>
+              <button className="btn btn-primary grow" disabled={!!impBusy} onClick={runImport}>
+                {impBusy
+                  ? `${lang === 'ar' ? 'يستورد' : 'Importing'} ${impBusy} / ${impFiles.length}`
+                  : (lang === 'ar' ? `ابدأ الاستيراد (${impFiles.length})` : `Start import (${impFiles.length})`)}
+              </button>
+              <button className="btn btn-outline" disabled={!!impBusy} onClick={() => { setImpFiles([]); setImpDone(null) }}>
+                {lang === 'ar' ? 'إغلاق' : 'Close'}
+              </button>
+            </div>
+          }
+        >
+          <div className="stack" style={{ gap: 'var(--sp-2)' }}>
+            <p className="sm faint" style={{ margin: 0 }}>
+              {lang === 'ar'
+                ? 'كل صورة تصبح صنفاً جديداً: الاسم من اسم الملف، السعر 0 (عدّله لاحقاً)، والصورة تُرفع وتُقاس تلقائياً. الأسماء الموجودة مسبقاً تُتخطى — فيمكنك تحديد المجلد كاملاً بأمان.'
+                : 'Each photo becomes a new item: name from the filename, price 0 (edit later), photo uploaded and measured. Existing names are skipped — selecting the whole folder is safe.'}
+            </p>
+            <div className="field">
+              <label>{lang === 'ar' ? 'الفئة التي تُضاف إليها' : 'Category to add into'}</label>
+              <select className="input" value={impCat} onChange={(e) => setImpCat(e.target.value)} disabled={!!impBusy}>
+                {cats.map((c) => <option key={c.id} value={c.id}>{pickLang(c, 'name', lang)}</option>)}
+              </select>
+            </div>
+            <div className="row wrap" style={{ gap: 6 }}>
+              {impFiles.slice(0, 24).map((f, i) => (
+                <span key={i} className="chip" style={{ maxWidth: 160, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{f.name.replace(/\.[^.]+$/, '')}</span>
+              ))}
+              {impFiles.length > 24 ? <span className="chip">+{impFiles.length - 24}</span> : null}
+            </div>
+            {impDone && (
+              <p className="sm" style={{ margin: 0 }}>
+                {lang === 'ar'
+                  ? `النتيجة: ${impDone.added} أُضيف، ${impDone.skipped} موجود مسبقاً${impDone.failed ? `، ${impDone.failed} فشل` : ''}.`
+                  : `Result: ${impDone.added} added, ${impDone.skipped} already existed${impDone.failed ? `, ${impDone.failed} failed` : ''}.`}
+              </p>
+            )}
+          </div>
+        </Sheet>
+      )}
+
       <input className="input" placeholder={t('search')} value={search} onChange={(e) => setSearch(e.target.value)} />
 
       <div className="scroll-x">
-        <button className={`chip ${filter === 'all' ? 'active' : ''}`} onClick={() => setFilter('all')}>{t('all')}</button>
+        <button className={`chip ${filter === 'all' ? 'active' : ''}`} onClick={() => setFilter('all')}>{t('all')}{Array.isArray(items) ? ` (${items.length})` : ''}</button>
         {cats.map((c) => (
-          <button key={c.id} className={`chip ${filter === c.id ? 'active' : ''}`} onClick={() => setFilter(c.id)}>{pickLang(c, 'name', lang)}</button>
+          <button key={c.id} className={`chip ${filter === c.id ? 'active' : ''}`} onClick={() => setFilter(c.id)}>{pickLang(c, 'name', lang)} ({catCount[c.id] || 0})</button>
         ))}
         {(soldOutCount > 0 || filter === 'soldout') && (
           <button className={`chip ${filter === 'soldout' ? 'active' : ''}`} onClick={() => setFilter('soldout')}>
@@ -903,9 +1015,112 @@ function SortableItem({ id, children }) {
   return <div ref={setNodeRef} style={style}>{children({ ...listeners, ...attributes })}</div>
 }
 
+// Name normalisation for the photo-import dedupe — the dishProps discipline:
+// strip diacritics, unify alef/ya/ta-marbuta, collapse spaces, so «كبده» in a
+// filename matches the existing «كبدة» item instead of duplicating it.
+const normName = (s) => String(s || '')
+  .toLowerCase()
+  .replace(/[ً-ْٰ]/g, '')
+  .replace(/[أإآ]/g, 'ا')
+  .replace(/ى/g, 'ي')
+  .replace(/ة/g, 'ه')
+  .replace(/\s+/g, ' ')
+  .trim()
+
+// Width/height of an image blob → the imageRatio the editorial stage reserves
+// its photo box from (3 decimals — same formula as db.healItemImageRatios).
+// 0 = could not measure; the admin-visit healer fills it in later.
+async function measureRatio(blob) {
+  try {
+    const bmp = await createImageBitmap(blob)
+    const r = bmp.height ? Math.round((bmp.width / bmp.height) * 1000) / 1000 : 0
+    if (bmp.close) bmp.close()
+    return r
+  } catch (_) { return 0 }
+}
+
+// The theme-fit overlay: source chooser → progress → approve/regenerate.
+// Modeled on PostStudio's preview gate: the generated file lives ONLY in state
+// (an object URL) until اعتماد uploads it — closing discards, nothing is
+// written over the item's photo without consent.
+function ThemeFitPreview({ st, lang, uploading, quota, onUseCurrent, onPickNew, onApprove, onRegen, onClose }) {
+  const ar = lang === 'ar'
+  const STEPS = {
+    read: ar ? 'يقرأ الثيم…' : 'Reading the theme…',
+    gen: ar ? 'يعيد التصوير وفق الثيم…' : 'Re-shooting to fit the theme…',
+    cut: ar ? 'يزيل الخلفية…' : 'Removing the background…',
+  }
+  const monthCap = quota && quota.month > 0 ? quota.month : 0
+  return (
+    <Sheet
+      open
+      onClose={onClose}
+      title={st.legacy ? (ar ? 'معاينة الصورة المولدة' : 'Generated image preview') : (ar ? 'ملاءمة الصورة للثيم' : 'Fit photo to theme')}
+      footer={
+        st.stage === 'preview' ? (
+          <div className="row" style={{ gap: 'var(--sp-2)', flexWrap: 'wrap' }}>
+            <button className="btn btn-primary grow" disabled={uploading} onClick={onApprove}>
+              <Icon name="check" size={16} /> {uploading ? (ar ? 'يرفع…' : 'Uploading…') : (ar ? 'اعتماد' : 'Approve')}
+            </button>
+            <button className="btn btn-outline" disabled={uploading} onClick={onRegen}>
+              <Icon name="reload" size={16} /> {ar ? 'إعادة التوليد' : 'Regenerate'}
+            </button>
+            <button className="btn btn-outline" disabled={uploading} onClick={onClose}>
+              <Icon name="close" size={16} /> {ar ? 'إلغاء' : 'Cancel'}
+            </button>
+          </div>
+        ) : st.stage === 'source' ? (
+          <button className="btn btn-outline grow" onClick={onClose}>{ar ? 'إلغاء' : 'Cancel'}</button>
+        ) : null
+      }
+    >
+      {st.stage === 'source' && (
+        <div className="stack" style={{ gap: 'var(--sp-2)' }}>
+          <p className="sm faint">{ar
+            ? 'أي صورة يعيد الذكاء تصويرها لتناسب ثيم المنيو؟ الطبق نفسه لا يتغير — تتغير الزاوية والإضاءة والتنسيق فقط.'
+            : 'Which photo should the AI re-shoot to fit the menu theme? The dish itself never changes — only angle, light and framing.'}</p>
+          <button className="btn btn-outline" onClick={onUseCurrent}>
+            <Icon name="image" size={16} /> {ar ? 'الصورة الحالية' : 'The current photo'}
+          </button>
+          <button className="btn btn-outline" onClick={onPickNew}>
+            <Icon name="upload" size={16} /> {ar ? 'صورة جديدة من الجهاز' : 'A new photo from this device'}
+          </button>
+        </div>
+      )}
+      {st.stage === 'busy' && (
+        <div className="stack center" style={{ gap: 'var(--sp-2)', padding: 'var(--sp-4) 0' }}>
+          <Spinner />
+          <p className="sm">{STEPS[st.step] || STEPS.gen}</p>
+          <p className="xs faint">{ar ? 'قد يستغرق حتى دقيقة' : 'May take up to a minute'}</p>
+        </div>
+      )}
+      {st.stage === 'preview' && (
+        <div className="stack" style={{ gap: 'var(--sp-2)' }}>
+          {/* checker ground: a transparent cutout must read as one before approval */}
+          <div className="center" style={{ borderRadius: 'var(--r-md)', overflow: 'hidden', backgroundImage: 'repeating-conic-gradient(rgba(127,127,127,0.16) 0% 25%, transparent 0% 50%)', backgroundSize: '16px 16px' }}>
+            <img src={st.url} alt="" style={{ display: 'block', maxWidth: '100%', maxHeight: '55vh', objectFit: 'contain' }} />
+          </div>
+          <p className="xs faint text-center">
+            {st.legacy
+              ? (ar ? 'توليد حر — لا يُحفظ شيء قبل الاعتماد' : 'Free generation — nothing is saved before approval')
+              : `${ar ? 'وفق ثيم' : 'Theme'}: ${st.direction?.labelAr || ''}${st.cut ? (ar ? ' · قصاصة شفافة' : ' · transparent cutout') : ''}`}
+          </p>
+          {monthCap > 0 && (
+            <p className="xs faint text-center">{ar
+              ? `كل توليد يُحسب من حصة صور الذكاء الشهرية (${monthCap} شهرياً)`
+              : `Each generation counts against the monthly AI image quota (${monthCap}/month)`}</p>
+          )}
+        </div>
+      )}
+    </Sheet>
+  )
+}
+
 function ItemEditor({ tenantId, cats, currency, value, onClose, onSaved, onDeleted, onOpenStudio, items = [], formPatchRef = null }) {
   const { t, lang } = useI18n()
-  const { can } = useAuth()
+  // `tnt` up here, before the handlers: stripBg and the theme-fit pipeline both
+  // resolve the venue's photo direction from it.
+  const { can, tenant: tnt } = useAuth()
   // Price fields lock without the edit_prices cap — the staffer can still fix
   // names/photos/recipes, but pricing stays management-controlled.
   const canPrice = can(CAP.EDIT_PRICES)
@@ -952,7 +1167,13 @@ function ItemEditor({ tenantId, cats, currency, value, onClose, onSaved, onDelet
       else if (target === 'bg') setForm((s) => ({ ...s, bgUrl: url, bgKind: 'image', bgVideoTrim: null }))
       // this dish's own tabletop photo — landing one IS choosing the image kind
       else if (target === 'table') setForm((s) => ({ ...s, table: { ...(s.table && typeof s.table === 'object' ? s.table : {}), kind: 'image', url } }))
-      else set('imageUrl', url)
+      else {
+        // A crop changes the aspect — measure it NOW, or the stored imageRatio
+        // goes stale and the editorial stage reserves the wrong box (the healer
+        // only fills MISSING ratios, it never re-checks existing ones).
+        const ratio = await measureRatio(blob)
+        setForm((s) => ({ ...s, imageUrl: url, imageRatio: ratio }))
+      }
     } catch (_) {
       toast.error(lang === 'ar' ? 'تعذّر رفع الصورة' : 'Upload failed')
     } finally {
@@ -969,9 +1190,20 @@ function ItemEditor({ tenantId, cats, currency, value, onClose, onSaved, onDelet
     setBgBusy(true)
     try {
       const { removeBackgroundToFile } = await import('../../lib/bgRemove.js')
-      const file = await removeBackgroundToFile(form.imageUrl, `item-cutout-${Date.now()}.png`)
+      let file = await removeBackgroundToFile(form.imageUrl, `item-cutout-${Date.now()}.png`)
+      // Cutout themes get the same anchoring the theme-fit pipeline guarantees:
+      // removal keeps the canvas size, so without the trim the transparent
+      // padding under the dish floats it above the theme's table.
+      const { resolvePhotoDirection } = await import('../../lib/photoDirection.js')
+      const direction = resolvePhotoDirection(tnt, form)
+      if (direction.cutout) {
+        const { anchorCutout } = await import('../../lib/cutoutTrim.js')
+        file = await anchorCutout(file, { aspect: direction.px[0] / direction.px[1], anchor: direction.anchor || 'bottom', widthFrac: direction.widthFrac || 0.88, margin: direction.margin || 0.03 })
+      }
       const url = await uploadImage(tenantId, file)
-      set('imageUrl', url)
+      // The trim changed the dimensions — the stale stored ratio must not survive.
+      const ratio = await measureRatio(file)
+      setForm((s) => ({ ...s, imageUrl: url, imageRatio: ratio }))
       toast.success(lang === 'ar' ? 'أُزيلت الخلفية' : 'Background removed')
     } catch (_) {
       toast.error(lang === 'ar' ? 'تعذّرت إزالة الخلفية — جرّب صورة أصغر أو أعد المحاولة' : 'Background removal failed — try again')
@@ -984,6 +1216,22 @@ function ItemEditor({ tenantId, cats, currency, value, onClose, onSaved, onDelet
   // nano-banana. CORS-blocked references degrade to a free scene automatically.
   const [aiImgBusy, setAiImgBusy] = useState(false)
   const [storyBusy, setStoryBusy] = useState(false)
+  // «ملاءمة للثيم» + the shared AI preview gate. `aiFit` drives one overlay
+  // through three stages (source chooser → busy → preview); NOTHING the AI
+  // produced touches form.imageUrl until the owner presses اعتماد. The legacy
+  // free-generation button feeds the same preview (legacy: true), so it too
+  // stopped overwriting the photo without consent.
+  const [aiFit, setAiFit] = useState(null)
+  const [fitBusy, setFitBusy] = useState(false)
+  // Closing the overlay mid-generation bumps this token; the in-flight run sees
+  // the mismatch and drops its result instead of re-opening the preview.
+  const fitRun = useRef(0)
+  const fitPickRef = useRef(null)
+  // Image sheet (tap the thumbnail): full view + crop/replace/library/delete.
+  const [imgSheet, setImgSheet] = useState(false)
+  const [libOpen, setLibOpen] = useState(false)
+  const replacePickRef = useRef(null)
+  const viewer = useViewer()
 
   // ---- AR (عرض على الطاولة) ----
   // Generated standee: bg-removed photo → real GLB via ar3d.js. Real 3D meshes
@@ -1006,7 +1254,6 @@ function ItemEditor({ tenantId, cats, currency, value, onClose, onSaved, onDelet
   }
   // REALISTIC 3D (top plan): server callable → Meshy image-to-3D → GLB in the
   // library + attached to the item. Long-running (1-8 min) with a live timer.
-  const { tenant: tnt } = useAuth()
   const can3d = planAllows(tnt, 'ar3d')
   const [real3dSec, setReal3dSec] = useState(-1) // -1 idle, >=0 running (elapsed)
   useEffect(() => {
@@ -1048,7 +1295,7 @@ function ItemEditor({ tenantId, cats, currency, value, onClose, onSaved, onDelet
     } catch (_) { toast.error(t('error')) } finally { setArBusy('') }
   }
   const genItemImage = async () => {
-    if (aiImgBusy) return
+    if (aiImgBusy || fitBusy) return
     const label = form.nameAr || form.nameEn
     if (!label) { toast.error(lang === 'ar' ? 'اكتب اسم الصنف أولاً' : 'Name the item first'); return }
     setAiImgBusy(true)
@@ -1056,16 +1303,117 @@ function ItemEditor({ tenantId, cats, currency, value, onClose, onSaved, onDelet
       const { generatePostImage } = await import('../../lib/postGen.js')
       const blob = await generatePostImage({
         itemImageUrls: form.imageUrl ? [form.imageUrl] : [],
-        stylePrompt: `appetizing hero shot of "${label}", premium cafe menu photography, clean composition`,
-        venueName: '',
+        stylePrompt: `appetizing hero shot of "${label}", premium menu photography, clean composition`,
+        venueName: tnt?.name || '',
+        tenant: tnt,
+        section: 'item-editor',
+        itemId: form.id || '',
       })
       const f = new File([blob], `item-ai-${Date.now()}.png`, { type: blob.type || 'image/png' })
-      const url = await uploadImage(tenantId, f)
-      set('imageUrl', url)
-      toast.success(lang === 'ar' ? 'وُلّدت الصورة — احفظ الصنف لتثبيتها' : 'Generated — save the item to keep it')
+      setAiFit({ stage: 'preview', legacy: true, srcUrl: form.imageUrl || '', file: f, url: URL.createObjectURL(f), direction: null, cut: false })
     } catch (e) {
       toast.error(e?.message || (lang === 'ar' ? 'تعذر التوليد' : 'Generation failed'))
     } finally { setAiImgBusy(false) }
+  }
+
+  // ---- «ملاءمة للثيم» — theme-fit re-shoot -------------------------------
+  // Source photo (fresh File or the stored URL) → photoDirection prompt for
+  // the venue's LIVE menu theme → faithful Gemini re-shoot → background
+  // removal when the theme shows cutouts → preview for approval.
+  const openThemeFit = () => {
+    if (fitBusy || aiImgBusy) return
+    if (form.imageUrl) setAiFit({ stage: 'source' })
+    else if (fitPickRef.current) fitPickRef.current.click()
+  }
+  const runThemeFit = async ({ srcFile = null, srcUrl = '' } = {}) => {
+    if (fitBusy) return
+    const token = ++fitRun.current
+    setFitBusy(true)
+    setAiFit({ stage: 'busy', step: 'read', srcFile, srcUrl })
+    try {
+      let src = srcFile
+      if (src) {
+        // A raw camera file is easily 10MB; the model needs nothing past
+        // AI_ORDER_RANGE.photoMaxEdge. Failure keeps the original — heavier,
+        // never fatal.
+        try {
+          const { downscaleImage } = await import('../../lib/dinerAi.js')
+          const small = await downscaleImage(src)
+          src = small instanceof File ? small : new File([small], `item-src-${Date.now()}.jpg`, { type: 'image/jpeg' })
+        } catch (_) { /* keep the original file */ }
+      }
+      const [{ resolvePhotoDirection, buildThemeFitPrompt }, { generateThemeFitImage }] = await Promise.all([
+        import('../../lib/photoDirection.js'),
+        import('../../lib/postGen.js'),
+      ])
+      const cat = (cats || []).find((c) => c.id === form.categoryId)
+      const direction = resolvePhotoDirection(tnt, form)
+      const prompt = buildThemeFitPrompt(direction, {
+        nameAr: form.nameAr || '', nameEn: form.nameEn || '',
+        catName: cat ? (cat.nameAr || cat.nameEn || cat.name || '') : '',
+      })
+      setAiFit((s) => (s ? { ...s, step: 'gen' } : s))
+      // The venue's last APPROVED cutout for this layout rides along as the
+      // pose reference — the field-proven way to make the model actually move
+      // the camera (words alone rarely land the angle).
+      const poseUrl = (tnt?.themeFitRefs && tnt.themeFitRefs[direction.layout]) || ''
+      const blob = await generateThemeFitImage({ srcFile: src, srcUrl, poseUrl, prompt, tenant: tnt, itemId: form.id || '' })
+      let file = new File([blob], `item-fit-${Date.now()}.png`, { type: blob.type || 'image/png' })
+      let cutOk = true
+      if (direction.cutout) {
+        setAiFit((s) => (s ? { ...s, step: 'cut' } : s))
+        try {
+          const { removeBackgroundToFile } = await import('../../lib/bgRemove.js')
+          file = await removeBackgroundToFile(file, `item-fit-${Date.now()}.png`)
+          // Seat the cutout: the model never composes pixel-flush against the
+          // canvas edge, and removal strips the shadow band it left under the
+          // vessel — the alpha trim is what actually guarantees the base sits
+          // on the bottom edge (editorial) or floats with an even margin.
+          const { anchorCutout } = await import('../../lib/cutoutTrim.js')
+          file = await anchorCutout(file, { aspect: direction.px[0] / direction.px[1], anchor: direction.anchor || 'bottom', widthFrac: direction.widthFrac || 0.88, margin: direction.margin || 0.03 })
+        } catch (_) {
+          cutOk = false
+          toast.error(lang === 'ar' ? 'تعذّرت إزالة الخلفية — اعتمد الصورة ثم استخدم زر «إزالة الخلفية»' : 'Background removal failed — approve, then use the remove-background button')
+        }
+      }
+      if (fitRun.current !== token) return
+      setAiFit({ stage: 'preview', srcFile, srcUrl, file, url: URL.createObjectURL(file), direction, cut: direction.cutout && cutOk })
+    } catch (e) {
+      if (fitRun.current === token) setAiFit(null)
+      toast.error(e?.message || (lang === 'ar' ? 'تعذر التوليد' : 'Generation failed'))
+    } finally { setFitBusy(false) }
+  }
+  const approveFit = async () => {
+    if (!aiFit?.file || uploading) return
+    setUploading(true)
+    try {
+      const url = await uploadImage(tenantId, aiFit.file)
+      const ratio = await measureRatio(aiFit.file)
+      setForm((f) => ({ ...f, imageUrl: url, imageRatio: ratio }))
+      // The cutout the owner just APPROVED becomes the pose reference for every
+      // later «ملاءمة للثيم» run on this layout — the menu's angles converge on
+      // the look the owner actually accepted. Fire-and-forget by design.
+      if (!aiFit.legacy && aiFit.cut && aiFit.direction?.layout) {
+        updateTenant(tenantId, { [`themeFitRefs.${aiFit.direction.layout}`]: url }).catch(() => {})
+      }
+      if (aiFit.url) URL.revokeObjectURL(aiFit.url)
+      setAiFit(null)
+      toast.success(lang === 'ar' ? 'اعتُمدت الصورة — احفظ الصنف لتثبيتها' : 'Approved — save the item to keep it')
+    } catch (_) {
+      toast.error(lang === 'ar' ? 'تعذّر رفع الصورة' : 'Upload failed')
+    } finally { setUploading(false) }
+  }
+  const regenFit = () => {
+    if (!aiFit || fitBusy || aiImgBusy) return
+    const { srcFile, srcUrl, legacy } = aiFit
+    if (aiFit.url) URL.revokeObjectURL(aiFit.url)
+    if (legacy) { setAiFit(null); genItemImage() }
+    else runThemeFit({ srcFile, srcUrl })
+  }
+  const cancelFit = () => {
+    fitRun.current += 1
+    if (aiFit?.url) URL.revokeObjectURL(aiFit.url)
+    setAiFit(null)
   }
 
   // AI description writer for the Arabic description field.
@@ -1265,6 +1613,11 @@ function ItemEditor({ tenantId, cats, currency, value, onClose, onSaved, onDelet
         imageUrl: form.imageUrl || '',
         images: (form.images || []).filter(Boolean),
         imageStyle: form.imageStyle || '',
+        // Written only when the editor measured (or reset) one — an untouched
+        // item keeps its stored value and the absent key stays absent, so the
+        // healer in db.js remains the owner of the backfill path. 0 = "please
+        // re-measure": the image changed through a path with no blob at hand.
+        ...(form.imageRatio != null ? { imageRatio: Math.max(0, Number(form.imageRatio) || 0) } : {}),
         hotspots: (form.hotspots || [])
           .filter((h) => h && (h.label || '').trim())
           .slice(0, 8)
@@ -1288,6 +1641,10 @@ function ItemEditor({ tenantId, cats, currency, value, onClose, onSaved, onDelet
         arStandeeUrl: form.arStandeeUrl || '',
         model3dUrl: form.model3dUrl || '',
         model3dUsdzUrl: form.model3dUsdzUrl || '',
+        // Stored as a NUMBER or omitted entirely; '' would make the viewer's
+        // `Number(x) || DEFAULT` fall through anyway, but a stray empty string
+        // in Firestore is noise the next reader has to reason about.
+        realHeightCm: Number(form.realHeightCm) > 0 ? Number(form.realHeightCm) : null,
         pairings: (form.pairings || []).filter(Boolean).slice(0, 3),
         available: form.available !== false,
         availableFrom: (form.availableFrom || '').trim(),
@@ -1435,56 +1792,88 @@ function ItemEditor({ tenantId, cats, currency, value, onClose, onSaved, onDelet
             hint={lang === 'ar' ? 'اختر الشكل المناسب لثيمك، ثم حرّك وكبّر لضبط الصورة' : 'Pick the shape your theme needs, then move and zoom to fit'}
             onClose={() => setCropState(null)} onCropped={onCropped} />
         )}
+        {aiFit && (
+          <ThemeFitPreview
+            st={aiFit} lang={lang} uploading={uploading} quota={limitsFor(tnt, 'aiImage')}
+            onUseCurrent={() => runThemeFit({ srcUrl: form.imageUrl })}
+            onPickNew={() => { if (fitPickRef.current) fitPickRef.current.click() }}
+            onApprove={approveFit} onRegen={regenFit} onClose={cancelFit}
+          />
+        )}
+        {imgSheet && form.imageUrl && (
+          <Sheet
+            open onClose={() => setImgSheet(false)}
+            title={lang === 'ar' ? 'صورة الصنف' : 'Item image'}
+            footer={
+              <div className="row" style={{ gap: 6, flexWrap: 'wrap' }}>
+                <button className="btn btn-sm btn-outline" onClick={() => viewer.open([{ url: form.imageUrl, kind: 'image', name: form.nameAr || form.nameEn || 'item' }], 0)}>
+                  <Icon name="eye" size={14} /> {lang === 'ar' ? 'عرض كامل' : 'Full view'}
+                </button>
+                <button className="btn btn-sm btn-outline" onClick={() => { setImgSheet(false); setCropState({ src: form.imageUrl, target: 'primary' }) }}>
+                  <Icon name="search" size={14} /> {lang === 'ar' ? 'تعديل الحجم' : 'Adjust'}
+                </button>
+                <button className="btn btn-sm btn-outline" onClick={() => { if (replacePickRef.current) replacePickRef.current.click() }}>
+                  <Icon name="upload" size={14} /> {lang === 'ar' ? 'تبديل من الجهاز' : 'Replace from device'}
+                </button>
+                <button className="btn btn-sm btn-outline" onClick={() => setLibOpen(true)}>
+                  <Icon name="folder" size={14} /> {lang === 'ar' ? 'من المكتبة' : 'From library'}
+                </button>
+                <button className="btn btn-sm btn-outline" style={{ color: 'var(--danger)', borderColor: 'var(--danger)' }}
+                  onClick={() => {
+                    if (!window.confirm(lang === 'ar' ? 'إزالة صورة هذا الصنف؟' : 'Remove this item image?')) return
+                    setForm((s) => ({ ...s, imageUrl: '', imageRatio: 0 }))
+                    setImgSheet(false)
+                  }}>
+                  <Icon name="delete" size={14} /> {lang === 'ar' ? 'حذف' : 'Delete'}
+                </button>
+              </div>
+            }
+          >
+            {/* checker ground so a transparent cutout reads as one — a JPEG simply covers it */}
+            <div className="center" style={{ borderRadius: 'var(--r-md)', overflow: 'hidden', backgroundImage: 'repeating-conic-gradient(rgba(127,127,127,0.16) 0% 25%, transparent 0% 50%)', backgroundSize: '16px 16px' }}>
+              <img src={form.imageUrl} alt="" style={{ display: 'block', maxWidth: '100%', maxHeight: '60vh', objectFit: 'contain' }} />
+            </div>
+          </Sheet>
+        )}
+        <Viewer {...viewer.viewerProps} />
+        <MediaLibrary
+          open={libOpen} onClose={() => setLibOpen(false)} tenantId={tenantId} kind="image" lang={lang}
+          onPick={(url) => {
+            setLibOpen(false)
+            setImgSheet(false)
+            // no blob at hand to measure — 0 tells the healer to re-measure
+            setForm((s) => ({ ...s, imageUrl: url, imageRatio: 0 }))
+          }}
+        />
+
         <EditorTabs lang={lang} />
         <EditorSection first id="ie-basics" title={lang === 'ar' ? 'الأساسي' : 'Basics'} />
         <div className="row" style={{ gap: 'var(--sp-3)', alignItems: 'flex-start' }}>
           <div className="stack" style={{ flex: 'none', gap: 4, alignItems: 'stretch', width: 88 }}>
-            <label style={{ cursor: 'pointer' }}>
-              <div className={`thumb center ${(bgBusy || aiImgBusy) ? 'ai-scanning' : ''}`} style={{ width: 88, height: 88, overflow: 'hidden', border: '1px dashed var(--border-strong)' }}>
-                {uploading ? <div className="spinner" /> : form.imageUrl ? <img src={form.imageUrl} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover' }} /> : <Icon name="camera" size={24} className="muted" />}
-              </div>
-              <input type="file" accept="image/*" hidden onChange={(e) => onPick(e, 'primary')} />
-              <span className="xs faint text-center" style={{ display: 'block', marginTop: 4 }}>{uploading ? t('uploading') : t('uploadImage')}</span>
-            </label>
-            {form.imageUrl && !uploading && (
-              <button type="button" className="btn btn-sm btn-outline" style={{ padding: '4px 6px' }} onClick={() => setCropState({ src: form.imageUrl, target: 'primary' })}>
-                <Icon name="search" size={13} /> {lang === 'ar' ? 'تعديل الحجم' : 'Adjust'}
+            {form.imageUrl && !uploading ? (
+              // A stored photo opens its sheet (view / crop / replace / delete)
+              // — re-picking a file moved to the sheet, so a tap is a PREVIEW,
+              // not a surprise OS file dialog.
+              <button type="button" onClick={() => setImgSheet(true)} style={{ padding: 0, border: 'none', background: 'none', cursor: 'pointer' }}
+                title={lang === 'ar' ? 'عرض الصورة وإجراءاتها' : 'View image and its actions'}>
+                <div className={`thumb center ${(bgBusy || aiImgBusy || fitBusy) ? 'ai-scanning' : ''}`} style={{ width: 88, height: 88, overflow: 'hidden', border: '1px solid var(--border-strong)' }}>
+                  <img src={form.imageUrl} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+                </div>
+                <span className="xs faint text-center" style={{ display: 'block', marginTop: 4 }}>{lang === 'ar' ? 'عرض الصورة' : 'View image'}</span>
               </button>
+            ) : (
+              <label style={{ cursor: 'pointer' }}>
+                <div className={`thumb center ${(bgBusy || aiImgBusy || fitBusy) ? 'ai-scanning' : ''}`} style={{ width: 88, height: 88, overflow: 'hidden', border: '1px dashed var(--border-strong)' }}>
+                  {uploading ? <div className="spinner" /> : <Icon name="camera" size={24} className="muted" />}
+                </div>
+                <input type="file" accept="image/*" hidden onChange={(e) => onPick(e, 'primary')} />
+                <span className="xs faint text-center" style={{ display: 'block', marginTop: 4 }}>{uploading ? t('uploading') : t('uploadImage')}</span>
+              </label>
             )}
-            {form.imageUrl && !uploading && (
-              <button type="button" className="btn btn-sm btn-outline" style={{ padding: '4px 6px' }} disabled={bgBusy} onClick={stripBg}>
-                <Icon name="sparkles" size={13} /> {bgBusy ? (lang === 'ar' ? 'يعالج…' : 'Working…') : (lang === 'ar' ? 'إزالة الخلفية' : 'Remove bg')}
-              </button>
-            )}
-            {form.imageUrl && !uploading && (
-              <button
-                type="button"
-                className="btn btn-sm btn-outline"
-                style={{ padding: '4px 6px', color: 'var(--danger)', borderColor: 'var(--danger)' }}
-                onClick={() => { if (window.confirm(lang === 'ar' ? 'إزالة صورة هذا الصنف؟' : 'Remove this item image?')) set('imageUrl', '') }}
-              >
-                <Icon name="delete" size={13} /> {lang === 'ar' ? 'إزالة الصورة' : 'Remove image'}
-              </button>
-            )}
-            {!uploading && (
-              <button type="button" className="btn btn-sm btn-outline" style={{ padding: '4px 6px' }} disabled={aiImgBusy} onClick={genItemImage}
-                title={lang === 'ar' ? 'يولّد صورة احترافية بالذكاء (صورة الصنف الحالية مرجع إن وُجدت)' : 'AI-generate a pro product photo'}>
-                <Icon name="image" size={13} /> {aiImgBusy ? (lang === 'ar' ? 'يولّد…' : 'Generating…') : (lang === 'ar' ? 'توليد بالذكاء' : 'AI photo')}
-              </button>
-            )}
-            {form.imageUrl && !uploading && (
-              <button type="button" className="btn btn-sm btn-outline" style={{ padding: '4px 6px' }} disabled={storyBusy}
-                title={lang === 'ar' ? 'ينشر صورة الصنف كستوري 24 ساعة فوراً' : 'Publish this photo as a 24h story'}
-                onClick={async () => {
-                  setStoryBusy(true)
-                  try {
-                    await publishUrlAsStory(tenantId, { url: form.imageUrl, caption: form.nameAr || form.nameEn || '' })
-                    toast.success(lang === 'ar' ? 'نُشر في الاستوري' : 'Published to stories')
-                  } catch (_) { toast.error(t('error')) } finally { setStoryBusy(false) }
-                }}>
-                <Icon name="camera" size={13} /> {storyBusy ? (lang === 'ar' ? 'ينشر…' : 'Posting…') : (lang === 'ar' ? 'نشر في الاستوري' : 'To story')}
-              </button>
-            )}
+            {/* hidden pickers: theme-fit source (skips the cropper — the AI recomposes)
+                and replace-from-device (through the cropper as always) */}
+            <input ref={fitPickRef} type="file" accept="image/*" hidden onChange={(e) => { const f = e.target.files?.[0]; e.target.value = ''; if (f) runThemeFit({ srcFile: f }) }} />
+            <input ref={replacePickRef} type="file" accept="image/*" hidden onChange={(e) => { setImgSheet(false); onPick(e, 'primary') }} />
           </div>
           <div className="stack grow" style={{ gap: 'var(--sp-2)' }}>
             <div className="field">
@@ -1496,6 +1885,47 @@ function ItemEditor({ tenantId, cats, currency, value, onClose, onSaved, onDelet
               <input className="input" dir="ltr" value={form.nameEn} onChange={(e) => set('nameEn', e.target.value)} />
             </div>
           </div>
+        </div>
+
+        {/* Image tools — one compact wrap row (was a tall vertical column beside the thumb). */}
+        <div className="row" style={{ gap: 6, flexWrap: 'wrap' }}>
+          <button type="button" className="btn btn-sm btn-outline" style={{ padding: '4px 8px' }} disabled={fitBusy || aiImgBusy || uploading} onClick={openThemeFit}
+            title={lang === 'ar' ? 'يعيد تصوير صورتك الحقيقية بزاوية وإضاءة تناسب ثيم المنيو — بدون تغيير الطبق' : 'Re-shoots your real photo to fit the menu theme — same dish, new angle and light'}>
+            <Icon name="palette" size={13} /> {fitBusy ? (lang === 'ar' ? 'يلائم…' : 'Fitting…') : (lang === 'ar' ? 'ملاءمة للثيم' : 'Fit to theme')}
+          </button>
+          <button type="button" className="btn btn-sm btn-outline" style={{ padding: '4px 8px' }} disabled={aiImgBusy || fitBusy || uploading} onClick={genItemImage}
+            title={lang === 'ar' ? 'يولّد صورة احترافية بالذكاء (صورة الصنف الحالية مرجع إن وُجدت)' : 'AI-generate a pro product photo'}>
+            <Icon name="image" size={13} /> {aiImgBusy ? (lang === 'ar' ? 'يولّد…' : 'Generating…') : (lang === 'ar' ? 'توليد بالذكاء' : 'AI photo')}
+          </button>
+          {form.imageUrl && !uploading && (
+            <>
+              <button type="button" className="btn btn-sm btn-outline" style={{ padding: '4px 8px' }} onClick={() => setCropState({ src: form.imageUrl, target: 'primary' })}>
+                <Icon name="search" size={13} /> {lang === 'ar' ? 'تعديل الحجم' : 'Adjust'}
+              </button>
+              <button type="button" className="btn btn-sm btn-outline" style={{ padding: '4px 8px' }} disabled={bgBusy} onClick={stripBg}>
+                <Icon name="sparkles" size={13} /> {bgBusy ? (lang === 'ar' ? 'يعالج…' : 'Working…') : (lang === 'ar' ? 'إزالة الخلفية' : 'Remove bg')}
+              </button>
+              <button type="button" className="btn btn-sm btn-outline" style={{ padding: '4px 8px' }} disabled={storyBusy}
+                title={lang === 'ar' ? 'ينشر صورة الصنف كستوري 24 ساعة فوراً' : 'Publish this photo as a 24h story'}
+                onClick={async () => {
+                  setStoryBusy(true)
+                  try {
+                    await publishUrlAsStory(tenantId, { url: form.imageUrl, caption: form.nameAr || form.nameEn || '' })
+                    toast.success(lang === 'ar' ? 'نُشر في الاستوري' : 'Published to stories')
+                  } catch (_) { toast.error(t('error')) } finally { setStoryBusy(false) }
+                }}>
+                <Icon name="camera" size={13} /> {storyBusy ? (lang === 'ar' ? 'ينشر…' : 'Posting…') : (lang === 'ar' ? 'نشر في الاستوري' : 'To story')}
+              </button>
+              <button
+                type="button"
+                className="btn btn-sm btn-outline"
+                style={{ padding: '4px 8px', color: 'var(--danger)', borderColor: 'var(--danger)' }}
+                onClick={() => { if (window.confirm(lang === 'ar' ? 'إزالة صورة هذا الصنف؟' : 'Remove this item image?')) setForm((s) => ({ ...s, imageUrl: '', imageRatio: 0 })) }}
+              >
+                <Icon name="delete" size={13} /> {lang === 'ar' ? 'إزالة الصورة' : 'Remove image'}
+              </button>
+            </>
+          )}
         </div>
 
         <EditorSection id="ie-images" title={lang === 'ar' ? 'الصور' : 'Images'} />
@@ -1926,9 +2356,37 @@ function ItemEditor({ tenantId, cats, currency, value, onClose, onSaved, onDelet
               </button>
             )}
             {(form.arStandeeUrl || form.model3dUrl) && (
-              <button type="button" className="btn-link xs" style={{ color: 'var(--danger)' }} onClick={() => { set('arStandeeUrl', ''); set('model3dUrl', ''); set('model3dUsdzUrl', '') }}>{lang === 'ar' ? 'إزالة' : 'Clear'}</button>
+              <button type="button" className="btn-link xs" style={{ color: 'var(--danger)' }} onClick={() => { set('arStandeeUrl', ''); set('model3dUsdzUrl', ''); set('model3dUrl', '') }}>{lang === 'ar' ? 'إزالة' : 'Clear'}</button>
             )}
           </div>
+
+          {/* REAL HEIGHT.
+              A reconstruction comes back at an arbitrary scale, so the viewer
+              scales it to a true height — and until now that height was read
+              from `realHeightCm`, a field nothing in the product ever wrote. So
+              a sharing platter and an espresso cup were both forced to 11cm.
+              This is the input that makes the size honest, and the one that
+              decides how big the dish lands on the table in AR. */}
+          {(form.model3dUrl || form.arStandeeUrl) && (
+            <div className="field" style={{ marginTop: 10 }}>
+              <label>
+                {lang === 'ar' ? 'الارتفاع الحقيقي للطبق' : 'Real dish height'}{' '}
+                <span className="faint xs">({lang === 'ar' ? 'سم — يضبط الحجم في العرض وعلى الطاولة في AR' : 'cm — sets the size in the viewer and in AR'})</span>
+              </label>
+              <input
+                className="input num" type="number" min="1" max="200" step="0.5" dir="ltr"
+                style={{ maxWidth: 140 }}
+                value={form.realHeightCm ?? ''}
+                placeholder="11"
+                onChange={(e) => set('realHeightCm', e.target.value === '' ? '' : Number(e.target.value))}
+              />
+              <p className="xs faint" style={{ marginTop: 4, lineHeight: 1.6 }}>
+                {lang === 'ar'
+                  ? 'اتركه فارغاً ليُستخدم 11 سم (فنجان قياسي). قِس ارتفاع الطبق كما يُقدَّم — طبق مشاركة ~26 سم، كوب ~11 سم، قطعة حلى ~8 سم.'
+                  : 'Leave empty for 11cm (a standard cup). Measure the dish as served.'}
+              </p>
+            </div>
+          )}
         </div>
 
         <EditorSection id="ie-recipe" title={lang === 'ar' ? 'الوصفة والمخزون' : 'Recipe & inventory'} />

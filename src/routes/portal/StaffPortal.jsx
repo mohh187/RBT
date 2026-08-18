@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
-import { useNavigate } from 'react-router-dom'
+import { useNavigate, useParams } from 'react-router-dom'
 import { useAuth } from '../../lib/auth.jsx'
 import { useI18n } from '../../lib/i18n.jsx'
 import { useToast } from '../../components/Toast.jsx'
@@ -7,13 +7,17 @@ import Icon from '../../components/Icon.jsx'
 import Sheet from '../../components/Sheet.jsx'
 import StaffBell from '../../components/StaffBell.jsx'
 import OrderDetail from '../../components/OrderDetail.jsx'
+import PinLock from '../../components/PinLock.jsx'
+import IncomingAlerts from '../../components/IncomingAlerts.jsx'
 import { Price } from '../../components/Riyal.jsx'
 import {
-  watchActiveOrders, updateOrderStatus, watchMyAttendance, watchStaff,
+  updateOrderStatus, watchMyAttendance, watchStaff,
   watchOrdersSince, watchAllReviews, createLeaveRequest, watchMyLeaves, setStaffMeta,
   watchAnnouncements, startStatusSession, endStatusSession, watchMyShifts, createShiftSwap,
   watchShiftSwaps, setShiftSwapStatus,
 } from '../../lib/db.js'
+import { useActiveOrders } from '../../lib/liveBoard.js'
+import { applyStaffManifest, restorePlatformManifest } from '../../lib/pwa.js'
 import { uploadImage, shrinkImage } from '../../lib/storage.js'
 import { useSystemThemeBody, systemThemeAttr } from '../../lib/systemThemes.js'
 import AppBackground from '../../components/AppBackground.jsx'
@@ -21,7 +25,7 @@ import { alertParty } from '../../lib/notify.js'
 import { Link } from 'react-router-dom'
 import { scoreStaff, startOf } from '../../lib/perf.js'
 import { achievementsFor } from '../../lib/achievements.js'
-import { overtimePay } from '../../lib/payroll.js'
+import { overtimePay, hoursIn } from '../../lib/payroll.js'
 import { buildRoleTargets, buildRoleWeights, TARGET_METRICS } from '../../lib/targets.js'
 import { orderNumber, timeAgo, staffIdFallback } from '../../lib/format.js'
 import { CAP, roleName } from '../../lib/permissions.js'
@@ -31,18 +35,6 @@ import { useCompactUI } from '../../lib/useCompactUI.js'
 const NEXT = { pending: 'accepted', accepted: 'preparing', preparing: 'ready', ready: 'served' }
 function startToday() { const d = new Date(); d.setHours(0, 0, 0, 0); return d }
 
-// Hours worked since a moment: pair in→out punches, count an open shift up to now.
-function hoursIn(punches, sinceMs) {
-  const list = (punches || []).filter((p) => (p.at?.toMillis?.() || 0) >= sinceMs).slice().sort((a, b) => (a.at?.toMillis?.() || 0) - (b.at?.toMillis?.() || 0))
-  let ms = 0, lastIn = null
-  list.forEach((p) => {
-    const at = p.at?.toMillis?.() || 0
-    if (p.type === 'in') lastIn = at
-    else if (p.type === 'out' && lastIn) { ms += at - lastIn; lastIn = null }
-  })
-  if (lastIn) ms += Date.now() - lastIn
-  return ms / 3600000
-}
 // "HH:MM" → minutes; shift length in hours; minutes remaining until an end time today.
 const hhmmToMin = (s) => { const [h, m] = String(s || '').split(':').map(Number); return (Number.isFinite(h) ? h : 0) * 60 + (Number.isFinite(m) ? m : 0) }
 function shiftLenHrs(s, e) { if (!s || !e) return 0; let d = hhmmToMin(e) - hhmmToMin(s); if (d < 0) d += 1440; return d / 60 }
@@ -50,18 +42,23 @@ function minutesUntil(e) { if (!e) return 0; const n = new Date(); const cur = n
 function leaveDays(l) { if (!l.from) return 1; const a = new Date(l.from); const b = l.to ? new Date(l.to) : a; const d = Math.round((b - a) / 86400000) + 1; return d > 0 ? d : 1 }
 const PERIOD_KEY = { today: 'daily', week: 'weekly', month: 'monthly' }
 
+const VALID_TABS = ['home', 'orders', 'attendance', 'leave', 'reports']
+
 export default function StaffPortal() {
   useCompactUI()
   const { t, lang, toggleTheme, toggleLang, theme } = useI18n()
-  const { tenant, tenantId, user, profile, role, can, logout, updateMyProfile, changePassword } = useAuth()
+  const { tenant, tenantId, user, profile, role, can, isManager, logout, updateMyProfile, changePassword } = useAuth()
   useSystemThemeBody(tenant, 'admin') // portal follows the venue's system theme fully (sheets/toasts too)
   const toast = useToast()
   const navigate = useNavigate()
   const ar = lang === 'ar'
   const currency = tenant?.currency || 'SAR'
-  const [tab, setTab] = useState('home')
+  // URL-driven tabs (/portal, /portal/orders, /portal/reports …) — real pages:
+  // browser back works, deep links work, the shell never traps anyone.
+  const { ptab } = useParams()
+  const tab = VALID_TABS.includes(ptab) ? ptab : 'home'
+  const setTab = (id) => navigate(id === 'home' ? '/portal' : `/portal/${id}`)
   const [period, setPeriod] = useState('today')
-  const [orders, setOrders] = useState([])
   const [monthOrders, setMonthOrders] = useState([])
   const [reviews, setReviews] = useState([])
   const [punches, setPunches] = useState([])
@@ -88,7 +85,17 @@ export default function StaffPortal() {
   const canOrders = can(CAP.TAKE_ORDERS)
   const name = profile?.displayName || user?.email || ''
 
-  useEffect(() => { if (!tenantId || !canOrders) return; return watchActiveOrders(tenantId, setOrders) }, [tenantId, canOrders])
+  // shared refcounted stream (liveBoard) — the same snapshot the accept modal rides
+  const orders = useActiveOrders(canOrders ? tenantId : null) || []
+
+  // the portal is a staff surface: install identity + tab title follow the venue
+  useEffect(() => {
+    if (!tenant?.name) return
+    const prevTitle = document.title
+    document.title = tenant.name
+    applyStaffManifest(tenant, tenant.slug)
+    return () => { document.title = prevTitle; restorePlatformManifest() }
+  }, [tenant?.name, tenant?.logoUrl, tenant?.slug])
   useEffect(() => { if (!tenantId) return; return watchOrdersSince(tenantId, startOf('month'), setMonthOrders) }, [tenantId])
   useEffect(() => { if (!tenantId) return; return watchAllReviews(tenantId, setReviews, 200) }, [tenantId])
   useEffect(() => { if (!tenantId || !user) return; return watchMyAttendance(tenantId, user.uid, setPunches, 120) }, [tenantId, user])
@@ -304,11 +311,32 @@ export default function StaffPortal() {
     } finally { setSavingPf(false) }
   }
 
+  // ---- «تقاريري» — this staffer's OWN slice of the numbers. Sales figures are
+  // masked without VIEW_REVENUE; counts are inherent to order-taking work. ----
+  const canRevenue = isManager || can(CAP.VIEW_REVENUE)
+  const myPeriodOrders = useMemo(() => periodOrders
+    .filter((o) => o.acceptedByUid === user?.uid || o.servedByUid === user?.uid)
+    .sort((a, b) => (b.createdAt?.toMillis?.() || 0) - (a.createdAt?.toMillis?.() || 0)), [periodOrders, user])
+  const mySales = useMemo(() => myPeriodOrders
+    .filter((o) => o.servedByUid === user?.uid && !['cancelled', 'refunded'].includes(o.status))
+    .reduce((s, o) => s + (o.total || 0), 0), [myPeriodOrders, user])
+  const myReviews = useMemo(() => reviews.filter((r) => r.staffUid === user?.uid), [reviews, user])
+
   const TABS = [
     { id: 'home', icon: 'home', label: ar ? 'الرئيسية' : 'Home' },
     ...(canOrders ? [{ id: 'orders', icon: 'orders', label: ar ? 'الطلبات' : 'Orders' }] : []),
     { id: 'attendance', icon: 'scan', label: ar ? 'الحضور' : 'Attendance' },
     { id: 'leave', icon: 'calendar', label: ar ? 'الإجازات' : 'Leave' },
+    { id: 'reports', icon: 'reports', label: ar ? 'تقاريري' : 'My reports' },
+  ]
+  // Cap-gated live boards + (for admin-class roles) the way back to the admin —
+  // the portal must never be a dead end (persistent nav, not a drawer secret).
+  const QUICK_LINKS = [
+    ...(canOrders ? [{ to: '/cashier', icon: 'cashier', label: t('cashier') }] : []),
+    ...(can(CAP.KITCHEN) ? [{ to: '/kds', icon: 'kitchen', label: t('kitchen') }] : []),
+    ...(can(CAP.SCAN_TICKETS) ? [{ to: '/scan', icon: 'scan', label: t('scan') }] : []),
+    ...(can(CAP.MANAGE_TABLES) ? [{ to: '/admin/operations', icon: 'tables', label: ar ? 'الطاولات' : 'Tables' }] : []),
+    ...(isManager || ['supervisor', 'marketing', 'accountant'].includes(role) ? [{ to: '/admin', icon: 'settings', label: ar ? 'لوحة الإدارة' : 'Admin' }] : []),
   ]
   const leaveLabel = (x) => ({ leave: ar ? 'إجازة' : 'Leave', sick: ar ? 'مرضي' : 'Sick', permission: ar ? 'استئذان' : 'Permission' }[x] || x)
   const statusBadge = (s) => s === 'approved' ? 'badge-success' : s === 'declined' ? 'badge-danger' : ''
@@ -317,6 +345,10 @@ export default function StaffPortal() {
   return (
     <div className="portal-shell" data-systheme={systemThemeAttr(tenant, 'admin')} style={{ minHeight: '100dvh', paddingBottom: 'calc(var(--bottomnav-h) + var(--safe-b))' }}>
       <AppBackground tenant={tenant} />
+      {/* the portal is a staff surface like the cashier — same PIN gate, same
+          incoming-order/waiter-call accept modal */}
+      <PinLock tenant={tenant} tenantId={tenantId} />
+      <IncomingAlerts />
       <header className="app-bar">
         <button className="icon-btn" onClick={() => setDrawerOpen(true)} aria-label="menu"><Icon name="more" /></button>
         <strong style={{ fontSize: 'var(--fs-md)' }}>{ar ? 'بوابتي' : 'My portal'}</strong>
@@ -327,13 +359,21 @@ export default function StaffPortal() {
         <button className="icon-btn portal-desktop-only" onClick={logout} title={t('logout')} style={{ color: 'var(--danger)' }}><Icon name="logout" /></button>
       </header>
 
-      {/* DESKTOP navigation: the phone bottom-nav is hidden ≥900px — tabs live up top */}
+      {/* DESKTOP navigation: the phone bottom-nav is hidden ≥900px — tabs live up
+          top, WITH the staffer's live boards + admin link so the portal is a hub,
+          never a dead end (persistent nav — the owner's exact complaint). */}
       <div className="portal-topnav">
         {TABS.map((tb) => (
           <button key={tb.id} className={`chip ${tab === tb.id ? 'active' : ''}`} onClick={() => setTab(tb.id)} style={{ position: 'relative' }}>
             <Icon name={tb.icon} size={15} /> {tb.label}
             {tb.id === 'leave' && pendingLeaves > 0 && <span className="cart-badge">{pendingLeaves}</span>}
           </button>
+        ))}
+        {QUICK_LINKS.length > 0 && <span aria-hidden style={{ width: 1, alignSelf: 'stretch', background: 'var(--border)', margin: '0 4px' }} />}
+        {QUICK_LINKS.map((q) => (
+          <Link key={q.to} to={q.to} className="chip" style={{ textDecoration: 'none' }}>
+            <Icon name={q.icon} size={15} /> {q.label}
+          </Link>
         ))}
       </div>
 
@@ -650,6 +690,83 @@ export default function StaffPortal() {
             )}
           </div>
         )}
+
+        {/* «تقاريري» — the staffer's own numbers only: their orders, ratings,
+            hours. Sales money appears ONLY with VIEW_REVENUE; the separation
+            the owner asked for (no cross-staff reports, no manager figures). */}
+        {tab === 'reports' && (
+          <div className="page stack" style={{ gap: 'var(--sp-4)' }}>
+            <div className="row-between" style={{ flexWrap: 'wrap', gap: 8 }}>
+              <h2 className="page-title row" style={{ gap: 8 }}><Icon name="reports" size={22} /> {ar ? 'تقاريري' : 'My reports'}</h2>
+              <div className="row" style={{ gap: 6 }}>
+                {[['today', ar ? 'اليوم' : 'Today'], ['week', ar ? 'الأسبوع' : 'Week'], ['month', ar ? 'الشهر' : 'Month']].map(([id, lbl]) => (
+                  <button key={id} className={`chip ${period === id ? 'active' : ''}`} onClick={() => setPeriod(id)}>{lbl}</button>
+                ))}
+              </div>
+            </div>
+
+            <div className="stat-grid">
+              <div className="stat"><div className="label">{ar ? 'قدّمت' : 'Served'}</div><div className="value num">{myRow.served}</div></div>
+              <div className="stat"><div className="label">{ar ? 'استلمت' : 'Took'}</div><div className="value num">{myRow.handled}</div></div>
+              <div className="stat"><div className="label">{ar ? 'نقاطي' : 'Points'}</div><div className="value num" style={{ color: 'var(--brand)' }}>{myRow.points}</div></div>
+              <div className="stat"><div className="label">{ar ? 'المركز' : 'Rank'}</div><div className="value num">#{rank}</div></div>
+            </div>
+
+            {canRevenue ? (
+              <div className="card card-pad row-between">
+                <span className="small row" style={{ gap: 6 }}><Icon name="wallet" size={15} className="faint" /> {ar ? 'مبيعاتي (طلبات قدّمتها)' : 'My sales (orders I served)'}</span>
+                <span className="price bold" style={{ color: 'var(--brand)' }}><Price value={mySales} currency={currency} lang={lang} /></span>
+              </div>
+            ) : (
+              <p className="xs faint" style={{ margin: 0 }}>{ar ? 'الأرقام المالية تظهر فقط لمن يملك صلاحية «رؤية الأرقام المالية».' : 'Money figures require the View-revenue permission.'}</p>
+            )}
+
+            {/* my ratings */}
+            <div className="card card-pad stack" style={{ gap: 8 }}>
+              <div className="row-between">
+                <strong className="small row" style={{ gap: 6 }}><Icon name="star" size={15} style={{ color: 'var(--gold)' }} fill="currentColor" strokeWidth={1.4} /> {ar ? 'تقييماتي' : 'My ratings'}</strong>
+                {myRow.ratingN > 0 && <span className="small bold num">{myRow.avgRating.toFixed(1)} <span className="xs faint">({myRow.ratingN})</span></span>}
+              </div>
+              {myReviews.length === 0 ? (
+                <p className="xs faint" style={{ margin: 0 }}>{ar ? 'لا تقييمات بعد' : 'No ratings yet'}</p>
+              ) : myReviews.slice(0, 8).map((r, i) => (
+                <div key={r.id || i} className="row-between xs" style={{ gap: 8, borderTop: i ? '1px solid var(--border)' : 'none', paddingTop: i ? 6 : 0 }}>
+                  <span className="grow" style={{ minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{r.comment || (ar ? 'بدون تعليق' : 'No comment')}</span>
+                  <span className="bold num" style={{ color: 'var(--gold)', flex: 'none', display: 'inline-flex', alignItems: 'center', gap: 3 }}>{r.staffRating || r.rating || 0} <Icon name="star" size={12} fill="currentColor" strokeWidth={1.4} /></span>
+                </div>
+              ))}
+            </div>
+
+            {/* my orders in the period */}
+            <div className="card card-pad stack" style={{ gap: 8 }}>
+              <strong className="small row" style={{ gap: 6 }}><Icon name="orders" size={15} className="faint" /> {ar ? 'طلباتي' : 'My orders'} <span className="xs faint num">({myPeriodOrders.length})</span></strong>
+              {myPeriodOrders.length === 0 ? (
+                <p className="xs faint" style={{ margin: 0 }}>{ar ? 'لا طلبات في هذه الفترة' : 'No orders this period'}</p>
+              ) : myPeriodOrders.slice(0, 20).map((o) => (
+                <button key={o.id} className="row-between xs" style={{ gap: 8, background: 'none', border: 'none', borderTop: '1px solid var(--border)', paddingTop: 6, cursor: 'pointer', color: 'inherit', textAlign: 'start' }} onClick={() => setDetailOrderId(o.id)}>
+                  <span className="bold num">{orderNumber(o.code)}</span>
+                  <span className="grow faint" style={{ minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{o.tableLabel || ''} · {timeAgo(o.createdAt, lang)}</span>
+                  <span className={`badge ${['served', 'paid'].includes(o.status) ? 'badge-success' : o.status === 'cancelled' ? 'badge-danger' : 'badge-gold'}`} style={{ flex: 'none' }}>{t(`status_${o.status}`) || o.status}</span>
+                  {canRevenue && <span className="price bold num" style={{ flex: 'none' }}><Price value={o.total} currency={currency} lang={lang} /></span>}
+                </button>
+              ))}
+            </div>
+
+            {/* hours + lateness (mirrors the home summary, scoped to me) */}
+            <div className="card card-pad stack" style={{ gap: 10 }}>
+              <strong className="small row" style={{ gap: 6 }}><Icon name="clock" size={15} className="faint" /> {ar ? 'دوامي' : 'My hours'}</strong>
+              <div className="stat-grid">
+                <div className="stat"><div className="label">{ar ? 'اليوم' : 'Today'}</div><div className="value num">{hrsToday.toFixed(1)}<span className="xs faint"> {ar ? 'س' : 'h'}</span></div></div>
+                <div className="stat"><div className="label">{ar ? 'الأسبوع' : 'Week'}</div><div className="value num">{hrsWeek.toFixed(1)}<span className="xs faint"> {ar ? 'س' : 'h'}</span></div></div>
+                <div className="stat"><div className="label">{ar ? 'الشهر' : 'Month'}</div><div className="value num">{hrsMonth.toFixed(0)}<span className="xs faint"> {ar ? 'س' : 'h'}</span></div></div>
+              </div>
+              <div className="row" style={{ gap: 8, flexWrap: 'wrap' }}>
+                {lateCount > 0 ? <span className="badge badge-danger">{ar ? `تأخير الشهر: ${lateCount}` : `Late this month: ${lateCount}`}</span> : <span className="badge badge-success"><Icon name="check" size={12} /> {ar ? 'بدون تأخير' : 'No lateness'}</span>}
+                {otMonth.hours > 0.05 && <span className="badge badge-success">{ar ? `إضافي الشهر ${otMonth.hours.toFixed(1)}س` : `OT ${otMonth.hours.toFixed(1)}h`}</span>}
+              </div>
+            </div>
+          </div>
+        )}
       </main>
 
       <nav className="m-bottomnav">
@@ -673,15 +790,18 @@ export default function StaffPortal() {
             { id: 'orders', icon: 'orders', label: ar ? 'الطلبات' : 'Orders', show: canOrders },
             { id: 'attendance', icon: 'scan', label: ar ? 'الحضور' : 'Attendance', show: true },
             { id: 'leave', icon: 'calendar', label: ar ? 'الإجازات' : 'Leave', show: true },
+            { id: 'reports', icon: 'reports', label: ar ? 'تقاريري' : 'My reports', show: true },
           ].filter((x) => x.show).map((x) => (
             <button key={x.id} className="list-row" onClick={() => { setTab(x.id); setDrawerOpen(false) }}>
               <Icon name={x.icon} size={20} /><span className="bold">{x.label}</span><span className="grow" />
             </button>
           ))}
-          {/* role-aware shortcuts to the live boards */}
-          {can(CAP.TAKE_ORDERS) && <Link to="/cashier" className="list-row" onClick={() => setDrawerOpen(false)}><Icon name="cashier" size={20} /><span className="bold">{t('cashier')}</span><span className="grow" /><Icon name={ar ? 'back' : 'next'} size={16} className="faint" /></Link>}
-          {can(CAP.KITCHEN) && <Link to="/kds" className="list-row" onClick={() => setDrawerOpen(false)}><Icon name="kitchen" size={20} /><span className="bold">{t('kitchen')}</span><span className="grow" /><Icon name={ar ? 'back' : 'next'} size={16} className="faint" /></Link>}
-          {can(CAP.SCAN_TICKETS) && <Link to="/scan" className="list-row" onClick={() => setDrawerOpen(false)}><Icon name="scan" size={20} /><span className="bold">{t('scan')}</span><span className="grow" /><Icon name={ar ? 'back' : 'next'} size={16} className="faint" /></Link>}
+          {/* role-aware shortcuts to the live boards — same set as the top nav */}
+          {QUICK_LINKS.map((q) => (
+            <Link key={q.to} to={q.to} className="list-row" onClick={() => setDrawerOpen(false)}>
+              <Icon name={q.icon} size={20} /><span className="bold">{q.label}</span><span className="grow" /><Icon name={ar ? 'back' : 'next'} size={16} className="faint" />
+            </Link>
+          ))}
           <button className="list-row" onClick={() => { setPf({ name, phone: me?.phone || '', cur: '', pw: '' }); setProfileOpen(true); setDrawerOpen(false) }}><Icon name="settings" size={20} /><span className="bold">{ar ? 'ملفي والإعدادات' : 'My profile & settings'}</span></button>
           <button className="list-row" onClick={logout} style={{ color: 'var(--danger)' }}><Icon name="logout" size={20} /><span className="bold">{t('logout')}</span></button>
         </div>
