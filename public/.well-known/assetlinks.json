@@ -3,16 +3,6 @@
     "relation": ["delegate_permission/common.handle_all_urls"],
     "target": {
       "namespace": "android_app",
-      "package_name": "sa.rbt360.app",
-      "sha256_cert_fingerprints": [
-        "REPLACE_WITH_PLAY_APP_SIGNING_SHA256_FINGERPRINT"
-      ]
-    }
-  },
-  {
-    "relation": ["delegate_permission/common.handle_all_urls"],
-    "target": {
-      "namespace": "android_app",
       "package_name": "sa.rbt360.staff",
       "sha256_cert_fingerprints": [
         "88:7F:24:27:D1:48:D6:BF:4B:A6:0B:34:47:98:2C:20:2E:C2:9C:76:98:63:97:FD:94:A4:2A:B7:87:B0:2E:EE"
