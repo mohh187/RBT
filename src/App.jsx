@@ -313,16 +313,30 @@ function AdminHome() {
 // operational staff on the PORTAL — that's the asked-for split. This only
 // picks the FIRST screen; everyone can still navigate anywhere their caps allow.
 function PinHome() {
-  const { role, can, tenant, loading } = useAuth()
+  const { role, tenant, loading } = useAuth()
   if (loading) return <FullSpinner />
   // On a lapsed plan those screens are PlanGate walls, so sending a staffer
   // there at shift start parks them on an upgrade notice they can't act on.
   const pos = planAllows(tenant, 'cashier') ? '/cashier' : '/portal'
   if (role === 'cashier') return <Navigate to={pos} replace />
   if (role === 'kitchen' || role === 'barista') return <Navigate to={planAllows(tenant, 'kds') ? '/kds' : '/portal'} replace />
-  if (role === 'waiter') return <Navigate to={can(CAP.MANAGE_TABLES) && planAllows(tenant, 'tables') ? '/admin/operations' : pos} replace />
+  // THE WAITER GOES TO THE PORTAL, NOT INTO THE ADMIN SHELL. /admin/operations
+  // is the tables board, but it renders inside the back office, so a waiter who
+  // entered a PIN found themselves standing in the admin. The portal is the
+  // staff-facing home and already carries a Tables link for anyone holding the
+  // cap, so the board is one tap away without handing them the back office.
+  if (role === 'waiter') return <Navigate to="/portal" replace />
   if (role === 'driver') return <Navigate to="/driver" replace />
-  return <Navigate to="/admin" replace />
+  // Only the roles that actually RUN the venue land in the back office.
+  if (ADMIN_ROLES.includes(role)) return <Navigate to="/admin" replace />
+  // EVERYONE ELSE GOES TO THE STAFF PORTAL, and that deliberately includes an
+  // unknown or not-yet-resolved role. This line used to be `/admin`, so any
+  // role the list above did not name — cleaner, plain staff, and above all a
+  // profile that failed to load and left `role` null — was dropped into the
+  // admin dashboard by a PIN sign-in. A staffer must never arrive there by
+  // default: the portal is the staff-facing home, and anyone who genuinely
+  // belongs in the back office can still walk there from it.
+  return <Navigate to="/portal" replace />
 }
 
 // The floor screens are lazy, so their chunk request only starts AFTER the PIN
