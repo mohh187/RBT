@@ -3686,12 +3686,35 @@ body[data-theme='dark'] .pos-fullscreen[data-systheme='glass'] { background: var
     0 2px 4px -2px rgba(0, 0, 0, 0.18);
   transition: transform 120ms var(--ease-out-strong), box-shadow 160ms, filter 160ms;
 }
+/* THE BUTTON MUST NEVER LOSE ITS FACE ON PRESS.
+   landing.css:890 styles this same shared button as
+   `.rlauth-submit:hover:not(:disabled) { background: var(--act-hover) }`, and
+   --act-hover only exists inside the .rlauth scope. On THIS screen the variable
+   resolves to nothing, which makes the whole `background` shorthand invalid at
+   computed-value time, so it falls back to none: white text on a white page and
+   the button visibly disappears the moment a finger lands (touch fires hover).
+   Same root cause as the invisible input fields on this screen. Every state
+   below therefore RE-DECLARES the background rather than inheriting it, at a
+   specificity landing.css cannot tie. */
+.staff-entry .staff-entry-form .rlauth-submit:hover:not(:disabled),
+.staff-entry .staff-entry-form .rlauth-submit:focus:not(:disabled) {
+  background: linear-gradient(180deg, color-mix(in srgb, var(--brand) 84%, #fff) 0%, var(--brand) 62%, color-mix(in srgb, var(--brand) 92%, #000) 100%);
+  box-shadow:
+    0 1px 0 rgba(255, 255, 255, 0.24) inset,
+    0 12px 26px -10px color-mix(in srgb, var(--brand) 78%, transparent),
+    0 2px 4px -2px rgba(0, 0, 0, 0.18);
+}
 .staff-entry .staff-entry-form .rlauth-submit:active:not(:disabled) {
+  background: linear-gradient(180deg, color-mix(in srgb, var(--brand) 88%, #fff) 0%, var(--brand) 62%, color-mix(in srgb, var(--brand) 92%, #000) 100%);
   transform: translateY(1.5px);
   filter: brightness(0.96);
   box-shadow:
     0 1px 0 rgba(255, 255, 255, 0.14) inset,
     0 4px 10px -8px color-mix(in srgb, var(--brand) 70%, transparent);
+}
+/* the disabled face must stay a face too, not a ghost */
+.staff-entry .staff-entry-form .rlauth-submit:disabled {
+  background: linear-gradient(180deg, color-mix(in srgb, var(--brand) 88%, #fff) 0%, var(--brand) 62%, color-mix(in srgb, var(--brand) 92%, #000) 100%);
 }
 .staff-entry .staff-entry-form .rlauth-submit:focus-visible { outline: 2px solid var(--brand); outline-offset: 3px; }
 .staff-entry .staff-entry-form .rlauth-submit:disabled { opacity: 0.55; box-shadow: none; cursor: default; }
