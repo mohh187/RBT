@@ -169,7 +169,7 @@ export default function DriverPortal() {
             <div className="small muted">{ar ? 'هل حصّلت المبلغ نقداً من العميل؟' : 'Did you collect the cash from the customer?'}</div>
             <strong className="num" style={{ fontSize: 'var(--fs-2xl)' }}><Price value={codFor.total || 0} lang={lang} /></strong>
             <button className="btn btn-success btn-lg btn-block" disabled={codBusy} onClick={() => finishCod(true)}><Icon name="check" size={18} /> {ar ? 'حصّلت نقداً' : 'Collected cash'}</button>
-            <button className="btn btn-outline btn-block" disabled={codBusy} onClick={() => finishCod(false)}>{ar ? 'لم أحصّل — تسليم فقط' : 'Not collected — just delivered'}</button>
+            <button className="btn btn-outline btn-block" disabled={codBusy} onClick={() => finishCod(false)}>{ar ? 'لم أحصّل، تسليم فقط' : 'Not collected, just delivered'}</button>
           </div>
         )}
       </Sheet>

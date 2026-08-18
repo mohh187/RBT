@@ -40,7 +40,7 @@ function stageAt(i) {
 const TXT = {
   ar: {
     title: 'صياد البحر',
-    how: 'القارب يتحرك وحده — المس الشاشة لإنزال الصنارة واصطد أكبر عدد من الأسماك. املأ حصّة كل مرحلة قبل نفاد الوقت لتغوص إلى مياه أعمق.',
+    how: 'القارب يتحرك وحده. المس الشاشة لإنزال الصنارة واصطد أكبر عدد من الأسماك، واملأ حصّة كل مرحلة قبل نفاد الوقت لتغوص إلى مياه أعمق.',
     start: 'ابدأ الصيد',
     again: 'العب مجدداً',
     cont: 'تابع من المرحلة',
@@ -58,7 +58,7 @@ const TXT = {
     cleared: 'مرحلة مكتملة',
     retry: 'أعد المحاولة',
     tap: 'المس لإنزال الصنارة',
-    hintJelly: 'قنديل البحر يقرصك ويُفلت صيدك — تجنّبه',
+    hintJelly: 'قنديل البحر يقرصك ويُفلت صيدك، فتجنّبه',
     hintGold: 'السمكة الذهبية نادرة وثمينة',
     hintBig: 'السمكة الكبيرة تساوي نقاطاً أكثر',
     gold: 'سمكة ذهبية',
@@ -66,7 +66,7 @@ const TXT = {
   },
   en: {
     title: 'Sea Fisher',
-    how: 'The boat drifts on its own — tap to drop the hook and land as many fish as you can. Fill each stage quota before the clock to dive deeper.',
+    how: 'The boat drifts on its own. Tap to drop the hook and land as many fish as you can, and fill each stage quota before the clock runs out to dive deeper.',
     start: 'Start fishing',
     again: 'Play again',
     cont: 'Continue from stage',
@@ -84,7 +84,7 @@ const TXT = {
     cleared: 'Stage cleared',
     retry: 'Try again',
     tap: 'Tap to drop the hook',
-    hintJelly: 'Jellyfish sting and drop your catch — avoid them',
+    hintJelly: 'Jellyfish sting and drop your catch, so avoid them',
     hintGold: 'The golden fish is rare and valuable',
     hintBig: 'Big fish are worth more points',
     gold: 'Golden fish',

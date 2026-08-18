@@ -8,6 +8,7 @@
 import { collection, query, where, orderBy, limit, onSnapshot } from 'firebase/firestore'
 import { callSummary } from './waiterCalls.js'
 import { orderNumber } from './format.js'
+import { orderTypeLabel as typeWord } from './orderStatus.js'
 
 const ms = (ts) => ts?.toMillis?.() ?? (typeof ts === 'number' ? ts : 0)
 
@@ -27,11 +28,9 @@ export function markSeen(tid, at = Date.now(), uid = '') {
   try { localStorage.setItem(seenKey(tid, uid), String(at)) } catch (_) { /* ignore */ }
 }
 
-const orderTypeLabel = (o) =>
-  o.tableLabel || (o.orderType === 'curbside' ? 'استلام بالسيارة'
-    : o.orderType === 'pickup' ? 'استلام'
-    : o.orderType === 'delivery' ? 'توصيل'
-    : 'داخل المقهى')
+// «المقهى» was hardcoded here; a bakery or a shop owner reads their own place
+// name everywhere else, so the neutral «في الصالة» is what this feed says.
+const orderTypeLabel = (o) => o.tableLabel || typeWord(o.orderType, 'ar')
 
 // buildNotifyFeed(db, tenantId, cb, caps): subscribes to the last ~20 of each
 // source and calls cb with the merged, newest-first feed:

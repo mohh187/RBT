@@ -10,18 +10,6 @@
 import { httpsCallable } from 'firebase/functions'
 import { functions } from './firebase.js'
 
-// Server verify → { ok, locked?, waitMs?, none? }. Network errors surface as
-// { ok:false, error:true } so the lock screen can say "check the connection"
-// instead of counting it as a wrong PIN.
-export async function verifyPin(tid, staffId, pin) {
-  try {
-    const res = await httpsCallable(functions, 'verifyStaffPin')({ tenantId: tid, staffId, pin })
-    return res?.data || { ok: false }
-  } catch (_) {
-    return { ok: false, error: true }
-  }
-}
-
 // PIN-only sign-in: the PIN alone identifies the staffer. Success returns
 // { ok, token, uid, name } — the caller swaps the Firebase session with the
 // token. staffId is passed ONLY on the duplicate-PIN disambiguation retry.

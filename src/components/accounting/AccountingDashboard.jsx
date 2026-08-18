@@ -4,6 +4,7 @@ import { Price } from '../Riyal.jsx'
 import Icon from '../Icon.jsx'
 import { money } from '../../lib/format.js'
 import { fmtDate } from '../../lib/accounting.js'
+import { arPlural } from '../../lib/forecast.js'
 
 const SEV = {
   high: { ar: 'حرج', en: 'Critical' },
@@ -19,7 +20,7 @@ export default function AccountingDashboard({
   ar = true, lang = 'ar', currency = 'SAR', showMoney = true, onJump,
 }) {
   const [openFinding, setOpenFinding] = useState(null)
-  const M = ({ v }) => (showMoney ? <Price value={v} currency={currency} lang={lang} /> : <span className="faint">—</span>)
+  const M = ({ v }) => (showMoney ? <Price value={v} currency={currency} lang={lang} /> : <span className="faint">-</span>)
 
   const chartData = series.map((b) => ({
     day: fmtDate(b.ms, ar).slice(0, 5),
@@ -77,7 +78,7 @@ export default function AccountingDashboard({
                 <Tooltip
                   cursor={{ fill: 'var(--surface-2)' }}
                   contentStyle={{ background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: 12, fontSize: 12.5 }}
-                  formatter={(v, k) => [showMoney ? money(v, currency, lang) : '—', k === 'profit' ? (ar ? 'الربح' : 'Profit') : (ar ? 'الإيراد' : 'Revenue')]}
+                  formatter={(v, k) => [showMoney ? money(v, currency, lang) : '-', k === 'profit' ? (ar ? 'الربح' : 'Profit') : (ar ? 'الإيراد' : 'Revenue')]}
                 />
                 <Bar dataKey="profit" radius={[5, 5, 0, 0]}>
                   {chartData.map((d, i) => <Cell key={i} fill={d.profit >= 0 ? 'var(--success)' : 'var(--danger)'} />)}
@@ -110,9 +111,9 @@ export default function AccountingDashboard({
       <div className="acc-card">
         <div className="row-between" style={{ flexWrap: 'wrap', gap: 8 }}>
           <span className="acc-card-title"><Icon name="warning" size={17} /> {ar ? 'ملاحظات المراجعة' : 'Audit findings'}</span>
-          <span className="acc-period-label">{ar ? `${findings.length} ملاحظة` : `${findings.length} findings`}</span>
+          <span className="acc-period-label">{ar ? arPlural(findings.length, { one: 'ملاحظة', two: 'ملاحظتان', few: 'ملاحظات', many: 'ملاحظة' }) : `${findings.length} findings`}</span>
         </div>
-        <p className="acc-hint">{ar ? 'قواعد ثابتة تعمل على مستنداتك الحقيقية — ليست تخميناً من الذكاء الاصطناعي.' : 'Deterministic rules over your real documents.'}</p>
+        <p className="acc-hint">{ar ? 'قواعد ثابتة تعمل على مستنداتك الحقيقية، لا تخمين من الذكاء الاصطناعي.' : 'Deterministic rules over your real documents.'}</p>
         {!findings.length ? (
           <p className="acc-empty">{ar ? 'لا ملاحظات على حسابات هذه الفترة.' : 'Nothing flagged this period.'}</p>
         ) : (

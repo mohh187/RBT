@@ -16,11 +16,11 @@ import { db } from './firebase.js'
 import { planExpired } from './plans.js'
 
 export const CHANNELS = [
-  { key: 'waUtility', ar: 'واتساب — رسائل المعاملات', short: 'واتساب معاملات', icon: 'mail', unit: 'رسالة', hint: 'حالة الطلب وروابط الفواتير' },
-  { key: 'waMarketing', ar: 'واتساب — التسويق', short: 'واتساب تسويق', icon: 'sound', unit: 'رسالة', hint: 'الحملات والعروض ورسائل الولاء' },
+  { key: 'waUtility', ar: 'رسائل معاملات واتساب', short: 'واتساب معاملات', icon: 'mail', unit: 'رسالة', hint: 'حالة الطلب وروابط الفواتير' },
+  { key: 'waMarketing', ar: 'رسائل واتساب التسويقية', short: 'واتساب تسويق', icon: 'sound', unit: 'رسالة', hint: 'الحملات والعروض ورسائل الولاء' },
   { key: 'email', ar: 'البريد الإلكتروني', short: 'بريد', icon: 'mail', unit: 'رسالة', hint: 'إشعارات الطلبات والفواتير والدعوات' },
-  { key: 'aiText', ar: 'الذكاء الاصطناعي — نصوص', short: 'ذكاء نصي', icon: 'sparkles', unit: 'طلب', hint: 'المساعد وتوليد الأوصاف والتحليلات' },
-  { key: 'aiImage', ar: 'الذكاء الاصطناعي — صور', short: 'ذكاء صور', icon: 'image', unit: 'صورة', hint: 'توليد صور الأصناف والمنشورات' },
+  { key: 'aiText', ar: 'نصوص الذكاء الاصطناعي', short: 'ذكاء نصي', icon: 'sparkles', unit: 'طلب', hint: 'المساعد وتوليد الأوصاف والتحليلات' },
+  { key: 'aiImage', ar: 'صور الذكاء الاصطناعي', short: 'ذكاء صور', icon: 'image', unit: 'صورة', hint: 'توليد صور الأصناف والمنشورات' },
   { key: 'ar3d', ar: 'المجسمات الواقعية', short: 'مجسمات', icon: 'package', unit: 'مجسم', hint: 'تحويل صورة الصنف إلى مجسم ثلاثي الأبعاد', tier: 'enterprise' },
   { key: 'tableImage', ar: 'صور الطاولات والجدران', short: 'صور طاولات', icon: 'image', unit: 'صورة', hint: 'توليد خلفيات الطاولة في غرفة المنيو' },
   { key: 'dinerAi', ar: 'مساعد الطلب للضيف', short: 'مساعد الضيف', icon: 'waiter', unit: 'طلب', hint: 'الطلب بالصورة أو بالصوت من صفحة المنيو' },

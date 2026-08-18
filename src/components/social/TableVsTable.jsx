@@ -255,8 +255,8 @@ export default function TableVsTable({
         <p className="sp-note" key={m.id}>
           {pick(
             lang,
-            `أرسلتم تحدياً إلى ${m.tableB.label || 'طاولة'} في ${gameName(m.gameId, lang)} — بانتظار ردّهم.`,
-            `Challenge sent to ${m.tableB.label || 'a table'} — waiting for them.`,
+            `أرسلتم تحدياً إلى ${m.tableB.label || 'طاولة'} في ${gameName(m.gameId, lang)}، وننتظر ردّهم.`,
+            `Challenge sent to ${m.tableB.label || 'a table'}. Waiting for them.`,
           )}
         </p>
       ))}

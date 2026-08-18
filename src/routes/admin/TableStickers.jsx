@@ -217,8 +217,8 @@ export default function TableStickers() {
         </div>
         <p className="xs faint" style={{ margin: 0, lineHeight: 1.7 }}>
           {ar
-            ? 'صمّم بحرية: صور وخلفيات، 1539 أيقونة، 37 خطاً، تأثيرات نص، و20 شكل باركود. اختر قالب «استاند مناديل» وابدأ — واضبط أي رمز على «رمز الطاولة» ليتولّد لكل طاولة.'
-            : 'Design freely — then bind any QR to the table code to generate one per table.'}
+            ? 'صمّم بحرية: صور وخلفيات، 1539 أيقونة، 37 خطاً، تأثيرات نص، و20 شكل باركود. اختر قالب «استاند مناديل» وابدأ، واضبط أي رمز على «رمز الطاولة» ليتولّد لكل طاولة.'
+            : 'Design freely, then bind any QR to the table code to generate one per table.'}
         </p>
         <PrintStudio embedded />
       </div>
@@ -251,13 +251,13 @@ export default function TableStickers() {
           <select className="select" value={base} onChange={(e) => setBase(e.target.value)}>
             {bases.map((b) => (
               <option key={b.url} value={b.url}>
-                {b.label}{b.note === 'venue' ? ar ? ' — نطاق منشأتك' : ' — your domain' : b.note === 'current' ? ar ? ' — النطاق الحالي' : ' — current host' : ''}
+                {b.label}{b.note === 'venue' ? ar ? '، نطاق منشأتك' : ', your domain' : b.note === 'current' ? ar ? '، النطاق الحالي' : ', current host' : ''}
               </option>
             ))}
           </select>
           {sampleUrl ? <span className="ts-url">{sampleUrl}</span> : null}
           <span className="xs" style={{ color: 'var(--warning)' }}>
-            {ar ? 'الملصق يبقى على الطاولة شهوراً — تأكّد أن هذا النطاق سيعمل طويلاً قبل الطباعة.' : 'Stickers outlive tabs — confirm this host is permanent.'}
+            {ar ? 'الملصق يبقى على الطاولة شهوراً، تأكّد أن هذا النطاق سيعمل طويلاً قبل الطباعة.' : 'Stickers outlive tabs, confirm this host is permanent.'}
           </span>
         </div>
 
@@ -290,7 +290,7 @@ export default function TableStickers() {
             {SHEETS.map((s) => <option key={s.id} value={s.id}>{ar ? s.ar : s.en}</option>)}
           </select>
           {sheet.id === 'strip' ? (
-            <span className="xs faint">{ar ? `الصفحة = الشريحة نفسها (${setW}×${h} مم) بلا هوامش — اختر «بلا حدود» في الطابعة.` : `Page equals the strip — print borderless.`}</span>
+            <span className="xs faint">{ar ? `الصفحة = الشريحة نفسها (${setW}×${h} مم) بلا هوامش، اختر «بلا حدود» في الطابعة.` : `Page equals the strip, print borderless.`}</span>
           ) : !fit.fits ? (
             <span className="xs" style={{ color: 'var(--danger)' }}>
               {ar ? `الشريحة ${setW} مم أعرض من المساحة المتاحة (${fit.usableW} مم). اختر ورقة أكبر أو «شريحة لكل طاولة».` : `Strip is wider than the sheet.`}
@@ -435,7 +435,7 @@ function CenterFace({ table, tenant, content, qr, ar, wide }) {
         <Qr src={qr} />
         <div className="ts-qrnote">
           <strong>{ar ? 'وجّه الكاميرا للرمز' : 'Point your camera here'}</strong>
-          {ar ? 'بلا تطبيق وبلا تسجيل دخول — القائمة تفتح في ثانية.' : 'No app, no login — opens in a second.'}
+          {ar ? 'بلا تطبيق وبلا تسجيل دخول، القائمة تفتح في ثانية.' : 'No app, no login, opens in a second.'}
         </div>
       </div>
       </div>

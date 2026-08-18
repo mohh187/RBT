@@ -3,7 +3,7 @@ import { Link } from 'react-router-dom'
 import { useAuth } from '../../lib/auth.jsx'
 import { useI18n, pickLang } from '../../lib/i18n.jsx'
 import { Spinner, Empty } from '../../components/ui.jsx'
-import { watchOrdersSince, watchCategories, watchItems, updateOrderStatus, setOrderLineDone } from '../../lib/db.js'
+import { watchOrdersSince, watchCategories, watchItems, updateOrderStatus, claimOrder, setOrderLineDone } from '../../lib/db.js'
 import { useActiveOrders } from '../../lib/liveBoard.js'
 import { orderNumber, minutesSince } from '../../lib/format.js'
 import { alertParty } from '../../lib/notify.js'
@@ -17,6 +17,7 @@ import PinLock from '../../components/PinLock.jsx'
 import IncomingAlerts from '../../components/IncomingAlerts.jsx'
 import AppBackground from '../../components/AppBackground.jsx'
 import { requestLock, getPinActor } from '../../lib/pin.js'
+import { CAP } from '../../lib/permissions.js'
 import { useToast } from '../../components/Toast.jsx'
 import DeviceCheck from '../../components/DeviceCheck.jsx'
 import { useDeviceHeartbeat } from '../../lib/staffDevice.js'
@@ -41,7 +42,7 @@ function useTick(ms = 15000) {
 export default function Kds() {
   useCompactUI()
   const { t, lang, toggleTheme, theme } = useI18n()
-  const { tenantId, tenant, profile, user } = useAuth()
+  const { tenantId, tenant, profile, user, can } = useAuth()
   const toast = useToast()
   const ar = lang === 'ar'
   useSystemThemeBody(tenant, 'kds')
@@ -66,7 +67,7 @@ export default function Kds() {
   const [tpl, setTpl] = useSectionTemplate(tenant, tenantId, 'kds', templateOptions('kds'))
   const [events, setEvents] = useState([]) // live activity feed (client-side, this screen)
   const [devOpen, setDevOpen] = useState(false) // device self-test sheet
-  const prevCount = useRef(0)
+  const announced = useRef(new Set()) // ticket ids already rung for
   const seeded = useRef(false)
   const prevStatus = useRef(null) // Map(id → {status, code}) for the activity diff
   useTick()
@@ -88,13 +89,18 @@ export default function Kds() {
   useEffect(() => { if (!tenantId) return; return watchItems(tenantId, setItems) }, [tenantId])
 
   // Alert kitchen when a new ticket (accepted/preparing) appears.
+  // BY ID, NOT BY COUNT. Counting missed the ordinary busy-line case: one
+  // ticket bumped to ready in the same snapshot as one newly accepted leaves
+  // the count unchanged, so the kitchen never heard the new order. Same
+  // already-announced Set that StaffBell uses for its v2 feed.
   useEffect(() => {
     if (!orders) return
-    const n = orders.filter((o) => ['accepted', 'preparing'].includes(o.status)).length
-    if (seeded.current && n > prevCount.current) {
+    const live = orders.filter((o) => ['accepted', 'preparing'].includes(o.status))
+    const fresh = live.filter((o) => !announced.current.has(o.id))
+    live.forEach((o) => announced.current.add(o.id))
+    if (seeded.current && fresh.length) {
       alertParty({ title: lang === 'ar' ? 'تذكرة جديدة' : 'New ticket', body: lang === 'ar' ? 'طلب للتحضير' : 'Order to prepare', tag: 'kds', url: '/kds' })
     }
-    prevCount.current = n
     seeded.current = true
   }, [orders, lang])
 
@@ -171,8 +177,15 @@ export default function Kds() {
   // A DENIED bump must say so: offline-queued writes replayed against an order
   // a coworker meanwhile refunded/cancelled are rejected by rules, and the
   // optimistic card snapping back with no message read as a dead button.
-  const bumpFail = () => toast.error(ar ? 'تعذّر تحديث الطلب — تغيّرت حالته' : 'Update failed — the order state changed')
-  const accept = (o) => updateOrderStatus(tenantId, o.id, 'accepted', { acceptedByName: kdsActor, acceptedByUid: user?.uid || '', _actor: kdsActor, _code: o.code || '' }).catch(bumpFail)
+  const bumpFail = () => toast.error(ar ? 'تغيّرت حالة الطلب من شاشة ثانية، راجع التذكرة ثم أعد المحاولة' : 'The order changed on another screen. Check the ticket, then try again')
+  // Accepting is a CLAIM (compare-and-set): a plain status write let a coworker
+  // tapping Accept a second later overwrite whoever actually took the order.
+  const accept = async (o) => {
+    const res = await claimOrder(tenantId, o.id, { name: kdsActor, uid: user?.uid || '' })
+    if (res.ok) return
+    if (res.by) toast.toast(ar ? `سبقك ${res.by} إليها` : `${res.by} got it first`)
+    else if (!res.gone) toast.error(ar ? 'تعذّر قبول الطلب، جرّب مرة ثانية' : 'Could not accept the order, try again')
+  }
   const serve = (o) => updateOrderStatus(tenantId, o.id, 'served', { servedByName: kdsActor, servedByUid: user?.uid || '', _actor: kdsActor, _code: o.code || '' }).catch(bumpFail)
   const recall = (o) => updateOrderStatus(tenantId, o.id, 'preparing', { _actor: kdsActor, _code: o.code || '' }).catch(bumpFail)
 
@@ -218,7 +231,7 @@ export default function Kds() {
           })}
         </div>
         {o.notes && <div className="kds-note">{o.notes}</div>}
-        <button className={`btn kds-bump ${cls} ${allDone ? 'all-done' : ''}`} onClick={() => updateOrderStatus(tenantId, o.id, next, { _code: o.code || '' }).catch(bumpFail)}>{allDone ? <Icon name="check" size={15} /> : null}{label}</button>
+        <button className={`btn kds-bump ${cls} ${allDone ? 'all-done' : ''}`} onClick={() => updateOrderStatus(tenantId, o.id, next, { _actor: kdsActor, _code: o.code || '' }).catch(bumpFail)}>{allDone ? <Icon name="check" size={15} /> : null}{label}</button>
       </div>
     )
   }
@@ -241,7 +254,7 @@ export default function Kds() {
       </div>
       <div className="row" style={{ gap: 6, marginTop: 'auto' }}>
         <button className="btn btn-outline" style={{ flex: 'none' }} onClick={() => recall(o)} title={ar ? 'استرجاع للتحضير' : 'Recall to prep'}><Icon name="undo" size={15} /></button>
-        <button className="btn btn-success grow kds-bump" style={{ marginTop: 0 }} onClick={() => serve(o)}><Icon name="check" size={15} /> {ar ? 'قُدّم' : 'Served'}</button>
+        <button className="btn btn-success grow kds-bump" style={{ marginTop: 0 }} onClick={() => serve(o)}><Icon name="check" size={15} /> {t('markServed')}</button>
       </div>
     </div>
   )
@@ -261,14 +274,17 @@ export default function Kds() {
           title, the live badge and the clock now hide on narrow screens; the
           controls never shrink. */}
       <header className="app-bar">
-        <Link to="/cashier" className="icon-btn" aria-label={ar ? 'رجوع إلى الكاشير' : 'Back to cashier'}><Icon name="back" /></Link>
+        {/* The kitchen role has no TAKE_ORDERS, so /cashier bounced it straight
+            back to /portal — a back arrow that went nowhere. Cap-filtered like
+            the portal's quick links: the cook lands on the portal instead. */}
+        <Link to={can(CAP.TAKE_ORDERS) ? '/cashier' : '/portal'} className="icon-btn" aria-label={ar ? 'رجوع' : 'Back'}><Icon name="back" /></Link>
         <strong className="kds-title" style={{ fontSize: 'var(--fs-md)', display: 'inline-flex', alignItems: 'center', gap: 6 }}><Icon name="kitchen" size={18} /> {t('kitchen')}</strong>
         <span className="badge badge-success kds-live" style={{ fontSize: 10 }}>● {ar ? 'مباشر' : 'Live'}</span>
         <div className="grow" />
         <span className="kds-clock-wrap"><Clock /></span>
         <div className="pos-tpl-switch row" style={{ gap: 2, flex: 'none' }}>
           {templateOptions('kds').map((o) => (
-            <button key={o.id} type="button" className={`icon-btn ${tpl === o.id ? 'active' : ''}`} title={lang === 'ar' ? `${o.ar}${o.hint ? ' — ' + o.hint : ''}` : o.en} onClick={() => setTpl(o.id)}>
+            <button key={o.id} type="button" className={`icon-btn ${tpl === o.id ? 'active' : ''}`} title={lang === 'ar' ? `${o.ar}${o.hint ? ` (${o.hint})` : ''}` : o.en} onClick={() => setTpl(o.id)}>
               <Icon name={{ rail: 'ticket', kanban: 'list', grid: 'grid', display: 'eye' }[o.id] || 'grid'} size={16} />
             </button>
           ))}
@@ -325,7 +341,7 @@ export default function Kds() {
                   <span className="xs faint">{o.tableLabel || t('takeaway')}</span>
                   {/* expo actions: full 44px tap targets (greasy kitchen fingers) */}
                   <button className="icon-btn" style={{ width: 44, height: 44 }} onClick={() => recall(o)} title={ar ? 'استرجاع' : 'Recall'}><Icon name="undo" size={16} /></button>
-                  <button className="btn btn-success" style={{ minHeight: 44, fontWeight: 800 }} onClick={() => serve(o)}>{ar ? 'قُدّم' : 'Served'}</button>
+                  <button className="btn btn-success" style={{ minHeight: 44, fontWeight: 800 }} onClick={() => serve(o)}>{t('markServed')}</button>
                 </div>
               ))}
             </div>

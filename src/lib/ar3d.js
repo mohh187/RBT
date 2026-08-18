@@ -19,7 +19,7 @@ export async function makeStandeeGlb(imageSrc, { heightM = 0.26 } = {}) {
 
   const url = typeof imageSrc === 'string' ? imageSrc : URL.createObjectURL(imageSrc)
   try {
-    const texture = await new Promise((res, rej) => new TextureLoader().load(url, res, undefined, () => rej(new Error('تعذر تحميل الصورة (قد يكون بسبب CORS — ارفع الصورة مباشرة أو فعّل إعداد CORS)'))))
+    const texture = await new Promise((res, rej) => new TextureLoader().load(url, res, undefined, () => rej(new Error('تعذّر تحميل الصورة. ارفعها مباشرة بدل استخدام الرابط، أو فعّل إعداد CORS على مصدرها.'))))
     texture.colorSpace = SRGBColorSpace
     const img = texture.image
     const aspect = img && img.width ? img.width / img.height : 1

@@ -589,7 +589,7 @@ export default function Items() {
   const hideFromMenu = (it, e) => {
     e?.stopPropagation()
     saveItem(tenantId, it.id, { archived: true, available: false })
-      .then(() => toast.success(lang === 'ar' ? 'أُخفي الصنف من المنيو — بياناته وتقاريره محفوظة' : 'Hidden from the menu — data and reports kept'))
+      .then(() => toast.success(lang === 'ar' ? 'أُخفي الصنف من المنيو، بياناته وتقاريره محفوظة' : 'Hidden from the menu, data and reports kept'))
       .catch(() => toast.error(t('error')))
   }
 
@@ -687,7 +687,7 @@ export default function Items() {
         : <div style={{ width: '100%', height: 110, background: 'var(--surface-2)', display: 'grid', placeItems: 'center' }}><Icon name="coffee" size={26} className="faint" /></div>}
       <div className="stack" style={{ gap: 4, padding: '8px 10px 10px' }}>
         <span className="bold" style={{ lineHeight: 1.25, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{pickLang(it, 'name', lang)}</span>
-        <span className="xs faint">{catName(it.categoryId) || '—'}</span>
+        <span className="xs faint">{catName(it.categoryId) || '·'}</span>
         <div className="row-between" style={{ alignItems: 'center' }}>
           <span className="pos-price"><Price value={it.price} currency={currency} lang={lang} /></span>
           {!it.archived && (
@@ -744,7 +744,7 @@ export default function Items() {
             </span>
           )}
           <button className="btn btn-sm btn-outline" onClick={() => { if (impPickRef.current) impPickRef.current.click() }}
-            title={lang === 'ar' ? 'حدد مجموعة صور — كل صورة تصبح صنفاً باسم ملفها، والموجود مسبقاً يُتخطى' : 'Pick a batch of photos — each becomes an item named after its file; existing names are skipped'}>
+            title={lang === 'ar' ? 'حدد مجموعة صور. كل صورة تصبح صنفاً باسم ملفها، والموجود مسبقاً يُتخطى' : 'Pick a batch of photos, each becomes an item named after its file; existing names are skipped'}>
             <Icon name="upload" size={13} /> {lang === 'ar' ? 'استيراد من صور' : 'Import from photos'}
           </button>
           <input ref={impPickRef} type="file" accept="image/*" multiple hidden onChange={onImpPick} />
@@ -773,8 +773,8 @@ export default function Items() {
           <div className="stack" style={{ gap: 'var(--sp-2)' }}>
             <p className="sm faint" style={{ margin: 0 }}>
               {lang === 'ar'
-                ? 'كل صورة تصبح صنفاً جديداً: الاسم من اسم الملف، السعر 0 (عدّله لاحقاً)، والصورة تُرفع وتُقاس تلقائياً. الأسماء الموجودة مسبقاً تُتخطى — فيمكنك تحديد المجلد كاملاً بأمان.'
-                : 'Each photo becomes a new item: name from the filename, price 0 (edit later), photo uploaded and measured. Existing names are skipped — selecting the whole folder is safe.'}
+                ? 'كل صورة تصبح صنفاً جديداً: الاسم من اسم الملف، السعر 0 (عدّله لاحقاً)، والصورة تُرفع وتُقاس تلقائياً. الأسماء الموجودة مسبقاً تُتخطى، فيمكنك تحديد المجلد كاملاً بأمان.'
+                : 'Each photo becomes a new item: name from the filename, price 0 (edit later), photo uploaded and measured. Existing names are skipped, selecting the whole folder is safe.'}
             </p>
             <div className="field">
               <label>{lang === 'ar' ? 'الفئة التي تُضاف إليها' : 'Category to add into'}</label>
@@ -1077,8 +1077,8 @@ function ThemeFitPreview({ st, lang, uploading, quota, onUseCurrent, onPickNew, 
       {st.stage === 'source' && (
         <div className="stack" style={{ gap: 'var(--sp-2)' }}>
           <p className="sm faint">{ar
-            ? 'أي صورة يعيد الذكاء تصويرها لتناسب ثيم المنيو؟ الطبق نفسه لا يتغير — تتغير الزاوية والإضاءة والتنسيق فقط.'
-            : 'Which photo should the AI re-shoot to fit the menu theme? The dish itself never changes — only angle, light and framing.'}</p>
+            ? 'أي صورة يعيد الذكاء تصويرها لتناسب ثيم المنيو؟ الطبق نفسه لا يتغير، تتغير الزاوية والإضاءة والتنسيق فقط.'
+            : 'Which photo should the AI re-shoot to fit the menu theme? The dish itself never changes. Only angle, light and framing.'}</p>
           <button className="btn btn-outline" onClick={onUseCurrent}>
             <Icon name="image" size={16} /> {ar ? 'الصورة الحالية' : 'The current photo'}
           </button>
@@ -1102,7 +1102,7 @@ function ThemeFitPreview({ st, lang, uploading, quota, onUseCurrent, onPickNew, 
           </div>
           <p className="xs faint text-center">
             {st.legacy
-              ? (ar ? 'توليد حر — لا يُحفظ شيء قبل الاعتماد' : 'Free generation — nothing is saved before approval')
+              ? (ar ? 'توليد حر، لا يُحفظ شيء قبل الاعتماد' : 'Free generation, nothing is saved before approval')
               : `${ar ? 'وفق ثيم' : 'Theme'}: ${st.direction?.labelAr || ''}${st.cut ? (ar ? ' · قصاصة شفافة' : ' · transparent cutout') : ''}`}
           </p>
           {monthCap > 0 && (
@@ -1206,7 +1206,7 @@ function ItemEditor({ tenantId, cats, currency, value, onClose, onSaved, onDelet
       setForm((s) => ({ ...s, imageUrl: url, imageRatio: ratio }))
       toast.success(lang === 'ar' ? 'أُزيلت الخلفية' : 'Background removed')
     } catch (_) {
-      toast.error(lang === 'ar' ? 'تعذّرت إزالة الخلفية — جرّب صورة أصغر أو أعد المحاولة' : 'Background removal failed — try again')
+      toast.error(lang === 'ar' ? 'تعذّرت إزالة الخلفية، جرّب صورة أصغر أو أعد المحاولة' : 'Background removal failed, try again')
     } finally {
       setBgBusy(false)
     }
@@ -1247,7 +1247,7 @@ function ItemEditor({ tenantId, cats, currency, value, onClose, onSaved, onDelet
       const file = new File([glb], `ar-${Date.now()}.glb`, { type: 'model/gltf-binary' })
       const url = await uploadFile(tenantId, file, 'library/ar')
       set('arStandeeUrl', url)
-      toast.success(lang === 'ar' ? 'جاهز — احفظ الصنف ليظهر زر AR في المنيو' : 'Done — save the item to enable AR')
+      toast.success(lang === 'ar' ? 'جاهز، احفظ الصنف ليظهر زر AR في المنيو' : 'Done, save the item to enable AR')
     } catch (e) {
       toast.error(e?.message || (lang === 'ar' ? 'تعذر إنشاء المجسم' : 'AR build failed'))
     } finally { setArBusy('') }
@@ -1277,7 +1277,7 @@ function ItemEditor({ tenantId, cats, currency, value, onClose, onSaved, onDelet
       if (!url) throw new Error(lang === 'ar' ? 'لم يصل رابط المجسم' : 'No model URL returned')
       set('model3dUrl', url)
       set('model3dUsdzUrl', res?.data?.usdzUrl || '')
-      toast.success(lang === 'ar' ? 'اكتمل المجسم الواقعي — احفظ الصنف' : 'Realistic model ready — save the item')
+      toast.success(lang === 'ar' ? 'اكتمل المجسم الواقعي، احفظ الصنف' : 'Realistic model ready, save the item')
     } catch (e) {
       toast.error(String(e?.message || e))
     } finally { setReal3dSec(-1) }
@@ -1291,7 +1291,7 @@ function ItemEditor({ tenantId, cats, currency, value, onClose, onSaved, onDelet
     try {
       const url = await uploadFile(tenantId, f, 'library/ar')
       set('model3dUrl', url)
-      toast.success(lang === 'ar' ? 'رُفع النموذج — احفظ الصنف' : 'Model uploaded — save the item')
+      toast.success(lang === 'ar' ? 'رُفع النموذج، احفظ الصنف' : 'Model uploaded, save the item')
     } catch (_) { toast.error(t('error')) } finally { setArBusy('') }
   }
   const genItemImage = async () => {
@@ -1373,7 +1373,7 @@ function ItemEditor({ tenantId, cats, currency, value, onClose, onSaved, onDelet
           file = await anchorCutout(file, { aspect: direction.px[0] / direction.px[1], anchor: direction.anchor || 'bottom', widthFrac: direction.widthFrac || 0.88, margin: direction.margin || 0.03 })
         } catch (_) {
           cutOk = false
-          toast.error(lang === 'ar' ? 'تعذّرت إزالة الخلفية — اعتمد الصورة ثم استخدم زر «إزالة الخلفية»' : 'Background removal failed — approve, then use the remove-background button')
+          toast.error(lang === 'ar' ? 'تعذّرت إزالة الخلفية، اعتمد الصورة ثم استخدم زر «إزالة الخلفية»' : 'Background removal failed. Approve, then use the remove-background button')
         }
       }
       if (fitRun.current !== token) return
@@ -1398,7 +1398,7 @@ function ItemEditor({ tenantId, cats, currency, value, onClose, onSaved, onDelet
       }
       if (aiFit.url) URL.revokeObjectURL(aiFit.url)
       setAiFit(null)
-      toast.success(lang === 'ar' ? 'اعتُمدت الصورة — احفظ الصنف لتثبيتها' : 'Approved — save the item to keep it')
+      toast.success(lang === 'ar' ? 'اعتُمدت الصورة، احفظ الصنف لتثبيتها' : 'Approved, save the item to keep it')
     } catch (_) {
       toast.error(lang === 'ar' ? 'تعذّر رفع الصورة' : 'Upload failed')
     } finally { setUploading(false) }
@@ -1434,7 +1434,7 @@ function ItemEditor({ tenantId, cats, currency, value, onClose, onSaved, onDelet
       const clean = String(out || '').trim()
       if (!clean) throw new Error(lang === 'ar' ? 'لم يصل رد' : 'No response')
       set('descAr', clean)
-      toast.success(lang === 'ar' ? 'كُتب الوصف — عدّله كما تحب' : 'Description written')
+      toast.success(lang === 'ar' ? 'كُتب الوصف، عدّله كما تحب' : 'Description written')
     } catch (e) {
       toast.error(e?.message || (lang === 'ar' ? 'تعذرت الكتابة' : 'Failed'))
     } finally { setAiDescBusy(false) }
@@ -1461,7 +1461,7 @@ function ItemEditor({ tenantId, cats, currency, value, onClose, onSaved, onDelet
       const raw = String(out || '')
       const m = raw.match(/\{[\s\S]*\}/)
       const j = m ? JSON.parse(m[0]) : null
-      if (!j || !(j.title || j.body)) throw new Error(lang === 'ar' ? 'رد غير مفهوم — أعد المحاولة' : 'Unparseable response')
+      if (!j || !(j.title || j.body)) throw new Error(lang === 'ar' ? 'رد غير مفهوم، أعد المحاولة' : 'Unparseable response')
       set('story', {
         ...(form.story || {}),
         title: String(j.title || '').trim(),
@@ -1469,7 +1469,7 @@ function ItemEditor({ tenantId, cats, currency, value, onClose, onSaved, onDelet
         sourceLine: String(j.sourceLine || '').trim(),
         chefLine: String(j.chefLine || '').trim(),
       })
-      toast.success(lang === 'ar' ? 'كُتبت القصة — راجعها وعدّلها' : 'Story written — review it')
+      toast.success(lang === 'ar' ? 'كُتبت القصة، راجعها وعدّلها' : 'Story written, review it')
     } catch (e) {
       toast.error(e?.message || (lang === 'ar' ? 'تعذرت الكتابة' : 'Failed'))
     } finally { setDishStoryBusy(false) }
@@ -1890,7 +1890,7 @@ function ItemEditor({ tenantId, cats, currency, value, onClose, onSaved, onDelet
         {/* Image tools — one compact wrap row (was a tall vertical column beside the thumb). */}
         <div className="row" style={{ gap: 6, flexWrap: 'wrap' }}>
           <button type="button" className="btn btn-sm btn-outline" style={{ padding: '4px 8px' }} disabled={fitBusy || aiImgBusy || uploading} onClick={openThemeFit}
-            title={lang === 'ar' ? 'يعيد تصوير صورتك الحقيقية بزاوية وإضاءة تناسب ثيم المنيو — بدون تغيير الطبق' : 'Re-shoots your real photo to fit the menu theme — same dish, new angle and light'}>
+            title={lang === 'ar' ? 'يعيد تصوير صورتك الحقيقية بزاوية وإضاءة تناسب ثيم المنيو، بدون تغيير الطبق' : 'Re-shoots your real photo to fit the menu theme. Same dish, new angle and light'}>
             <Icon name="palette" size={13} /> {fitBusy ? (lang === 'ar' ? 'يلائم…' : 'Fitting…') : (lang === 'ar' ? 'ملاءمة للثيم' : 'Fit to theme')}
           </button>
           <button type="button" className="btn btn-sm btn-outline" style={{ padding: '4px 8px' }} disabled={aiImgBusy || fitBusy || uploading} onClick={genItemImage}
@@ -1961,7 +1961,7 @@ function ItemEditor({ tenantId, cats, currency, value, onClose, onSaved, onDelet
             </select>
             <button type="button" className="btn btn-sm btn-outline" style={{ whiteSpace: 'nowrap' }} onClick={applyImageStyleToAll}>{lang === 'ar' ? 'تطبيق على الكل' : 'Apply to all'}</button>
           </div>
-          <p className="xs faint">{lang === 'ar' ? 'الشفاف العائم: تظهر الصورة بلا إطار بظلّ ناعم — مثالي لصور PNG بدون خلفية في ثيم المتجر.' : 'Transparent float: frameless image with a soft shadow — ideal for background-free PNGs in the storefront theme.'}</p>
+          <p className="xs faint">{lang === 'ar' ? 'الشفاف العائم: تظهر الصورة بلا إطار بظلّ ناعم، مثالي لصور PNG بدون خلفية في ثيم المتجر.' : 'Transparent float: frameless image with a soft shadow, ideal for background-free PNGs in the storefront theme.'}</p>
         </div>
 
         {/* «نقاط تفاعلية على الصورة» — tappable ingredient/sauce pins inside the dish photo */}
@@ -1971,7 +1971,7 @@ function ItemEditor({ tenantId, cats, currency, value, onClose, onSaved, onDelet
             <span className="faint xs num">({(form.hotspots || []).length}/8)</span>
           </label>
           <HotspotsEditor lang={lang} imageUrl={form.imageUrl} hotspots={form.hotspots || []} onChange={(v) => set('hotspots', v)} />
-          <p className="xs faint">{lang === 'ar' ? 'يضغط العميل على النقطة داخل صورة الطبق ليقرأ ما هي — نوع الجبن، الصوص، الإضافة المميزة.' : 'Customers tap a dot inside the dish photo to read what that part of the plate is.'}</p>
+          <p className="xs faint">{lang === 'ar' ? 'يضغط العميل على النقطة داخل صورة الطبق ليقرأ ما هي. نوع الجبن، الصوص، الإضافة المميزة.' : 'Customers tap a dot inside the dish photo to read what that part of the plate is.'}</p>
         </div>
 
         {/* «قصة الطبق» — an editorial story the guest can read from the item sheet */}
@@ -2119,7 +2119,7 @@ function ItemEditor({ tenantId, cats, currency, value, onClose, onSaved, onDelet
                     <span className="xs bold">{lang === 'ar' ? 'ظل ملامسة تحت الطبق' : 'Contact shadow under the dish'}</span>
                     <span className="xs faint">
                       {dpSurface
-                        ? (lang === 'ar' ? 'ظل بيضاوي خفيف عند التقاء الطبق بالسطح، يمنعه من الطفو. مطفأ إلا إذا طلبته — صورة فيها ظلّها الحقيقي لا تحتاجه.' : 'A soft ellipse where the dish meets the material, so the cutout stops floating. Off unless you ask for it: a photo that already carries its own shadow does not need a second one.')
+                        ? (lang === 'ar' ? 'ظل بيضاوي خفيف عند التقاء الطبق بالسطح، يمنعه من الطفو. مطفأ إلا إذا طلبته، صورة فيها ظلّها الحقيقي لا تحتاجه.' : 'A soft ellipse where the dish meets the material, so the cutout stops floating. Off unless you ask for it: a photo that already carries its own shadow does not need a second one.')
                         : (lang === 'ar' ? 'لا سطح تحت الطبق، فلا شيء يقع عليه الظل. اختر سطحاً أعلاه أولاً.' : 'There is no surface under the dish, so there is nothing for a shadow to fall on. Pick a material above first.')}
                     </span>
                   </span>
@@ -2131,7 +2131,7 @@ function ItemEditor({ tenantId, cats, currency, value, onClose, onSaved, onDelet
                     <span className="xs faint">
                       {dpReflective
                         ? (lang === 'ar' ? 'لمعة ناعمة تحت الطبق، كما يعكس السطح المصقول ما يقف عليه. مطفأة إلا إذا طلبتها.' : 'A soft sheen under the dish, the way a polished material reflects what stands on it. Off unless you ask for it.')
-                        : (lang === 'ar' ? `السطح المختار «${dpSurface ? (lang === 'ar' ? dpSurface.labelAr : dpSurface.labelEn) : '—'}» غير عاكس، فلا انعكاس له. اختر الرخام الداكن أو الستيل المصقول أو طاولة الجوز.` : 'The chosen material does not reflect, so there is nothing to switch on. Pick dark marble, brushed steel or the walnut table.')}
+                        : (lang === 'ar' ? `السطح المختار «${dpSurface ? (lang === 'ar' ? dpSurface.labelAr : dpSurface.labelEn) : '. '}» غير عاكس، فلا انعكاس له. اختر الرخام الداكن أو الستيل المصقول أو طاولة الجوز.` : 'The chosen material does not reflect, so there is nothing to switch on. Pick dark marble, brushed steel or the walnut table.')}
                     </span>
                   </span>
                   <input type="checkbox" disabled={!dpReflective} checked={dpReflective && !!form.reflect} onChange={(e) => set('reflect', e.target.checked)} style={{ width: 22, height: 22, flex: 'none' }} />
@@ -2220,7 +2220,7 @@ function ItemEditor({ tenantId, cats, currency, value, onClose, onSaved, onDelet
             <label>{lang === 'ar' ? 'حتى الساعة' : 'Until'}</label>
             <input className="input" type="time" value={form.availableTo || ''} onChange={(e) => set('availableTo', e.target.value)} />
           </div>
-          <span className="xs faint" style={{ paddingBottom: 8 }}>{lang === 'ar' ? 'اتركهما فارغين ليظهر دائماً — مثال: فطور 06:00 حتى 11:30 يختفي تلقائياً بعدها.' : 'Leave empty for always — e.g. breakfast 06:00-11:30 auto-hides after.'}</span>
+          <span className="xs faint" style={{ paddingBottom: 8 }}>{lang === 'ar' ? 'اتركهما فارغين ليظهر دائماً، مثال: فطور 06:00 حتى 11:30 يختفي تلقائياً بعدها.' : 'Leave empty for always, e.g. breakfast 06:00-11:30 auto-hides after.'}</span>
         </div>
 
         {/* variants (single-select size, replaces base price) — they belong WITH
@@ -2228,7 +2228,7 @@ function ItemEditor({ tenantId, cats, currency, value, onClose, onSaved, onDelet
             «المقاسات والإضافات» could never scroll to them */}
         <div className="field">
           <div className="row-between">
-            <label>{t('variants')} <span className="faint xs">({lang === 'ar' ? 'حجم/نوع — يستبدل السعر' : 'size — replaces price'})</span></label>
+            <label>{t('variants')} <span className="faint xs">({lang === 'ar' ? 'حجم/نوع، يستبدل السعر' : 'size, replaces price'})</span></label>
             <button className="btn btn-sm btn-outline" onClick={addVariant}>+ {t('addVariant')}</button>
           </div>
           {(form.variants || []).map((v, i) => (
@@ -2345,7 +2345,7 @@ function ItemEditor({ tenantId, cats, currency, value, onClose, onSaved, onDelet
               </button>
             ) : (
               <span className="badge badge-gold" title={lang === 'ar' ? 'التحويل الواقعي الكامل ميزة الباقة المتكاملة' : 'Realistic conversion is an Enterprise perk'}>
-                <Icon name="lock" size={11} /> {lang === 'ar' ? 'تحويل واقعي 3D — الباقة المتكاملة' : 'Realistic 3D — Enterprise'}
+                <Icon name="lock" size={11} /> {lang === 'ar' ? 'تحويل واقعي 3D، الباقة المتكاملة' : 'Realistic 3D, Enterprise'}
               </span>
             )}
             {form.arStandeeUrl && <span className="badge badge-success"><Icon name="check" size={11} /> {lang === 'ar' ? 'مجسم الصورة جاهز' : 'Standee ready'}</span>}
@@ -2371,7 +2371,7 @@ function ItemEditor({ tenantId, cats, currency, value, onClose, onSaved, onDelet
             <div className="field" style={{ marginTop: 10 }}>
               <label>
                 {lang === 'ar' ? 'الارتفاع الحقيقي للطبق' : 'Real dish height'}{' '}
-                <span className="faint xs">({lang === 'ar' ? 'سم — يضبط الحجم في العرض وعلى الطاولة في AR' : 'cm — sets the size in the viewer and in AR'})</span>
+                <span className="faint xs">({lang === 'ar' ? 'سم، يضبط الحجم في العرض وعلى الطاولة في AR' : 'cm, sets the size in the viewer and in AR'})</span>
               </label>
               <input
                 className="input num" type="number" min="1" max="200" step="0.5" dir="ltr"
@@ -2382,7 +2382,7 @@ function ItemEditor({ tenantId, cats, currency, value, onClose, onSaved, onDelet
               />
               <p className="xs faint" style={{ marginTop: 4, lineHeight: 1.6 }}>
                 {lang === 'ar'
-                  ? 'اتركه فارغاً ليُستخدم 11 سم (فنجان قياسي). قِس ارتفاع الطبق كما يُقدَّم — طبق مشاركة ~26 سم، كوب ~11 سم، قطعة حلى ~8 سم.'
+                  ? 'اتركه فارغاً ليُستخدم 11 سم (فنجان قياسي). قِس ارتفاع الطبق كما يُقدَّم. طبق مشاركة ~26 سم، كوب ~11 سم، قطعة حلى ~8 سم.'
                   : 'Leave empty for 11cm (a standard cup). Measure the dish as served.'}
               </p>
             </div>
@@ -2428,14 +2428,14 @@ function ItemEditor({ tenantId, cats, currency, value, onClose, onSaved, onDelet
           </label>
           {/* promo tag: who gets an automatic WhatsApp when this item is starred/added */}
           <div className="field" style={{ width: '100%' }}>
-            <label style={{ display: 'inline-flex', alignItems: 'center', gap: 5 }}><Icon name="bellRing" size={13} /> {lang === 'ar' ? 'الوسم الترويجي — من يُبلَّغ بهذا الصنف تلقائياً؟' : 'Promo tag — who gets auto-notified about this item?'}</label>
+            <label style={{ display: 'inline-flex', alignItems: 'center', gap: 5 }}><Icon name="bellRing" size={13} /> {lang === 'ar' ? 'الوسم الترويجي، من يُبلَّغ بهذا الصنف تلقائياً؟' : 'Promo tag, who gets auto-notified about this item?'}</label>
             <select className="select" value={form.promoNotify || 'default'} onChange={(e) => set('promoNotify', e.target.value)}>
               <option value="default">{lang === 'ar' ? 'حسب إعدادات الأتمتة العامة' : 'Follow global automation settings'}</option>
               <option value="members">{lang === 'ar' ? 'الأعضاء فقط' : 'Members only'}</option>
               <option value="all">{lang === 'ar' ? 'كل العملاء' : 'Everyone'}</option>
               <option value="off">{lang === 'ar' ? 'بدون إشعار' : 'No notification'}</option>
             </select>
-            <span className="xs faint">{lang === 'ar' ? 'يُرسل واتساب تلقائياً عند تمييز الصنف بالنجمة أو إضافته — الإعدادات العامة في صفحة «الإعلانات والحملات».' : 'Auto WhatsApp on starring/adding this item — global defaults live in Campaigns.'}</span>
+            <span className="xs faint">{lang === 'ar' ? 'يُرسل واتساب تلقائياً عند تمييز الصنف بالنجمة أو إضافته، الإعدادات العامة في صفحة «الإعلانات والحملات».' : 'Auto WhatsApp on starring/adding this item, global defaults live in Campaigns.'}</span>
           </div>
           <label className="row" style={{ gap: 8, cursor: 'pointer' }}>
             <input type="checkbox" checked={!!form.trackStock} onChange={(e) => set('trackStock', e.target.checked)} style={{ width: 20, height: 20 }} />
@@ -2561,7 +2561,7 @@ function CompositionEditor({ form, setForm, lang, uploading, variant, setVariant
       </p>
 
       <CxGroup icon="image" title={ar ? 'الخلفية' : 'Backdrop'} resetLabel={resetLabel} onReset={resetBg}
-        hint={ar ? 'صورة أو فيديو خلف هذا الصنف — تتفوق على الخلفية الموحّدة في الاستوديو.' : 'An image or video behind this item, overriding the venue-wide backdrop.'}>
+        hint={ar ? 'صورة أو فيديو خلف هذا الصنف، تتفوق على الخلفية الموحّدة في الاستوديو.' : 'An image or video behind this item, overriding the venue-wide backdrop.'}>
         <div className="row" style={{ gap: 6, flexWrap: 'wrap', alignItems: 'center' }}>
           <label className="btn btn-sm btn-outline" style={{ cursor: 'pointer' }}>
             <Icon name="image" size={13} /> {ar ? 'رفع صورة' : 'Upload image'}
@@ -2609,7 +2609,7 @@ function CompositionEditor({ form, setForm, lang, uploading, variant, setVariant
               value={form.bgFilter || ''} onChange={(v) => set('bgFilter', v)} />
           </div>
         ) : (
-          <p className="xs faint" style={{ margin: 0 }}>{ar ? 'لا خلفية لهذا الصنف — يظهر على خلفية الثيم العادية.' : 'No backdrop: the item sits on the theme background.'}</p>
+          <p className="xs faint" style={{ margin: 0 }}>{ar ? 'لا خلفية لهذا الصنف، يظهر على خلفية الثيم العادية.' : 'No backdrop: the item sits on the theme background.'}</p>
         )}
       </CxGroup>
 
@@ -2637,11 +2637,11 @@ function CompositionEditor({ form, setForm, lang, uploading, variant, setVariant
           <CxSlider label={ar ? 'الإزاحة الرأسية في القائمة' : 'Vertical offset in the list'} format={cxOff}
             min={RANGE.offset.min} max={RANGE.offset.max} step={RANGE.offset.step}
             value={listY} onChange={(v) => set('listY', v)} />
-          <CxSlider label={ar ? 'الإمالة على السطح — القائمة' : 'Lean on the surface — list'} format={cxDeg}
+          <CxSlider label={ar ? 'الإمالة على السطح، القائمة' : 'Lean on the surface, list'} format={cxDeg}
             min={RANGE.tilt.min} max={RANGE.tilt.max} step={RANGE.tilt.step}
             value={listTilt} onChange={(v) => set('listTilt', v)} />
           {listFollows && (
-            <p className="xs faint" style={{ margin: 0 }}>{ar ? 'تتبع القائمة حالياً قيم الصنف المفتوح — حرّك أي مؤشر هنا لتفصلها.' : 'The list currently follows the item screen — move any slider here to split them.'}</p>
+            <p className="xs faint" style={{ margin: 0 }}>{ar ? 'تتبع القائمة حالياً قيم الصنف المفتوح، حرّك أي مؤشر هنا لتفصلها.' : 'The list currently follows the item screen, move any slider here to split them.'}</p>
           )}
         </div>
 
@@ -2658,7 +2658,7 @@ function CompositionEditor({ form, setForm, lang, uploading, variant, setVariant
           <CxSlider label={ar ? 'الإزاحة الرأسية' : 'Vertical offset'} format={cxOff}
             min={RANGE.offset.min} max={RANGE.offset.max} step={RANGE.offset.step}
             value={stageY} onChange={(v) => set('imageY', v)} />
-          <CxSlider label={ar ? 'الإمالة على السطح — نافذة الصنف' : 'Lean on the surface — item window'} format={cxDeg}
+          <CxSlider label={ar ? 'الإمالة على السطح، نافذة الصنف' : 'Lean on the surface, item window'} format={cxDeg}
             min={RANGE.tilt.min} max={RANGE.tilt.max} step={RANGE.tilt.step}
             value={stageTilt} onChange={(v) => set('imageTilt', v)} />
         </div>
@@ -2679,7 +2679,7 @@ function CompositionEditor({ form, setForm, lang, uploading, variant, setVariant
       </CxGroup>
 
       <CxGroup icon="moon" title={ar ? 'الظل' : 'Shadow'} resetLabel={resetLabel} onReset={resetShadow}
-        hint={ar ? 'ظل يتبع حدود الطبق نفسه لا حدود المربع — مناسب للصور المقصوصة الخلفية، ويمكن تحريكه في أي اتجاه.' : 'A shadow that follows the dish cutout rather than its box, movable in any direction.'}>
+        hint={ar ? 'ظل يتبع حدود الطبق نفسه لا حدود المربع. مناسب للصور المقصوصة الخلفية، ويمكن تحريكه في أي اتجاه.' : 'A shadow that follows the dish cutout rather than its box, movable in any direction.'}>
         <label className="row-between" style={{ cursor: 'pointer', gap: 10 }}>
           <span className="xs bold">{ar ? 'تشغيل الظل' : 'Shadow on'}</span>
           <input type="checkbox" checked={!!form.shadowOn} onChange={(e) => set('shadowOn', e.target.checked)} style={{ width: 22, height: 22, flex: 'none' }} />
@@ -2713,7 +2713,7 @@ function CompositionEditor({ form, setForm, lang, uploading, variant, setVariant
 
       <CxGroup icon="sparkles" title={ar ? 'المؤثر الحي' : 'Live effect'} resetLabel={resetLabel} onReset={() => set('effect', '')}
         hint={ar
-          ? 'بخار أو دخان أو لمعان يتحرك فوق الصنف في المنيو وفي عارض المجسم داخل التطبيق. في وضع AR على الطاولة (الكاميرا) يظهر المجسم فقط بلا مؤثر — قيد تقني من نظام التشغيل.'
+          ? 'بخار أو دخان أو لمعان يتحرك فوق الصنف في المنيو وفي عارض المجسم داخل التطبيق. في وضع AR على الطاولة (الكاميرا) يظهر المجسم فقط بلا مؤثر، قيد تقني من نظام التشغيل.'
           : 'Animates over the photo in the menu and the in-app 3D viewer. Real camera AR shows the bare model only (OS limitation).'}>
         <CxSelect lang={lang} label={ar ? 'المؤثر فوق الصنف' : 'Effect over the dish'} options={FX}
           value={form.effect || ''} onChange={(v) => set('effect', v)} />
@@ -2758,7 +2758,7 @@ function CompositionEditor({ form, setForm, lang, uploading, variant, setVariant
 // TABLE_RANGE at render time, never from a local number.
 const TBL_ITEM_SLIDERS = [
   ['lift', 'جلوس الطبق على الطاولة (مقدار النزول)', 'Seat the dish (drop onto the table)', cxOff],
-  ['melt', 'ذوبان علوي — السطح خلف النص', 'Top melt behind the text', cxPct],
+  ['melt', 'ذوبان علوي: السطح خلف النص', 'Top melt behind the text', cxPct],
   ['meltBottom', 'ذوبان الحافة السفلية', 'Bottom-edge melt', cxPct],
   ['veil', 'حجاب القراءة (لوح فوق السطح لوضوح النص)', 'Reading veil over the surface', cxPct],
   ['dim', 'تعتيم كامل فوق السطح', 'Flat darkening over the surface', cxPct],
@@ -2814,15 +2814,15 @@ function ItemTableEditor({ form, setForm, lang, tenant, uploading, onPickImage, 
     ['own', ar ? 'طاولة مستقلة' : 'Independent table'],
     ['off', ar ? 'بدون طاولة لهذا الصنف' : 'No table for this dish'],
   ]
-  const over = (k) => (own && own[k] != null ? (ar ? ' — مخصص' : ' — custom') : '')
+  const over = (k) => (own && own[k] != null ? (ar ? '، مخصص' : ', custom') : '')
   const sliders = [TBL_ITEM_SLIDERS[0], ...(effKind === 'image' ? [TBL_SCALE_SLIDER] : []), ...TBL_ITEM_SLIDERS.slice(1)]
   return (
     <div className="stack" style={{ gap: 10, marginBottom: 'var(--sp-3)' }}>
       <CxGroup icon="grid" title={ar ? 'طاولة هذا الصنف' : 'This dish’s table'}
         resetLabel={ar ? 'إرجاع لطاولة الغرفة' : 'Back to the room table'} onReset={() => setMode('room')}
         hint={ar
-          ? 'اللوح الذي يحمل اسم الصنف وسعره يُرسم كطاولة (ثيم «المجلة الداكنة»). افتراضياً يتبع هذا الصنف طاولة الغرفة المضبوطة في الاستوديو — وهنا تفرده بطاولة مستقلة أو تحرمه منها وحده.'
-          : 'The panel carrying this dish’s name and price paints as a table (dark editorial theme). By default the dish follows the room table from the studio; here it can carry its own — or none at all.'}>
+          ? 'اللوح الذي يحمل اسم الصنف وسعره يُرسم كطاولة (ثيم «المجلة الداكنة»). افتراضياً يتبع هذا الصنف طاولة الغرفة المضبوطة في الاستوديو، وهنا تفرده بطاولة مستقلة أو تحرمه منها وحده.'
+          : 'The panel carrying this dish’s name and price paints as a table (dark editorial theme). By default the dish follows the room table from the studio; here it can carry its own, or none at all.'}>
         <div className="row" style={{ gap: 6, flexWrap: 'wrap' }}>
           {modes.map(([id, label]) => (
             <button key={id} type="button" className={`chip ${mode === id ? 'active' : ''}`} aria-pressed={mode === id} onClick={() => setMode(id)}>{label}</button>
@@ -2836,7 +2836,7 @@ function ItemTableEditor({ form, setForm, lang, tenant, uploading, onPickImage, 
         )}
         {mode === 'off' && (
           <p className="xs faint" style={{ margin: 0 }}>
-            {ar ? 'لا طاولة تحت هذا الصنف وحده — يبقى لوحه داكناً سادة ولو كانت للغرفة طاولة.' : 'No table under this one dish — its panel stays plain even while the room has a table.'}
+            {ar ? 'لا طاولة تحت هذا الصنف وحده، يبقى لوحه داكناً سادة ولو كانت للغرفة طاولة.' : 'No table under this one dish, its panel stays plain even while the room has a table.'}
           </p>
         )}
 
@@ -2890,7 +2890,7 @@ function ItemTableEditor({ form, setForm, lang, tenant, uploading, onPickImage, 
                 </div>
                 {!effUrl && (
                   <p className="xs faint" style={{ margin: 0 }}>
-                    {ar ? 'لا صورة بعد — سيرسم المنيو الخامة المختارة بدلاً منها حتى تضع صورة.' : 'No photo yet — the menu falls back to the chosen material until one is set.'}
+                    {ar ? 'لا صورة بعد، سيرسم المنيو الخامة المختارة بدلاً منها حتى تضع صورة.' : 'No photo yet, the menu falls back to the chosen material until one is set.'}
                   </p>
                 )}
               </div>
@@ -3080,7 +3080,7 @@ function LayersEditor({ lang, tenantId, tenant, form, canLibrary, layers, setLay
   const removeFromLibrary = async (entry) => {
     try {
       await updateTenant(tenantId, { elementLibrary: arrayRemove(entry) })
-      toast.success(ar ? 'حُذف من المكتبة — الأصناف التي تستخدمه لا تتأثر' : 'Removed from the library; items already using it are untouched')
+      toast.success(ar ? 'حُذف من المكتبة، الأصناف التي تستخدمه لا تتأثر' : 'Removed from the library; items already using it are untouched')
     } catch (_) {
       toast.error(ar ? 'تعذّر الحذف من المكتبة' : 'Could not remove it from the library')
     }
@@ -3231,7 +3231,7 @@ function LayersEditor({ lang, tenantId, tenant, form, canLibrary, layers, setLay
     <div className="stack" style={{ gap: 10, marginBottom: 'var(--sp-3)' }}>
       <p className="xs faint" style={{ margin: 0 }}>
         {ar
-          ? 'ارفع صورك أنت — عناصر مقصوصة بخلفية شفافة (PNG) — ثم ضعها بإصبعك فوق الطبق: اسحب لتحريكها، امسك المقبض السفلي لتكبيرها والعلوي لتدويرها. لكل عنصر عمق (خلف الطبق أو أمامه)، شفافية، مزج، فلتر، حركة سكون وحركة ظهور. لا رسومات ولا أشكال مصنوعة هنا: ما ترفعه هو ما يظهر.'
+          ? 'ارفع صورك أنت. عناصر مقصوصة بخلفية شفافة (PNG). ثم ضعها بإصبعك فوق الطبق: اسحب لتحريكها، امسك المقبض السفلي لتكبيرها والعلوي لتدويرها. لكل عنصر عمق (خلف الطبق أو أمامه)، شفافية، مزج، فلتر، حركة سكون وحركة ظهور. لا رسومات ولا أشكال مصنوعة هنا: ما ترفعه هو ما يظهر.'
           : 'Upload your own transparent cut-outs and place them on the dish: drag to move, the lower grip resizes, the upper one rotates. Each element has depth, opacity, blend, filter, idle motion and an entrance.'}
       </p>
 
@@ -3252,7 +3252,7 @@ function LayersEditor({ lang, tenantId, tenant, form, canLibrary, layers, setLay
         </div>
         <p className="xs faint" style={{ margin: 0 }}>
           {ar
-            ? 'كل ما ترفعه هنا يُحفظ لمنشأتك ويصلح لكل الأصناف — ترفع ورقة النعناع مرة واحدة وتستخدمها في عشرة أطباق. الرفع يضيف ولا يستبدل شيئاً.'
+            ? 'كل ما ترفعه هنا يُحفظ لمنشأتك ويصلح لكل الأصناف، ترفع ورقة النعناع مرة واحدة وتستخدمها في عشرة أطباق. الرفع يضيف ولا يستبدل شيئاً.'
             : 'Everything uploaded here is saved for the whole venue and reusable on any dish. Uploading appends; it never replaces anything.'}
         </p>
         {library.length > 0 ? (
@@ -3274,7 +3274,7 @@ function LayersEditor({ lang, tenantId, tenant, form, canLibrary, layers, setLay
         ) : (
           <p className="xs faint" style={{ margin: 0 }}>
             {ar
-              ? 'المكتبة فارغة. ارفع صوراً مقصوصة بخلفية شفافة (PNG) — ورقة نعناع، حبة ليمون، ملعقة، بخار حقيقي مقصوص من صورة.'
+              ? 'المكتبة فارغة. ارفع صوراً مقصوصة بخلفية شفافة (PNG). ورقة نعناع، حبة ليمون، ملعقة، بخار حقيقي مقصوص من صورة.'
               : 'The library is empty. Upload transparent PNG cut-outs: a mint leaf, a lime, a spoon, real steam cut from a photo.'}
           </p>
         )}
@@ -3317,7 +3317,7 @@ function LayersEditor({ lang, tenantId, tenant, form, canLibrary, layers, setLay
               )}
             </span>
           ) : (
-            <span className="dlx-empty">{ar ? 'ارفع صورة الصنف أولاً — العناصر تُركّب حولها' : 'Add the item photo first — elements are arranged around it'}</span>
+            <span className="dlx-empty">{ar ? 'ارفع صورة الصنف أولاً، العناصر تُركّب حولها' : 'Add the item photo first, elements are arranged around it'}</span>
           )}
 
           {comp.layers.front.map((l) => <LayerArt key={`f${l.id}`} layer={l} replay={replay} onReady={noteRatio(l.url)} />)}
@@ -3328,7 +3328,7 @@ function LayersEditor({ lang, tenantId, tenant, form, canLibrary, layers, setLay
                 key={l.id}
                 className="dlx-hit" role="button" tabIndex={0}
                 data-sel={l.id === selected ? 'true' : 'false'}
-                aria-label={`${l.name || (ar ? 'عنصر' : 'Element')} — ${depthLabel(l.depth)}`}
+                aria-label={`${l.name || (ar ? 'عنصر' : 'Element')}، ${depthLabel(l.depth)}`}
                 style={{
                   insetInlineStart: `${l.x}%`,
                   // Mirrors layerStyle() exactly: horizontal centring is a
@@ -3387,7 +3387,7 @@ function LayersEditor({ lang, tenantId, tenant, form, canLibrary, layers, setLay
         </div>
         {layers.length === 0 ? (
           <p className="xs faint" style={{ margin: 0 }}>
-            {ar ? 'لا عناصر على هذا الصنف بعد — ارفع صورة أو اختر من المكتبة أعلاه.' : 'No elements on this item yet — upload one or pick from the library above.'}
+            {ar ? 'لا عناصر على هذا الصنف بعد، ارفع صورة أو اختر من المكتبة أعلاه.' : 'No elements on this item yet, upload one or pick from the library above.'}
           </p>
         ) : (
           <div className="dlx-list">
@@ -3489,7 +3489,7 @@ function LayerControls({ layer, lang, onChange }) {
       <p className="xs faint" style={{ margin: 0 }}>
         {ar
           ? 'حركة السكون متعمَّدة الخفّة: عنصر لا يتوقف عن الحركة يشبه بانر إعلاني لا صورة. تتوقف كلها لمن فعّل تقليل الحركة في جهازه.'
-          : 'Idle motion is deliberately tiny — a prop that never stops moving reads as a web banner. All of it stops for anyone with reduced motion on.'}
+          : 'Idle motion is deliberately tiny, a prop that never stops moving reads as a web banner. All of it stops for anyone with reduced motion on.'}
       </p>
 
       <div className="field" style={{ marginBottom: 0 }}>
@@ -3559,7 +3559,7 @@ function ModifierGroupsEditor({ groups, onChange, currency, materials = [] }) {
           </div>
           <p className="xs faint" style={{ margin: 0 }}>
             {Number(g.max) === 1
-              ? (lang === 'ar' ? 'يختار الضيف خياراً واحداً — واختياره الجديد يستبدل السابق.' : 'The guest picks one — a new pick replaces the previous.')
+              ? (lang === 'ar' ? 'يختار الضيف خياراً واحداً، واختياره الجديد يستبدل السابق.' : 'The guest picks one, a new pick replaces the previous.')
               : (lang === 'ar' ? 'يستطيع الضيف اختيار أكثر من خيار. حدّد «أقصى» أدناه إن أردت سقفاً.' : 'The guest can pick several. Set “Max” below for a cap.')}
           </p>
           {Number(g.max) !== 1 && (
@@ -3655,9 +3655,9 @@ function HotspotsEditor({ imageUrl, hotspots, onChange, lang }) {
       <div className="row-between" style={{ alignItems: 'center', gap: 8 }}>
         <span className="xs faint">
           {full
-            ? (ar ? 'وصلت للحد الأقصى: 8 نقاط — احذف نقطة لإضافة غيرها.' : 'Maximum reached: 8 points — delete one to add another.')
+            ? (ar ? 'وصلت للحد الأقصى: 8 نقاط، احذف نقطة لإضافة غيرها.' : 'Maximum reached: 8 points, delete one to add another.')
             : spots.length === 0
-              ? (ar ? 'انقر على الصورة لإضافة نقطة — مثال: نوع الجبن، الصوص، الإضافة المميزة.' : 'Click the photo to add a point — e.g. the cheese, the sauce, the signature side.')
+              ? (ar ? 'انقر على الصورة لإضافة نقطة. مثال: نوع الجبن، الصوص، الإضافة المميزة.' : 'Click the photo to add a point. E.g. the cheese, the sauce, the signature side.')
               : (ar ? 'انقر على الصورة لإضافة نقطة، واسحب الرقم لتحريكه.' : 'Click the photo to add a point, drag a number to move it.')}
         </span>
         <button type="button" className={`btn btn-xs ${preview ? 'btn-primary' : 'btn-outline'}`} style={{ flex: 'none' }} onClick={() => setPreview((v) => !v)}>
@@ -3692,7 +3692,7 @@ function HotspotsEditor({ imageUrl, hotspots, onChange, lang }) {
           <span className="dh-num-chip num">{i + 1}</span>
           <input
             className="input" style={{ flex: '1 1 40%', minWidth: 0 }}
-            placeholder={ar ? 'الاسم — مطلوب (مثال: جبن حلوم)' : 'Label — required (e.g. halloumi)'}
+            placeholder={ar ? 'الاسم، مطلوب (مثال: جبن حلوم)' : 'Label, required (e.g. halloumi)'}
             value={h.label || ''} onChange={(e) => setSpot(i, { label: e.target.value })}
           />
           <input
@@ -3802,8 +3802,8 @@ function Batch3dSheet({ tenantId, items, lang, onClose, onOpenStudio }) {
       <div className="stack" style={{ gap: 'var(--sp-3)' }}>
         <p className="small muted" style={{ margin: 0, lineHeight: 1.8 }}>
           {ar
-            ? `${candidates.length.toLocaleString('ar-SA-u-nu-latn')} صنفاً مصوّراً بلا مجسم واقعي. التحويل يستغرق 1-8 دقائق لكل صنف (صنفان معاً في كل مرة) — أبقِ الصفحة مفتوحة حتى الانتهاء. يعتمد التحويل الجماعي على صورة الصنف الرئيسية وحدها بالوضع الواقعي؛ اللقطات المتعددة والوضع المنمّق من استوديو المجسم.`
-            : `${candidates.length} photographed items without a realistic model. Each takes 1-8 minutes (2 at a time) — keep this page open. Batch runs single-image realism; multi-view and smooth mode live in the 3D studio.`}
+            ? `${candidates.length.toLocaleString('ar-SA-u-nu-latn')} صنفاً مصوّراً بلا مجسم واقعي. التحويل يستغرق 1-8 دقائق لكل صنف (صنفان معاً في كل مرة)، أبقِ الصفحة مفتوحة حتى الانتهاء. يعتمد التحويل الجماعي على صورة الصنف الرئيسية وحدها بالوضع الواقعي؛ اللقطات المتعددة والوضع المنمّق من استوديو المجسم.`
+            : `${candidates.length} photographed items without a realistic model. Each takes 1-8 minutes (2 at a time), keep this page open. Batch runs single-image realism; multi-view and smooth mode live in the 3D studio.`}
         </p>
         {quota && (
           <div className="row-between card card-pad" style={{ paddingBlock: 8 }}>
@@ -3813,7 +3813,7 @@ function Batch3dSheet({ tenantId, items, lang, onClose, onOpenStudio }) {
         )}
         {quota && quota.used >= quota.cap && (
           <p className="xs" style={{ margin: 0, color: 'var(--danger)' }}>
-            {ar ? 'اكتمل حد هذا الشهر — يتجدد مطلع الشهر، أو اطلب رفعه من المنصة.' : 'Monthly cap reached — resets next month, or ask the platform to raise it.'}
+            {ar ? 'اكتمل حد هذا الشهر. يتجدد مطلع الشهر، أو اطلب رفعه من المنصة.' : 'Monthly cap reached. Resets next month, or ask the platform to raise it.'}
           </p>
         )}
         {abortMsg && (
@@ -3841,7 +3841,7 @@ function Batch3dSheet({ tenantId, items, lang, onClose, onOpenStudio }) {
         <div className="stack" style={{ gap: 6, maxHeight: '46dvh', overflowY: 'auto' }}>
           {candidates.length === 0 && (
             <p className="small muted" style={{ textAlign: 'center', padding: 16 }}>
-              {ar ? 'كل الأصناف المصوّرة لديها مجسمات بالفعل — أضف صوراً لأصنافك أولاً.' : 'Every photographed item already has a model.'}
+              {ar ? 'كل الأصناف المصوّرة لديها مجسمات بالفعل، أضف صوراً لأصنافك أولاً.' : 'Every photographed item already has a model.'}
             </p>
           )}
           {candidates.map((it) => {
@@ -3857,7 +3857,7 @@ function Batch3dSheet({ tenantId, items, lang, onClose, onOpenStudio }) {
                 {st?.state === 'run' && <span className="badge" style={{ color: 'var(--brand)' }}><Spinner size={12} /> {ar ? `يحوّل… ${st.sec || 0} ث` : `Converting… ${st.sec || 0}s`}</span>}
                 {st?.state === 'done' && (
                   <button className="badge badge-success" onClick={() => onOpenStudio({ ...it, model3dUrl: st.url })}>
-                    <Icon name="check" size={11} /> {ar ? 'تم — عرض' : 'Done — view'}
+                    <Icon name="check" size={11} /> {ar ? 'تم، عرض' : 'Done, view'}
                   </button>
                 )}
                 {st?.state === 'fail' && <span className="badge badge-danger" title={st.msg}><Icon name="warning" size={11} /> {ar ? 'فشل' : 'Failed'}</span>}

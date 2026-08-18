@@ -32,3 +32,16 @@ const SHORT = {
   refunded: { ar: 'مسترجع', en: 'Refunded' },
 }
 export const statusShort = (lang, s) => SHORT[s]?.[lang === 'ar' ? 'ar' : 'en'] || s
+
+// ONE word per order type, for the same reason. The guest taps «سفري» and the
+// order stores orderType 'pickup', while a counter sale rung up on the POS
+// stores 'takeaway' — two values for one behaviour, which the staff screens
+// then showed under a third word. Everything reads the label from here.
+const TYPES = {
+  dinein: { ar: 'في الصالة', en: 'Dine-in' },
+  pickup: { ar: 'سفري', en: 'Takeaway' },
+  takeaway: { ar: 'سفري', en: 'Takeaway' },
+  curbside: { ar: 'استلام بالسيارة', en: 'Curbside' },
+  delivery: { ar: 'توصيل', en: 'Delivery' },
+}
+export const orderTypeLabel = (type, lang) => (TYPES[type] || TYPES.dinein)[lang === 'ar' ? 'ar' : 'en']

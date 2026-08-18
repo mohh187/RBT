@@ -50,8 +50,7 @@ function PlanCard({ plan, price, listPrice, features, onChange, cycle, yearlyDis
       </div>
       {cycle === 'yearly' && (
         <span className="xs faint">
-          يعادل <span className="num" dir="ltr">{Math.round(yearlyTotal / 12).toLocaleString('en-US')}</span> ريالاً شهرياً —
-          خصم <span className="num" dir="ltr">{Math.round((1 - (Number(yearlyDiscount) || 0.8)) * 100)}%</span> على الدفع السنوي
+          يعادل <span className="num" dir="ltr">{Math.round(yearlyTotal / 12).toLocaleString('en-US')}</span> ريالاً شهرياً، بخصم <span className="num" dir="ltr">{Math.round((1 - (Number(yearlyDiscount) || 0.8)) * 100)}%</span> على الدفع السنوي
         </span>
       )}
       <label className="stack xs" style={{ gap: 4 }}>
@@ -266,7 +265,7 @@ export default function PlanEditor() {
           </label>
           <span className="xs faint">
             {draft.promo.active && draft.promo.validUntil && Date.now() > Number(draft.promo.validUntil)
-              ? 'انتهت المدة — لن يظهر أي شطب حتى تُمدَّد.'
+              ? 'انتهت المدة، لن يظهر أي شطب حتى تُمدَّد.'
               : 'اتركه فارغاً ليستمر بلا تاريخ انتهاء.'}
           </span>
         </div>

@@ -77,6 +77,7 @@ const rate = (n, of) => ({ n: Math.max(0, Math.round(num(n))), of: Math.max(0, M
 
 const nOrders = (n) => arPlural(n, { one: 'طلب', two: 'طلبان', few: 'طلبات', many: 'طلباً' })
 const nItems = (n) => arPlural(n, { one: 'صنف', two: 'صنفان', few: 'أصناف', many: 'صنفاً' })
+const nDays = (n) => arPlural(n, { one: 'يوم', two: 'يومان', few: 'أيام', many: 'يوماً' })
 
 export const itemName = (it, lang = 'ar') => String(
   (lang === 'en' ? (it?.nameEn || it?.nameAr) : (it?.nameAr || it?.nameEn)) || it?.name || '',
@@ -185,7 +186,7 @@ export function upsellFor(index, anchorIds, { items = [], limit = 3, exclude = [
     return {
       ok: false,
       reason: 'thin-sample',
-      reasonAr: `العينة ${nOrders(index.basketOrders)} فقط — الحد الأدنى ${T.MIN_BASKET_ORDERS} طلباً قبل أي اقتراح`,
+      reasonAr: `العينة ${nOrders(index.basketOrders)} فقط، والحد الأدنى ${T.MIN_BASKET_ORDERS} طلباً قبل أي اقتراح`,
       sample,
       suggestions: [],
     }
@@ -248,7 +249,7 @@ export function upsellFor(index, anchorIds, { items = [], limit = 3, exclude = [
       ok: false,
       reason: tooFew ? 'thin-anchor' : 'no-real-pairing',
       reasonAr: tooFew
-        ? `أكثر صنف في السلة ظهر في ${nOrders(best)} فقط — الحد الأدنى ${T.MIN_ANCHOR_ORDERS}`
+        ? `أكثر صنف في السلة ظهر في ${nOrders(best)} فقط، والحد الأدنى ${T.MIN_ANCHOR_ORDERS}`
         : 'لا يوجد تلازم حقيقي يتجاوز الشراء العشوائي',
       sample,
       suggestions: [],
@@ -275,7 +276,7 @@ export function topPairings(index, { items = [], limit = 25, lang = 'ar' } = {})
   if (!index || index.thin) {
     return {
       ok: false,
-      reasonAr: `تحتاج ${T.MIN_BASKET_ORDERS} طلباً مدفوعاً على الأقل — المتوفر ${index?.basketOrders || 0}`,
+      reasonAr: `تحتاج ${T.MIN_BASKET_ORDERS} طلباً مدفوعاً على الأقل، والمتوفر ${index?.basketOrders || 0}`,
       rows: [], sample: { basketOrders: index?.basketOrders || 0, multiLineOrders: index?.multiLineOrders || 0, windowDays: index?.days || 0 },
     }
   }
@@ -451,22 +452,22 @@ export function abandonedCarts({
     // Phrased as a noun clause so it stays grammatical at every count — Arabic
     // verb agreement breaks on "1 ضيف تركوا".
     unreachableNote: unreachable > 0
-      ? `عدد من ترك السلة دون أي رقم يمكن الوصول إليه: ${unreachable} — لا يمكن مراسلتهم، ولن نخترع رقماً`
+      ? `عدد من ترك السلة دون أي رقم يمكن الوصول إليه: ${unreachable}. لا يمكن مراسلتهم، ولن نخترع رقماً`
       : '',
     // Priced from today's menu, for the carts where every line still has a
     // price. It is a value LEFT BEHIND, not a forecast of what you will recover.
     leftBehindValue: pricedRows ? r2(recoverable) : null,
     leftBehindPricedRows: pricedRows,
-    leftBehindNote: 'محسوبة بأسعار القائمة الحالية للسلال التي تحمل كل أسطرها سعراً — قيمة متروكة، وليست توقّع استرجاع',
+    leftBehindNote: 'محسوبة بأسعار القائمة الحالية للسلال التي تحمل كل أسطرها سعراً. هي قيمة متروكة، وليست توقّع استرجاع',
     abandonRate: rate(abandoned.length, inWindow.filter((s) => num(sessionCounts(s).cartAdds) > 0).length),
     thin: reachable.length < GROWTH_THRESHOLDS.MIN_ABANDONED,
     thinNote: reachable.length < GROWTH_THRESHOLDS.MIN_ABANDONED
-      ? `عدد من يمكن الوصول إليهم ${reachable.length} فقط — قائمة أسماء، لا حملة`
+      ? `عدد من يمكن الوصول إليهم ${reachable.length} فقط، وهذه قائمة أسماء لا حملة`
       : '',
     limits: [
       'الجلسة لكل تبويب متصفح: هاتف واحد يتنقل بين الضيوف = جلسة واحدة',
       'ترك السلة قد يعني أن الضيف طلب من الموظف مباشرة، لا أنه غادر',
-      'الأرقام مأخوذة من تعريف الضيف بنفسه أو من طلب سابق على نفس الجهاز — لا يوجد أي رقم مُستنتج',
+      'الأرقام مأخوذة من تعريف الضيف بنفسه أو من طلب سابق على نفس الجهاز، ولا يوجد أي رقم مُستنتج',
     ],
   }
 }
@@ -495,7 +496,7 @@ export function abandonedCampaignDraft(result, { venueName = '', lang = 'ar', ro
     text: sample ? abandonedMessage(sample, { venueName, lang }) : '',
     purpose: lang === 'en'
       ? `Guests who added to cart and did not order in the last ${result?.days || 0} days`
-      : `ضيوف أضافوا للسلة ولم يطلبوا خلال ${result?.days || 0} يوماً`,
+      : `ضيوف أضافوا للسلة ولم يطلبوا خلال ${nDays(result?.days || 0)}`,
     audience: { phones },
   }
 }
@@ -537,7 +538,7 @@ export function marginHeadroom({ items = [], materials = [], marginFloorPct = 15
       maxDiscountPct: null,
       bindingItem: null,
       rows: [],
-      noteAr: 'لا توجد تكاليف وصفات محسوبة — لا يمكن تحديد سقف خصم مسنود بهامش حقيقي',
+      noteAr: 'لا توجد تكاليف وصفات محسوبة، فلا يمكن تحديد سقف خصم مسنود بهامش حقيقي',
     }
   }
   rows.sort((a, b) => a.maxDiscountPct - b.maxDiscountPct)
@@ -579,7 +580,7 @@ export function quietHourPlan({
   if (!busiest || busiest.orders < T.MIN_PEAK_ORDERS) {
     return {
       ok: false,
-      reasonAr: `أعلى فترة بها ${nOrders(busiest?.orders || 0)} فقط — لا يمكن تمييز الهدوء عن التذبذب العشوائي (الحد الأدنى ${T.MIN_PEAK_ORDERS})`,
+      reasonAr: `أعلى فترة بها ${nOrders(busiest?.orders || 0)} فقط، فلا يمكن تمييز الهدوء عن التذبذب العشوائي (الحد الأدنى ${T.MIN_PEAK_ORDERS})`,
       sample, headroom: head, windows: [], peaks,
     }
   }
@@ -632,10 +633,10 @@ export function quietHourPlan({
       suggestedValue: value,
       marginBacked: head.known,
       ceiling,
-      whyAr: `${WEEKDAYS_AR[q.weekday]} ${hourLabel(q.hour)} سجّلت ${nOrders(q.orders)} خلال ${d} يوماً (${q.ordersPerWeek} أسبوعياً)، مقابل ${nOrders(busiest.orders)} في الذروة (${busiest.label})`,
+      whyAr: `${WEEKDAYS_AR[q.weekday]} ${hourLabel(q.hour)} سجّلت ${nOrders(q.orders)} خلال ${nDays(d)} (${q.ordersPerWeek} أسبوعياً)، مقابل ${nOrders(busiest.orders)} في الذروة (${busiest.label})`,
       boundAr: head.known
         ? `الخصم المقترح ${value}% ضمن سقف ${ceiling}% يحدّده هامش «${head.bindingItem.name}»`
-        : `الخصم المقترح ${value}% غير مسنود بهامش — لا توجد تكاليف وصفات، راجعه يدوياً قبل التفعيل`,
+        : `الخصم المقترح ${value}% غير مسنود بهامش لأنه لا توجد تكاليف وصفات، راجعه يدوياً قبل التفعيل`,
       numbers: {
         'طلبات الفترة الهادئة': `${q.orders}`,
         'أسبوعياً': `${q.ordersPerWeek}`,
@@ -655,11 +656,11 @@ export function quietHourPlan({
   let reasonAr = ''
   if (!windows.length) {
     if (blockedByMargin > 0) {
-      reasonAr = `وُجدت ${blockedByMargin} فترة هادئة، لكن الهامش لا يحتمل أي خصم فوق أرضية ${head.marginFloorPct}% — سقف الخصم الآمن ${head.maxDiscountPct}% فقط، يحدّده «${head.bindingItem?.name || ''}». المشكلة تسعير وتكلفة، لا توقيت`
+      reasonAr = `وُجدت ${blockedByMargin} فترة هادئة، لكن الهامش لا يحتمل أي خصم فوق أرضية ${head.marginFloorPct}%. سقف الخصم الآمن ${head.maxDiscountPct}% فقط، يحدّده «${head.bindingItem?.name || ''}». المشكلة تسعير وتكلفة، لا توقيت`
     } else if (alreadyCovered > 0) {
       reasonAr = `أهدأ الفترات مغطاة أصلاً بعروض مؤقتة مفعّلة (${alreadyCovered})`
     } else if (neverTraded > 0) {
-      reasonAr = `أهدأ الفترات لم تسجّل أي طلب إطلاقاً (${neverTraded}) — الأرجح أنها خارج ساعات العمل الفعلية لتلك الأيام، لا فترات هادئة`
+      reasonAr = `أهدأ الفترات لم تسجّل أي طلب إطلاقاً (${neverTraded}). الأرجح أنها خارج ساعات العمل الفعلية لتلك الأيام، لا فترات هادئة`
     } else {
       reasonAr = 'لا توجد فترة هادئة يتجاوز فارقها عن الذروة الضجيج الإحصائي'
     }
@@ -676,7 +677,7 @@ export function quietHourPlan({
     windows,
     peaks,
     limits: [
-      'الهدوء محسوب على ساعات وأيام سجّلت فيها المنشأة طلبات فعلاً — الصفر خارج أوقات العمل ليس هدوءاً',
+      'الهدوء محسوب على ساعات وأيام سجّلت فيها المنشأة طلبات فعلاً. الصفر خارج أوقات العمل ليس هدوءاً',
       'لا يوجد هنا أي توقّع لزيادة المبيعات: الأرقام المعروضة هي الحجم الحالي فقط',
     ],
   }
@@ -812,7 +813,7 @@ export function menuHealth({
       items: hits[c.key],
       unmeasurableAr: measurable ? '' : (
         c.key === 'belowCost' ? (anyRecipeCost ? 'لا يوجد صنف مسعّر له تكلفة وصفة' : 'لا توجد وصفات أو تكاليف مواد مسجّلة')
-          : c.key === 'neverOrdered' ? `لا توجد طلبات خلال ${d} يوماً للمقارنة`
+          : c.key === 'neverOrdered' ? `لا توجد طلبات خلال ${nDays(d)} للمقارنة`
             : c.key === 'noCategory' ? 'لا توجد تصنيفات معرّفة أصلاً'
               : 'غير قابل للقياس بالبيانات الحالية'
       ),
@@ -824,9 +825,9 @@ export function menuHealth({
   let score = null
   let formulaAr = ''
   if (!list.length) {
-    formulaAr = 'لا توجد أصناف في القائمة — لا يمكن حساب درجة'
+    formulaAr = 'لا توجد أصناف في المنيو، فلا يمكن حساب درجة'
   } else if (!weightSum) {
-    formulaAr = 'لا يوجد فحص قابل للقياس بالبيانات الحالية — لا درجة'
+    formulaAr = 'لا يوجد فحص قابل للقياس بالبيانات الحالية، فلا درجة'
   } else {
     // Weights renormalized over the checks we could actually run.
     const penalty = measured.reduce((a, f) => a + (f.weight / weightSum) * f.share * 100, 0)
@@ -857,9 +858,9 @@ export function menuHealth({
       itemsTooNewToJudge: tooNew,
     },
     notes: [
-      tooNew > 0 ? `عدد الأصناف المضافة خلال آخر ${T.NEW_ITEM_GRACE_DAYS} يوماً واستُثنيت من فحص «لم يُطلب»: ${tooNew} — من غير العدل الحكم عليها قبل أن تأخذ فرصتها` : '',
-      inWin.length === 0 ? `لا توجد طلبات خلال ${d} يوماً — فحص «لم يُطلب» غير محسوب ووزنه أُعيد توزيعه` : '',
-      !anyRecipeCost ? 'لا توجد تكاليف وصفات — فحص «السعر تحت التكلفة» غير محسوب ووزنه أُعيد توزيعه' : '',
+      tooNew > 0 ? `عدد الأصناف المضافة خلال آخر ${nDays(T.NEW_ITEM_GRACE_DAYS)} واستُثنيت من فحص «لم يُطلب»: ${tooNew}. من غير العدل الحكم عليها قبل أن تأخذ فرصتها` : '',
+      inWin.length === 0 ? `لا توجد طلبات خلال ${nDays(d)}، ففحص «لم يُطلب» غير محسوب ووزنه أُعيد توزيعه` : '',
+      !anyRecipeCost ? 'لا توجد تكاليف وصفات، ففحص «السعر تحت التكلفة» غير محسوب ووزنه أُعيد توزيعه' : '',
     ].filter(Boolean),
   }
 }
@@ -1007,7 +1008,7 @@ export function usualOrder(orders, phone, { items = [], now = new Date(), lang =
       ? `أُسقط ${nItems(dropped.length)} من طلبك السابق: ${dropped.map((x) => `«${x.name || 'صنف'}» (${x.reasonAr})`).join('، ')}`
       : '',
     labelAr: isHabit
-      ? `طلبك المعتاد — تكرر ${top.count} من ${mine.length} ${mine.length === 2 ? 'طلبين' : 'طلباً'}`
+      ? `طلبك المعتاد، تكرر ${top.count} من ${mine.length} ${mine.length === 2 ? 'طلبين' : 'طلباً'}`
       : `آخر طلب لك${mine.length > 1 ? ` من ${mine.length} طلباً` : ''}`,
     honestNote: isHabit ? '' : 'لم يتكرر أي طلب بعد، لذا هذا آخر طلب وليس عادة',
     now,
@@ -1071,6 +1072,6 @@ export function growthSnapshot({ orders = [], items = [], categories = [], mater
     quietHours: { ok: quiet.ok, reason: quiet.reasonAr, marginKnown: quiet.headroom.known, maxDiscountPct: quiet.headroom.maxDiscountPct, windows: quiet.windows.map((w) => ({ when: `${w.weekdayName} ${w.startTime}`, orders: w.orders, peak: w.peakOrders, suggested: w.suggestedValue })) },
     menuHealth: { score: health.score, formula: health.formulaAr, sample: health.sample, worst: health.findings.filter((f) => f.measurable && f.affected > 0).slice(0, 4).map((f) => ({ check: f.labelAr, affected: f.affected, of: f.applicable })) },
     reorder: { guestsWithPhone: repeat.totalGuestsWithPhone, withRealHabit: repeat.withRealHabit, ordersScanned: repeat.ordersScanned },
-    guard: 'أجب فقط من هذه الأرقام. لا تقدّر، ولا تتوقع زيادة مبيعات — لا يوجد في هذا الملخص أي رقم توقّعي.',
+    guard: 'أجب فقط من هذه الأرقام. لا تقدّر، ولا تتوقع زيادة مبيعات، إذ لا يوجد في هذا الملخص أي رقم توقّعي.',
   }
 }

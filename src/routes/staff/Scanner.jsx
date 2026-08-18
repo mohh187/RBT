@@ -116,7 +116,7 @@ export default function Scanner() {
     } catch (e) {
       // an already-admitted pass is a distinct, important message — not a generic error
       toast.error(String(e?.message).includes('already-used')
-        ? (lang === 'ar' ? 'دخل مسبقاً — لا يمكن استخدامه مرتين' : 'Already checked in — cannot be reused')
+        ? (lang === 'ar' ? 'هذه التذكرة دخلت من قبل، ولا تُستخدم مرتين' : 'This ticket was already checked in, it cannot be reused')
         : t('error'))
     } finally {
       setBusy(false)

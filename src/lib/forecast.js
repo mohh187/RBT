@@ -36,6 +36,7 @@ export function arPlural(n, { one, two, few, many }) {
 const nOrders = (n) => arPlural(n, { one: 'طلب', two: 'طلبان', few: 'طلبات', many: 'طلباً' })
 const nUnits = (n) => arPlural(n, { one: 'وحدة', two: 'وحدتان', few: 'وحدات', many: 'وحدة' })
 const nDays = (n) => arPlural(n, { one: 'يوم', two: 'يومان', few: 'أيام', many: 'يوماً' })
+const nItems = (n) => arPlural(n, { one: 'صنف', two: 'صنفان', few: 'أصناف', many: 'صنفاً' })
 
 // A discount the margin can absorb is not automatically a discount worth making:
 // deep cuts train guests to wait for them. Suggestions stay at or below this,
@@ -69,7 +70,9 @@ export function isSettled(o) { return !!o && SETTLED_STATUS.has(o.status) }
 export function netTotal(o) {
   if (!o) return 0
   const gross = num(o.total)
-  return o.status === 'refunded' ? Math.max(0, gross - num(o.refund?.amount)) : gross
+  // a partial refund leaves the status 'paid', so refundTotal is the truth here
+  const back = num(o.refundTotal) || (o.status === 'refunded' ? num(o.refund?.amount) : 0)
+  return Math.max(0, gross - back)
 }
 
 // Midnight, `days` days back — a whole-day window so per-day rates are honest.
@@ -243,7 +246,7 @@ export function stockRunway({ materials = [], orders = [], items = [], days = 30
 
     const note = perDay > 0
       ? `استهلاك ${r2(perDay)} ${m.baseUnit || ''}/يوم محسوب من ${nOrders(settled.length)} خلال ${nDays(d)}`
-      : `لا يوجد استهلاك مسجّل خلال ${nDays(d)} — لا يمكن حساب مدة النفاد`
+      : `لا يوجد استهلاك مسجّل خلال ${nDays(d)}، فلا يمكن حساب مدة النفاد`
 
     return {
       id: m.id,
@@ -440,7 +443,7 @@ export function offerAdvice({
       suggestions.push({
         id: `quiet-${q.weekday}-${q.hour}`,
         kind: 'happy-hour',
-        title: `عرض «ساعة هادئة» — ${WEEKDAYS_AR[q.weekday]} ${hourLabel(q.hour)}`,
+        title: `عرض «ساعة هادئة» · ${WEEKDAYS_AR[q.weekday]} ${hourLabel(q.hour)}`,
         why: `أهدأ فترة عمل: ${WEEKDAYS_AR[q.weekday]} ${hourLabel(q.hour)} بـ ${nOrders(q.orders)} خلال ${nDays(d)}، مقابل ${nOrders(b.orders)} في الذروة (${WEEKDAYS_AR[b.weekday]} ${hourLabel(b.hour)})`,
         numbers: {
           'طلبات الفترة الهادئة': `${nOrders(q.orders)} (${q.ordersPerWeek} أسبوعياً)`,
@@ -474,7 +477,7 @@ export function offerAdvice({
       title: `حرّك مخزون «${m.name}»`,
       why: known
         ? `المخزون ${m.stockQty} ${m.unit} يكفي ${nDays(m.daysLeft)} بمعدل ${m.perDay}/يوم · قيمة راكدة ${m.stockValue}`
-        : `المخزون ${m.stockQty} ${m.unit} بقيمة ${m.stockValue}، ولا يوجد استهلاك مسجّل خلال ${nDays(d)} — يُرجّح الركود أو نقص في تسجيل الوصفات`,
+        : `المخزون ${m.stockQty} ${m.unit} بقيمة ${m.stockValue}، ولا يوجد استهلاك مسجّل خلال ${nDays(d)}، ويُرجّح الركود أو نقص في تسجيل الوصفات`,
       numbers: {
         'الكمية الحالية': `${m.stockQty} ${m.unit}`,
         'قيمة المخزون': r2(m.stockValue),
@@ -517,7 +520,7 @@ export function offerAdvice({
       id: `pair-${p.ids.join('-')}`,
       kind: 'pairing',
       title: `باقة «${a.nameAr || a.nameEn || ''}» + «${b.nameAr || b.nameEn || ''}»`,
-      why: `طُلبا معاً في ${nOrders(p.count)} من ${sample} خلال ${nDays(d)} (${pct}% من الطلبات) — الباقة تثبّت هذا السلوك وترفع قيمة الفاتورة`,
+      why: `طُلبا معاً في ${nOrders(p.count)} من ${sample} خلال ${nDays(d)} (${pct}% من الطلبات). الباقة تثبّت هذا السلوك وترفع قيمة الفاتورة`,
       numbers: {
         'مرات الطلب معاً': `${p.count}`,
         'إجمالي الطلبات في النافذة': `${sample}`,
@@ -547,7 +550,7 @@ export function offerAdvice({
     },
     confidence: baseConfidence,
     limits: sample < 20
-      ? `العينة صغيرة (${nOrders(sample)} خلال ${nDays(d)}) — التوصيات إرشادية ولا تصلح كقرار نهائي`
+      ? `العينة صغيرة (${nOrders(sample)} خلال ${nDays(d)})، فالتوصيات إرشادية ولا تصلح كقرار نهائي`
       : '',
     suggestions,
     // A compact, already-computed snapshot. Anything shown to an AI layer must
@@ -688,9 +691,9 @@ export function customerYear({ orders = [], customer = null, year = new Date().g
   for (const n of [10, 25, 50, 100]) {
     if (visits >= n) milestones.push({ key: `visit-${n}`, label: `الزيارة رقم ${n}`, value: dated[n - 1].d.toLocaleDateString('en-CA'), at: dated[n - 1].d })
   }
-  if (longestStreak >= 2) milestones.push({ key: 'streak', label: 'أطول تتابع يومي', value: `${longestStreak} يوماً متتالياً`, at: null })
+  if (longestStreak >= 2) milestones.push({ key: 'streak', label: 'أطول تتابع يومي', value: nDays(longestStreak), at: null })
   if (longestWeekStreak >= 3) milestones.push({ key: 'weeks', label: 'أطول تتابع أسبوعي', value: `${longestWeekStreak} أسبوعاً`, at: null })
-  if (itemCount.size >= 5) milestones.push({ key: 'variety', label: 'أصناف جرّبتها', value: `${itemCount.size} صنفاً`, at: null })
+  if (itemCount.size >= 5) milestones.push({ key: 'variety', label: 'أصناف جرّبتها', value: nItems(itemCount.size), at: null })
 
   return {
     year: y,

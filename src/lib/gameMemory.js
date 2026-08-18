@@ -458,8 +458,8 @@ export const TAG_RULES = [
   { id: 'one-shot', ar: 'محاولة واحدة', rule: 'لعب مرة واحدة فقط ولم يعد.', ruleEn: 'Exactly one play, never returned.' },
   { id: 'quiz-strong', ar: 'قوي في الأسئلة', rule: 'أجاب 12 سؤالاً فأكثر بنسبة صحة 75% فما فوق.', ruleEn: '12+ scored answers at 75%+ accuracy.' },
   { id: 'quiz-weak', ar: 'يحتاج تلميحات', rule: 'أجاب 12 سؤالاً فأكثر بنسبة صحة 40% فما دون.', ruleEn: '12+ scored answers at 40% or less.' },
-  { id: 'identified', ar: 'معروف الهوية', rule: 'ترك رقم جوال — يمكن مراسلته.', ruleEn: 'Left a phone number — reachable.' },
-  { id: 'anonymous', ar: 'مجهول', rule: 'لا رقم جوال — لا يمكن مراسلته.', ruleEn: 'No phone — unreachable.' },
+  { id: 'identified', ar: 'معروف الهوية', rule: 'ترك رقم جوال، يمكن مراسلته.', ruleEn: 'Left a phone number — reachable.' },
+  { id: 'anonymous', ar: 'مجهول', rule: 'لا رقم جوال، فلا يمكن مراسلته.', ruleEn: 'No phone — unreachable.' },
 ]
 
 // Per-category strength tags are emitted as `quiz-strong-<cat>` on top of the

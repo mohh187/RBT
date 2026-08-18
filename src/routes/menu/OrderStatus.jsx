@@ -47,7 +47,11 @@ export default function OrderStatus() {
   const { slug, orderId } = useParams()
   const { t, lang } = useI18n()
   const toast = useToast()
-  const [tid, setTid] = useState(null)
+  // The venue id the menu already cached under this slug (usePublicVenue writes
+  // it). Seeding from it lets watchOrder open on the FIRST render instead of
+  // behind a full-screen spinner waiting on a serialized slug lookup — this is
+  // the screen a guest stares at while their food is being made.
+  const [tid, setTid] = useState(() => { try { return localStorage.getItem(`venue_tid_${slug}`) || null } catch (_) { return null } })
   const [order, setOrder] = useState(undefined)
   const [notifOpen, setNotifOpen] = useState(false)
   const [notifMounted, setNotifMounted] = useState(false)
@@ -88,14 +92,28 @@ export default function OrderStatus() {
   useEffect(() => {
     let unsub
     let alive = true
+    let watching = null
+    const start = (id) => {
+      if (!alive || id === watching) return
+      watching = id
+      unsub && unsub()
+      unsub = watchOrder(id, orderId, setOrder)
+      getTenant(id).then(setVenue).catch(() => {})
+    }
+    // Same shape as usePublicVenue: the cached id opens the stream NOW, and the
+    // slug lookup runs behind it purely as a correction — it re-subscribes only
+    // if the slug turns out to point somewhere else. Read per-slug rather than
+    // from `tid`: this effect re-runs when the slug changes, and at that moment
+    // the state still holds the previous venue.
+    let cached = null
+    try { cached = localStorage.getItem(`venue_tid_${slug}`) || null } catch (_) { cached = null }
+    if (cached) { setTid(cached); start(cached) }
     resolveSlug(slug).then((id) => {
       if (!alive) return // unmounted before the slug resolved — don't subscribe
+      if (!id) { if (!cached) setOrder(null); return }
       setTid(id)
-      if (id) {
-        unsub = watchOrder(id, orderId, setOrder)
-        getTenant(id).then(setVenue).catch(() => {})
-      } else setOrder(null)
-    }).catch(() => { if (alive) setOrder(null) }) // a transient slug-lookup reject must not spin forever
+      start(id)
+    }).catch(() => { if (alive && !cached) setOrder(null) }) // a transient slug-lookup reject must not spin forever
     return () => { alive = false; unsub && unsub() }
   }, [slug, orderId])
 
@@ -415,7 +433,7 @@ export default function OrderStatus() {
             </span>
             <span className="wg-invite-txt">
               <b>{lang === 'ar' ? 'العب وأنت تنتظر' : 'Play while you wait'}</b>
-              <span>{lang === 'ar' ? `«${waitGameName}» — ${waitFrame}` : `${waitGameName} — ${waitFrame}`}</span>
+              <span>{lang === 'ar' ? `«${waitGameName}»، ${waitFrame}` : `${waitGameName}, ${waitFrame}`}</span>
             </span>
           </button>
         )}

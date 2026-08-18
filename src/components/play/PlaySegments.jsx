@@ -67,7 +67,7 @@ export function SegmentCard({ seg, ar = true, onCreateCampaign, periodLabel = ''
           <Icon name="warning" size={15} />
           <span>{ar
             ? `هذه الشريحة أقل من ${fmtNum(THIN_PLAYERS)} لاعبين. القاعدة التي بنتها صحيحة، لكن حجمها لا يكفي لاستنتاج نمط عام عن زبائنك.`
-            : `Fewer than ${fmtNum(THIN_PLAYERS)} players — the rule holds, the sample does not generalise.`}</span>
+            : `Fewer than ${fmtNum(THIN_PLAYERS)} players. The rule holds, but the sample does not generalise.`}</span>
         </div>
       )}
 

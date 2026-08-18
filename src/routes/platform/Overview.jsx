@@ -132,7 +132,7 @@ export default function Overview() {
           <Link to="/platform/activity" className="small bold">السجل الكامل</Link>
         </div>
         {activity.length === 0 ? (
-          <p className="muted small">لا نشاط بعد — سيظهر هنا كل إجراء تقوم به أي منشأة</p>
+          <p className="muted small">لا نشاط بعد. سيظهر هنا كل إجراء تقوم به أي منشأة</p>
         ) : (
           <div className="divide">
             {activity.map((a) => <ActivityRow key={a.id} a={a} />)}

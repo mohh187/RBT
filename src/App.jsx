@@ -1,5 +1,5 @@
 import { Suspense, useEffect, useState } from 'react'
-import { Routes, Route, Navigate, useLocation, useNavigate } from 'react-router-dom'
+import { Routes, Route, Navigate, Link, useLocation, useNavigate } from 'react-router-dom'
 import { useAuth } from './lib/auth.jsx'
 import { useI18n } from './lib/i18n.jsx'
 import ErrorBoundary, { lazyRoute } from './components/ErrorBoundary.jsx'
@@ -13,6 +13,9 @@ import { getDeviceVenue } from './lib/pin.js'
 import UploadProgress from './components/UploadProgress.jsx'
 import LiquidFilters from './components/LiquidFilters.jsx'
 import PlanGate from './components/PlanGate.jsx'
+import Icon from './components/Icon.jsx'
+import { planAllows } from './lib/plans.js'
+import { initScrollAffordance } from './lib/scrollAffordance.js'
 
 // The public menu is THE first paint for diners (QR scan -> /m/:slug or a venue
 // domain root), so it stays in the entry chunk: making it lazy would add a
@@ -244,14 +247,21 @@ function DriverGate({ children }) {
 
 // Blocks operational staff routes when the venue is suspended by the platform.
 function RequireActive({ children }) {
-  const { tenant, loading } = useAuth()
+  const { tenant, loading, logout } = useAuth()
   if (loading) return <FullSpinner />
   if (tenant?.active === false) {
     return (
       <div style={{ minHeight: '100dvh', display: 'grid', placeItems: 'center', padding: 24, textAlign: 'center' }}>
         <div>
           <p style={{ fontWeight: 800, color: 'var(--danger)' }}>الحساب موقوف مؤقتاً من إدارة المنصة</p>
-          <p className="small" style={{ marginTop: 6 }}>{tenant?.suspendReason || 'تم إيقاف الوصول. تواصل مع الدعم لإعادة التفعيل.'}</p>
+          <p className="small" style={{ marginTop: 6 }}>{tenant?.suspendReason || 'الوصول متوقف الآن. كلّم الدعم لإعادة التفعيل.'}</p>
+          {/* Every route that lands here arrives with replace, and the installed
+              staff PWA has no URL bar — without these two the staffer is stuck
+              on a screen with nothing to press. */}
+          <div style={{ marginTop: 16, display: 'flex', gap: 8, justifyContent: 'center', flexWrap: 'wrap' }}>
+            <Link to="/admin" className="btn btn-primary"><Icon name="home" size={16} /> لوحة المنشأة</Link>
+            <button type="button" className="btn btn-outline" onClick={() => logout()}><Icon name="logout" size={16} /> تسجيل الخروج</button>
+          </div>
         </div>
       </div>
     )
@@ -303,13 +313,32 @@ function AdminHome() {
 // operational staff on the PORTAL — that's the asked-for split. This only
 // picks the FIRST screen; everyone can still navigate anywhere their caps allow.
 function PinHome() {
-  const { role, can, loading } = useAuth()
+  const { role, can, tenant, loading } = useAuth()
   if (loading) return <FullSpinner />
-  if (role === 'cashier') return <Navigate to="/cashier" replace />
-  if (role === 'kitchen' || role === 'barista') return <Navigate to="/kds" replace />
-  if (role === 'waiter') return <Navigate to={can(CAP.MANAGE_TABLES) ? '/admin/operations' : '/cashier'} replace />
+  // On a lapsed plan those screens are PlanGate walls, so sending a staffer
+  // there at shift start parks them on an upgrade notice they can't act on.
+  const pos = planAllows(tenant, 'cashier') ? '/cashier' : '/portal'
+  if (role === 'cashier') return <Navigate to={pos} replace />
+  if (role === 'kitchen' || role === 'barista') return <Navigate to={planAllows(tenant, 'kds') ? '/kds' : '/portal'} replace />
+  if (role === 'waiter') return <Navigate to={can(CAP.MANAGE_TABLES) && planAllows(tenant, 'tables') ? '/admin/operations' : pos} replace />
   if (role === 'driver') return <Navigate to="/driver" replace />
   return <Navigate to="/admin" replace />
+}
+
+// The floor screens are lazy, so their chunk request only starts AFTER the PIN
+// is accepted and <Navigate> renders. Warm both while the staffer is still
+// typing (the lock screen already warms pinSignIn the same way). Same import
+// specifier as the lazyRoute wrappers, so it's one shared module.
+let floorWarmed = false
+function warmFloorChunks() {
+  if (floorWarmed) return
+  floorWarmed = true
+  const go = () => {
+    import('./routes/staff/Cashier.jsx').catch(() => {})
+    import('./routes/staff/Kds.jsx').catch(() => {})
+  }
+  if (typeof requestIdleCallback === 'function') requestIdleCallback(go, { timeout: 2000 })
+  else setTimeout(go, 300)
 }
 
 // Cold-start lock screen (/lock): the tablet remembers its venue (device cache,
@@ -321,6 +350,7 @@ function LockRoute() {
   const { user, tenantId, loading } = useAuth()
   const navigate = useNavigate()
   const cached = getDeviceVenue()
+  useEffect(warmFloorChunks, [])
   if (loading) return <FullSpinner />
   if (user && tenantId) return <Navigate to="/admin" replace />
   if (!cached?.tid) return <Navigate to="/login" replace />
@@ -356,6 +386,12 @@ export default function App() {
   const { firebaseReady } = useAuth()
   const location = useLocation()
   const { lang } = useI18n()
+  // Scrollbars are hidden product-wide, so the edge fade is the ONLY hint that a
+  // strip scrolls. AdminLayout/MenuView start it for their own shells; the floor
+  // screens (cashier, KDS, portal, platform) have no such ancestor. Re-armed per
+  // path because those shells share one module-level observer and disconnect it
+  // when they unmount. Safe to call repeatedly: elements are marked once.
+  useEffect(() => initScrollAffordance(document.body), [location.pathname])
   if (!firebaseReady) return <FirebaseSetup />
 
   return (

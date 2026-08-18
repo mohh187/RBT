@@ -247,7 +247,7 @@
 .platform-scope.admin-shell .textarea { min-height: 54px; padding-block: var(--sp-3); }
 .platform-scope.admin-shell .input:focus,
 .platform-scope.admin-shell .select:focus,
-.platform-scope.admin-shell .textarea:focus { box-shadow: 0 0 0 2px var(--ring); }
+.platform-scope.admin-shell .textarea:focus { box-shadow: 0 0 0 2px var(--ring-soft); }
 
 .platform-scope.admin-shell .badge { padding: 1px 6px; font-weight: 600; border-radius: 2px; }
 .platform-scope.admin-shell .chip { min-height: 24px; padding: 2px var(--sp-4); border-radius: var(--r-sm); }

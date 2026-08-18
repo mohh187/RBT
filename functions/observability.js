@@ -61,7 +61,7 @@ async function probeMeta(db, limits, live) {
   const out = { status: 'skipped', checkedAt: Date.now() }
   if (!token || !waba) {
     out.status = 'unconfigured'
-    out.note = 'WA_ACCESS_TOKEN أو wabaId غير مضبوط — لا يمكن مراقبة جودة واتساب'
+    out.note = 'ربط واتساب مع Meta غير مكتمل، فلا يمكن مراقبة جودة الأرقام.'
     return out
   }
   const auth = { headers: { Authorization: `Bearer ${token}` } }
@@ -114,7 +114,7 @@ async function probeMeta(db, limits, live) {
       await raise(db, {
         key, ns: 'vendor.meta', source: 'vendor', vendor: 'meta', severity: 'high',
         title: `قالب معاملات «${t.name}» صُنّف تسويقياً`,
-        body: 'Meta تصنّفه MARKETING الآن — أي نحو 4.7 أضعاف السعر، وفقدان مجانية نافذة الـ 24 ساعة.',
+        body: 'Meta تصنّفه MARKETING الآن، أي نحو 4.7 أضعاف السعر، مع فقدان مجانية نافذة الـ 24 ساعة.',
         action: 'اطلب إعادة التصنيف إلى UTILITY من WhatsApp Manager، وأزل أي عبارة ترويجية من نص القالب.',
         url: CONSOLE_URL, detail: { name: t.name, category: t.category },
       })
@@ -141,7 +141,7 @@ async function probeMeshy(db, limits, live) {
       severity: credits <= 0 ? 'critical' : 'high',
       title: credits <= 0 ? 'رصيد Meshy نفد' : 'رصيد Meshy منخفض',
       body: `المتبقي ${credits} وحدة (الحد الأدنى المضبوط ${min}). تحويل المجسمات الواقعية يتوقف عند النفاد.`,
-      action: 'اشحن رصيد Meshy من لوحتهم، أو عطّل ar3d مؤقتاً من /platform/spend حتى الشحن.',
+      action: 'اشحن رصيد Meshy من لوحتهم، أو أوقف المجسمات الواقعية مؤقتاً من /platform/spend حتى الشحن.',
       url: CONSOLE_URL, detail: { credits, min },
     })
   }
@@ -244,7 +244,7 @@ const vendorProbe = onSchedule(
           key: k, ns: 'probe', source: 'probe', vendor: name, severity: 'high',
           title: `تعذّر فحص ${name}`,
           body: `الفحص نفسه فشل: ${String(r.reason && r.reason.message || r.reason).slice(0, 200)}. غياب التنبيهات عن ${name} الآن لا يعني أنه سليم.`,
-          action: 'تحقق من صلاحية المفتاح ومن اتصال الخدمة — الصمت هنا ليس دليل صحة.',
+          action: 'تحقق من صلاحية المفتاح ومن اتصال الخدمة. الصمت هنا ليس دليل سلامة.',
           url: CONSOLE_URL,
         })
       }
@@ -317,10 +317,10 @@ const geminiCapGuard = onSchedule(
         title: overNow ? 'تجاوز سقف Gemini الشهري' : projected >= cap ? 'الاتجاه يتجاوز سقف Gemini' : 'اقتراب من سقف Gemini',
         body: overNow
           ? `المستهلك ${mtdUsd.toFixed(2)} من ${cap} دولار. Google توقف كل طلبات Gemini على الحساب عند التجاوز.`
-          : `المستهلك ${mtdUsd.toFixed(2)} دولار، والاتجاه الحالي يصل ${projected.toFixed(2)} نهاية الشهر${crossesOn ? ` — أي التجاوز يوم ${crossesOn}` : ''}.`,
+          : `المستهلك ${mtdUsd.toFixed(2)} دولار، والاتجاه الحالي يصل ${projected.toFixed(2)} نهاية الشهر${crossesOn ? `، ويتجاوز السقف يوم ${crossesOn}` : ''}.`,
         action: overNow
           ? 'ارفع شريحة Gemini في Google AI Studio فوراً، أو أوقف قنوات الذكاء من /platform/spend حتى تُرفع.'
-          : 'ارفع الشريحة قبل الموعد، أو اخفض سقوف aiImage وtableImage للباقات الأعلى.',
+          : 'ارفع الشريحة قبل الموعد، أو اخفض سقوف صور الذكاء وصور الطاولات في الباقات الأعلى.',
         url: CONSOLE_URL,
         detail: { mtdUsd: Math.round(mtdUsd * 100) / 100, cap, projected: Math.round(projected * 100) / 100, crossesOn },
       })
@@ -365,7 +365,7 @@ async function noteJobRun(db, name, { ms, docsRead, timeoutSeconds, ok = true, e
     await raise(db, {
       key: `job.${name}.timeout`, ns: 'job', source: 'job', severity: 'high',
       title: `الوظيفة ${name} تقترب من مهلتها`,
-      body: `استغرقت ${Math.round(ms / 1000)} ثانية أي ${pct}% من المهلة، وقرأت ${docsRead || 0} مستنداً. عند التجاوز تتوقف في منتصف الدوران — فتُحرم المنشآت المتأخرة في الترتيب من الخدمة بلا أي خطأ.`,
+      body: `استغرقت ${Math.round(ms / 1000)} ثانية أي ${pct}% من المهلة، وعدد المستندات المقروءة ${docsRead || 0}. عند تجاوز المهلة تتوقف في منتصف الدوران، فتُحرم المنشآت المتأخرة في الترتيب من الخدمة بلا أي خطأ ظاهر.`,
       action: 'قسّم الوظيفة على دفعات أو ارفع timeoutSeconds، وراجع عدد المستندات المقروءة.',
       url: CONSOLE_URL, detail: { name, ms, pct, docsRead },
     })
@@ -450,7 +450,7 @@ const venueBalanceNudge = onSchedule(
       // all of them beats four notifications that each look like spam.
       const lines = hits.map((h) => (
         h.reason === 'pace'
-          ? `${h.label}: استهلكت ${h.used} من ${h.cap} — وبهذا المعدّل ينفد يوم ${h.crossesOn} من الشهر.`
+          ? `${h.label}: استهلكت ${h.used} من ${h.cap}، وبهذا المعدّل ينفد رصيدك يوم ${h.crossesOn} من الشهر.`
           : h.reason === 'depleted'
             ? `${h.label}: رصيدك المشترى أوشك على النفاد.`
             : `${h.label}: استهلكت ${h.pct}% من ${h.cap}.`
@@ -460,7 +460,7 @@ const venueBalanceNudge = onSchedule(
       await db.collection(`tenants/${t.id}/announcements`).add({
         fromPlatform: true,
         title: hits.length > 1 ? 'رصيدك في عدة خدمات أوشك على النفاد' : `رصيد «${hits[0].label}» أوشك على النفاد`,
-        body: `${lines.join('\n')}\n\nيمكنك شحن رصيد إضافي فوراً من صفحة الفوترة — أو ترقية باقتك.`,
+        body: `${lines.join('\n')}\n\nيمكنك شحن رصيد إضافي من صفحة الفوترة، أو ترقية باقتك.`,
         // ONE TAP from the notice to checkout: the billing screen opens with
         // this channel's packs already expanded. Removing that tap is worth
         // more than any wording change.

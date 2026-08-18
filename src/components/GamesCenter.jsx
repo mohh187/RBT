@@ -93,9 +93,9 @@ const TXT = {
     prize: 'جائزة',
     all: 'الكل',
     empty: 'لم يفعّل هذا المكان أي لعبة بعد.',
-    emptyHint: 'اسأل الموظفين — يمكنهم تفعيل الألعاب من لوحة التحكم.',
+    emptyHint: 'اسأل الموظفين، يمكنهم تفعيل الألعاب من لوحة التحكم.',
     boardNote: 'لوحة الصدارة الشهرية تعرض أفضل نتيجة في جولة واحدة.',
-    anyGame: 'هذه البطولة تحتسب كل الألعاب — اختر أي لعبة من القائمة وتُحتسب جولتك فيها.',
+    anyGame: 'هذه البطولة تحتسب كل الألعاب. اختر أي لعبة من القائمة وتُحتسب جولتك فيها.',
     notHere: 'هذه اللعبة لم تعد مفعّلة في هذا المكان. اختر واحدة من القائمة.',
     waitHost: 'مقعدك محفوظ. تبدأ الجولة حين يبدأها المضيف.',
     nowH: 'ما يحدث الآن',
@@ -129,7 +129,7 @@ const TXT = {
     gateWhy: 'We keep your scores and stages on this device, and register you with the venue.',
     gateFor: 'Opening',
     gateTour: 'A tournament is live right now',
-    gateTourIn: 'register and your rounds count in it',
+    gateTourIn: 'Register and your rounds count in it',
     gateTourPrize: 'Prize',
     name: 'Name',
     phone: 'Mobile number',
@@ -154,7 +154,7 @@ const TXT = {
     empty: 'This venue has not enabled any game yet.',
     emptyHint: 'Staff can enable games from the dashboard.',
     boardNote: 'The monthly board shows the best single-round score.',
-    anyGame: 'Every game counts in this tournament — pick any game below and your round enters it.',
+    anyGame: 'Every game counts in this tournament. Pick any game below and your round enters it.',
     notHere: 'This game is no longer enabled at this venue. Pick one from the list.',
     waitHost: 'Your seat is saved. The round begins when the host starts it.',
     nowH: 'Happening now',
@@ -1166,7 +1166,7 @@ export default function GamesCenter({
     const prize = claimText(r.prize, { itemName: resolveItemName(r.prize.itemId) })
     if (!prize) return null
     const where = r.gameId === 'any' ? '' : nameOfGame(r.gameId)
-    return `${prize} — ${conditionText(r, where)}`
+    return `${prize}: ${conditionText(r, where)}`
   }, [resolveItemName, nameOfGame])
 
   // ---- registration gate ----
@@ -1804,7 +1804,7 @@ export default function GamesCenter({
               <span>
                 {t.gateTour}
                 {tour.name ? ` «${tour.name}»` : ''}
-                {` — ${t.gateTourIn}`}
+                {`. ${t.gateTourIn}`}
                 {String(tour?.prize?.label || '').trim()
                   ? `. ${t.gateTourPrize}: ${String(tour.prize.label).trim()}`
                   : ''}

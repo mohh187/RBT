@@ -57,7 +57,7 @@ function PlayerDetail({ ar, row, onBack, soloPlays = 0 }) {
           <div className="ga-sheet-t">
             <strong>{playerLabel(row, ar)}</strong>
             <span className="ga-num">
-              {row.customerPhone ? maskPhone(row.customerPhone) : (ar ? 'بلا رقم جوال — لا يمكن مراسلته' : 'no phone')}
+              {row.customerPhone ? maskPhone(row.customerPhone) : (ar ? 'بلا رقم جوال، لا يمكن مراسلته' : 'no phone')}
               {' · '}
               {shortDevice(row.deviceId)}
             </span>
@@ -113,7 +113,7 @@ function PlayerDetail({ ar, row, onBack, soloPlays = 0 }) {
           </div>
           <div className="ga-fig">
             <span className="ga-fig-l">{ar ? 'أول وآخر ظهور' : 'First / last'}</span>
-            <strong className="ga-fig-v ga-num">{dayStamp(row.firstAt)} — {dayStamp(row.lastAt)}</strong>
+            <strong className="ga-fig-v ga-num">{dayStamp(row.firstAt)} · {dayStamp(row.lastAt)}</strong>
           </div>
         </div>
       </div>
@@ -125,7 +125,7 @@ function PlayerDetail({ ar, row, onBack, soloPlays = 0 }) {
           <p className="ga-hint">
             {ar
               ? 'ناتج عن اختيارات تركها الضيف بنفسه داخل لعبة في المنيو. وصف ذاتي وليس تشخيصاً ولا حكماً على شخص.'
-              : 'From the guest\'s own picks inside a menu game — self-report, not a diagnosis.'}
+              : 'From the guest\'s own picks inside a menu game. It is a self-report, not a diagnosis.'}
           </p>
         </div>
       )}
@@ -162,7 +162,7 @@ function PlayerDetail({ ar, row, onBack, soloPlays = 0 }) {
                     <td>{g.gameAr || gameName(g.gameId, ar)}</td>
                     <td className="ga-num">{fmtInt(g.plays)}</td>
                     <td className="ga-num">{fmtInt(g.best)}</td>
-                    <td className="ga-num">{num(g.stage) ? fmtInt(g.stage) : '—'}</td>
+                    <td className="ga-num">{num(g.stage) ? fmtInt(g.stage) : '·'}</td>
                     <td className="ga-num">{dateTime(g.lastAt)}</td>
                   </tr>
                 ))}
@@ -198,7 +198,7 @@ function PlayerDetail({ ar, row, onBack, soloPlays = 0 }) {
                       </span>
                     </td>
                     <td className="ga-num">{fmtInt(p.score)}</td>
-                    <td className="ga-num">{num(p.durationMs) > 0 ? durText(num(p.durationMs) / 1000) : '—'}</td>
+                    <td className="ga-num">{num(p.durationMs) > 0 ? durText(num(p.durationMs) / 1000) : '·'}</td>
                     <td>{p.completed === true ? <span className="ga-ok"><Icon name="ok" size={14} /></span> : <span className="ga-of">{ar ? 'لا' : 'No'}</span>}</td>
                   </tr>
                 ))}
@@ -208,7 +208,7 @@ function PlayerDetail({ ar, row, onBack, soloPlays = 0 }) {
         ) : (
           <p className="ga-hint">
             {ar
-              ? 'لا جولات لهذا اللاعب داخل الفترة المختارة — الأرقام أعلاه من ملفه التراكمي.'
+              ? 'لا جولات لهذا اللاعب داخل الفترة المختارة، والأرقام أعلاه من ملفه التراكمي.'
               : 'No rounds inside the selected period.'}
           </p>
         )}
@@ -283,7 +283,7 @@ export default function PlayersPanel({
         </div>
         <p className="ga-hint">
           {ar
-            ? `${fmtInt(identified)} من ${fmtInt(players.length)} تركوا رقم جوال — هؤلاء وحدهم يمكن مراسلتهم. البقية أجهزة مجهولة، وهذا واقع البيانات لا نقص فيها.`
+            ? `${fmtInt(identified)} من ${fmtInt(players.length)} تركوا رقم جوال، وهؤلاء وحدهم يمكن مراسلتهم. البقية أجهزة مجهولة، وهذا واقع البيانات لا نقص فيها.`
             : `${identified} of ${players.length} left a phone; only those are reachable.`}
           {periodLabel ? <span className="ga-num"> {' · '}{periodLabel}</span> : null}
         </p>
@@ -293,7 +293,7 @@ export default function PlayersPanel({
           // a competitive figure, and it must not be read as one.
           <p className="ga-hint">
             {ar
-              ? `عمود «جولات» هنا يشمل الجولات ضد الكمبيوتر — ${fmtInt(soloTotal)} منها في هذه الفترة. للترتيب التنافسي استخدم البطولات، فهي تستبعدها.`
+              ? `عمود «جولات» هنا يشمل الجولات ضد الكمبيوتر، ومنها ${fmtInt(soloTotal)} في هذه الفترة. للترتيب التنافسي استخدم البطولات، فهي تستبعدها.`
               : `The plays column here includes computer rounds (${fmtInt(soloTotal)} this period). Tournament standings exclude them.`}
           </p>
         )}
@@ -353,10 +353,10 @@ export default function PlayersPanel({
                             {gameName(g.gameId, ar)} ({fmtInt(g.plays)})
                           </span>
                         ))}
-                        {topGames(p).length === 0 ? <span className="ga-of">—</span> : null}
+                        {topGames(p).length === 0 ? <span className="ga-of">·</span> : null}
                       </span>
                     </td>
-                    <td>{p.insight?.archetype || <span className="ga-of">—</span>}</td>
+                    <td>{p.insight?.archetype || <span className="ga-of">·</span>}</td>
                     <td>
                       <span className="ga-chipsrow">
                         {(p.tags || []).slice(0, 3).map((t) => (

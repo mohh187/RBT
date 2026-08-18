@@ -187,7 +187,7 @@ export default function DeviceCheck({ open, onClose, tenant, tenantId }) {
           <Row lang={lang} label={ar ? 'مدعومة على هذا الجهاز' : 'Supported on this device'} ok={diag.supported}
             note={diag.supported ? (ar ? 'مدعومة' : 'Supported') : (ar ? 'غير مدعومة' : 'Unsupported')} />
           <Row lang={lang} label={ar ? 'إذن الإشعارات' : 'Permission'} ok={diag.permission === 'granted'}
-            note={diag.permission === 'granted' ? (ar ? 'مسموح' : 'Granted') : diag.permission === 'denied' ? (ar ? 'محظور — فعّله من إعدادات المتصفح' : 'Blocked in browser') : (ar ? 'بانتظار التفعيل' : 'Not set')} />
+            note={diag.permission === 'granted' ? (ar ? 'مسموح' : 'Granted') : diag.permission === 'denied' ? (ar ? 'محظور. فعّله من إعدادات المتصفح' : 'Blocked. Allow it from your browser settings') : (ar ? 'بانتظار التفعيل' : 'Not set')} />
           <Row lang={lang} label={ar ? 'خدمة الدفع (الخادم)' : 'Server push key'} ok={diag.vapid}
             note={diag.vapid ? (ar ? 'مضبوطة' : 'Configured') : (ar ? 'غير مضبوطة' : 'Missing')} />
           <button className="btn btn-sm btn-outline" style={{ alignSelf: 'flex-start' }} onClick={testSound}>
@@ -222,7 +222,7 @@ export default function DeviceCheck({ open, onClose, tenant, tenantId }) {
               note={ar ? `${screensOnline} من ${screens.length} متصلة` : `${screensOnline} of ${screens.length} online`} />
           )}
           {devices.length === 0 ? (
-            <p className="xs faint" style={{ margin: 0 }}>{ar ? 'لا أجهزة مسجّلة بعد — سجّل هذا الجهاز بالأسفل.' : 'No devices registered yet — register this one below.'}</p>
+            <p className="xs faint" style={{ margin: 0 }}>{ar ? 'لا أجهزة مسجّلة بعد. سجّل هذا الجهاز من الأسفل.' : 'No devices registered yet. Register this one below.'}</p>
           ) : devices.map((d) => {
             const mine = d.id === myId
             const online = toMs(d.lastSeenAt) >= now - DEVICE_ONLINE_MS

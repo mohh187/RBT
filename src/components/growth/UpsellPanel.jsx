@@ -8,6 +8,7 @@ import SmartUpsell from '../SmartUpsell.jsx'
 import { GCard, GRefusal, GBasis, GTag, GNumbers, pct } from './parts.jsx'
 import { basketIndex, topPairings, GROWTH_THRESHOLDS as TH } from '../../lib/growth.js'
 import { lex } from '../../lib/venueTypes.js'
+import { arPlural } from '../../lib/forecast.js'
 
 export default function UpsellPanel({ orders = [], items = [], tenant = null, lang = 'ar', currency = 'SAR', days = 90 }) {
   const ar = lang !== 'en'
@@ -28,7 +29,7 @@ export default function UpsellPanel({ orders = [], items = [], tenant = null, la
         <GNumbers data={{
           [ar ? 'طلبات مدفوعة في النافذة' : 'Paid orders in window']: pairs.sample.basketOrders,
           [ar ? 'طلبات بأكثر من صنف' : 'Multi-item orders']: pairs.sample.multiLineOrders,
-          [ar ? 'النافذة' : 'Window']: `${pairs.sample.windowDays} ${ar ? 'يوماً' : 'days'}`,
+          [ar ? 'النافذة' : 'Window']: ar ? arPlural(pairs.sample.windowDays, { one: 'يوم', two: 'يومين', few: 'أيام', many: 'يوماً' }) : `${pairs.sample.windowDays} days`,
           [ar ? 'أزواج تتجاوز الحدود' : 'Pairs above thresholds']: pairs.rows.length,
         }} />
         <GBasis>
@@ -42,7 +43,7 @@ export default function UpsellPanel({ orders = [], items = [], tenant = null, la
         <GRefusal
           title={ar ? 'لا توجد قاعدة تلازم يمكن الوثوق بها' : 'No trustworthy pairing yet'}
           body={ar
-            ? `${pairs.reasonAr}. لن يظهر أي اقتراح للضيوف حتى تتوفر بيانات كافية — الاقتراح المخترع أسوأ من غيابه.`
+            ? `${pairs.reasonAr}. لن يظهر أي اقتراح للضيوف حتى تتوفر بيانات كافية، فالاقتراح المخترع أسوأ من غيابه.`
             : `${pairs.reasonAr}. Nothing is shown to guests until the data supports it.`}
         />
       ) : (
@@ -57,13 +58,13 @@ export default function UpsellPanel({ orders = [], items = [], tenant = null, la
                 </div>
                 <div className="g-basis" style={{ borderInlineStart: 0, paddingInlineStart: 0 }}>
                   {ar
-                    ? `طُلبا معاً ${r.together} من ${r.anchorOrders} طلباً يحتوي «${r.aName}»`
+                    ? `طُلبا معاً ${r.together} من ${arPlural(r.anchorOrders, { one: 'طلب', two: 'طلبين', few: 'طلبات', many: 'طلباً' })} تحتوي «${r.aName}»`
                     : `Together ${r.together} of ${r.anchorOrders} orders containing "${r.aName}"`}
                 </div>
               </div>
               <span className="g-metric">{ar ? 'الثقة' : 'Conf.'} {pct(r.confidence)}</span>
               <span className="g-metric">{ar ? 'الدعم' : 'Support'} {pct(r.support)}</span>
-              <span className={`g-metric g-lift ${r.lift >= 2 ? 'strong' : ''}`}>lift {r.lift ?? '—'}</span>
+              <span className={`g-metric g-lift ${r.lift >= 2 ? 'strong' : ''}`}>lift {r.lift ?? '-'}</span>
               <button
                 type="button"
                 className="btn btn-xs btn-outline"

@@ -61,6 +61,8 @@ import EditorialLayout, { EditorialItemStage, buttonSkinVars, EditorialRoomBg } 
 import OceanArtLayout from './menuThemes/OceanArtLayout.jsx'
 import ChromeSkin from './ChromeSkin.jsx'
 import { basePrice, variantHasOwnPrice } from '../lib/pricing.js'
+import { orderTypeLabel } from '../lib/orderStatus.js'
+import { arPlural } from '../lib/forecast.js'
 import { scrollSectionIntoView, scrollSectionToTop, scrollRailIntoView, chromeOffset, stuckOffset } from '../lib/scrollToSection.js'
 
 const resolveItemStyles = (it) => {
@@ -654,15 +656,20 @@ export default function MenuView({ tenant, tenantId, items, categories, offers =
     let alive = true
     ;(async () => {
       try {
-        const [{ recallFor }, { listOrdersSince }] = await Promise.all([
+        const [{ recallFor }, { getOrder }] = await Promise.all([
           import('../lib/venueMemory.js'),
           import('../lib/db.js'),
         ])
-        const since = new Date(Date.now() - 365 * 86400000)
-        const orders = await listOrdersSince(tenantId, since)
+        // Per-id reads, NOT a collection query: firestore.rules allow a diner
+        // `get` on one order but deny `list` (staff-only), so listOrdersSince
+        // was permission-denied for every guest and this never once ran.
+        const cutoff = Date.now() - 365 * 86400000
+        const fetched = await Promise.all(
+          mine.filter((m) => m.id && (m.at || 0) >= cutoff).slice(0, 10).map((m) => getOrder(tenantId, m.id).catch(() => null)),
+        )
         if (!alive) return
         const lines = recallFor({
-          orders: orders || [],
+          orders: fetched.filter(Boolean),
           items,
           tenant,
           customer: { phone, name: savedCustomer?.name || '' },
@@ -672,7 +679,10 @@ export default function MenuView({ tenant, tenantId, items, categories, offers =
       } catch (_) { /* recognition is a bonus, never a blocker */ }
     })()
     return () => { alive = false }
-  }, [tenantId, preview, savedCustomer?.phone, items, tenant]) // eslint-disable-line react-hooks/exhaustive-deps
+    // `items` / `tenant` are READ but not tracked by identity: both re-emit on
+    // every staff edit while a diner has the menu open, and this used to refire
+    // the whole lookup each time. items.length is enough to catch the first load.
+  }, [tenantId, preview, savedCustomer?.phone, items?.length]) // eslint-disable-line react-hooks/exhaustive-deps
 
   // An invite link opens the games hub straight away — the guest came for the
   // board, not the menu. Stripping the params happens HERE, once the hub is
@@ -765,7 +775,7 @@ export default function MenuView({ tenant, tenantId, items, categories, offers =
     if (!merged) { toast.error(lang === 'ar' ? 'لم تعد الأصناف متاحة' : 'Those items are no longer available'); return false }
     setFxOpen('')
     setCartOpen(true)
-    toast.success(lang === 'ar' ? 'نُقلت أصناف الطاولة إلى سلتك — أكمل الطلب' : 'Table items moved to your cart')
+    toast.success(lang === 'ar' ? 'نقلنا أصناف الطاولة إلى سلتك، أكمل طلبك' : 'Table items moved to your cart')
     return true
   }
 
@@ -1111,14 +1121,15 @@ export default function MenuView({ tenant, tenantId, items, categories, offers =
                   <strong className="small">{lang === 'ar' ? `عضو ${TIER_META[memberCard.tier] ? TIER_META[memberCard.tier].ar : ''}` : `${TIER_META[memberCard.tier] ? TIER_META[memberCard.tier].en : ''} member`} · {memberCard.points || 0} {lang === 'ar' ? 'نقطة' : 'pts'} · {memberCard.discountPct || 0}%</strong>
                   <span className="xs faint">{lang === 'ar' ? 'اضغط لعرض بطاقتك' : 'Tap to view your card'}</span>
                 </div>
-                <Icon name="next" size={18} className="faint" />
+                {/* the global RTL chevron flip only covers .list-row, and this is a .welcome-card */}
+                <Icon name={lang === 'ar' ? 'back' : 'next'} size={18} className="faint" />
               </a>
             ) : savedCustomer ? (
               <div className="welcome-card">
                 <span className="welcome-ic"><Icon name="user" size={19} /></span>
                 <div className="grow stack" style={{ gap: 1 }}>
                   <strong className="small">{lang === 'ar' ? `أهلاً ${savedCustomer.name || 'بعودتك'}` : `Welcome back${savedCustomer.name ? ` ${savedCustomer.name}` : ''}`}</strong>
-                  <span className="xs faint">{lang === 'ar' ? 'سعداء بعودتك — تابع نقاطك وعروضك' : 'Track your points & offers'}</span>
+                  <span className="xs faint">{lang === 'ar' ? 'سعداء بعودتك، تابع نقاطك وعروضك' : 'Track your points & offers'}</span>
                 </div>
                 <Icon name="award" size={18} className="faint" />
               </div>
@@ -1882,7 +1893,7 @@ function SpotCover({ cat, item, lang }) {
       {img && <span className="spot-cover-bg" style={{ backgroundImage: `url(${img})` }} aria-hidden="true" />}
       <span className="spot-cover-veil" aria-hidden="true" />
       <div className="spot-cover-in">
-        <span className="spot-cover-kick">{lang === 'ar' ? 'القائمة' : 'The Menu'}</span>
+        <span className="spot-cover-kick">{lang === 'ar' ? 'المنيو' : 'The Menu'}</span>
         <h2 className="spot-cover-name">{pickLang(cat, 'name', lang)}</h2>
         {cdesc && <p className="spot-cover-desc">{cdesc}</p>}
         <span className="spot-cover-hint" aria-hidden="true"><Icon name="next" size={22} style={{ transform: 'rotate(90deg)' }} /></span>
@@ -1965,9 +1976,11 @@ function OrderTypeGate({ open, curbsideEnabled, deliveryEnabled, onPick, onClose
   return (
     <Sheet open={open} onClose={onClose} title={t('chooseOrderType')}>
       <div className="stack" style={{ gap: 'var(--sp-3)' }}>
-        <Opt icon="bag" label={t('takeaway')} sub={ar ? 'أستلم من الكاشير' : 'Pick up at the counter'} onClick={() => onPick('pickup')} />
-        {curbsideEnabled && <Opt icon="car" label={t('curbside')} sub={ar ? 'يصل طلبك لسيارتك' : 'Brought to your car'} onClick={() => onPick('curbside')} />}
-        {deliveryEnabled && <Opt icon="car" label={ar ? 'توصيل' : 'Delivery'} sub={ar ? 'يصل طلبك إلى عنوانك' : 'Delivered to your address'} onClick={() => onPick('delivery')} />}
+        {/* one vocabulary with the chips in the cart (orderTypeLabel) — this gate
+            used to say «سفري» for the very type the chip below called «استلام من المحل» */}
+        <Opt icon="bag" label={orderTypeLabel('pickup', lang)} sub={ar ? 'أستلم من الكاشير' : 'Pick up at the counter'} onClick={() => onPick('pickup')} />
+        {curbsideEnabled && <Opt icon="car" label={orderTypeLabel('curbside', lang)} sub={ar ? 'يصل طلبك لسيارتك' : 'Brought to your car'} onClick={() => onPick('curbside')} />}
+        {deliveryEnabled && <Opt icon="car" label={orderTypeLabel('delivery', lang)} sub={ar ? 'يصل طلبك إلى عنوانك' : 'Delivered to your address'} onClick={() => onPick('delivery')} />}
       </div>
     </Sheet>
   )
@@ -2329,7 +2342,7 @@ function ArStage({ item, tenant, lang, onClose }) {
             : 'AR could not start: on Android install "Google Play Services for AR" and open in Chrome itself (not an in-app browser); on iPhone use Safari.'}
         </p>
       ) : (phase !== 'unsupported' && phase !== 'error') ? (
-        <p className="ar-stage-hint">{ar ? 'اضغط أيقونة AR داخل العارض ثم وجّه الكاميرا إلى الطاولة — سيقف الصنف عليها فعلياً.' : 'Tap the AR icon inside the viewer and point at your table.'}</p>
+        <p className="ar-stage-hint">{ar ? 'اضغط أيقونة AR داخل العارض، ثم وجّه الكاميرا إلى الطاولة ليقف الصنف عليها.' : 'Tap the AR icon inside the viewer and point at your table.'}</p>
       ) : null}
     </div>
   )
@@ -2636,7 +2649,7 @@ function CartSheet({ cart, subtotal, currency, offers, tenant, tenantId, table, 
       let here = null
       try { here = await getPosition() } catch { toast.error(lang === 'ar' ? 'فعّل خدمة الموقع لتأكيد وجودك داخل المقهى لإتمام طلب الطاولة' : 'Enable location to confirm you are at the venue for a table order'); return }
       const d = distanceMeters(here, venueGeo)
-      if (d != null && d > radius) { toast.error(lang === 'ar' ? 'طلبات الطاولة متاحة داخل المقهى فقط — يبدو أنك خارج النطاق' : 'Table orders are available inside the venue only'); return }
+      if (d != null && d > radius) { toast.error(lang === 'ar' ? 'طلبات الطاولة تُقبل من داخل المكان فقط، ويبدو أنك خارجه' : 'Table orders are available inside the venue only'); return }
     }
 
     if (isDelivery) {
@@ -2652,13 +2665,15 @@ function CartSheet({ cart, subtotal, currency, offers, tenant, tenantId, table, 
         if (radiusKm > 0 && venueGeo?.lat != null) {
           if (!geo?.lat) { toast.error(lang === 'ar' ? 'حدّد موقعك بزر «موقعي الحالي» لتأكيد نطاق التوصيل' : 'Set your location to confirm the delivery range'); return }
           const km = distanceMeters(geo, venueGeo) / 1000
-          if (km != null && km > radiusKm) { toast.error(lang === 'ar' ? `عذراً، أنت خارج نطاق التوصيل (${radiusKm} كم) — المسافة ~${km.toFixed(1)} كم` : `Sorry, you are outside the ${radiusKm} km delivery range (~${km.toFixed(1)} km)`); return }
+          if (km != null && km > radiusKm) { toast.error(lang === 'ar' ? `أنت خارج نطاق التوصيل (${radiusKm} كم)، والمسافة تقريباً ${km.toFixed(1)} كم` : `Sorry, you are outside the ${radiusKm} km delivery range (~${km.toFixed(1)} km)`); return }
         }
       }
     }
     setPlacing(true)
     try {
-      const ip = await fetchIp().catch(() => null)
+      // Guest Wi-Fi that filters the IP lookup makes fetchIp HANG (no reject),
+      // and checkout was parked on it. The ip is analytics-only: race it.
+      const ip = await Promise.race([fetchIp().catch(() => null), new Promise((r) => setTimeout(() => r(null), 400))])
       // Pay-first only when the guest chose online AND it's enabled AND there is a charge.
       const payOnline = payMethod === 'online' && onlinePayEnabled && total > 0
       const payload = {
@@ -2714,7 +2729,7 @@ function CartSheet({ cart, subtotal, currency, offers, tenant, tenantId, table, 
       }
       if (payOnline) {
         // Take payment FIRST. The held order only reaches staff once Moyasar settles.
-        try { await startPayment('order', tenantId, res.id); return } catch (_) { toast.error(lang === 'ar' ? 'تعذّر فتح صفحة الدفع — لم يُرسل طلبك، أعد المحاولة' : 'Could not open payment — order not sent, please retry') }
+        try { await startPayment('order', tenantId, res.id); return } catch (_) { toast.error(lang === 'ar' ? 'ما فتحت صفحة الدفع، وطلبك لم يُرسل. جرّب مرة ثانية' : 'The payment page did not open and your order was not sent. Please try again') }
         return
       }
       onPlaced(res.id)
@@ -2740,7 +2755,7 @@ function CartSheet({ cart, subtotal, currency, offers, tenant, tenantId, table, 
           /* browse mode: the list is for the waiter — no submission */
           <div className="row" style={{ gap: 8, alignItems: 'center', justifyContent: 'center', padding: '4px 0', color: 'var(--text-muted)' }}>
             <Icon name="waiter" size={16} />
-            <span className="small">{lang === 'ar' ? 'اعرض هذه القائمة للنادل عند الطلب' : 'Show this list to your waiter to order'}</span>
+            <span className="small">{lang === 'ar' ? 'اعرض هذا الطلب للنادل عند طلبك' : 'Show this list to your waiter to order'}</span>
           </div>
         ) : !ordering.open ? (
           /* venue is closed / paused — the menu stays browsable but no submission */
@@ -2764,11 +2779,11 @@ function CartSheet({ cart, subtotal, currency, offers, tenant, tenantId, table, 
           {!browseOnly && (
             <div className="otype-row">
               {(table
-                ? [{ id: 'dine_in', icon: 'tables', label: t('dineIn') }]
+                ? [{ id: 'dine_in', icon: 'tables', label: orderTypeLabel('dine_in', lang) }]
                 : [
-                  { id: 'pickup', icon: 'bag', label: t('pickup') },
-                  ...(curbsideEnabled ? [{ id: 'curbside', icon: 'car', label: t('curbside') }] : []),
-                  ...(deliveryEnabled ? [{ id: 'delivery', icon: 'car', label: lang === 'ar' ? 'توصيل' : 'Delivery' }] : []),
+                  { id: 'pickup', icon: 'bag', label: orderTypeLabel('pickup', lang) },
+                  ...(curbsideEnabled ? [{ id: 'curbside', icon: 'car', label: orderTypeLabel('curbside', lang) }] : []),
+                  ...(deliveryEnabled ? [{ id: 'delivery', icon: 'car', label: orderTypeLabel('delivery', lang) }] : []),
                 ]
               ).map((o) => (
                 <button key={o.id} className={`otype-chip ${orderType === o.id ? 'on' : ''}`} onClick={() => setOrderType(o.id)}>
@@ -2806,7 +2821,7 @@ function CartSheet({ cart, subtotal, currency, offers, tenant, tenantId, table, 
               </div>
               <span className="xs faint">
                 {payMethod === 'online'
-                  ? (lang === 'ar' ? 'ستدفع الآن أونلاين (Apple Pay/مدى/بطاقة)، ويصل طلبك للمطبخ بعد نجاح الدفع.' : 'Pay now (Apple Pay/mada/card); your order reaches the kitchen after payment succeeds.')
+                  ? (lang === 'ar' ? 'ستدفع الآن بالدفع الإلكتروني (Apple Pay أو مدى أو بطاقة)، ويصل طلبك للمطبخ بعد نجاح الدفع.' : 'Pay now (Apple Pay/mada/card); your order reaches the kitchen after payment succeeds.')
                   : payMethod === 'card_terminal'
                     ? (lang === 'ar' ? 'ستدفع بالشبكة عند الاستلام؛ يصل طلبك للكاشير فوراً.' : 'Pay by card machine on handover; your order reaches the cashier now.')
                     : (lang === 'ar' ? 'ستدفع نقداً عند الاستلام؛ يصل طلبك للكاشير فوراً.' : 'Pay cash on handover; your order reaches the cashier now.')}
@@ -2833,7 +2848,7 @@ function CartSheet({ cart, subtotal, currency, offers, tenant, tenantId, table, 
               </div>
               {distKm != null && (
                 outOfZone
-                  ? <span className="xs" style={{ color: 'var(--danger)' }}><Icon name="warning" size={12} /> {lang === 'ar' ? `خارج نطاق التوصيل — المسافة ~${distKm.toFixed(1)} كم` : `Outside delivery range — ~${distKm.toFixed(1)} km`}</span>
+                  ? <span className="xs" style={{ color: 'var(--danger)' }}><Icon name="warning" size={12} /> {lang === 'ar' ? `خارج نطاق التوصيل، المسافة تقريباً ${distKm.toFixed(1)} كم` : `Outside delivery range, about ${distKm.toFixed(1)} km away`}</span>
                   : <span className="xs faint">{lang === 'ar' ? `المسافة ~${distKm.toFixed(1)} كم` : `~${distKm.toFixed(1)} km`}{deliveryZones.length ? <> · {lang === 'ar' ? 'الرسوم' : 'fee'} <Price value={baseDeliveryFee} currency={currency} lang={lang} symbolSize="0.85em" /></> : null}</span>
               )}
               {phone.trim() === '' && <span className="xs faint">{lang === 'ar' ? 'أدخل جوالك أدناه ليتواصل السائق معك.' : 'Enter your phone below so the driver can reach you.'}</span>}
@@ -2947,7 +2962,7 @@ function CartSheet({ cart, subtotal, currency, offers, tenant, tenantId, table, 
           )}
           {showField('email') && (
           <div className="field">
-            <label>{lang === 'ar' ? 'البريد الإلكتروني' : 'Email'} <span className="faint">({lang === 'ar' ? 'اختياري — لاستلام الفاتورة' : 'optional — for your invoice'})</span></label>
+            <label>{lang === 'ar' ? 'البريد الإلكتروني' : 'Email'} <span className="faint">({lang === 'ar' ? 'اختياري، لاستلام الفاتورة' : 'optional, for your invoice'})</span></label>
             <input className="input" dir="ltr" type="email" inputMode="email" value={email} onChange={(e) => setEmail(e.target.value)} />
           </div>
           )}
@@ -2962,7 +2977,7 @@ function CartSheet({ cart, subtotal, currency, offers, tenant, tenantId, table, 
               {canRedeem ? (
                 <label className="row" style={{ gap: 8, cursor: 'pointer' }}>
                   <input type="checkbox" checked={redeem} onChange={(e) => setRedeem(e.target.checked)} style={{ width: 20, height: 20 }} />
-                  <span className="small">{lang === 'ar' ? `لديك ${customer.rewards} مشروب مجاني — استخدم واحداً الآن` : `You have ${customer.rewards} free drink(s) — use one now`}</span>
+                  <span className="small">{lang === 'ar' ? `${arPlural(customer.rewards, { one: 'مشروب مجاني', two: 'مشروبان مجانيان', few: 'مشروبات مجانية', many: 'مشروباً مجانياً' })} بانتظارك، استخدم واحداً الآن` : `You have ${customer.rewards} free drink(s), use one now`}</span>
                 </label>
               ) : (
                 <span className="xs faint">{lang === 'ar' ? `باقٍ ${Math.max(0, threshold - (customer.loyaltyDrinks || 0))} للحصول على مشروب مجاني` : `${Math.max(0, threshold - (customer.loyaltyDrinks || 0))} more for a free drink`}</span>

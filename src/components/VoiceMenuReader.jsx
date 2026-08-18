@@ -34,7 +34,7 @@ const COPY = {
     item: 'الصنف',
     of: 'من',
     added: 'تمت الإضافة',
-    needs: 'هذا الصنف يحتاج اختيارات — سنفتحه لك.',
+    needs: 'هذا الصنف يحتاج اختيارات، سنفتحه لك.',
     close: 'إغلاق',
   },
   en: {
@@ -54,7 +54,7 @@ const COPY = {
     item: 'Item',
     of: 'of',
     added: 'Added',
-    needs: 'This item needs choices — opening it for you.',
+    needs: 'This item needs a few choices, so I am opening it for you.',
     close: 'Close',
   },
 }

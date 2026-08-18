@@ -50,7 +50,7 @@ export default function AdShapePicker({ ad, onChange, lang = 'ar' }) {
         <h4>{ar ? 'شكل الإعلان' : 'Ad shape'}</h4>
         <p className="ads-hint">
           {ar
-            ? 'داخل الشريط الإعلاني تتحول كل الأشكال إلى صف مضغوط — الدائرة تبقى دائرة، والعريض يبقى عريضاً.'
+            ? 'داخل الشريط الإعلاني تتحول كل الأشكال إلى صف مضغوط، مع بقاء الدائرة دائرة والعريض عريضاً.'
             : 'Inside a banner every shape collapses to a compact row.'}
         </p>
       </div>
@@ -71,7 +71,7 @@ export default function AdShapePicker({ ad, onChange, lang = 'ar' }) {
         <p className="ads-hint">
           {ar
             ? 'الشكل الدائري يضع النص في المنتصف دائماً مهما كان اختيار «موضع النص»، لأن أعلى الدائرة وأسفلها ضيقان.'
-            : 'The circle always centres its text — its top and bottom are too narrow for anything else.'}
+            : 'The circle always centres its text, because its top and bottom are too narrow for anything else.'}
         </p>
       ) : null}
     </>

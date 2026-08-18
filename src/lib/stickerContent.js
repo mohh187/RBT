@@ -63,7 +63,7 @@ export function stickerContent(tenant, { lang = 'ar' } = {}) {
     : (ordering ? 'Scan. Order. Play.' : 'Scan. Explore. Play.')
 
   const subParts = ar
-    ? [ordering ? 'اطلب من مكانك' : 'القائمة بالصور', gamesOn ? `${gameCount} ${gamesWord(gameCount)} مجاناً` : null, loyaltyOn ? 'ومكافآت تنتظرك' : null]
+    ? [ordering ? 'اطلب من مكانك' : 'المنيو بالصور', gamesOn ? `${gameCount} ${gamesWord(gameCount)} مجاناً` : null, loyaltyOn ? 'ومكافآت تنتظرك' : null]
     : [ordering ? 'Order from your seat' : 'Photo menu', gamesOn ? `${gameCount} free games` : null, loyaltyOn ? 'and rewards' : null]
   const sub = subParts.filter(Boolean).join(ar ? ' · ' : ' · ')
 
@@ -72,28 +72,28 @@ export function stickerContent(tenant, { lang = 'ar' } = {}) {
     features.push({
       icon: 'cart',
       title: ar ? 'اطلب من جوالك' : 'Order from your phone',
-      body: ar ? 'طلبك يصل المطبخ في نفس اللحظة — بلا انتظار.' : 'Straight to the kitchen — no waiting.',
+      body: ar ? 'طلبك يصل المطبخ في نفس اللحظة، بلا انتظار.' : 'Straight to the kitchen — no waiting.',
     })
   } else {
     features.push({
       icon: 'image',
-      title: ar ? 'القائمة كاملة بالصور' : 'The full photo menu',
+      title: ar ? 'المنيو كاملاً بالصور' : 'The full photo menu',
       body: ar ? 'كل صنف بصورته وسعره ومكوّناته وسعراته.' : 'Every item with photo, price and calories.',
     })
   }
   if (gamesOn) {
     features.push({
       icon: 'games',
-      title: ar ? `${gameCount} ${gamesWord(gameCount)} — مجاناً` : `${gameCount} free games`,
+      title: ar ? `${gameCount} ${gamesWord(gameCount)} مجاناً` : `${gameCount} free games`,
       body: ar
-        ? (named.length ? `${named.slice(0, 4).join(' · ')}${restCount ? ' والمزيد' : ''} — والعبوا معاً على طاولة واحدة.` : 'العبوا معاً على طاولة واحدة.')
+        ? (named.length ? `${named.slice(0, 4).join(' · ')}${restCount ? ' والمزيد' : ''}. والعبوا معاً على طاولة واحدة.` : 'العبوا معاً على طاولة واحدة.')
         : 'Play together at one table.',
     })
   }
   if (loyaltyOn) {
     features.push({
       icon: 'award',
-      title: ar ? `كل ${threshold} ${drinks(threshold)} — واحد مجاناً` : `Every ${threshold} drinks, one free`,
+      title: ar ? `اطلب ${threshold} ${drinks(threshold)} والتالي علينا` : `Every ${threshold} drinks, one free`,
       body: ar ? 'سجّل رقمك مرة، ونحسبها لك في كل زيارة.' : 'Register once, we count every visit.',
     })
   } else if (memberOn) {
@@ -106,8 +106,8 @@ export function stickerContent(tenant, { lang = 'ar' } = {}) {
   if (waiterOn) {
     features.push({
       icon: 'waiter',
-      title: ar ? 'نادِ النادل — واطلب الحساب' : 'Call the waiter · ask for the bill',
-      body: ar ? 'ماء، أدوات، أو الفاتورة — بزرٍّ واحد من مكانك.' : 'Water, cutlery or the bill — one tap.',
+      title: ar ? 'نادِ النادل واطلب الحساب' : 'Call the waiter · ask for the bill',
+      body: ar ? 'ماء أو أدوات أو الفاتورة، بزرٍّ واحد من مكانك.' : 'Water, cutlery or the bill — one tap.',
     })
   }
   features.push({
@@ -123,12 +123,12 @@ export function stickerContent(tenant, { lang = 'ar' } = {}) {
         title: ar ? `${gameCount} ${gamesWord(gameCount)} في جوالك` : `${gameCount} games`,
         names: named,
         more: ar
-          ? (restCount ? `والمزيد والمزيد — ${restCount} ${gamesWord(restCount)} أخرى: ألغاز، ومعرفة، واكتشف شخصيتك.` : 'ألغاز، ومعرفة، واكتشف شخصيتك.')
+          ? (restCount ? `و${restCount} ${gamesWord(restCount)} أخرى: ألغاز، ومعرفة، واكتشف شخصيتك.` : 'ألغاز، ومعرفة، واكتشف شخصيتك.')
           : (restCount ? `And ${restCount} more.` : ''),
         rows: [
           { icon: 'customers', text: ar ? 'العبوا معاً على طاولة واحدة، أو تحدَّوا طاولة أخرى.' : 'Play together, or challenge another table.' },
-          { icon: 'award', text: ar ? 'جوائز حقيقية من المكان — اربح، واعرض الرمز للكاشير.' : 'Real prizes — show the code at the till.' },
-          { icon: 'trending', text: ar ? 'لوحة صدارة شهرية — نتائجك محفوظة لك.' : 'Monthly leaderboard.' },
+          { icon: 'award', text: ar ? 'جوائز حقيقية من المكان. اربح واعرض الرمز للكاشير.' : 'Real prizes — show the code at the till.' },
+          { icon: 'trending', text: ar ? 'لوحة صدارة شهرية، ونتائجك محفوظة لك.' : 'Monthly leaderboard.' },
         ],
         cta: ar ? 'امسح والعب الآن' : 'Scan and play',
       }
@@ -146,7 +146,7 @@ export function stickerContent(tenant, { lang = 'ar' } = {}) {
 
   const perksFace = {
     kicker: ar ? 'لأنك ضيفنا' : 'Because you are our guest',
-    title: ar ? 'ميزات تنتظرك في القائمة' : 'What waits inside',
+    title: ar ? 'ميزات تنتظرك في المنيو' : 'What waits inside',
     rows: perksRows.slice(0, 6),
     cta: ar ? 'امسح وسجّل رقمك' : 'Scan and register',
   }

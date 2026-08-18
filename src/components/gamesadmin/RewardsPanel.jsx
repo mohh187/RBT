@@ -22,6 +22,7 @@ import {
   conditionText, claimText, perGuestText,
 } from '../../lib/gameRewards.js'
 import { fmtInt, dateTime, claimsByRule } from './engine.jsx'
+import { arPlural } from '../../lib/forecast.js'
 
 const num = (v, f = 0) => {
   const n = Number(v)
@@ -51,7 +52,7 @@ function whyDropped(raw) {
   if (p.kind === 'discount' && (!Number.isFinite(v) || v <= 0 || v > 100)) return 'نسبة الخصم يجب أن تكون بين 1 و 100.'
   if (p.kind === 'points' && (!Number.isFinite(v) || v < 1)) return 'عدد النقاط يجب أن يكون 1 فأكثر.'
   if (p.kind === 'freeItem' && !String(p.label || '').trim() && !String(p.itemId || '').trim()) {
-    return 'الصنف المجاني بلا اسم — الضيف لن يعرف ما الذي ربحه.'
+    return 'الصنف المجاني بلا اسم، والضيف لن يعرف ما الذي ربحه.'
   }
   if (raw.metric !== 'completed') {
     const th = Math.floor(Number(raw.threshold))
@@ -100,7 +101,7 @@ function RuleCard({ ar, rule, index, canEdit, claims, claimsOk, onChange, onRemo
         </div>
       )}
       {!live && !reason && rule.active === false && (
-        <p className="ga-hint">{ar ? 'موقوفة بإرادتك — لن تُعرض على أي ضيف حتى تُفعّلها.' : 'Switched off.'}</p>
+        <p className="ga-hint">{ar ? 'موقوفة بإرادتك، ولن تُعرض على أي ضيف حتى تُفعّلها.' : 'Switched off.'}</p>
       )}
 
       <div className="ga-two">
@@ -199,7 +200,7 @@ function RuleCard({ ar, rule, index, canEdit, claims, claimsOk, onChange, onRemo
           <span className="ga-hint">
             {ar
               ? 'عدد المطالبات غير متاح: تعذّرت قراءة سجل الرموز الصادرة. لا نعرض صفراً لأنه ليس قياساً.'
-              : 'Claim count unavailable — not shown as zero, because it was not measured.'}
+              : 'Claim count unavailable. It is not shown as zero, because it was not measured.'}
           </span>
         ) : claims ? (
           <>
@@ -296,7 +297,7 @@ export default function RewardsPanel({
         </label>
         <p className="ga-hint">
           {ar
-            ? 'عند الإيقاف لا يُعرض على الضيف أي وعد بجائزة إطلاقاً — ولا حتى «ربما في المرة القادمة». الجائزة تُعرض فقط حين يستحقها فعلاً.'
+            ? 'عند الإيقاف لا يُعرض على الضيف أي وعد بجائزة إطلاقاً، ولا حتى «ربما في المرة القادمة». الجائزة تُعرض فقط حين يستحقها فعلاً.'
             : 'When off, no prize is ever hinted at. A reward is shown only when actually earned.'}
         </p>
         <label className="ga-field">
@@ -312,8 +313,8 @@ export default function RewardsPanel({
             <Icon name="warning" size={15} />
             <span>
               {ar
-                ? `لديك ${fmtInt(rules.length)} قاعدة محفوظة لكن الجوائز موقوفة — لا شيء منها يصل الضيف الآن.`
-                : 'Rules are saved but rewards are off — none of them reach guests.'}
+                ? `لديك ${arPlural(rules.length, { one: 'قاعدة محفوظة', two: 'قاعدتان محفوظتان', few: 'قواعد محفوظة', many: 'قاعدة محفوظة' })} لكن الجوائز موقوفة، ولا شيء منها يصل الضيف الآن.`
+                : 'Rules are saved but rewards are off, so none of them reach guests.'}
             </span>
           </div>
         )}
@@ -326,7 +327,7 @@ export default function RewardsPanel({
           <p className="ga-empty-t">{ar ? 'لا قاعدة جوائز بعد' : 'No reward rules'}</p>
           <p className="ga-hint">
             {ar
-              ? 'القاعدة تربط شرطاً حقيقياً (نقاط الجولة، الوصول لمرحلة، إكمال اللعبة) بجائزة تكتبها أنت. الضيف يرى رمزاً يُظهره للكاشير — لا خصم يُطبَّق تلقائياً في أي مكان.'
+              ? 'القاعدة تربط شرطاً حقيقياً (نقاط الجولة، الوصول لمرحلة، إكمال اللعبة) بجائزة تكتبها أنت. الضيف يرى رمزاً يُظهره للكاشير، ولا خصم يُطبَّق تلقائياً في أي مكان.'
               : 'A rule ties a real condition to a prize you write. The guest gets a code for the cashier.'}
           </p>
         </div>

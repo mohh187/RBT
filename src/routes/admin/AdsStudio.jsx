@@ -92,7 +92,7 @@ export default function AdsStudio() {
       if (!editId && typeof id === 'string') setEditId(id)
       const inactive = !draft.active
       toast.success(inactive
-        ? (ar ? 'حُفظ — فعّله من البطاقة ليظهر للعملاء' : 'Saved — activate it to go live')
+        ? (ar ? 'حُفظ، فعّله من البطاقة ليظهر للعملاء' : 'Saved, activate it to go live')
         : (ar ? 'حُفظ الإعلان وهو نشط الآن' : 'Saved and live'))
       if (back) { setDraft(null); setEditId('') }
     } catch (e) {
@@ -184,7 +184,7 @@ export default function AdsStudio() {
         ) : (
           <div className="ads-warn ok">
             <Icon name="ok" size={16} />
-            <span>{ar ? 'الإعداد مكتمل — لا شيء يمنع ظهور هذا الإعلان.' : 'Nothing blocks this ad from showing.'}</span>
+            <span>{ar ? 'الإعداد مكتمل، لا شيء يمنع ظهور هذا الإعلان.' : 'Nothing blocks this ad from showing.'}</span>
           </div>
         )}
 
@@ -231,7 +231,7 @@ export default function AdsStudio() {
           <h2>{ar ? 'استوديو الإعلانات' : 'Ads studio'}</h2>
           <p>
             {ar
-              ? 'إعلان يستقبل الضيف داخل القائمة — أنت تحدد شكله ووقته ومن يراه.'
+              ? 'إعلان يستقبل الضيف داخل القائمة، أنت تحدد شكله ووقته ومن يراه.'
               : 'An ad that greets guests inside the menu.'}
           </p>
         </div>
@@ -297,7 +297,7 @@ export default function AdsStudio() {
                   <div className="ads-item-name">
                     <b>{ad.name || (ar ? 'بلا اسم' : 'Untitled')}</b>
                     <span>
-                      {`${labelOf(AD_KINDS, ad.kind)} — ${labelOf(AD_SHAPES, ad.shape)}`}
+                      {`${labelOf(AD_KINDS, ad.kind)}. ${labelOf(AD_SHAPES, ad.shape)}`}
                     </span>
                   </div>
                   <span className={`badge ${ad.active ? 'badge-success' : ''}`}>
@@ -322,8 +322,8 @@ export default function AdsStudio() {
                     <span>{ar ? 'ضغطات' : 'Clicks'}</span>
                   </div>
                   <div className="ads-stat">
-                    {/* A dash, never a made-up rate, while nothing has been shown. */}
-                    <b>{rate == null ? '—' : pct(rate)}</b>
+                    {/* A dot, never a made-up rate, while nothing has been shown. */}
+                    <b>{rate == null ? '·' : pct(rate)}</b>
                     <span>{ar ? 'نسبة الضغط' : 'CTR'}</span>
                   </div>
                 </div>
@@ -355,7 +355,7 @@ export default function AdsStudio() {
       {rows.length ? (
         <p className="ads-hint">
           {ar
-            ? 'الأرقام أعلاه عدّادات فعلية يكتبها جهاز الضيف عند كل ظهور أو ضغطة — لا تُقدَّر ولا تُستنتج. وهي إجمالية فقط: لا يوجد تفصيل بحسب اليوم أو الجهاز.'
+            ? 'الأرقام أعلاه عدّادات فعلية يكتبها جهاز الضيف عند كل ظهور أو ضغطة، لا تُقدَّر ولا تُستنتج. وهي إجمالية فقط: لا يوجد تفصيل بحسب اليوم أو الجهاز.'
             : 'These are real counters written by the guest device, never estimates.'}
         </p>
       ) : null}

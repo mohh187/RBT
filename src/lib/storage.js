@@ -58,7 +58,7 @@ function guardSize(file, folder = '') {
   const limit = (BIG_FOLDERS.includes(folder) && BIG_LIMITS_MB[kind]) || UPLOAD_LIMITS_MB[kind]
   if (file.size > limit * 1024 * 1024) {
     const mb = Math.round(file.size / 1024 / 1024)
-    throw new Error(`الملف كبير جداً (${mb}MB) — الحد الأقصى ${limit}MB${kind === 'video' ? '. اضغط الفيديو أو قصّر مدته' : kind === 'audio' ? '. اختر أغنية أصغر' : ''}`)
+    throw new Error(`الملف كبير جداً (${mb}MB) والحد الأقصى ${limit}MB${kind === 'video' ? '. اضغط الفيديو أو قصّر مدته' : kind === 'audio' ? '. اختر أغنية أصغر' : ''}`)
   }
 }
 

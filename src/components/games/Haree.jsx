@@ -366,22 +366,22 @@ export function initialState() {
 }
 
 export const RULES_AR = [
-  'الحريق — من لاعبَين إلى أربعة، كلٌّ لنفسه. الورق شدّتان مع أربعة جوكرات.',
+  'الحريق: من لاعبَين إلى أربعة، كلٌّ لنفسه. الورق شدّتان مع أربعة جوكرات.',
   '',
   'التوزيع: أربع عشرة ورقة لكل لاعب، واللاعب الذي بعد الموزّع يأخذ خمس عشرة ويبدأ الجولة دون سحب.',
   '',
   'الدور: اسحب ورقة من الكومة أو خذ أعلى المرمية، انزل ما تشاء إن استطعت، ثم اختم بِرمي ورقة واحدة.',
   '',
-  'النزول: ثلاث ورقات فأكثر — سلسلة من نوع واحد متتابعة، أو مجموعة من رتبة واحدة. الآس يصح أولاً (آس-2-3) وآخراً (Q-K-آس). الجوكر يقوم مقام أي ورقة، على أن تبقى في النزلة ورقتان حقيقيتان على الأقل.',
+  'النزول: ثلاث ورقات فأكثر، إما سلسلة من نوع واحد متتابعة، وإما مجموعة من رتبة واحدة. الآس يصح أولاً (آس-2-3) وآخراً (Q-K-آس). الجوكر يقوم مقام أي ورقة، على أن تبقى في النزلة ورقتان حقيقيتان على الأقل.',
   '',
   'الافتتاح: أول نزول لك في الجولة يجب أن يبلغ 51 نقطة فأكثر دفعة واحدة، بأي عدد من النزلات. القيم: من 2 إلى 10 برقمها، والصور والآس والجوكر بعشر.',
   '',
-  'بعد الافتتاح: انزل ما شئت ومدّد أي نزلة على الطاولة — نزلتك أو نزلة غيرك.',
+  'بعد الافتتاح: انزل ما شئت ومدّد أي نزلة على الطاولة، نزلتك كانت أو نزلة غيرك.',
   '',
-  'الرمية: الورقة التي تختم بها لا يجوز أن تدخل في نزلة موجودة على الطاولة — تلك «غطاء» يُلعب ولا يُرمى. إن كانت كل أوراقك أغطية، فارمِ ما شئت.',
+  'الرمية: الورقة التي تختم بها لا يجوز أن تدخل في نزلة موجودة على الطاولة، فتلك «غطاء» يُلعب ولا يُرمى. إن كانت كل أوراقك أغطية، فارمِ ما شئت.',
   '',
   'نهاية الجولة: من أنهى أوراقه أولاً فاز بها. الباقون يتحمّلون عقوبة الجولة:',
-  '• طور «حريق 14»: مجموع قيم الورق المتبقي في اليد — جولة سيئة واحدة قد تحرقك.',
+  '• طور «حريق 14»: مجموع قيم الورق المتبقي في اليد، وجولة سيئة واحدة قد تحرقك.',
   '• طور «عدّ الورق»: نقطة عن كل ورقة متبقية.',
   '',
   'الحرق: من بلغ مجموع عقوباته 31 «احترق» وخرج من الطاولة. تستمر الجولات بين الناجين، وآخر لاعب يبقى هو الفائز بالمباراة.',
@@ -390,23 +390,23 @@ export const RULES_AR = [
 ].join('\n')
 
 const RULES_EN = [
-  'Hareeg — two to four players, everyone for themselves. Two decks plus four jokers.',
+  'Hareeg: two to four players, everyone for themselves. Two decks plus four jokers.',
   '',
   'Deal: fourteen cards each; the player after the dealer takes fifteen and opens the round without drawing.',
   '',
   'A turn: draw from the stock or take the top of the thrown pile, lay down what you can, then end by throwing exactly one card.',
   '',
-  'Laying down: melds of three or more — a one-suit run, or a one-rank set. The Ace plays low (A-2-3) or high (Q-K-A). Jokers stand for any card; keep at least two natural cards per meld.',
+  'Laying down: melds of three or more, either a one-suit run or a one-rank set. The Ace plays low (A-2-3) or high (Q-K-A). Jokers stand for any card; keep at least two natural cards per meld.',
   '',
-  'Opening: your first lay-down of a round must total 51 points or more, in one turn. Values: 2–10 by face; pictures, Aces and jokers are 10.',
+  'Opening: your first lay-down of a round must total 51 points or more, in one turn. Values: 2 to 10 by face; pictures, Aces and jokers are 10.',
   '',
   'After opening you may lay freely and extend any meld on the table.',
   '',
-  'The throw must not fit an existing meld (such a card is a cover — play it, do not throw it). If your whole hand is covers, throw anything.',
+  'The throw must not fit an existing meld (such a card is a cover: play it, do not throw it). If your whole hand is covers, throw anything.',
   '',
-  'Round end: first empty hand wins. The rest take the round penalty — card values in «14» mode, one per card in count mode. Reaching 31 burns you out of the match; the last player standing wins.',
+  'Round end: first empty hand wins. The rest take the round penalty: card values in «14» mode, one per card in count mode. Reaching 31 burns you out of the match; the last player standing wins.',
   '',
-  'The stock: when it runs dry the thrown pile (minus its top card) is reshuffled into a new stock. If there is nothing left to rebuild, or the pile has been rebuilt three times and nobody has gone out, the round is void — no winner, no penalties, next dealer redeals.',
+  'The stock: when it runs dry the thrown pile (minus its top card) is reshuffled into a new stock. If there is nothing left to rebuild, or the pile has been rebuilt three times and nobody has gone out, the round is void: no winner, no penalties, and the next dealer redeals.',
 ].join('\n')
 
 // ---------------------------------------------------------------------------
@@ -1085,27 +1085,27 @@ export default function Haree({
   const t = ar
     ? {
       rules: 'الشرح', close: 'إغلاق', deal: 'وزّع الورق', next: 'الجولة التالية', exit: 'خروج',
-      waitPlayers: 'بانتظار اللاعبين', need: 'من لاعبَين إلى أربعة — كلٌّ لنفسه، وآخر من يبقى يفوز.',
+      waitPlayers: 'بانتظار اللاعبين', need: 'من لاعبَين إلى أربعة، كلٌّ لنفسه، وآخر من يبقى يفوز.',
       startNow: 'ابدأ بالموجودين', hostStarts: 'مضيف الغرفة يبدأ التوزيع.',
       round: 'الجولة', stock: 'الكومة', thrown: 'المرمية', empty: 'فارغة',
       addMeld: 'أضف نزلة', lay: 'انزل', throwCard: 'ارمِ', undo: 'تراجع', suggest: 'اقترح', extend: 'مدّد', clearSel: 'ألغِ التحديد',
       pts: 'نقطة', openMeter: 'نحو الافتتاح',
-      hintDraw: 'دورك — اسحب من الكومة أو خذ أعلى المرمية',
+      hintDraw: 'دورك، اسحب من الكومة أو خذ أعلى المرمية',
       hintPickMeld: 'علّم ثلاث ورقات فأكثر تكوّن نزلة، ثم «أضف نزلة»',
-      hintNeedMore: (n) => 'ينقصك ' + n + ' نقطة لبلوغ 51 — أضف نزلة أخرى أو تراجع',
-      hintReady: 'بلغت 51 — اضغط «انزل» لتثبيت نزلاتك',
+      hintNeedMore: (n) => 'ينقصك ' + n + ' لبلوغ 51 نقطة. أضف نزلة أخرى أو تراجع',
+      hintReady: 'بلغت 51، اضغط «انزل» لتثبيت نزلاتك',
       hintThrow: 'اضغط «ارمِ» لإنهاء دورك',
       hintExtend: 'اضغط النزلة المضيئة لتمديدها بما علّمت',
-      hintNoOpen: 'لا تمديد قبل الافتتاح — افتتح بـ51 نقطة أولاً',
+      hintNoOpen: 'لا تمديد قبل الافتتاح، افتتح بـ51 نقطة أولاً',
       hintBad: 'الورقات المعلّمة لا تكوّن نزلة صحيحة',
       hintFree: 'انزل أو مدّد، ثم ارمِ ورقة واحدة لإنهاء دورك',
       hintOpenFirst: 'افتتح بـ51 نقطة، أو ارمِ ورقة لإنهاء دورك',
-      coverBlock: 'غطاء — هذه الورقة تدخل في النزلة المضيئة، تُلعب ولا تُرمى',
-      coverAll: 'كل أوراقك أغطية — يجوز لك الرمي',
-      waitFor: 'الدور على', watching: 'أنت تشاهد هذه الجولة', youBurned: 'احترقت وخرجت من المباراة — تتابع حتى ينتهي الباقون',
-      noMelds: 'لا نزلات على الطاولة بعد — أول نزول يحتاج 51 نقطة',
+      coverBlock: 'غطاء: هذه الورقة تدخل في النزلة المضيئة، تُلعب ولا تُرمى',
+      coverAll: 'كل أوراقك أغطية، فيجوز لك الرمي',
+      waitFor: 'الدور على', watching: 'أنت تشاهد هذه الجولة', youBurned: 'احترقت وخرجت من المباراة، وتتابع حتى ينتهي الباقون',
+      noMelds: 'لا نزلات على الطاولة بعد، وأول نزول يحتاج 51 نقطة',
       run: 'سلسلة', set: 'مجموعة',
-      roundOver: 'انتهت الجولة', voidRound: 'نفد الورق — جولة لاغية',
+      roundOver: 'انتهت الجولة', voidRound: 'نفد الورق، والجولة لاغية',
       wonRound: 'أنهى ورقه وفاز بالجولة', burned: 'احترق', youWin: 'فزت بالمباراة', winnerIs: 'الفائز',
       mode14: 'حريق 14', modeCount: 'عدّ الورق', modePick: 'طريقة الحساب',
       opened: 'مفتّح', you: 'أنت', emptySeat: 'مقعد فارغ',
@@ -1115,34 +1115,34 @@ export default function Haree({
         normal: 'يأخذ المرمية إذا دخلت في نزلة عنده، يفتتح فور بلوغ 51، ينزل ويمدّد ما يجد، ويرمي أثقل ورقة لا تنفعه.',
         hard: 'مثل «عادي» ويزيد: يحتفظ بالأزواج والمتتاليات القريبة، ويرمي أثقل ورقة ليس لها شريك في يده.',
       },
-      shakeNoOpen: 'لم تفتتح بعد — لا يمكنك التمديد',
+      shakeNoOpen: 'لم تفتتح بعد، فلا يمكنك التمديد',
       shakeNoFit: 'ما علّمته لا يدخل في هذه النزلة',
       shakeShort: 'الافتتاح يحتاج 51 نقطة دفعة واحدة',
       shakeOne: 'علّم ورقة واحدة فقط للرمي',
     }
     : {
       rules: 'Rules', close: 'Close', deal: 'Deal', next: 'Next round', exit: 'Exit',
-      waitPlayers: 'Waiting for players', need: 'Two to four players — last one standing wins.',
+      waitPlayers: 'Waiting for players', need: 'Two to four players. The last one standing wins.',
       startNow: 'Start with current players', hostStarts: 'The host deals.',
       round: 'Round', stock: 'Stock', thrown: 'Thrown', empty: 'Empty',
       addMeld: 'Stage meld', lay: 'Lay down', throwCard: 'Throw', undo: 'Undo', suggest: 'Suggest', extend: 'Extend', clearSel: 'Clear picks',
       pts: 'pts', openMeter: 'To open',
-      hintDraw: 'Your turn — draw from the stock or take the thrown card',
+      hintDraw: 'Your turn: draw from the stock or take the thrown card',
       hintPickMeld: 'Select three or more cards that form a meld, then «Stage meld»',
-      hintNeedMore: (n) => n + ' more points to reach 51 — stage another meld or undo',
-      hintReady: 'You have 51 — press «Lay down» to commit',
+      hintNeedMore: (n) => n + ' short of 51 points. Stage another meld or undo',
+      hintReady: 'You have 51, so press «Lay down» to commit',
       hintThrow: 'Press «Throw» to end your turn',
       hintExtend: 'Tap the highlighted meld to extend it',
-      hintNoOpen: 'No extending before you open — lay 51 first',
+      hintNoOpen: 'No extending before you open, so lay 51 first',
       hintBad: 'The selected cards are not a valid meld',
       hintFree: 'Lay or extend, then throw one card to end your turn',
       hintOpenFirst: 'Open with 51, or throw a card to end your turn',
-      coverBlock: 'Cover — this card fits the highlighted meld; play it, do not throw it',
-      coverAll: 'Every card in your hand is a cover — you may throw anything',
-      waitFor: 'Turn:', watching: 'You are watching this round', youBurned: 'You burned out — the survivors play on',
-      noMelds: 'No melds on the table yet — the first lay-down needs 51',
+      coverBlock: 'Cover: this card fits the highlighted meld, so play it instead of throwing it',
+      coverAll: 'Every card in your hand is a cover, so you may throw anything',
+      waitFor: 'Turn:', watching: 'You are watching this round', youBurned: 'You burned out. The survivors play on',
+      noMelds: 'No melds on the table yet. The first lay-down needs 51',
       run: 'Run', set: 'Set',
-      roundOver: 'Round over', voidRound: 'Deck exhausted — void round',
+      roundOver: 'Round over', voidRound: 'Deck exhausted, round void',
       wonRound: 'emptied their hand and wins the round', burned: 'burned out', youWin: 'You win the match', winnerIs: 'Winner',
       mode14: 'Hareeg 14', modeCount: 'Card count', modePick: 'Penalty mode',
       opened: 'opened', you: 'You', emptySeat: 'Empty seat',
@@ -1152,7 +1152,7 @@ export default function Haree({
         normal: 'Takes the thrown card when it completes a meld, opens the moment it holds 51, lays and extends, and throws its heaviest useless card.',
         hard: 'Like normal, plus it keeps pairs and near-runs and throws the heaviest card with no partner in hand.',
       },
-      shakeNoOpen: 'You have not opened yet — no extending',
+      shakeNoOpen: 'You have not opened yet, so no extending',
       shakeNoFit: 'Your selection does not fit that meld',
       shakeShort: 'Opening needs 51 points in one turn',
       shakeOne: 'Select exactly one card to throw',
@@ -1516,7 +1516,7 @@ export default function Haree({
                   disabled={!canAct || benched}
                   onClick={() => toggleCard(c)}
                   aria-pressed={on}
-                  aria-label={cardWord(c, ar) + (isJoker(c) ? '' : ' ' + (ar ? SUIT_AR[suitOf(c)] : SUIT_EN[suitOf(c)])) + (cover ? ' — ' + (ar ? 'غطاء' : 'cover') : '')}
+                  aria-label={cardWord(c, ar) + (isJoker(c) ? '' : ' ' + (ar ? SUIT_AR[suitOf(c)] : SUIT_EN[suitOf(c)])) + (cover ? (ar ? '، غطاء' : ', cover') : '')}
                 >
                   <CardFace code={c} />
                 </button>
@@ -1619,7 +1619,7 @@ export default function Haree({
               {[0, 1, 2, 3].map((sx) => (
                 <div key={sx} className={'hg-seatbox' + (bySeat[sx] ? ' is-filled' : '') + (sx === seat ? ' is-me' : '')}>
                   <span className="hg-av" style={{ '--sc': SEAT_COLOR[sx] }}>{avatarOf(bySeat[sx]?.name, sx, ar)}</span>
-                  <span>{bySeat[sx]?.name || '—'}</span>
+                  <span>{nameOf(sx)}</span>
                 </div>
               ))}
             </div>
@@ -1667,7 +1667,7 @@ export default function Haree({
                 : st.lastRound?.void ? t.voidRound : t.roundOver}
             </strong>
             {st.lastRound && !st.lastRound.void && st.lastRound.winner != null ? (
-              <p className="hg-panel-sub">{shortName(st.lastRound.winner)} — {t.wonRound}</p>
+              <p className="hg-panel-sub">{shortName(st.lastRound.winner)} {t.wonRound}</p>
             ) : null}
             <div className="hg-rows">
               {/* `playing` is re-derived every deal as «seated and not burned»,
@@ -1685,7 +1685,7 @@ export default function Haree({
                       {st.out[sx] ? ' · ' + t.burned : ''}
                       {burnedNow ? '' : ''}
                     </span>
-                    <span className="hg-row-pen">{pen ? '+' + fmt(pen, ar) : '—'}</span>
+                    <span className="hg-row-pen">{pen ? '+' + fmt(pen, ar) : fmt(0, ar)}</span>
                     <span className={'hg-burn hg-row-burn' + (st.burns[sx] >= BURN_AT * 0.72 && !st.out[sx] ? ' is-hot' : '') + (st.out[sx] ? ' is-done' : '')}>
                       <span className="hg-burn-fill" style={{ '--f': clamp(0, (st.burns[sx] || 0) / BURN_AT, 1) }} />
                     </span>
@@ -1712,7 +1712,7 @@ export default function Haree({
       {rules ? (
         <div className="hg-sheet">
           <div className="hg-sheet-head">
-            <strong>{ar ? 'الحريق — الشرح' : 'Hareeg — how to play'}</strong>
+            <strong>{ar ? 'شرح الحريق' : 'How to play Hareeg'}</strong>
             <button type="button" className="hg-help cg-press" onClick={() => setRules(false)} aria-label={t.close}>
               <Glyph name="close" />
             </button>

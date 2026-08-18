@@ -21,7 +21,7 @@ import { qrDataUrl } from '../../lib/qr.js'
 // Latin digits with thousands separators — Arabic-Indic numerals are a hard
 // project rule against, and `ar-SA-u-nu-latn` is the sanctioned locale.
 const n2 = (v) => (Number(v) || 0).toLocaleString('ar-SA-u-nu-latn', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
-const dateAr = (ms) => (ms ? new Date(ms).toLocaleDateString('ar-SA-u-nu-latn', { year: 'numeric', month: 'long', day: 'numeric' }) : '')
+const dateAr = (ms) => (ms ? new Date(ms).toLocaleDateString('ar-SA-u-nu-latn-ca-gregory', { year: 'numeric', month: 'long', day: 'numeric' }) : '')
 
 const TITLE = {
   taxInvoice: 'فاتورة ضريبية',
@@ -113,7 +113,7 @@ export default function PlatformDocSheet({ doc, variant = 'taxInvoice', onAccept
         <section className="pdoc-buyer">
           <div>
             <span className="pdoc-label">{isQuote ? 'مقدَّم إلى' : 'فاتورة إلى'}</span>
-            <strong>{b.nameAr || doc.tenantName || '—'}</strong>
+            <strong>{b.nameAr || doc.tenantName || '-'}</strong>
             {b.contactName ? <span>{b.contactName}</span> : null}
             {b.cityAr ? <span>{b.cityAr}</span> : null}
           </div>
@@ -153,7 +153,7 @@ export default function PlatformDocSheet({ doc, variant = 'taxInvoice', onAccept
                 <td>
                   {l.descAr}
                   {l.discount > 0 && l.discountLabelAr
-                    ? <div className="pdoc-disc">{l.discountLabelAr} — وفّرت <span className="pdoc-num">{n2(l.discount)}</span> ريال</div>
+                    ? <div className="pdoc-disc">{l.discountLabelAr}: وفّرت <span className="pdoc-num">{n2(l.discount)}</span> ريال</div>
                     : null}
                 </td>
                 <td className="pdoc-c pdoc-num">{l.qty}</td>
@@ -232,7 +232,7 @@ export default function PlatformDocSheet({ doc, variant = 'taxInvoice', onAccept
             <Icon name="check" size={16} /> {accepting ? 'جارٍ…' : 'قبول العرض والمتابعة للدفع'}
           </button>
         )}
-        {expired ? <span className="pdoc-danger">انتهت صلاحية هذا العرض — تواصل معنا لعرض محدّث.</span> : null}
+        {expired ? <span className="pdoc-danger">انتهت صلاحية هذا العرض. تواصل معنا ونرسل لك عرضاً محدّثاً.</span> : null}
       </div>
     </div>
   )

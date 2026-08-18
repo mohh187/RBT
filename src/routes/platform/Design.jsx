@@ -194,7 +194,7 @@ function DesignDetail({ tid }) {
               style={{ width: frameW, maxWidth: device === 'desktop' ? 'none' : '100%', height: '70dvh' }}
             />
           </div>
-          <p className="xs faint text-center">معاينة حية لواجهة الزبون — تُحدَّث بعد الحفظ</p>
+          <p className="xs faint text-center">معاينة حية لواجهة الزبون، تُحدَّث بعد الحفظ</p>
         </div>
 
         {/* controls */}
@@ -236,7 +236,7 @@ function DesignDetail({ tid }) {
             <span className="xs faint bold">السكن (تصميم كامل)</span>
             <select className="input" value={skinId} onChange={(e) => setSkinId(e.target.value)}>
               <option value="">بدون سكن (ثيم فقط)</option>
-              {SKINS.map((s) => <option key={s.id} value={s.id}>{s.name.ar} — {s.tier}</option>)}
+              {SKINS.map((s) => <option key={s.id} value={s.id}>{s.name.ar} · {s.tier}</option>)}
             </select>
           </label>
 

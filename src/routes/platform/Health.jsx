@@ -68,7 +68,7 @@ export default function Health() {
 
   const st = LEVEL_STYLE[overall.level]
   const ack = async (a) => {
-    try { await ackAlert(a.id, user?.email || ''); toast.success('تم الإقرار — يبقى التنبيه مفتوحاً حتى يُحل') }
+    try { await ackAlert(a.id, user?.email || ''); toast.success('تم الإقرار، يبقى التنبيه مفتوحاً حتى يُحل') }
     catch { toast.error('تعذّر الإقرار') }
   }
 
@@ -193,7 +193,7 @@ export default function Health() {
               <strong>تفريغ شعارات المنشآت</strong>
               <p className="xs faint" style={{ margin: 0, maxWidth: '58ch' }}>
                 يقصّ كل شعار مخزَّن دائرياً ويحفظ نسخة PNG بزوايا شفافة. يجري تلقائياً عند أول
-                كتابة لوثيقة أي منشأة — وهذا الزر لمن لم تُكتب وثيقتها منذ مدة.
+                كتابة لوثيقة أي منشأة، وهذا الزر لمن لم تُكتب وثيقتها منذ مدة.
               </p>
             </div>
             <button className="btn btn-outline" disabled={masking} onClick={runMask}>
@@ -216,7 +216,7 @@ export default function Health() {
 
       <div className="card card-pad">
         <span className="xs faint">
-          تكلفة القنوات هنا وفي المالية <strong>تقديرية</strong> — محسوبة من أسعار الوحدة ولم تُطابَق بفاتورة مزوّد،
+          تكلفة القنوات هنا وفي المالية <strong>تقديرية</strong>، محسوبة من أسعار الوحدة ولم تُطابَق بفاتورة مزوّد،
           لأن مفاتيح المزوّدين مشتركة مع أنظمة أخرى. تُصبح المطابقة ممكنة بفصل المفاتيح لكل نظام.
         </span>
       </div>

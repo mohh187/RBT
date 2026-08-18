@@ -109,10 +109,10 @@ function TemplateEditor({ initial, onSaved, onCancel }) {
       </div>
 
       <label className="stack" style={{ gap: 4 }}>
-        <span className="xs faint bold">السكن (تصميم كامل — اختياري)</span>
+        <span className="xs faint bold">السكن (تصميم كامل، اختياري)</span>
         <select className="input" value={form.skinId} onChange={(e) => set('skinId', e.target.value)}>
           <option value="">بدون سكن (ثيم فقط)</option>
-          {SKINS.map((s) => <option key={s.id} value={s.id}>{s.name.ar} — {s.tier}</option>)}
+          {SKINS.map((s) => <option key={s.id} value={s.id}>{s.name.ar} · {s.tier}</option>)}
         </select>
       </label>
 

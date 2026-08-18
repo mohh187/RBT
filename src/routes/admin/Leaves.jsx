@@ -73,7 +73,7 @@ export default function Leaves({ focusId, onFocusHandled }) {
             return (
               <button key={l.id} className="card card-pad stack" style={{ gap: 6, textAlign: 'start', cursor: 'pointer' }} onClick={() => { setOpen(l); setDeclining(false); setReason('') }}>
                 <div className="row-between">
-                  <strong className="small">{l.staffName || '—'} · {typeLabel(l.type)}</strong>
+                  <strong className="small">{l.staffName ? `${l.staffName} · ` : ''}{typeLabel(l.type)}</strong>
                   <span className="xs faint">{timeAgo(l.createdAt, lang)}</span>
                 </div>
                 <div className="small" dir="ltr">{l.from}{l.to ? ` → ${l.to}` : ''}</div>
@@ -97,7 +97,7 @@ export default function Leaves({ focusId, onFocusHandled }) {
             : null}>
         {cur && (
           <div className="stack" style={{ gap: 'var(--sp-3)' }}>
-            <div className="row-between"><span className="muted small">{ar ? 'الموظف' : 'Staff'}</span><strong>{cur.staffName || '—'}</strong></div>
+            <div className="row-between"><span className="muted small">{ar ? 'الموظف' : 'Staff'}</span><strong>{cur.staffName || '·'}</strong></div>
             <div className="row-between"><span className="muted small">{ar ? 'النوع' : 'Type'}</span><span>{typeLabel(cur.type)}</span></div>
             <div className="row-between"><span className="muted small">{ar ? 'الفترة' : 'Dates'}</span><span dir="ltr">{cur.from}{cur.to ? ` → ${cur.to}` : ''}</span></div>
             <div className="row-between"><span className="muted small">{ar ? 'الحالة' : 'Status'}</span><span className={`badge ${statusBadge(cur.status || 'pending')}`}>{statusLabel(cur.status || 'pending')}</span></div>

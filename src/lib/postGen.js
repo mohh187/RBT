@@ -103,11 +103,11 @@ export function cleanCaption(text = '') {
 const arabicError = (raw, code = '') => {
   const s = String(raw || '')
   const c = String(code || '')
-  if (/(unauthenticated|permission-denied)/i.test(c)) return 'توليد الصور متاح للمالك والمدير فقط، وبعد نشر الدوال السحابية — سجّل الدخول بحساب المالك أو المدير.'
-  if (/(403|PERMISSION_DENIED|API key not valid|API_KEY_INVALID|expired)/i.test(s)) return 'مفتاح توليد الصور المحلي مرفوض (403) — تحقق من VITE_GEMINI_API_KEY أو جرّب من النسخة المنشورة.'
-  if (/(404|not.?found|NOT_FOUND|unsupported|is not supported)/i.test(s)) return 'نموذج توليد الصور غير متاح حالياً على هذا المفتاح — جرّب لاحقاً أو استخدم «التصميم اليدوي».'
-  if (/(429|quota|exhausted|RESOURCE_EXHAUSTED|rate.?limit)/i.test(s)) return 'استُهلكت حصة توليد الصور مؤقتاً — انتظر دقيقة ثم أعد المحاولة، أو استخدم «التصميم اليدوي».'
-  if (/(503|500|502|overload|unavailable|high demand|deadline|timeout|network|failed to fetch)/i.test(s)) return 'تعذر الوصول للخادم أو النموذج مزدحم — تحقق من اتصالك وأعد المحاولة بعد لحظات.'
+  if (/(unauthenticated|permission-denied)/i.test(c)) return 'توليد الصور متاح للمالك والمدير فقط. سجّل الدخول بحساب المالك أو المدير.'
+  if (/(403|PERMISSION_DENIED|API key not valid|API_KEY_INVALID|expired)/i.test(s)) return 'مفتاح توليد الصور المحلي مرفوض. جرّب من النسخة المنشورة على الإنترنت.'
+  if (/(404|not.?found|NOT_FOUND|unsupported|is not supported)/i.test(s)) return 'توليد الصور غير متاح حالياً. جرّب لاحقاً أو صمّم المنشور يدوياً.'
+  if (/(429|quota|exhausted|RESOURCE_EXHAUSTED|rate.?limit)/i.test(s)) return 'استُهلكت حصة توليد الصور مؤقتاً. انتظر دقيقة وأعد المحاولة، أو صمّم المنشور يدوياً.'
+  if (/(503|500|502|overload|unavailable|high demand|deadline|timeout|network|failed to fetch)/i.test(s)) return 'تعذّر الوصول للخدمة الآن. تحقق من اتصالك وأعد المحاولة بعد لحظات.'
   return 'تعذر توليد الصورة: ' + s.slice(0, 160)
 }
 
@@ -166,7 +166,7 @@ function b64ToBlob(b64, mime = 'image/png') {
 // hard-throw stranded users behind the missing bucket CORS config).
 // Returns an image Blob. Throws a clear Arabic message only on MODEL failure.
 export async function generatePostImage({ itemImageUrls = [], refFiles = [], stylePrompt = '', venueName = '', tenant = null, imitate = false, insight = null, section = '', itemId = '' } = {}) {
-  if (!firebaseReady) throw new Error('الذكاء غير مهيأ — أكمل إعداد Firebase أولاً.')
+  if (!firebaseReady) throw new Error('خدمة الذكاء غير مفعّلة على هذا الحساب. راسل الدعم لتفعيلها.')
   const refs = []
   for (const f of (refFiles || []).filter(Boolean).slice(0, 3)) {
     try { refs.push(await blobToInlineData(f)) } catch (_) { /* unreadable file — skip */ }
@@ -208,7 +208,7 @@ export async function generatePostImage({ itemImageUrls = [], refFiles = [], sty
   const img = json?.candidates?.[0]?.content?.parts?.find((p) => p.inlineData?.data)
   if (!img) {
     const said = (json?.candidates?.[0]?.content?.parts || []).map((p) => p.text).filter(Boolean).join(' ').trim().slice(0, 140)
-    const msg = said ? `لم يُرجع النموذج صورة: ${said}` : 'لم يُرجع النموذج صورة — أعد المحاولة أو غيّر النمط.'
+    const msg = said ? `لم يُرجع النموذج صورة: ${said}` : 'لم تصل صورة من الذكاء. أعد المحاولة أو غيّر النمط.'
     gen.fail(msg)
     throw new Error(msg)
   }
@@ -221,9 +221,9 @@ export async function generatePostImage({ itemImageUrls = [], refFiles = [], sty
 // Attached-chat-images variant: refs are already base64 inlineData parts
 // ({mimeType, data}) — used by the assistant's edit_attached_images tool.
 export async function generateFromInlineRefs({ inlineRefs = [], stylePrompt = '', venueName = '', tenant = null, imitate = false, insight = null } = {}) {
-  if (!firebaseReady) throw new Error('الذكاء غير مهيأ — أكمل إعداد Firebase أولاً.')
+  if (!firebaseReady) throw new Error('خدمة الذكاء غير مفعّلة على هذا الحساب. راسل الدعم لتفعيلها.')
   const refs = (inlineRefs || []).filter((r) => r && r.data).slice(0, 4)
-  if (!refs.length) throw new Error('لا صور مرفقة — أرفق صورة أو أكثر مع رسالتك أولاً.')
+  if (!refs.length) throw new Error('لا صور مرفقة. أرفق صورة أو أكثر مع رسالتك ثم أعد المحاولة.')
   const prompt = [
     `Professional advertising photograph for the ${venueEnglishLabel(tenant)} "${venueName || tenant?.name || 'this venue'}".`,
     brandContext(tenant, insight),
@@ -239,7 +239,7 @@ export async function generateFromInlineRefs({ inlineRefs = [], stylePrompt = ''
   }
   const json = await sendGemini(IMAGE_MODEL, body)
   const img = json?.candidates?.[0]?.content?.parts?.find((p) => p.inlineData?.data)
-  if (!img) throw new Error('لم يُرجع النموذج صورة — أعد المحاولة بوصف أوضح.')
+  if (!img) throw new Error('لم تصل صورة من الذكاء. أعد المحاولة بوصف أوضح.')
   return b64ToBlob(img.inlineData.data, img.inlineData.mimeType || 'image/png')
 }
 
@@ -251,7 +251,7 @@ export async function generateFromInlineRefs({ inlineRefs = [], stylePrompt = ''
 // INVENTING a different dish — for a faithful re-shoot a wrong dish is worse
 // than an error, so a missing reference throws instead.
 export async function generateThemeFitImage({ srcFile = null, srcUrl = '', poseUrl = '', prompt = '', tenant = null, itemId = '' } = {}) {
-  if (!firebaseReady) throw new Error('الذكاء غير مهيأ — أكمل إعداد Firebase أولاً.')
+  if (!firebaseReady) throw new Error('خدمة الذكاء غير مفعّلة على هذا الحساب. راسل الدعم لتفعيلها.')
   let ref = null
   if (srcFile) {
     ref = await blobToInlineData(srcFile)
@@ -259,10 +259,10 @@ export async function generateThemeFitImage({ srcFile = null, srcUrl = '', poseU
     try {
       ref = await urlToInlineData(srcUrl)
     } catch (_) {
-      throw new Error('تعذر قراءة صورة الصنف الحالية من التخزين (إعداد CORS) — اختر الصورة من جهازك بدلاً من ذلك.')
+      throw new Error('تعذّرت قراءة صورة الصنف الحالية. اختر الصورة من جهازك بدلاً منها.')
     }
   }
-  if (!ref) throw new Error('لا توجد صورة مصدر — ارفع صورة الصنف أولاً.')
+  if (!ref) throw new Error('لا توجد صورة مصدر. ارفع صورة الصنف أولاً.')
   // The pose reference (the venue's last APPROVED cutout) is an ENHANCEMENT:
   // it shows the model the target angle far more reliably than words do, but
   // a CORS-blocked fetch must not kill the generation — unlike the source,
@@ -290,7 +290,7 @@ export async function generateThemeFitImage({ srcFile = null, srcUrl = '', poseU
   const img = json?.candidates?.[0]?.content?.parts?.find((p) => p.inlineData?.data)
   if (!img) {
     const said = (json?.candidates?.[0]?.content?.parts || []).map((p) => p.text).filter(Boolean).join(' ').trim().slice(0, 140)
-    const msg = said ? `لم يُرجع النموذج صورة: ${said}` : 'لم يُرجع النموذج صورة — أعد المحاولة.'
+    const msg = said ? `لم يُرجع النموذج صورة: ${said}` : 'لم تصل صورة من الذكاء. أعد المحاولة.'
     gen.fail(msg)
     throw new Error(msg)
   }
@@ -317,10 +317,10 @@ export async function generateCaption({ itemName = '', venueName = '', tone = ''
     tone ? `الأسلوب المطلوب: ${tone}.` : 'الأسلوب: راقٍ بلمسة سعودية خفيفة، بلا مبالغة.',
     offer ? `أدرج هذا العرض ضمن النص: ${offer}.` : '',
     'ثم أضف في سطر أخير 3 إلى 5 هاشتاقات عربية مناسبة.',
-    'ممنوع منعاً باتاً: الرموز التعبيرية (الإيموجي) بكل أنواعها، والأرقام العربية المشرقية — استخدم الأرقام اللاتينية فقط.',
+    'ممنوع منعاً باتاً: الرموز التعبيرية (الإيموجي) بكل أنواعها، والأرقام العربية المشرقية. استخدم الأرقام اللاتينية فقط.',
     'أجب بنص المنشور فقط دون أي شرح أو مقدمات.',
   ].filter(Boolean).join('\n')
   const out = cleanCaption(await aiQuick(prompt))
-  if (!out) throw new Error('لم يصل رد من الذكاء — أعد المحاولة.')
+  if (!out) throw new Error('لم يصل رد من الذكاء. أعد المحاولة.')
   return out
 }

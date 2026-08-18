@@ -44,8 +44,8 @@ const CHANNEL_AR = {
   waUtility: 'واتساب المعاملات',
   waMarketing: 'واتساب التسويق',
   email: 'البريد',
-  aiText: 'الذكاء — نصوص',
-  aiImage: 'الذكاء — صور',
+  aiText: 'نصوص الذكاء الاصطناعي',
+  aiImage: 'صور الذكاء الاصطناعي',
   ar3d: 'المجسمات الواقعية',
   tableImage: 'صور الطاولات',
   dinerAi: 'مساعد الطلب للضيف',
@@ -550,7 +550,7 @@ async function noteRefusal(db, tid, channel, count, reason, tenant) {
   const reasonAr = {
     cap: 'تجاوز السقف الشهري', daily: 'تجاوز السقف اليومي',
     burst: 'تجاوز الحد اللحظي (قد يكون خللاً متكرراً)', killed: 'أوقفته المنصة',
-    platformBurst: 'بلغت المنصة كلها حدّ الذكاء الاصطناعي في هذه الدقيقة — حماية من إيقاف Google للمفتاح',
+    platformBurst: 'بلغت المنصة كلها حدّ الذكاء الاصطناعي في هذه الدقيقة، والإيقاف مؤقت حتى لا يُغلق المزوّد الخدمة على الجميع',
   }[reason] || reason
   let name = tenant && tenant.name ? tenant.name : ''
   if (!name) {
@@ -564,8 +564,8 @@ async function noteRefusal(db, tid, channel, count, reason, tenant) {
     // platformBurst means the SHARED key is at its ceiling — that is a
     // platform incident, not one venue's usage story.
     severity: (reason === 'burst' || reason === 'platformBurst') ? 'high' : 'warn',
-    title: `حد الإنفاق — ${CHANNEL_AR[channel] || channel}`,
-    body: `${name || tid}: ${reasonAr}. رُفضت ${count} رسالة/طلب.`,
+    title: `حد الإنفاق: ${CHANNEL_AR[channel] || channel}`,
+    body: `${name || tid}: ${reasonAr}. عدد ما رُفض إرساله: ${count}.`,
     channel,
     reason,
     at: FieldValue.serverTimestamp(),
@@ -731,7 +731,7 @@ function makeRollup(onSchedule, getFirestore) {
       patch['budgetFired.at'] = FieldValue.serverTimestamp()
       alert = {
         title: 'تجاوز ميزانية المنصة',
-        body: `الإنفاق ${totalUsd.toFixed(2)} دولار من ميزانية ${budget} — ${action === 'stopAll' ? 'أُوقف الإرسال بالكامل' : action === 'stopMarketing' ? 'أُوقف الإرسال التسويقي' : 'تنبيه فقط، لم يُوقَف شيء'}.`,
+        body: `الإنفاق ${totalUsd.toFixed(2)} دولار من ميزانية ${budget}. ${action === 'stopAll' ? 'أُوقف الإرسال بالكامل' : action === 'stopMarketing' ? 'أُوقف الإرسال التسويقي' : 'تنبيه فقط، ولم يُوقَف شيء'}.`,
         severity: 'high',
       }
     } else if (pct >= 0.8 && !firedFor.warn && !firedFor.trip) {
@@ -749,7 +749,7 @@ function makeRollup(onSchedule, getFirestore) {
       patch['budgetFired.projected'] = true
       alert = {
         title: 'الاتجاه الحالي يتجاوز الميزانية',
-        body: `المصروف ${totalUsd.toFixed(2)} من ${budget} دولار (${Math.round(pct * 100)}%)، لكن معدّل الإنفاق يصل ${projected.toFixed(2)} نهاية الشهر — أي التجاوز يوم ${crossesOnDay}.`,
+        body: `المصروف ${totalUsd.toFixed(2)} من ${budget} دولار (${Math.round(pct * 100)}%)، لكن معدّل الإنفاق يصل ${projected.toFixed(2)} نهاية الشهر، ويتجاوز الميزانية يوم ${crossesOnDay}.`,
         severity: 'warn',
       }
     }

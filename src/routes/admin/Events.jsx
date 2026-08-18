@@ -212,7 +212,7 @@ export default function Events() {
               <div className="stack" style={{ gap: 8, border: '1px solid var(--border)', borderRadius: 'var(--r-md)', padding: 10 }}>
                 <textarea className="textarea" rows={2} placeholder={lang === 'ar' ? 'وصف إضافي للبوستر (اختياري)… يُبنى تلقائياً من اسم الفعالية وتاريخها ووصفها' : 'Extra poster description (optional)…'} value={aiDesc} onChange={(e) => setAiDesc(e.target.value)} />
                 <button className="btn btn-sm btn-primary" disabled={aiBusy || uploading} onClick={genPoster}>{aiBusy ? (lang === 'ar' ? 'جارٍ توليد البوستر…' : 'Generating poster…') : (lang === 'ar' ? 'توليد بوستر الفعالية' : 'Generate poster')}</button>
-                <p className="xs faint" style={{ margin: 0 }}>{lang === 'ar' ? 'البوستر يعبّئ صورة الفعالية فقط — الحفظ يبقى بيدك.' : 'The poster only fills the event image — saving stays manual.'}</p>
+                <p className="xs faint" style={{ margin: 0 }}>{lang === 'ar' ? 'البوستر يعبّئ صورة الفعالية فقط، الحفظ يبقى بيدك.' : 'The poster only fills the event image, saving stays manual.'}</p>
               </div>
             )}
             <div className="field"><label>{t('eventTitle')}</label><input className="input" value={form.titleAr} onChange={(e) => set('titleAr', e.target.value)} /></div>

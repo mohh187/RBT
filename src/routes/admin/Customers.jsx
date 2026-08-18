@@ -31,7 +31,7 @@ export default function Customers() {
     if (!mergeKeep || !mergeDup || mergeKeep === mergeDup) { toast.error(lang === 'ar' ? 'اختر عميلين مختلفين' : 'Pick two different customers'); return }
     const keep = customers.find((c) => c.id === mergeKeep)
     const dup = customers.find((c) => c.id === mergeDup)
-    if (!window.confirm(lang === 'ar' ? `دمج «${dup?.name || dup?.phone}» داخل «${keep?.name || keep?.phone}»؟ تُجمع الطلبات والنقاط ويُحذف السجل المكرر — لا يمكن التراجع.` : `Merge "${dup?.name || dup?.phone}" into "${keep?.name || keep?.phone}"? Irreversible.`)) return
+    if (!window.confirm(lang === 'ar' ? `دمج «${dup?.name || dup?.phone}» داخل «${keep?.name || keep?.phone}»؟ تُجمع الطلبات والنقاط ويُحذف السجل المكرر، لا يمكن التراجع.` : `Merge "${dup?.name || dup?.phone}" into "${keep?.name || keep?.phone}"? Irreversible.`)) return
     setMergeBusy(true)
     try {
       await mergeCustomers(tenantId, keep.phone || keep.id, dup.phone || dup.id)

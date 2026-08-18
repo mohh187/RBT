@@ -127,7 +127,7 @@ function MemberSection({ ar, lang, currency, policy, m, eligible, totalOrders = 
   const copyCard = async () => { try { await navigator.clipboard.writeText(cardUrl); setCopied(true); setTimeout(() => setCopied(false), 1500) } catch (_) { /* ignore */ } }
   const fmtDay = (ms) => { try { return new Date(ms).toLocaleDateString(ar ? 'ar-SA-u-nu-latn' : 'en-US', { month: 'short', day: 'numeric' }) } catch (_) { return '' } }
   if (!policy?.enabled) {
-    return <div className="card card-pad xs faint">{ar ? 'عضوية VIP غير مُفعّلة — فعّلها من الإعدادات.' : 'VIP membership disabled — enable it in Settings.'}</div>
+    return <div className="card card-pad xs faint">{ar ? 'عضوية VIP غير مُفعّلة. فعّلها من الإعدادات.' : 'VIP membership is off. Turn it on from Settings.'}</div>
   }
   if (!m) {
     return (

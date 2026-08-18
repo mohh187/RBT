@@ -30,12 +30,12 @@ async function claimSpend(db, tenantId, channel, want = 1) {
   const label = CHANNEL_AR[channel] || channel
   const why = {
     cap: `اكتمل رصيدك الشهري من «${label}». يمكنك شراء رصيد إضافي من صفحة الفوترة، أو ترقية باقتك.`,
-    daily: `بلغت الحد اليومي من «${label}» — يتجدد غداً.`,
-    burst: 'طلبات كثيرة في وقت قصير — انتظر دقيقة ثم أعد المحاولة.',
-    platformBurst: 'الذكاء الاصطناعي مزدحم على المنصة الآن — أعد المحاولة بعد لحظات.',
+    daily: `بلغت الحد اليومي من «${label}»، ويتجدد غداً.`,
+    burst: 'طلبات كثيرة في وقت قصير. انتظر دقيقة ثم أعد المحاولة.',
+    platformBurst: 'الذكاء الاصطناعي مزدحم على المنصة الآن. أعد المحاولة بعد لحظات.',
     killed: `«${label}» موقوف مؤقتاً من إدارة المنصة.`,
     suspended: 'اشتراك المنشأة موقوف.',
-    disabled: `«${label}» غير مفعّل في باقتك — رقِّ اشتراكك أو اشترِ رصيداً.`,
+    disabled: `«${label}» غير مفعّل في باقتك. رقِّ الاشتراك أو اشترِ رصيداً.`,
     'error-closed': 'الخدمة غير متاحة مؤقتاً، أعد المحاولة بعد قليل.',
   }[r.reason] || 'تم بلوغ حدّ الاستخدام.'
   throw new HttpsError('resource-exhausted', why)
@@ -184,11 +184,11 @@ const generateMonthlyInvoices = onSchedule(
             meter: 'platform',
             to: email,
             lang: il,
-            subject: p(`فاتورة اشتراك rbt360 — ${period}`, `rbt360 subscription invoice — ${period}`),
+            subject: p(`فاتورة اشتراك rbt360 عن ${period}`, `rbt360 subscription invoice for ${period}`),
             // OUR identity — we are billing them. The footer carries the legal
             // entity, which is the same one printed on the tax invoice itself.
             html: shell(ib, {
-              title: p(`فاتورة اشتراك — ${d.name || ''}`, `Subscription invoice — ${d.name || ''}`),
+              title: p(`فاتورة اشتراك ${d.name || ''}`, `Subscription invoice for ${d.name || ''}`),
               preheader: p(`فاتورة اشتراك ${period}`, `Subscription invoice ${period}`),
               body: p(
                 `<p style="margin:0 0 10px;">صدرت فاتورة اشتراك «${esc(d.name || '')}» عن فترة <strong>${esc(period)}</strong>.</p>`,
@@ -395,7 +395,7 @@ async function settleInvoiceFromPayment(db, payment) {
           meter: 'platform',
           to: email,
           lang: rl,
-          subject: p(`تم استلام دفعة اشتراك rbt360 — ${invoice.period || ''}`, `rbt360 subscription payment received — ${invoice.period || ''}`),
+          subject: p(`تم استلام دفعة اشتراك rbt360 عن ${invoice.period || ''}`, `rbt360 subscription payment received for ${invoice.period || ''}`),
           html: shell(rb, {
             title: p('تم استلام دفعتك', 'Payment received'),
             preheader: p(`إيصال سداد اشتراك ${invoice.period || ''}`, `Subscription payment receipt ${invoice.period || ''}`),
@@ -553,7 +553,7 @@ async function deriveIntentAmount(db, { kind, tenantId, refId, request }) {
     const isMgr = uSnap.exists && ['owner', 'manager'].includes(uSnap.data().role) && uSnap.data().tenantId === tenantId
     if (!isMgr) throw new HttpsError('permission-denied', 'Managers only.')
     amountSar = AI_PACKS[qty]
-    description = `AI credits ${qty} — ${tenantId}`
+    description = `AI credits ${qty} · ${tenantId}`
   } else if (kind === 'spendPack') {
     // Top-up for ANY metered channel. refId is "<channel>:<qty>" and the price
     // comes from packPrice() — the server table in functions/spend.js, or its
@@ -570,7 +570,7 @@ async function deriveIntentAmount(db, { kind, tenantId, refId, request }) {
     const price = await packPrice(db, channel, qty)
     if (!price) throw new HttpsError('invalid-argument', 'unknown credit pack')
     amountSar = price
-    description = `${CHANNEL_AR[channel] || channel} +${qty} — ${tenantId}`
+    description = `${CHANNEL_AR[channel] || channel} +${qty} · ${tenantId}`
   } else if (kind === 'booking') {
     const [rs, ts] = await Promise.all([
       db.doc(`tenants/${tenantId}/reservations/${refId}`).get(),
@@ -727,13 +727,40 @@ async function settleFromPayment(db, payment) {
         await oRef.set({
           status: 'cancelled', paidOnline: true, paymentRef: payment.id,
           paymentStatus: refunded ? 'refunded' : 'paid',
-          cancelReason: refunded ? 'نفد أحد الأصناف — تمّت إعادة المبلغ كاملاً.' : 'نفد أحد الأصناف — سيتواصل معك المتجر بشأن الاسترداد.',
+          cancelReason: refunded ? 'نفد أحد الأصناف، وأعدنا لك المبلغ كاملاً.' : 'نفد أحد الأصناف، وسنعيد لك المبلغ. سيتواصل معك المطعم.',
           refund: refunded ? { amount: total, reason: 'stock-out', at: Date.now() } : null,
+          // refundTotal is what accounting reads (refundOf); without it the
+          // reports keep counting a refunded order at its full value.
+          refundTotal: refunded ? total : 0,
+          refundDue: !refunded,
           statusHistory: FieldValue.arrayUnion({ status: 'cancelled', at: Date.now(), by: 'system' }),
         }, { merge: true }).catch(() => {})
         await writeAudit(db, { kind: 'payment', action: refunded ? 'autoRefundStockOut' : 'autoRefundFailed', tenantId: tid, refId: intent.refId, providerRef: payment.id })
         return { settled: true, refunded, cancelled: true }
       }
+    }
+
+    // ALREADY CANCELLED WHILE THE GUEST WAS STILL PAYING.
+    //
+    // onNewOrder auto-cancels a held order for a missing item, a stock-out, a
+    // total that does not add up, or a paused kitchen — and the guest's payment
+    // page is still open the whole time. When the capture lands, `held` is
+    // false, so the refund branch above is skipped and the paid patch below
+    // applied to a dead order: charged, cancelled, never refunded, and counted
+    // at full value in the reports. Same treatment as a stock-out.
+    if (order.status === 'cancelled') {
+      const refunded = await moyasarRefund(payment.id, Number(payment.amount) || undefined)
+      await oRef.set({
+        paidOnline: true, paymentRef: payment.id,
+        paymentStatus: refunded ? 'refunded' : 'paid',
+        refund: refunded ? { amount: total, reason: 'cancelled', at: Date.now() } : null,
+        refundTotal: refunded ? total : 0,
+        refundDue: !refunded,
+        // The original cancelReason says WHY; this says where the money went.
+        refundNote: refunded ? 'أعدنا لك المبلغ كاملاً.' : 'سنعيد لك المبلغ، وسيتواصل معك المطعم.',
+      }, { merge: true }).catch(() => {})
+      await writeAudit(db, { kind: 'payment', action: refunded ? 'autoRefundCancelled' : 'autoRefundFailed', tenantId: tid, refId: intent.refId, providerRef: payment.id })
+      return { settled: true, refunded, cancelled: true }
     }
 
     // Activate: status -> 'pending' surfaces the paid order to the kitchen/cashier.
@@ -780,6 +807,23 @@ async function settleFromPayment(db, payment) {
         db.doc(`tenants/${tid}/items/${l.itemId}`).update({ stock: FieldValue.increment(-(l.qty || 1)), soldCount: FieldValue.increment(l.qty || 1) }).catch(() => {})
       ))
       await oRef.set({ stockDecremented: true }, { merge: true }).catch(() => {})
+    }
+    // THE WHOLE ONLINE CHANNEL WAS PUSH-SILENT.
+    //
+    // onNewOrder returns before its push for a held order (there is no ticket
+    // until it is paid), and the ticket is born HERE instead — so nothing ever
+    // announced it. A prepaid order landed in the KDS with no sound anywhere.
+    // Same helper, same recipients as a cash ticket: one implementation, no
+    // second copy of the filter. Required lazily to avoid an import cycle.
+    if (held) {
+      const { _pushToStaff: pushToStaff } = require('./index.js')
+      const code = order.code ? `#${order.code}` : ''
+      const where = order.tableLabel || (order.orderType === 'takeaway' ? 'سفري' : 'طلب')
+      await pushToStaff(db, tid,
+        { title: 'طلب جديد مدفوع', body: `${where} ${code} · ${total}` },
+        { url: `/cashier?order=${intent.refId}`, tag: 'order' },
+        { cap: ['take_orders', 'kitchen'] },
+      ).catch(() => {})
     }
   } else if (intent.kind === 'subscription') {
     await settleInvoiceFromPayment(db, { ...payment, metadata: { ...meta, invoiceId: intent.refId } })
@@ -1090,7 +1134,7 @@ const startPlanSubscription = onCall(async (request) => {
   const now = new Date()
   const ref = await db.collection('platformInvoices').add({
     tenantId: tid, tenantName: tName, plan: planId, amount, currency: 'SAR',
-    period: `${now.toISOString().slice(0, 7)}${yearly ? ' — سنوي' : ''}`,
+    period: `${now.toISOString().slice(0, 7)}${yearly ? ' (سنوي)' : ''}`,
     billing: yearly ? 'yearly' : 'monthly', status: 'pending', source: 'self-signup',
     createdAt: FieldValue.serverTimestamp(),
   })
@@ -1144,7 +1188,7 @@ const imageTo3d = onCall({ timeoutSeconds: 540, memory: '1GiB' }, async (request
   const allowed = td.features && td.features.ar3d === true
     ? true
     : (ORDER[td.plan || 'enterprise'] || 4) >= 4 && td.features?.ar3d !== false
-  if (!allowed) throw new HttpsError('permission-denied', 'المجسمات الواقعية ميزة الباقة المتكاملة — رقِّ اشتراكك لتفعيلها.')
+  if (!allowed) throw new HttpsError('permission-denied', 'المجسمات الواقعية ميزة في الباقة المتكاملة. رقِّ اشتراكك لتفعيلها.')
 
   // Credit protection: every conversion consumes PLATFORM Meshy credits — the
   // dearest unit on the platform at roughly 1.20 USD each.
@@ -1173,7 +1217,7 @@ const imageTo3d = onCall({ timeoutSeconds: 540, memory: '1GiB' }, async (request
     monthUsed = monthJobs.length
     if (itemId && monthJobs.filter((j) => j.itemId === itemId).length >= 2) {
       throw new HttpsError('resource-exhausted',
-        'هذا الصنف حُوِّل مرتين هذا الشهر — الحد تحويلان لكل صنف شهرياً حمايةً للرصيد. عدِّل صورة الصنف جيداً قبل إعادة المحاولة الشهر القادم.')
+        'هذا الصنف حُوِّل مرتين هذا الشهر، والحد تحويلان لكل صنف شهرياً حمايةً للرصيد. حسّن صورة الصنف واستخدم المحاولة الشهر القادم.')
     }
     await claimSpend(db, tenantId, 'ar3d')
   }
@@ -1183,7 +1227,7 @@ const imageTo3d = onCall({ timeoutSeconds: 540, memory: '1GiB' }, async (request
     const bal = await fetch('https://api.meshy.ai/openapi/v1/balance', { headers: { Authorization: `Bearer ${key}` } }).then((r) => r.json())
     const credits = bal && (typeof bal.balance === 'number' ? bal.balance : (bal.result && typeof bal.result.balance === 'number' ? bal.result.balance : null))
     if (credits != null && credits < 5) {
-      throw new HttpsError('resource-exhausted', `رصيد مزود المجسمات أوشك على النفاد (${credits} نقطة) — أعد الشحن من meshy.ai ثم أعد المحاولة.`)
+      throw new HttpsError('resource-exhausted', `رصيد مزود المجسمات أوشك على النفاد (${credits} نقطة). أعد الشحن من meshy.ai ثم جرّب من جديد.`)
     }
   } catch (e) { if (e instanceof HttpsError) throw e }
 
@@ -1243,7 +1287,7 @@ const imageTo3d = onCall({ timeoutSeconds: 540, memory: '1GiB' }, async (request
     }
   }
   if (!glbUrl) {
-    throw new HttpsError('deadline-exceeded', 'التحويل يستغرق أطول من المعتاد — المهمة مستمرة لدى المزود، أعد المحاولة بعد دقائق وسيكتمل أسرع.')
+    throw new HttpsError('deadline-exceeded', 'التحويل يأخذ وقتاً أطول من المعتاد، وما زال يعمل لدى المزود. أعد المحاولة بعد دقائق وسيكتمل أسرع.')
   }
 
   // 3) store the GLB (+ USDZ for iPhone Quick Look) in the venue library + attach to the item
@@ -1400,14 +1444,14 @@ const generateTableImage = onCall({ timeoutSeconds: 120, memory: '512MiB' }, asy
   const body = await res.json().catch(() => null)
   if (!res.ok) {
     console.error('generateTableImage provider error', { status: res.status, body: JSON.stringify(body || {}).slice(0, 300) })
-    throw new HttpsError('internal', 'مزود الصور رفض الطلب — أعد المحاولة بعد قليل.')
+    throw new HttpsError('internal', 'تعذّر توليد الصورة الآن. أعد المحاولة بعد قليل.')
   }
   // the image arrives inline, base64, camelCase or snake_case depending on the
   // serving stack — accept both rather than betting on one
   const parts = (body && body.candidates && body.candidates[0] && body.candidates[0].content && body.candidates[0].content.parts) || []
   const imgPart = parts.find((p) => (p.inlineData && p.inlineData.data) || (p.inline_data && p.inline_data.data))
   const inline = imgPart ? (imgPart.inlineData || imgPart.inline_data) : null
-  if (!inline || !inline.data) throw new HttpsError('internal', 'النموذج لم يرجع صورة — جرّب وصفاً أوضح للخامة.')
+  if (!inline || !inline.data) throw new HttpsError('internal', 'لم تصلنا صورة هذه المرة. جرّب وصفاً أوضح للخامة.')
   let mime = inline.mimeType || inline.mime_type || 'image/png'
   let buf = Buffer.from(inline.data, 'base64')
   // Top mode: crop the flat gray sky above the table's far edge — the model
@@ -1485,13 +1529,13 @@ async function takeDinerAiCredit(db, tenantId) {
   const r = await takeSpend(db, tenantId, 'dinerAi', 1)
   if (r.granted >= 1 || r.reason === 'error-open') return
   throw new HttpsError('resource-exhausted', {
-    burst: 'المساعد مشغول الآن — أعد المحاولة بعد لحظات.',
-    platformBurst: 'المساعد مشغول الآن — أعد المحاولة بعد لحظات.',
-    daily: 'بلغ المساعد حدّه اليومي في هذا المطعم — جرّب غداً أو اطلب من النادل.',
+    burst: 'المساعد مشغول الآن. أعد المحاولة بعد لحظات.',
+    platformBurst: 'المساعد مشغول الآن. أعد المحاولة بعد لحظات.',
+    daily: 'المساعد وصل حدّه اليومي هنا. جرّب غداً، أو اطلب من النادل.',
     killed: 'المساعد متوقف مؤقتاً.',
     disabled: 'المساعد غير مفعّل في هذا المطعم.',
     suspended: 'هذا المطعم غير نشط حالياً.',
-  }[r.reason] || 'اكتمل رصيد المساعد في هذا المطعم لهذا الشهر — يمكنك الطلب يدوياً من المنيو.')
+  }[r.reason] || 'انتهى رصيد المساعد هذا الشهر. يمكنك الطلب من المنيو مباشرة.')
 }
 
 // Request: { tenantId, kind: 'photo'|'audio', inlineData: { mimeType, data },
@@ -1503,7 +1547,7 @@ async function takeDinerAiCredit(db, tenantId) {
 const dinerOrderAi = onCall({ timeoutSeconds: 60, memory: '512MiB' }, async (request) => {
   const key = process.env.GEMINI_API_KEY || process.env.VITE_GEMINI_API_KEY
   if (!key) {
-    throw new HttpsError('failed-precondition', 'GEMINI_API_KEY مفقود في functions/.env — أضِفه ثم أعد نشر الدوال.')
+    throw new HttpsError('failed-precondition', 'GEMINI_API_KEY مفقود في functions/.env. أضِفه ثم أعد نشر الدوال.')
   }
   const data = request.data || {}
   const tenantId = data.tenantId

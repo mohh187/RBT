@@ -18,7 +18,7 @@ import SpendMeter from '../../components/SpendMeter.jsx'
 
 const fmtDate = (ts, lang) => {
   const d = ts?.toDate ? ts.toDate() : ts ? new Date(ts) : null
-  return d ? d.toLocaleDateString(lang === 'ar' ? 'ar-SA-u-nu-latn' : 'en-GB', { dateStyle: 'medium' }) : '—'
+  return d ? d.toLocaleDateString(lang === 'ar' ? 'ar-SA-u-nu-latn' : 'en-GB', { dateStyle: 'medium' }) : '·'
 }
 
 export default function Billing() {
@@ -68,7 +68,7 @@ export default function Billing() {
           <div className="stack" style={{ gap: 2 }}>
             <strong>{ar ? 'باقتك الحالية' : 'Current plan'}: <span style={{ color: 'var(--brand)' }}>{plan ? (ar ? plan.ar : plan.en || plan.ar) : tenant?.plan}</span></strong>
             <span className="xs faint">
-              {planStatus === 'trial' ? (ar ? 'فترة تجريبية' : 'Trial') : planStatus === 'expired' ? (ar ? 'منتهية — جدّد للاستمرار' : 'Expired') : (ar ? 'نشطة' : 'Active')}
+              {planStatus === 'trial' ? (ar ? 'فترة تجريبية' : 'Trial') : planStatus === 'expired' ? (ar ? 'منتهية، جدّد للاستمرار' : 'Expired') : (ar ? 'نشطة' : 'Active')}
               {expires ? ` · ${ar ? 'حتى' : 'until'} ${fmtDate(expires, lang)}` : ''}
             </span>
           </div>
@@ -107,7 +107,7 @@ export default function Billing() {
             return (
               <div key={inv.id} className="card card-pad row-between wrap" style={{ gap: 8 }}>
                 <div className="stack" style={{ gap: 2 }}>
-                  <strong className="small">{inv.no ? `#${inv.no}` : inv.id.slice(0, 6)} · {(PLANS.find((p) => p.id === inv.plan)?.ar) || inv.plan}{inv.period ? ` — ${inv.period}` : ''}</strong>
+                  <strong className="small">{inv.no ? `#${inv.no}` : inv.id.slice(0, 6)} · {(PLANS.find((p) => p.id === inv.plan)?.ar) || inv.plan}{inv.period ? `, ${inv.period}` : ''}</strong>
                   <span className="xs faint">{fmtDate(inv.createdAt, lang)}{inv.paidAt ? ` · ${ar ? 'سُددت' : 'paid'} ${fmtDate(inv.paidAt, lang)}` : ''}</span>
                 </div>
                 <div className="row" style={{ gap: 8, alignItems: 'center' }}>
@@ -119,7 +119,7 @@ export default function Billing() {
                   {!inv.payUrl && inv.status === 'pending' && (
                     <button className="btn btn-sm btn-primary" onClick={async () => {
                       try { await startPayment('subscription', tenantId, inv.id) }
-                      catch (_) { toast.error(ar ? 'تعذر فتح صفحة الدفع — أعد المحاولة' : 'Could not open checkout') }
+                      catch (_) { toast.error(ar ? 'تعذر فتح صفحة الدفع، أعد المحاولة' : 'Could not open checkout') }
                     }}>{ar ? 'ادفع الآن' : 'Pay now'}</button>
                   )}
                 </div>

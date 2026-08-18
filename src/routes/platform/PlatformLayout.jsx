@@ -157,7 +157,7 @@ export default function PlatformLayout() {
   // Every /platform route carries the RBT 360 console identity in the tab.
   useEffect(() => {
     const prev = document.title
-    document.title = 'RBT 360 — الكونسول'
+    document.title = 'RBT 360، الكونسول'
     return () => { document.title = prev }
   }, [])
   const [threads, setThreads] = useState([])

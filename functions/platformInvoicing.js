@@ -207,7 +207,7 @@ async function creditNote(db, invoiceId, { reason, by, financeCfg }) {
   await db.collection('platformActivity').add({
     tenantId: inv.tenantId, tenantName: inv.tenantName || '', type: 'creditNote',
     severity: 'warn', title: `إشعار دائن ${out.no}`,
-    body: `عن الفاتورة ${inv.no || invoiceId} بمبلغ ${inv.total || inv.amount}. السبب: ${reason || '—'} · بواسطة ${by || '—'}`,
+    body: `عن الفاتورة ${inv.no || invoiceId} بمبلغ ${inv.total || inv.amount}. السبب: ${reason || 'غير مذكور'} · بواسطة ${by || 'غير معروف'}`,
     at: FieldValue.serverTimestamp(),
   }).catch(() => {})
   return out

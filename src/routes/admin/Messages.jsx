@@ -125,7 +125,7 @@ export default function Messages() {
         status: 'scheduled',
         scheduleAt: Date.now() + 3600e3,
       })
-      toast.success(ar ? 'أُنشئت نسخة مجدولة بعد ساعة — عدّلها أو ألغِها من صفحة الحملات' : 'Duplicated as a campaign scheduled in 1 hour — manage it from Campaigns')
+      toast.success(ar ? 'أُنشئت نسخة مجدولة بعد ساعة، عدّلها أو ألغِها من صفحة الحملات' : 'Duplicated as a campaign scheduled in 1 hour, manage it from Campaigns')
     } catch (_) { toast.error(t('error')) }
     finally { setBusyId(null) }
   }
@@ -144,20 +144,20 @@ export default function Messages() {
   const AUTOMATIONS = [
     { key: 'followup', icon: 'star', on: fu.enabled === true,
       ar: 'ما بعد الزيارة', en: 'Post-visit thanks',
-      detAr: fu.enabled === true ? `تُرسل بعد ${fu.delayMins ?? 60} دقيقة من الدفع${fu.includeReview !== false ? ' + رابط تقييم جوجل' : ''}` : 'شكر بعد الدفع + طلب تقييم — فعّلها من صفحة الحملات',
-      detEn: fu.enabled === true ? `Sends ${fu.delayMins ?? 60} mins after payment${fu.includeReview !== false ? ' + Google review link' : ''}` : 'Thanks after payment + review ask — enable it in Campaigns' },
+      detAr: fu.enabled === true ? `تُرسل بعد ${fu.delayMins ?? 60} دقيقة من الدفع${fu.includeReview !== false ? ' + رابط تقييم جوجل' : ''}` : 'شكر بعد الدفع + طلب تقييم، فعّلها من صفحة الحملات',
+      detEn: fu.enabled === true ? `Sends ${fu.delayMins ?? 60} mins after payment${fu.includeReview !== false ? ' + Google review link' : ''}` : 'Thanks after payment + review ask, enable it in Campaigns' },
     { key: 'winback', icon: 'heart', on: wb.enabled === true,
       ar: 'اشتقنا لك', en: 'We miss you',
-      detAr: wb.enabled === true ? `للعميل الخامل بعد ${wb.days ?? 30} يوماً بلا طلبات` : 'رسالة للعميل الخامل — فعّلها من صفحة الحملات',
-      detEn: wb.enabled === true ? `Idle customers after ${wb.days ?? 30} days` : 'Idle-customer nudge — enable it in Campaigns' },
+      detAr: wb.enabled === true ? `للعميل الخامل بعد ${wb.days ?? 30} يوماً بلا طلبات` : 'رسالة للعميل الخامل، فعّلها من صفحة الحملات',
+      detEn: wb.enabled === true ? `Idle customers after ${wb.days ?? 30} days` : 'Idle-customer nudge, enable it in Campaigns' },
     { key: 'birthday', icon: 'cake', on: lc.birthday !== false,
       ar: 'عيد الميلاد', en: 'Birthday',
       detAr: lc.birthday !== false ? `تهنئة يومية لمن سُجّل تاريخ ميلاده${bdayBonus > 0 ? ` + ${bdayBonus} نقطة هدية` : ''}` : 'متوقفة من إعدادات العضوية',
       detEn: lc.birthday !== false ? `Daily greeting for recorded birthdays${bdayBonus > 0 ? ` + ${bdayBonus} bonus points` : ''}` : 'Disabled in membership settings' },
     { key: 'ownerReport', icon: 'chartBar', on: rep.enabled === true,
       ar: 'تقرير المالك', en: 'Owner report',
-      detAr: rep.enabled === true ? `واتساب يومياً 7 صباحاً${rep.phone ? ` إلى ${rep.phone}` : ' — أضف رقم الجوال من صفحة الحملات'}` : 'ملخص المبيعات اليومي — فعّله من صفحة الحملات',
-      detEn: rep.enabled === true ? `Daily WhatsApp at 7am${rep.phone ? ` to ${rep.phone}` : ' — add a phone in Campaigns'}` : 'Daily sales digest — enable it in Campaigns' },
+      detAr: rep.enabled === true ? `واتساب يومياً 7 صباحاً${rep.phone ? ` إلى ${rep.phone}` : '، أضف رقم الجوال من صفحة الحملات'}` : 'ملخص المبيعات اليومي، فعّله من صفحة الحملات',
+      detEn: rep.enabled === true ? `Daily WhatsApp at 7am${rep.phone ? ` to ${rep.phone}` : ', add a phone in Campaigns'}` : 'Daily sales digest, enable it in Campaigns' },
     { key: 'welcome', icon: 'award', on: lc.welcome !== false,
       ar: 'الترحيب', en: 'Welcome',
       detAr: lc.welcome !== false ? 'تُرسل تلقائياً عند منح العضوية مع رابط البطاقة' : 'متوقفة من إعدادات العضوية',
@@ -182,7 +182,7 @@ export default function Messages() {
         </div>
         <div className="stat">
           <div className="label">{ar ? 'أفضل حملة (طلبات محققة)' : 'Best campaign (attributed)'}</div>
-          <div className="value num">{best ? attribution[best.id] : '—'}</div>
+          <div className="value num">{best ? attribution[best.id] : '·'}</div>
           <div className="xs faint" style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
             {best ? (best.title || (ar ? 'حملة' : 'Campaign')) : (ar ? 'اربط كود خصم بحملتك لقياس الأثر' : 'Attach a coupon to measure impact')}
           </div>
@@ -231,7 +231,7 @@ export default function Messages() {
                     <div className="small" style={{ whiteSpace: 'pre-wrap' }}>{c.text}</div>
                     {c.textB && (
                       <div className="stack" style={{ gap: 4, borderInlineStart: '2px solid var(--border)', paddingInlineStart: 8 }}>
-                        <span className="xs bold">{ar ? 'النسخة B — أُرسلت لنصف الجمهور (اختبار A/B)' : 'Variant B — sent to half the audience (A/B test)'}</span>
+                        <span className="xs bold">{ar ? 'النسخة B، أُرسلت لنصف الجمهور (اختبار A/B)' : 'Variant B, sent to half the audience (A/B test)'}</span>
                         <div className="xs faint" style={{ whiteSpace: 'pre-wrap' }}>{c.textB}</div>
                       </div>
                     )}
@@ -285,7 +285,7 @@ export default function Messages() {
 
       {/* automation log — CONFIG state only; no invented per-message numbers */}
       <div className="stack" style={{ gap: 8 }}>
-        <strong className="small"><Icon name="sparkles" size={14} style={{ verticalAlign: 'middle' }} /> {ar ? 'الرسائل التلقائية — حالة التفعيل' : 'Automations — configuration'}</strong>
+        <strong className="small"><Icon name="sparkles" size={14} style={{ verticalAlign: 'middle' }} /> {ar ? 'الرسائل التلقائية، حالة التفعيل' : 'Automations, configuration'}</strong>
         <div className="stat-grid" style={{ gridTemplateColumns: 'repeat(auto-fill,minmax(210px,1fr))' }}>
           {AUTOMATIONS.map((a) => (
             <div key={a.key} className="card card-pad stack" style={{ gap: 6 }}>
@@ -299,8 +299,8 @@ export default function Messages() {
         </div>
         <p className="xs faint" style={{ margin: 0 }}>
           {ar
-            ? 'الإحصاء الفردي لكل رسالة تلقائية وإيصالات القراءة يتطلبان Webhook من Meta — قادم مع تفعيل واتساب الرسمي.'
-            : 'Per-message stats for automations and read receipts require a Meta webhook — coming with official WhatsApp activation.'}
+            ? 'الإحصاء الفردي لكل رسالة تلقائية وإيصالات القراءة يتطلبان Webhook من Meta، قادم مع تفعيل واتساب الرسمي.'
+            : 'Per-message stats for automations and read receipts require a Meta webhook, coming with official WhatsApp activation.'}
         </p>
       </div>
 

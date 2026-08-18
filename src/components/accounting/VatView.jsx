@@ -6,7 +6,7 @@ import { downloadCsv } from '../../lib/accounting.js'
 // venue explicitly flagged as vatable — unflagged bills are reported as a
 // separate, honest "not claimed" figure rather than silently assumed.
 export default function VatView({ vat, ar = true, lang = 'ar', currency = 'SAR', showMoney = true, tenant, periodLabel = '', onPrint }) {
-  const M = ({ v }) => (showMoney ? <Price value={v} currency={currency} lang={lang} /> : <span className="faint">—</span>)
+  const M = ({ v }) => (showMoney ? <Price value={v} currency={currency} lang={lang} /> : <span className="faint">-</span>)
   const taxNumber = tenant?.vatNumber || tenant?.taxNumber || ''
 
   const rows = [
@@ -53,7 +53,7 @@ export default function VatView({ vat, ar = true, lang = 'ar', currency = 'SAR',
         {!taxNumber && vat.outputVat > 0 && (
           <div className="acc-warn">
             <Icon name="warning" size={15} />
-            <span>{ar ? 'حُصّلت ضريبة بدون رقم تسجيل ضريبي مسجّل في الإعدادات — الفاتورة الضريبية غير مكتملة نظاماً.' : 'VAT collected without a registered tax number.'}</span>
+            <span>{ar ? 'حُصّلت ضريبة والرقم الضريبي غير مسجّل في الإعدادات، فالفاتورة الضريبية ناقصة نظاماً. أضف الرقم من الإعدادات.' : 'VAT was collected but no tax number is set, so the tax invoice is incomplete. Add it in Settings.'}</span>
           </div>
         )}
 

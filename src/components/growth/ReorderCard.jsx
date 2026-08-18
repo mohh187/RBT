@@ -63,7 +63,7 @@ export default function ReorderCard({
           : (isHabit
             ? `Repeated ${usual.timesOrdered} of ${usual.ofOrders} orders`
             : `Your last order of ${usual.ofOrders}`)}
-        {usual.honestNote && ar ? ` — ${usual.honestNote}` : ''}
+        {usual.honestNote && ar ? `. ${usual.honestNote}` : ''}
       </div>
 
       <div className="gu-reorder-lines">
@@ -92,8 +92,8 @@ export default function ReorderCard({
       {usual.priceChanged && (
         <div className="gu-reorder-sub">
           {ar
-            ? `تغيّرت بعض الأسعار منذ ذلك الطلب — الإجمالي أدناه محسوب بأسعار اليوم (كان ${usual.historicalTotal}).`
-            : `Some prices changed since then — the total below uses today's prices (was ${usual.historicalTotal}).`}
+            ? `تغيّرت بعض الأسعار منذ ذلك الطلب، والإجمالي أدناه محسوب بأسعار اليوم (كان ${usual.historicalTotal}).`
+            : `Some prices changed since then, so the total below uses today's prices (was ${usual.historicalTotal}).`}
         </div>
       )}
 

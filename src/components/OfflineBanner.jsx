@@ -60,7 +60,7 @@ export default function OfflineBanner() {
         <Icon name="zap" size={13} />
         {compact
           ? (ar ? 'بلا اتصال' : 'Offline')
-          : (ar ? 'بلا اتصال — التصفح يعمل، وما تطلبه يُرسل تلقائياً عند عودة الإنترنت' : 'Offline — browsing works; orders sync when back online')}
+          : (ar ? 'بلا اتصال، والتصفح يعمل وطلبك يُرسل عند عودة الإنترنت' : 'Offline, browsing still works and orders send when you are back online')}
       </span>
     </div>
   )

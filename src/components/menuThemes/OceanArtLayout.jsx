@@ -87,7 +87,7 @@ function OaSection({ cat, items, artBg, currency, offers, lang, t, onOpen, onQui
       <span className="oa-veil" aria-hidden="true" />
       <div className="oa-in">
         <header className="oa-head">
-          <h3 className="oa-cat-name">{cat ? pickLang(cat, 'name', lang) : (lang === 'ar' ? 'القائمة' : 'The Menu')}</h3>
+          <h3 className="oa-cat-name">{cat ? pickLang(cat, 'name', lang) : (lang === 'ar' ? 'المنيو' : 'The Menu')}</h3>
           {cdesc && <p className="oa-cat-desc">{cdesc}</p>}
           <WaveDivider />
         </header>

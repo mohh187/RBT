@@ -133,7 +133,7 @@ export default function ReviewsStudio() {
       <div className="row-between wrap" style={{ gap: 10 }}>
         <div>
           <h2>{ar ? 'استوديو التقييمات' : 'Reviews Studio'}</h2>
-          <p className="muted small">{ar ? 'استورد تقييمات جوجل، وأسندها للأصناف التي تذكرها فقط — الباقي يبقى تقييماً عاماً للمنشأة.' : 'Import Google reviews; attach to items only when the text mentions them — the rest stay venue-level.'}</p>
+          <p className="muted small">{ar ? 'استورد تقييمات جوجل، وأسندها للأصناف التي تذكرها فقط، الباقي يبقى تقييماً عاماً للمنشأة.' : 'Import Google reviews; attach to items only when the text mentions them, the rest stay venue-level.'}</p>
         </div>
       </div>
 
@@ -169,7 +169,7 @@ export default function ReviewsStudio() {
           </div>
           {missingRating > 0 && (
             <p className="xs" style={{ color: 'var(--danger)' }}>
-              {ar ? `${missingRating} صف بلا تقييم نجوم — حدد النجوم يدوياً وإلا لن يُحفظ (لا نخترع تقييماً).` : `${missingRating} rows have no star rating — set stars manually or they will be skipped (we never invent a rating).`}
+              {ar ? `${missingRating} صف بلا تقييم نجوم، حدد النجوم يدوياً وإلا لن يُحفظ (لا نخترع تقييماً).` : `${missingRating} rows have no star rating, set stars manually or they will be skipped (we never invent a rating).`}
             </p>
           )}
           <div className="stack" style={{ gap: 8 }}>
@@ -199,7 +199,7 @@ export default function ReviewsStudio() {
                         ))}
                       </select>
                       {r.itemId && r.mentionedItemIds.includes(r.itemId) && (
-                        <span className="xs faint">{ar ? `يذكر الصنف (ثقة ${Math.round(r.confidence * 100)}%)` : `mentions item (${Math.round(r.confidence * 100)}%)`}{r.confidence < ATTACH_CONFIDENCE ? (ar ? ' — أُسند يدوياً' : ' — manual attach') : ''}</span>
+                        <span className="xs faint">{ar ? `يذكر الصنف (ثقة ${Math.round(r.confidence * 100)}%)` : `mentions item (${Math.round(r.confidence * 100)}%)`}{r.confidence < ATTACH_CONFIDENCE ? (ar ? '، أُسند يدوياً' : ', manual attach') : ''}</span>
                       )}
                       <label className="row xs faint" style={{ gap: 5, alignItems: 'center', cursor: 'pointer' }}>
                         <input type="checkbox" checked={r.override} style={{ width: 16, height: 16 }}
@@ -208,7 +208,7 @@ export default function ReviewsStudio() {
                       </label>
                     </div>
                     {offMention && (
-                      <p className="rvw-warn"><Icon name="warning" size={13} /> {ar ? 'هذا التقييم لا يذكر الصنف — إسناده إليه تضليل للعملاء' : 'This review does not mention that item — attaching it is misleading to customers'}</p>
+                      <p className="rvw-warn"><Icon name="warning" size={13} /> {ar ? 'هذا التقييم لا يذكر الصنف، إسناده إليه تضليل للعملاء' : 'This review does not mention that item, attaching it is misleading to customers'}</p>
                     )}
                   </div>
                 </div>

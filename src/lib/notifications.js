@@ -16,6 +16,7 @@ import { useActiveOrders, useOpenWaiterCalls } from './liveBoard.js'
 import { CAP } from './permissions.js'
 import { alertParty } from './notify.js'
 import { orderNumber } from './format.js'
+import { orderTypeLabel } from './orderStatus.js'
 
 const ms = (ts) => ts?.toMillis?.() ?? (typeof ts === 'number' ? ts : 0)
 // ONE stable empty array — a per-render `[]` here caused a render loop (see below)
@@ -80,7 +81,9 @@ export function useNotificationFeed(tenantId) {
     orders.filter((o) => o.status === 'pending').forEach((o) => {
       out.push({ id: 'ord_' + o.id, kind: 'order', icon: 'orders', color: 'var(--brand)', orderId: o.id, at: ms(o.createdAt),
         title: `${ar ? 'طلب جديد' : 'New order'} · ${orderNumber(o.code)}`,
-        body: o.tableLabel || (o.orderType === 'curbside' ? (ar ? 'استلام بالسيارة' : 'Curbside') : o.orderType === 'pickup' ? (ar ? 'استلام' : 'Pickup') : (ar ? 'داخل المقهى' : 'Dine-in')) })
+        // «المقهى» was hardcoded; a bakery or a shop is not a cafe, so the
+        // shared neutral label is what the bell shows.
+        body: o.tableLabel || orderTypeLabel(o.orderType, lang) })
     })
 
     // waiter calls / arrivals — for order-takers (resolvable inline)

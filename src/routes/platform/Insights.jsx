@@ -112,7 +112,7 @@ export default function Insights() {
 
       {!hasStats ? (
         <div className="card" style={{ marginTop: 'var(--sp-4)' }}>
-          <Empty icon="chartBar" title="لا توجد إحصائيات بعد" hint="تُبنى التقارير من التجميع اليومي (platformStats) — عُد بعد أول دورة ليلية" />
+          <Empty icon="chartBar" title="لا توجد إحصائيات بعد" hint="تُبنى التقارير من التجميع اليومي (platformStats)، عُد بعد أول دورة ليلية" />
         </div>
       ) : (
         <>

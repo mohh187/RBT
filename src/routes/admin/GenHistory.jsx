@@ -105,8 +105,8 @@ export default function GenHistory() {
 
       <p className="gh-note">
         {ar
-          ? 'كل عملية توليد بالذكاء الاصطناعي في النظام تُسجَّل هنا — الناجحة والفاشلة معاً — مع البرومبت الذي استُخدم بالضبط، لتراجعها وتعيد استخدام ما نجح وتتجنّب ما فشل.'
-          : 'Every AI generation in the system is recorded here — successes and failures alike — with the exact prompt used, so you can review it, reuse what worked and avoid what did not.'}
+          ? 'كل عملية توليد بالذكاء الاصطناعي في النظام تُسجَّل هنا. الناجحة والفاشلة معاً. مع البرومبت الذي استُخدم بالضبط، لتراجعها وتعيد استخدام ما نجح وتتجنّب ما فشل.'
+          : 'Every AI generation in the system is recorded here. Successes and failures alike. With the exact prompt used, so you can review it, reuse what worked and avoid what did not.'}
       </p>
 
       {error && (
@@ -139,7 +139,7 @@ export default function GenHistory() {
           hint={
             ar
               ? 'يمتلئ هذا السجل تلقائياً عند أول استخدام لأي أداة ذكاء اصطناعي: توليد صور المنشورات، صور الأصناف، النصوص والتعليقات، الخطط والتقارير. لا شيء هنا الآن لأن شيئاً لم يُولَّد بعد.'
-              : 'This log fills itself the first time an AI tool is used — post images, item photos, text and captions, plans and reports. It is empty because nothing has been generated yet.'
+              : 'This log fills itself the first time an AI tool is used. Post images, item photos, text and captions, plans and reports. It is empty because nothing has been generated yet.'
           }
         />
       )}
@@ -180,8 +180,8 @@ export default function GenHistory() {
           {windowFull && (
             <p className="gh-note">
               {ar
-                ? `يعرض السجل ويبحث داخل آخر ${DEFAULT_WINDOW} عملية توليد فقط — العمليات الأقدم من ذلك محفوظة لكنها ليست ضمن هذه النافذة.`
-                : `The log shows and searches the most recent ${DEFAULT_WINDOW} generations only — older entries are still stored but fall outside this window.`}
+                ? `يعرض السجل ويبحث داخل آخر ${DEFAULT_WINDOW} عملية توليد فقط، العمليات الأقدم من ذلك محفوظة لكنها ليست ضمن هذه النافذة.`
+                : `The log shows and searches the most recent ${DEFAULT_WINDOW} generations only, older entries are still stored but fall outside this window.`}
             </p>
           )}
         </>

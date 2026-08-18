@@ -312,7 +312,7 @@ function StockOpSheet({ op, onClose, tenantId, actor, currency, lang, suppliers 
         // counted quantity for as long as that button has existed. An unknown
         // op must now refuse loudly instead of destroying stock quietly.
         console.error('[stock] unknown operation kind', op.kind)
-        toast?.error?.(ar ? 'عملية غير معروفة — لم يُسجَّل شيء' : 'Unknown operation — nothing was recorded')
+        toast?.error?.(ar ? 'عملية غير معروفة، لم يُسجَّل شيء' : 'Unknown operation, nothing was recorded')
         return
       }
       toast?.success?.(ar ? 'تم' : 'Done')
@@ -321,7 +321,7 @@ function StockOpSheet({ op, onClose, tenantId, actor, currency, lang, suppliers 
   }
 
   return (
-    <Sheet open={!!op} onClose={onClose} title={`${title} — ${ar ? m.nameAr : (m.nameEn || m.nameAr)}`}>
+    <Sheet open={!!op} onClose={onClose} title={`${title}, ${ar ? m.nameAr : (m.nameEn || m.nameAr)}`}>
       <div className="stack" style={{ gap: 'var(--sp-2)' }}>
         <div className="row-between xs faint"><span>{ar ? 'الرصيد الحالي' : 'Current'}</span><span>{fmtBaseQty(m.stockQty || 0, m.baseUnit, lang)}</span></div>
         {op.kind === 'receive' ? (
@@ -331,7 +331,7 @@ function StockOpSheet({ op, onClose, tenantId, actor, currency, lang, suppliers 
             {suppliers.length > 0 && (
               <div className="field"><label>{ar ? 'المورّد' : 'Supplier'}</label>
                 <select className="select" value={supplierId} onChange={(e) => setSupplierId(e.target.value)}>
-                  <option value="">{ar ? '— بدون —' : '— none —'}</option>
+                  <option value="">{ar ? 'بدون' : 'None'}</option>
                   {suppliers.map((s) => <option key={s.id} value={s.id}>{s.name}</option>)}
                 </select>
               </div>

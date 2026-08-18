@@ -463,7 +463,7 @@ export async function exportDesignPng({ design, items = [], currency = 'SAR', qr
   const blob = await new Promise((res, rej) => {
     try { canvas.toBlob((b) => (b ? res(b) : rej(new Error('toBlob failed'))), 'image/png') } catch (e) { rej(e) }
   }).catch(() => {
-    throw new Error('تعذر إنشاء ملف الصورة — غالباً صورة خارجية بلا CORS منعت التصدير. أزل الصورة أو ارفعها للمكتبة ثم أعد المحاولة.')
+    throw new Error('ما تم إنشاء ملف الصورة. غالباً السبب صورة مأخوذة من موقع خارجي، فأزلها أو ارفعها إلى مكتبة الوسائط ثم أعد المحاولة.')
   })
   return { blob, skipped }
 }

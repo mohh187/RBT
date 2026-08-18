@@ -495,7 +495,7 @@
 }
 .ads-item:hover { border-color: var(--brand); }
 .ads-item:active { transform: scale(0.99); }
-.ads-item.sel { border-color: var(--brand); box-shadow: 0 0 0 3px var(--ring); }
+.ads-item.sel { border-color: var(--brand); box-shadow: 0 0 0 3px var(--ring-soft); }
 
 .ads-item-top {
   display: flex;
@@ -646,7 +646,7 @@
 .ads-shape:active { transform: scale(0.97); }
 .ads-shape.active {
   border-color: var(--brand);
-  box-shadow: 0 0 0 3px var(--ring);
+  box-shadow: 0 0 0 3px var(--ring-soft);
 }
 .ads-shape b { font-size: var(--fs-sm); font-weight: 800; }
 .ads-shape span {

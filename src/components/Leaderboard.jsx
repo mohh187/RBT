@@ -12,8 +12,8 @@ import { submitScore, watchTopScores, myRank, currentMonth, cleanName, TOP_N } f
 const T = {
   ar: {
     title: 'لوحة صدارة صيادي الشهر',
-    monthNote: `تُصفّر اللوحة مع بداية كل شهر — الأشهر السابقة تبقى محفوظة. تُعرض أعلى ${TOP_N} نتيجة.`,
-    empty: 'لا توجد نتائج هذا الشهر بعد — كن أول صيّاد على اللوحة.',
+    monthNote: `تُصفّر اللوحة مع بداية كل شهر، والأشهر السابقة تبقى محفوظة. تُعرض أعلى ${TOP_N} نتيجة.`,
+    empty: 'لا توجد نتائج هذا الشهر بعد. كن أول صيّاد على اللوحة.',
     errorTitle: 'تعذّر تحميل اللوحة',
     errorHint: 'تحقّق من الاتصال ثم أعد فتح اللوحة.',
     you: 'أنت',
@@ -33,8 +33,8 @@ const T = {
   },
   en: {
     title: 'Anglers of the month',
-    monthNote: `The board resets at the start of each month — past months stay saved. Top ${TOP_N} shown.`,
-    empty: 'No scores yet this month — be the first angler on the board.',
+    monthNote: `The board resets at the start of each month, and past months stay saved. Top ${TOP_N} shown.`,
+    empty: 'No scores yet this month. Be the first angler on the board.',
     errorTitle: 'Could not load the board',
     errorHint: 'Check your connection, then reopen the board.',
     you: 'You',

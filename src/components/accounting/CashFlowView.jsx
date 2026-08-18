@@ -1,11 +1,12 @@
 import { Price } from '../Riyal.jsx'
 import Icon from '../Icon.jsx'
 import { METHOD_LABELS, accountAr, accountEn, fmtDate, downloadCsv } from '../../lib/accounting.js'
+import { arPlural } from '../../lib/forecast.js'
 
 // Inflow by payment method, outflow by account, and the drawer reconciliation.
 // Variance is shown against what the cashier ACTUALLY counted — never a guess.
 export default function CashFlowView({ cf, ar = true, lang = 'ar', currency = 'SAR', showMoney = true }) {
-  const M = ({ v }) => (showMoney ? <Price value={v} currency={currency} lang={lang} /> : <span className="faint">—</span>)
+  const M = ({ v }) => (showMoney ? <Price value={v} currency={currency} lang={lang} /> : <span className="faint">-</span>)
 
   const inflow = Object.entries(cf.inflowByMethod || {}).sort((a, b) => b[1] - a[1])
   const outflow = Object.entries(cf.outflowByAccount || {}).sort((a, b) => b[1] - a[1])
@@ -46,7 +47,7 @@ export default function CashFlowView({ cf, ar = true, lang = 'ar', currency = 'S
         <div className="acc-kpi" data-tone={cf.totalVariance === 0 ? '' : 'bad'}>
           <span className="acc-kpi-label">{ar ? 'فروقات الدرج' : 'Drawer variance'}</span>
           <span className="acc-kpi-value"><M v={cf.totalVariance} /></span>
-          <span className="acc-kpi-sub">{ar ? `${cf.sessionsCount} وردية` : `${cf.sessionsCount} sessions`}</span>
+          <span className="acc-kpi-sub">{ar ? arPlural(cf.sessionsCount, { one: 'وردية', two: 'ورديتان', few: 'ورديات', many: 'وردية' }) : `${cf.sessionsCount} sessions`}</span>
         </div>
       </div>
 
@@ -80,7 +81,7 @@ export default function CashFlowView({ cf, ar = true, lang = 'ar', currency = 'S
           <button className="btn btn-sm btn-outline" onClick={exportSessions} disabled={!cf.sessions.length}><Icon name="download" size={15} /> CSV</button>
         </div>
         {!cf.sessions.length ? (
-          <p className="acc-empty">{ar ? 'لا ورديات درج في هذه الفترة — افتح الدرج من شاشة الكاشير لتتم المطابقة تلقائياً.' : 'No drawer sessions in this period.'}</p>
+          <p className="acc-empty">{ar ? 'لا ورديات درج في هذه الفترة. افتح الدرج من شاشة الكاشير وتتم المطابقة تلقائياً.' : 'No drawer sessions in this period.'}</p>
         ) : (
           <div className="acc-scroll-x">
             <table className="acc-table">
@@ -97,11 +98,11 @@ export default function CashFlowView({ cf, ar = true, lang = 'ar', currency = 'S
                 {cf.sessions.map((s) => (
                   <tr key={s.id} data-variance={s.variance == null ? 'open' : (s.variance === 0 ? 'ok' : (Math.abs(s.variance) >= 50 ? 'high' : 'low'))}>
                     <td className="acc-num acc-nowrap">{fmtDate(s.openedAt, ar)}</td>
-                    <td className="acc-nowrap">{s.by || '—'}</td>
+                    <td className="acc-nowrap">{s.by || '-'}</td>
                     <td className="acc-ta-end acc-num"><M v={s.expected} /></td>
                     <td className="acc-ta-end acc-num">{s.counted == null ? <span className="faint">{ar ? 'مفتوحة' : 'Open'}</span> : <M v={s.counted} />}</td>
                     <td className="acc-ta-end acc-num acc-var-cell">
-                      {s.variance == null ? <span className="faint">—</span> : <M v={s.variance} />}
+                      {s.variance == null ? <span className="faint">-</span> : <M v={s.variance} />}
                     </td>
                   </tr>
                 ))}

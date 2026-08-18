@@ -2,13 +2,14 @@ import { useMemo, useState } from 'react'
 import { Price } from '../Riyal.jsx'
 import Icon from '../Icon.jsx'
 import { downloadCsv } from '../../lib/accounting.js'
+import { arPlural } from '../../lib/forecast.js'
 
 // Per-item cost vs price vs margin, worst first. Cost comes ONLY from a real
 // recipe priced at the material's weighted average cost; an item with no recipe
 // is shown as "غير مسعّر" rather than being assigned a made-up cost.
 export default function MarginsView({ margins, inventory, ar = true, lang = 'ar', currency = 'SAR', showMoney = true }) {
   const [onlySold, setOnlySold] = useState(true)
-  const M = ({ v }) => (showMoney ? <Price value={v} currency={currency} lang={lang} /> : <span className="faint">—</span>)
+  const M = ({ v }) => (showMoney ? <Price value={v} currency={currency} lang={lang} /> : <span className="faint">-</span>)
 
   const rows = useMemo(
     () => (margins.rows || []).filter((r) => (onlySold ? r.qtySold > 0 : true)),
@@ -36,7 +37,7 @@ export default function MarginsView({ margins, inventory, ar = true, lang = 'ar'
         <div className="acc-kpi">
           <span className="acc-kpi-label">{ar ? 'قيمة المخزون' : 'Inventory value'}</span>
           <span className="acc-kpi-value"><M v={inventory.total} /></span>
-          <span className="acc-kpi-sub">{ar ? `${inventory.count} مادة` : `${inventory.count} materials`}</span>
+          <span className="acc-kpi-sub">{ar ? arPlural(inventory.count, { one: 'مادة', two: 'مادتان', few: 'مواد', many: 'مادة' }) : `${inventory.count} materials`}</span>
         </div>
         <div className="acc-kpi">
           <span className="acc-kpi-label">{ar ? 'أصناف مسعّرة بوصفة' : 'Items with a recipe'}</span>
@@ -61,7 +62,7 @@ export default function MarginsView({ margins, inventory, ar = true, lang = 'ar'
           <Icon name="warning" size={15} />
           <span>
             {ar
-              ? `${margins.uncostedCount} صنفاً بلا وصفة مرتبطة بالمواد الخام، لذلك لا تُحتسب تكلفتها ضمن تكلفة البضاعة المباعة وهامش الربح الحقيقي أقل مما يظهر. اربط وصفاتها من شاشة المخزون.`
+              ? `${arPlural(margins.uncostedCount, { one: 'صنف', two: 'صنفان', few: 'أصناف', many: 'صنفاً' })} بلا وصفة مرتبطة بالمواد الخام، فلا تُحتسب تكلفتها ضمن تكلفة البضاعة المباعة، والهامش الحقيقي أقل مما يظهر هنا. اربط وصفاتها من شاشة المخزون.`
               : `${margins.uncostedCount} items have no recipe, so their cost is excluded from COGS.`}
           </span>
         </div>
@@ -103,9 +104,9 @@ export default function MarginsView({ margins, inventory, ar = true, lang = 'ar'
                       {!r.costed && <span className="acc-uncosted-tag">{ar ? 'غير مسعّر' : 'No recipe'}</span>}
                     </td>
                     <td className="acc-ta-end acc-num"><M v={r.price} /></td>
-                    <td className="acc-ta-end acc-num">{r.costed ? <M v={r.cost} /> : <span className="faint">—</span>}</td>
-                    <td className="acc-ta-end acc-num">{r.costed ? <M v={r.margin} /> : <span className="faint">—</span>}</td>
-                    <td className="acc-ta-end acc-num acc-pct-cell">{r.marginPct == null ? <span className="faint">—</span> : `${r.marginPct}%`}</td>
+                    <td className="acc-ta-end acc-num">{r.costed ? <M v={r.cost} /> : <span className="faint">-</span>}</td>
+                    <td className="acc-ta-end acc-num">{r.costed ? <M v={r.margin} /> : <span className="faint">-</span>}</td>
+                    <td className="acc-ta-end acc-num acc-pct-cell">{r.marginPct == null ? <span className="faint">-</span> : `${r.marginPct}%`}</td>
                     <td className="acc-ta-end acc-num">{r.qtySold}</td>
                   </tr>
                 ))}

@@ -41,7 +41,7 @@ export default function IconPicker({ onPick, onClose, color = '#1c1c1e', strokeW
           <Icon name="search" size={15} />
           <input
             className="input input-sm" value={q} onChange={(e) => setQ(e.target.value)}
-            placeholder={`ابحث في ${total} أيقونة — قهوة، جائزة، coffee…`}
+            placeholder={`ابحث في ${total} أيقونة: قهوة، جائزة، coffee…`}
           />
           {q && <button className="icon-btn" onClick={() => setQ('')} aria-label="مسح"><Icon name="close" size={14} /></button>}
         </label>
@@ -65,7 +65,7 @@ export default function IconPicker({ onPick, onClose, color = '#1c1c1e', strokeW
       <p className="icp-note">
         {q
           ? `${shown.length}${shown.length >= 400 ? '+' : ''} نتيجة`
-          : `يُعرض ${shown.length} من ${total} — اكتب للبحث في الباقي`}
+          : `يُعرض ${shown.length} من ${total}. اكتب للبحث في الباقي`}
       </p>
     </div>
   )

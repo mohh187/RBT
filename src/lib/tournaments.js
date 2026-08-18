@@ -224,13 +224,13 @@ export function validateTournament(raw) {
   const out = []
   if (!t.name) out.push('اكتب اسماً للبطولة.')
   if (!t.from || !t.to) out.push('حدّد تاريخ البداية وتاريخ النهاية.')
-  if (t.from && t.to && t.to - t.from < 60 * 1000) out.push('الفترة قصيرة جداً — اجعل النهاية بعد البداية.')
+  if (t.from && t.to && t.to - t.from < 60 * 1000) out.push('الفترة قصيرة جداً، اجعل النهاية بعد البداية.')
   if (t.prize.kind === 'discount' && (t.prize.value <= 0 || t.prize.value > 100)) {
     out.push('نسبة الخصم يجب أن تكون بين 1 و 100.')
   }
   if (t.prize.kind === 'points' && t.prize.value < 1) out.push('عدد نقاط الولاء يجب أن يكون 1 فأكثر.')
   if (t.prize.kind !== 'custom' && !t.prize.label && t.prize.kind === 'freeItem') {
-    out.push('اكتب اسم الصنف المجاني — جائزة بلا اسم ليست جائزة.')
+    out.push('اكتب اسم الصنف المجاني، فجائزة بلا اسم ليست جائزة.')
   }
   return out
 }
@@ -249,7 +249,7 @@ export const STATUS_AR = {
   draft: 'متوقفة',
   scheduled: 'لم تبدأ بعد',
   running: 'جارية الآن',
-  ended: 'انتهت الفترة — لم تُعلن',
+  ended: 'انتهت الفترة ولم تُعلن',
   finalized: 'أُعلنت',
 }
 
@@ -357,13 +357,13 @@ function partialNoteAr(cov, counted, players, wantGame, soloNote) {
   }
   const head = `ترتيب جزئي: احتُسبت ${counted} جولة لـ ${players} لاعباً من الجولات التي أمكن قراءتها فقط، لا من كل جولات الفترة`
   if (!cov.reported) {
-    return `${head} — لم تُرفق أي إفادة عن مدى القراءة، فلا دليل على أنها شملت الفترة.${soloNote}`
+    return `${head}. لم تُرفق أي إفادة عن مدى القراءة، فلا دليل على أنها شملت الفترة.${soloNote}`
   }
-  if (!cov.ok) return `${head} — تعذّرت قراءة سجل الجولات.${soloNote}`
+  if (!cov.ok) return `${head}. تعذّرت قراءة سجل الجولات.${soloNote}`
   if (cov.capped) {
     return `${head}: قُرئت ${cov.scanned} جولة ثم توقفت القراءة عند سقف الأمان (${cov.cap} جولة). اختر فترة أقصر ليكتمل المسح.${soloNote}`
   }
-  return `${head} — لم تثبت القراءة أنها بلغت بداية الفترة.${soloNote}`
+  return `${head}. لم تثبت القراءة أنها بلغت بداية الفترة.${soloNote}`
 }
 
 export function standings({
@@ -393,7 +393,7 @@ export function standings({
     noteAr: '',
   }
   if (!base.windowValid) {
-    return { ...base, complete: false, noteAr: 'فترة البطولة غير صالحة — حدّد بداية ونهاية.' }
+    return { ...base, complete: false, noteAr: 'فترة البطولة غير صالحة، حدّد بداية ونهاية.' }
   }
 
   const list = Array.isArray(plays) ? plays : []
@@ -414,7 +414,7 @@ export function standings({
   const soloExcluded = inWindow.filter(isSoloPlay).length
   const qualified = inWindow.filter((p) => !isSoloPlay(p))
   const soloNote = soloExcluded
-    ? ` استُبعدت ${soloExcluded} جولة ضد الكمبيوتر — البطولة تُحتسب من اللعب أمام أشخاص فقط.`
+    ? ` استُبعدت ${soloExcluded} جولة ضد الكمبيوتر، فالبطولة تُحتسب من اللعب أمام أشخاص فقط.`
     : ''
 
   if (!qualified.length) {
@@ -582,7 +582,7 @@ export async function finalize(tid, tournament, computed) {
       ? ` قُرئت ${num(cov.scanned)} جولة ثم توقفت القراءة عند سقف الأمان (${num(cov.cap)} جولة).`
       : ''
     throw new Error(
-      `القراءة لم تشمل كل جولات فترة البطولة، فالترتيب الحالي قد يكون ناقصاً أو خاطئاً — ولا يصح إعلان فائز على أساسه.${why} اجعل فترة البطولة أقصر: الفترة الأقصر تحوي جولات أقل فتكتمل قراءتها، ثم أعد المحاولة.`,
+      `القراءة لم تشمل كل جولات فترة البطولة، فالترتيب الحالي قد يكون ناقصاً أو خاطئاً، ولا يصح إعلان فائز على أساسه.${why} اجعل فترة البطولة أقصر: الفترة الأقصر تحوي جولات أقل فتكتمل قراءتها، ثم أعد المحاولة.`,
     )
   }
   const t = normalizeTournament(tournament)

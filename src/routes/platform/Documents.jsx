@@ -40,7 +40,7 @@ const PREVIEW_TERMS = [
 
 const n2 = (v) => (Number(v) || 0).toLocaleString('ar-SA-u-nu-latn', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
 const nInt = (v) => (Number(v) || 0).toLocaleString('en-US')
-const dateAr = (ms) => (ms ? new Date(ms).toLocaleDateString('ar-SA-u-nu-latn', { dateStyle: 'medium' }) : '—')
+const dateAr = (ms) => (ms ? new Date(ms).toLocaleDateString('ar-SA-u-nu-latn', { dateStyle: 'medium' }) : '·')
 
 // A stored quote or invoice, shaped for the sheet. The only real work is
 // flattening Firestore Timestamps — the sheet must not know Firestore exists.
@@ -98,7 +98,7 @@ export default function Documents() {
         <h2 className="page-title">المستندات</h2>
         <p className="muted small">
           عروض أسعار احترافية بهوية الشركة وشعارها، تتحوّل إلى فاتورة ضريبية عند الدفع. الترقيم متسلسل بلا فجوات،
-          ولا يُحذف مستند أبداً — يُلغى بسبب مكتوب ويبقى في السجل.
+          ولا يُحذف مستند أبداً، بل يُلغى بسبب مكتوب ويبقى في السجل.
         </p>
       </div>
 
@@ -124,13 +124,13 @@ function QuotesTab({ tenants, quotes, cfg, onOpen }) {
   const [converting, setConverting] = useState('')
 
   const convert = async (q) => {
-    if (!window.confirm(`تحويل العرض ${q.no} إلى فاتورة ضريبية بمبلغ ${n2(q.total)} ريال؟\nتأخذ الفاتورة رقماً متسلسلاً ولا يمكن حذفها بعدها — تُلغى بسبب مكتوب فقط.`)) return
+    if (!window.confirm(`تحويل العرض ${q.no} إلى فاتورة ضريبية بمبلغ ${n2(q.total)} ريال؟\nتأخذ الفاتورة رقماً متسلسلاً ولا يمكن حذفها بعدها، تُلغى بسبب مكتوب فقط.`)) return
     setConverting(q.id)
     try {
       const r = await convertQuoteToInvoice({ quoteId: q.id })
       toast.success(r.linked
         ? `صدرت الفاتورة ${r.no}`
-        : `صدرت الفاتورة ${r.no} — اربطها بمنشأة من تبويب الفواتير`)
+        : `صدرت الفاتورة ${r.no}، اربطها بمنشأة من تبويب الفواتير`)
     } catch (e) {
       toast.error(e?.message || 'تعذّر التحويل')
     } finally { setConverting('') }
@@ -141,7 +141,7 @@ function QuotesTab({ tenants, quotes, cfg, onOpen }) {
   const copyLink = async (q) => {
     try {
       await navigator.clipboard.writeText(quoteUrl(q))
-      toast.success('نُسخ رابط العرض — أرسله للعميل')
+      toast.success('نُسخ رابط العرض، أرسله للعميل')
     } catch {
       // Clipboard is blocked in some embedded contexts; showing the link is
       // more useful than an error the operator can do nothing with.
@@ -161,7 +161,7 @@ function QuotesTab({ tenants, quotes, cfg, onOpen }) {
       {open && <QuoteForm tenants={tenants} cfg={cfg} onDone={() => setOpen(false)} />}
 
       {quotes.length === 0 ? (
-        <Empty icon="file" title="لا عروض أسعار" hint="أنشئ عرضاً وأرسل رابطه للعميل — يقبله ويدفع مباشرة." />
+        <Empty icon="file" title="لا عروض أسعار" hint="أنشئ عرضاً وأرسل رابطه للعميل، يقبله ويدفع مباشرة." />
       ) : (
         <div className="pc-rows">
           {quotes.map((q) => (
@@ -172,7 +172,7 @@ function QuotesTab({ tenants, quotes, cfg, onOpen }) {
                   <span className={`badge ${DOC_STATUS_BADGE[q.status] || ''}`}>{DOC_STATUS_AR[q.status] || q.status}</span>
                 </div>
                 <div className="xs faint">
-                  {q.buyer?.nameAr || '—'} · باقة {(PLANS.find((p) => p.id === q.planId) || {}).ar || q.planId}
+                  {q.buyer?.nameAr ? `${q.buyer.nameAr} · ` : ''}باقة {(PLANS.find((p) => p.id === q.planId) || {}).ar || q.planId}
                   {q.billing === 'yearly' ? ' · سنوي' : ''} · ساري حتى {dateAr(q.validUntil)}
                 </div>
               </div>
@@ -241,7 +241,7 @@ function QuoteForm({ tenants, cfg, onDone }) {
       // Shaped exactly like a saved quote so PlatformDocSheet needs no special
       // «preview mode» — one renderer, so what you see is what is stored.
       doc: {
-        no: 'QT-—-————',
+        no: 'QT-, -, , , , ',
         seller: { ...(cfg.seller || {}), ...PREVIEW_SELLER },
         buyer: {
           nameAr: buyerName || 'اسم المنشأة', vatNumber: buyerVat, crNumber: '',
@@ -253,7 +253,7 @@ function QuoteForm({ tenants, cfg, onDone }) {
         promo,
         lines: [{
           sku: `plan:${planId}`,
-          descAr: `اشتراك منصة RBT360 — باقة «${planAr}» (${yearly ? 'سنوي' : 'شهري'})`,
+          descAr: `اشتراك منصة RBT360، باقة «${planAr}» (${yearly ? 'سنوي' : 'شهري'})`,
           qty: 1, listPrice: list, unitPrice: price, discount,
           discountLabelAr: promo ? promo.labelAr : (override !== '' ? 'سعر متفق عليه' : ''),
           net: price, vatRate: 15, vat, total,
@@ -337,7 +337,7 @@ function QuoteForm({ tenants, cfg, onDone }) {
         <label className="stack grow" style={{ gap: 4, minWidth: 200 }}>
           <span className="xs faint">ربط بمنشأة قائمة (اختياري)</span>
           <select className="input" value={tenantId} onChange={(e) => setTenantId(e.target.value)}>
-            <option value="">— عميل محتمل، بلا حساب بعد —</option>
+            <option value="">عميل محتمل، بلا حساب بعد</option>
             {(tenants || []).map((t) => <option key={t.id} value={t.id}>{t.name || t.id}</option>)}
           </select>
         </label>
@@ -373,8 +373,8 @@ function QuoteForm({ tenants, cfg, onDone }) {
             </button>
           </div>
           {preview.promo
-            ? <span className="xs" style={{ color: 'var(--brand)' }}>{preview.promo.labelAr} — خصم {preview.promo.discountPct}%، ساري حتى {dateAr(preview.promo.validUntil)}</span>
-            : <span className="xs faint">لا يوجد سعر أصلي أعلى أو أن العرض متوقف — لن يظهر شطب. اضبطهما من محرر الخطط.</span>}
+            ? <span className="xs" style={{ color: 'var(--brand)' }}>{preview.promo.labelAr}: خصم {preview.promo.discountPct}%، ساري حتى {dateAr(preview.promo.validUntil)}</span>
+            : <span className="xs faint">لا يوجد سعر أصلي أعلى أو أن العرض متوقف، فلن يظهر شطب. اضبطهما من محرر الخطط.</span>}
         </div>
       )}
 
@@ -405,7 +405,7 @@ function InvoicesTab({ docs, onOpen, tenants }) {
     setLinking(d.id)
     try {
       const r = await linkDocumentTenant({ invoiceId: d.id, tenantId: tid })
-      toast.success(`رُبطت الفاتورة بـ${r.tenantName || 'المنشأة'} — تظهر الآن في صفحة فوترتها`)
+      toast.success(`رُبطت الفاتورة بـ${r.tenantName || 'المنشأة'}، تظهر الآن في صفحة فوترتها`)
     } catch (e) {
       toast.error(e?.message || 'تعذّر الربط')
     } finally { setLinking('') }
@@ -432,7 +432,7 @@ function InvoicesTab({ docs, onOpen, tenants }) {
             <div className="xs faint">
               {d.tenantId
                 ? <Link to={`/platform/venues/${d.tenantId}`}>{d.tenantName || d.tenantId}</Link>
-                : <span>{d.buyer?.nameAr || '—'} · غير مرتبطة بمنشأة</span>}
+                : <span>{d.buyer?.nameAr ? `${d.buyer.nameAr} · ` : ''}غير مرتبطة بمنشأة</span>}
               {d.period ? ` · فترة ${d.period}` : ''} · صدرت {fmtWhen(d.issuedAt || d.createdAt)}
             </div>
             {d.status === 'void' && d.voidReason ? <div className="xs" style={{ color: 'var(--danger)' }}>ملغاة: {d.voidReason}</div> : null}
@@ -446,7 +446,7 @@ function InvoicesTab({ docs, onOpen, tenants }) {
                   value={pick[d.id] || ''}
                   onChange={(e) => setPick((p) => ({ ...p, [d.id]: e.target.value }))}
                 >
-                  <option value="">— اربطها بمنشأة —</option>
+                  <option value="">اربطها بمنشأة</option>
                   {(tenants || []).map((t) => <option key={t.id} value={t.id}>{t.name || t.id}</option>)}
                 </select>
                 <button className="btn btn-sm btn-outline" disabled={linking === d.id || !pick[d.id]} onClick={() => link(d)}>
@@ -480,9 +480,9 @@ function AuditTab({ docs }) {
   return (
     <div className="card card-pad stack" style={{ gap: 12 }}>
       <div>
-        <strong className="small">فحص تسلسل الترقيم — <span className="num" dir="ltr">{year}</span></strong>
+        <strong className="small">فحص تسلسل الترقيم: <span className="num" dir="ltr">{year}</span></strong>
         <p className="xs faint" style={{ margin: '4px 0 0' }}>
-          سلسلة الفواتير يجب أن تكون متصلة من واحد بلا رقم ناقص. الرقم المفقود هو أول ما يبحث عنه المدقّق —
+          سلسلة الفواتير يجب أن تكون متصلة من واحد بلا رقم ناقص. الرقم المفقود هو أول ما يبحث عنه المدقّق.
           ولهذا لا يُحذف مستند هنا أبداً، بل يُلغى بسبب مكتوب ويبقى محتلاً رقمه.
         </p>
       </div>

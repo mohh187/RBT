@@ -167,11 +167,11 @@ function IncomingAlertsLive() {
       : await claimWaiterCall(tenantId, cur.id, me)
     setClaiming(false)
     if (res.ok) {
-      toast.success(cur.kind === 'order' ? (ar ? 'الطلب لك — ابدأ التحضير' : 'Order accepted') : (ar ? 'النداء لك — الطاولة بانتظارك' : 'Call claimed'))
+      toast.success(cur.kind === 'order' ? (ar ? 'الطلب لك، ابدأ التحضير' : 'Order accepted') : (ar ? 'النداء لك، الطاولة بانتظارك' : 'Call claimed'))
     } else if (res.by) {
       toast.toast(ar ? `سبقك ${res.by} إليها` : `${res.by} got it first`)
     } else if (!res.gone) {
-      toast.error(ar ? 'تعذّر القبول — أعد المحاولة' : 'Claim failed — retry')
+      toast.error(ar ? 'ما تمّ القبول. اضغط «قبول» مرة ثانية' : 'The claim did not go through. Tap Accept again')
     }
   }
   const openDetails = () => {

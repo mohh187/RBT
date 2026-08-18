@@ -9,8 +9,8 @@ import { planLabel, planExpired } from '../lib/plans.js'
 
 function fmtDate(ts, ar) {
   const d = ts?.toDate ? ts.toDate() : ts ? new Date(ts) : null
-  if (!d) return '—'
-  return d.toLocaleDateString(ar ? 'ar-SA-u-nu-latn' : 'en-US', { dateStyle: 'medium' })
+  if (!d) return ar ? 'غير محدد' : 'Not set'
+  return d.toLocaleDateString(ar ? 'ar-SA-u-nu-latn-ca-gregory' : 'en-US', { dateStyle: 'medium' })
 }
 
 // Venue-facing subscription status + pay-your-dues. Invoices are minted by the
@@ -67,7 +67,7 @@ export default function SubscriptionCard({ tenant, tenantId }) {
           ))}
         </div>
       )}
-      <p className="xs faint" style={{ margin: 0 }}>{ar ? 'يتطلّب الدفع الإلكتروني مُفعَّلاً ونشر الدوال.' : 'Requires online payment enabled + deployed functions.'}</p>
+      <p className="xs faint" style={{ margin: 0 }}>{ar ? 'يلزم تفعيل الدفع الإلكتروني في منشأتك قبل السداد من هنا.' : 'Online payment must be switched on for your venue before you can pay here.'}</p>
     </div>
   )
 }

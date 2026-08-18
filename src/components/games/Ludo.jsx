@@ -480,8 +480,8 @@ export const RULES_AR = [
   'الخروج: لا تخرج القطعة من البيت إلا برمية 6.',
   'الستّة: كل 6 تمنحك رمية إضافية، لكن 3 ستّات متتالية تُسقط دورك كاملاً (قاعدة منع التعطيل المعتمدة).',
   'الأكل: النزول بالضبط على قطعة خصم يعيدها إلى بيتها، ويمنحك رمية إضافية.',
-  'الأمان: مربعات النجمة ومربع انطلاق كل لون آمنة — لا تُؤكل فيها قطعة، وتتشارك فيها الألوان.',
-  'الحاجز: قطعتان من لونك على مربع واحد تكوّنان حاجزاً لا يستطيع الخصم النزول عليه. المرور فوقه مسموح — هذه هي النسخة الأكثر انتشاراً من اللودو.',
+  'الأمان: مربعات النجمة ومربع انطلاق كل لون آمنة، فلا تُؤكل فيها قطعة، وتتشارك فيها الألوان.',
+  'الحاجز: قطعتان من لونك على مربع واحد تكوّنان حاجزاً لا يستطيع الخصم النزول عليه. المرور فوقه مسموح، وهذه هي النسخة الأكثر انتشاراً من اللودو.',
   'ممر البيت: 5 مربعات خاصة بلونك، ثم المركز. يلزم عدد مطابق تماماً؛ أي زيادة حركة غير قانونية.',
   'الوصول: إدخال قطعة إلى المركز يمنح رمية إضافية.',
   'إن لم تكن هناك أي حركة قانونية انتقل الدور تلقائياً.',
@@ -519,16 +519,16 @@ const T = {
     winner: 'الفائز',
     yourDie: 'زهرك',
     blockedHint: 'قطعة عليها حاجز: خانتها يحتلّها حجر خصم مزدوج، ولا يجوز النزول عليه.',
-    autoPlay: 'حركتك الوحيدة — تُلعب تلقائياً',
+    autoPlay: 'حركتك الوحيدة، تُلعب تلقائياً',
     n: {
       start: 'ابدأ برمية الزهر.',
       rolled: 'اختر القطعة التي تتحرك.',
-      noMove: 'لا توجد حركة قانونية — انتقل الدور.',
-      threeSixes: 'ثلاث ستّات متتالية — سقط الدور.',
+      noMove: 'لا توجد حركة قانونية، فانتقل الدور.',
+      threeSixes: 'ثلاث ستّات متتالية، فسقط الدور.',
       skipped: 'تم تخطي دور لاعب متوقف.',
       moved: 'تحركت القطعة.',
-      captured: 'أكل قطعة خصم — رمية إضافية.',
-      homed: 'وصلت قطعة إلى المركز — رمية إضافية.',
+      captured: 'أكل قطعة خصم، ومعها رمية إضافية.',
+      homed: 'وصلت قطعة إلى المركز، ومعها رمية إضافية.',
       extra: 'رمية إضافية.',
       over: 'انتهت اللعبة.',
     },
@@ -559,16 +559,16 @@ const T = {
     winner: 'Winner',
     yourDie: 'Your die',
     blockedHint: 'Blocked: an opponent holds that square with two tokens, and a block cannot be landed on.',
-    autoPlay: 'Your only move — playing it',
+    autoPlay: 'Your only move, playing it now',
     n: {
       start: 'Roll to begin.',
       rolled: 'Choose a token to move.',
-      noMove: 'No legal move — turn passes.',
-      threeSixes: 'Three sixes in a row — turn forfeited.',
+      noMove: 'No legal move, so the turn passes.',
+      threeSixes: 'Three sixes in a row, so the turn is forfeited.',
       skipped: 'A stalled player was skipped.',
       moved: 'Token moved.',
-      captured: 'Captured — extra roll.',
-      homed: 'Token home — extra roll.',
+      captured: 'Captured, with an extra roll.',
+      homed: 'Token home, with an extra roll.',
       extra: 'Extra roll.',
       over: 'Game over.',
     },
@@ -1063,7 +1063,7 @@ export default function Ludo({
   }, [online, gstate, groom, turnSeat, myTurn, tick])
 
   const nameOf = useCallback((s) => {
-    if (!Number.isInteger(s) || s < 0 || s > 3) return '—'
+    if (!Number.isInteger(s) || s < 0 || s > 3) return '…'
     const p = ((groom && groom.players) || []).find((x) => Number(x.seat) === s)
     if (p && p.name) return p.name
     return lang === 'en' ? COLORS[s].en : COLORS[s].ar
@@ -1506,7 +1506,7 @@ export default function Ludo({
           <span className="lud-dot" style={{ background: turnSeat >= 0 && COLORS[turnSeat] ? COLORS[turnSeat].main : '#999' }} />
           <span className="lud-turn-t">
             {over
-              ? `${L.winner}: ${gstate.finished.length ? nameOf(gstate.finished[0]) : '—'}`
+              ? `${L.winner}: ${nameOf(gstate.finished[0])}`
               : (myTurn ? L.turnYou : `${L.turnOf} ${nameOf(turnSeat)}`)}
           </span>
           {/* the hint always states what is happening NOW, in priority order:
@@ -1560,7 +1560,7 @@ export default function Ludo({
               <circle cx="24" cy="2.6" r="1.9" fill="url(#ludCrownG)" />
               <circle cx="44.6" cy="7.4" r="1.9" fill="url(#ludCrownG)" />
             </svg>
-            <div className="lud-over-w">{gstate.finished.length ? nameOf(gstate.finished[0]) : '—'}</div>
+            <div className="lud-over-w">{nameOf(gstate.finished[0])}</div>
             <div className="lud-over-sub">{L.winner}</div>
             <ol className="lud-places">
               {placings.map((s, i) => (

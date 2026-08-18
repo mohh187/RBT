@@ -12,14 +12,15 @@ import { collection, getDocs, limit, orderBy, query, where } from 'firebase/fire
 import { db } from '../../lib/firebase.js'
 import Icon from '../Icon.jsx'
 import { Spinner } from '../ui.jsx'
+import { arPlural } from '../../lib/forecast.js'
 
 const DAYS = [7, 30, 90]
 const fmt = (n) => Number(n || 0).toLocaleString('ar-SA-u-nu-latn')
-const pct = (n, of) => (of > 0 ? `${Math.round((n / of) * 100)}%` : '—')
+const pct = (n, of) => (of > 0 ? `${Math.round((n / of) * 100)}%` : '-')
 
 function whenText(ms) {
-  if (!ms) return '—'
-  return new Date(ms).toLocaleString('ar-SA-u-nu-latn', { dateStyle: 'short', timeStyle: 'short' })
+  if (!ms) return '-'
+  return new Date(ms).toLocaleString('ar-SA-u-nu-latn-ca-gregory', { dateStyle: 'short', timeStyle: 'short' })
 }
 
 export default function AdReport({ tenantId, ads = [], lang = 'ar', onOpenAd }) {
@@ -47,7 +48,7 @@ export default function AdReport({ tenantId, ads = [], lang = 'ar', onOpenAd }) 
       } catch (_) {
         // A missing index or a rules gap must not blank the page — the counter
         // view below still works without any session data.
-        if (alive) { setSessions([]); setErr(ar ? 'تعذّر تحميل الجلسات — الأرقام الإجمالية أدناه صحيحة، لكن تفاصيل «من شاهد» غير متاحة الآن.' : 'Sessions unavailable; totals below are still correct.') }
+        if (alive) { setSessions([]); setErr(ar ? 'تفاصيل «من شاهد» ما وصلت الآن. الأرقام الإجمالية أدناه صحيحة، وأعد فتح الصفحة بعد قليل للتفاصيل.' : 'The viewer details did not load. The totals below are still correct; reopen the page shortly for the rest.') }
       }
     })()
     return () => { alive = false }
@@ -120,7 +121,7 @@ export default function AdReport({ tenantId, ads = [], lang = 'ar', onOpenAd }) 
         <div className="row" style={{ gap: 6 }}>
           {DAYS.map((d) => (
             <button key={d} type="button" className={`chip ${days === d ? 'active' : ''}`} onClick={() => setDays(d)}>
-              {ar ? `${fmt(d)} يوم` : `${d}d`}
+              {ar ? arPlural(d, { one: 'يوم', two: 'يومان', few: 'أيام', many: 'يوماً' }) : `${d}d`}
             </button>
           ))}
         </div>
@@ -128,7 +129,7 @@ export default function AdReport({ tenantId, ads = [], lang = 'ar', onOpenAd }) 
 
       <p className="ads-rep-note">
         {ar
-          ? 'الأرقام الإجمالية من عدّادات الإعلان نفسه وتشمل كل جهاز. «من شاهد» يأتي من جلسات التصفح، فيظهر فيه المسجّلون بأسمائهم والبقية كأجهزة — لذلك عدده أقل دائماً، وهذا طبيعي لا نقص.'
+          ? 'الأرقام الإجمالية من عدّادات الإعلان نفسه وتشمل كل جهاز. أما «من شاهد» فيأتي من جلسات التصفح، ويظهر فيه المسجّلون بأسمائهم والبقية كأجهزة، فيكون عدده أقل دائماً وهذا طبيعي.'
           : 'Totals come from the ad counters (every device). The people list comes from browsing sessions, so it is always a subset.'}
       </p>
 

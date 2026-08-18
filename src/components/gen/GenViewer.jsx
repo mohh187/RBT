@@ -30,7 +30,7 @@ export default function GenViewer({ row, onClose, onDelete, ar = true, itemName 
       await navigator.clipboard.writeText(value)
       toast.success(okMsg)
     } catch (_) {
-      toast.error(ar ? 'تعذّر النسخ — انسخ النص يدوياً' : 'Copy failed — select and copy manually')
+      toast.error(ar ? 'ما تم النسخ. حدّد النص وانسخه يدوياً.' : 'Copy did not go through. Select the text and copy it manually.')
     }
   }
 
@@ -42,14 +42,14 @@ export default function GenViewer({ row, onClose, onDelete, ar = true, itemName 
     const where = sectionLabel(row.section, ar)
     copy(
       prompt,
-      ar ? `نُسخ البرومبت — الصقه في «${where}» وشغّل توليداً جديداً` : `Prompt copied — paste it in "${where}" and run a new generation`,
+      ar ? `نُسخ البرومبت. الصقه في «${where}» وشغّل توليداً جديداً` : `Prompt copied. Paste it in "${where}" and run a new generation`,
     )
   }
 
   const remove = async () => {
     const msg = ar
-      ? 'حذف هذا السجل نهائياً؟ يُحذف السجل فقط — الصورة أو النص الناتج يبقى في مكانه إن كنت قد حفظته.'
-      : 'Delete this log entry permanently? Only the entry is removed — a saved result stays where it is.'
+      ? 'حذف هذا السجل نهائياً؟ يُحذف السجل وحده، أما الصورة أو النص الناتج فيبقى في مكانه إن كنت قد حفظته.'
+      : 'Delete this log entry permanently? Only the entry goes; a saved result stays where it is.'
     if (!window.confirm(msg)) return
     setBusy(true)
     try {
@@ -95,11 +95,11 @@ export default function GenViewer({ row, onClose, onDelete, ar = true, itemName 
             <p className="gh-note">
               {meta?.urlOmitted
                 ? ar
-                  ? 'اكتمل التوليد لكن الناتج كان ملفاً مؤقتاً في المتصفح، فلم يُحفَظ رابط دائم في السجل. البرومبت أدناه هو الأهم — يمكنك إعادة استخدامه.'
-                  : 'This generation succeeded but produced a temporary in-browser file, so no permanent link was stored. The prompt below is what matters — you can reuse it.'
+                  ? 'اكتمل التوليد لكن الناتج كان ملفاً مؤقتاً في المتصفح، فلم يُحفَظ رابط دائم في السجل. الأهم هو البرومبت أدناه، ويمكنك إعادة استخدامه.'
+                  : 'This generation succeeded but produced a temporary in-browser file, so no permanent link was stored. What matters is the prompt below, and you can reuse it.'
                 : ar
-                  ? 'لم تُسجَّل معاينة لهذه العملية — البرومبت والتفاصيل أدناه.'
-                  : 'No preview was recorded for this generation — the prompt and details are below.'}
+                  ? 'لم تُسجَّل معاينة لهذه العملية. البرومبت والتفاصيل أدناه.'
+                  : 'No preview was recorded for this generation. The prompt and details are below.'}
             </p>
           )}
           {failed && (
@@ -177,8 +177,8 @@ export default function GenViewer({ row, onClose, onDelete, ar = true, itemName 
 
           <p className="gh-note">
             {ar
-              ? '«أعد الاستخدام» ينسخ البرومبت فقط ولا يشغّل توليداً جديداً من هنا — الصقه في القسم الذي أُنشئ منه لتتحكّم في خياراته وتكلفته.'
-              : 'Reuse only copies the prompt — it does not re-run the generation from here. Paste it into the section it came from so you keep control of its options and cost.'}
+              ? '«أعد الاستخدام» ينسخ البرومبت فقط ولا يشغّل توليداً جديداً من هنا. الصقه في القسم الذي أُنشئ منه لتتحكّم في خياراته وتكلفته.'
+              : 'Reuse only copies the prompt, it does not re-run the generation from here. Paste it into the section it came from so you keep control of its options and cost.'}
           </p>
         </div>
       </Sheet>

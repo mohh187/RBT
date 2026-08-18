@@ -190,7 +190,7 @@ function StoryViewer({ stories, start, tenantId, ar, onClose }) {
                 setReply(''); setSent(true); setTimeout(() => setSent(false), 1800)
               } catch (e) {
                 console.error('[story] reply failed', e?.code || e)
-                setErr(ar ? 'تعذّر إرسال ردك — حاول مرة أخرى' : 'Could not send your reply — try again')
+                setErr(ar ? 'ما وصل ردك، حاول مرة أخرى' : 'Your reply did not go through, please try again')
                 setTimeout(() => setErr(''), 2600)
               } finally { setSending(false) }
             }}>

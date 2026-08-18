@@ -69,7 +69,7 @@ function CreateInvoiceForm({ tenants, onDone }) {
       </div>
       <div className="row" style={{ gap: 8, flexWrap: 'wrap' }}>
         <select className="input" style={{ minWidth: 180, flex: 1 }} value={tenantId} onChange={(e) => setTenantId(e.target.value)}>
-          <option value="">— اختر المنشأة —</option>
+          <option value="">اختر المنشأة</option>
           {tenants.map((t) => <option key={t.id} value={t.id}>{t.name || t.id}</option>)}
         </select>
         <select className="input" style={{ width: 'auto' }} value={plan} onChange={(e) => setPlan(e.target.value)}>
@@ -117,7 +117,7 @@ function InvoicesTab({ invoices, tenants }) {
   const unpay = async (inv) => {
     // Only ever a correction to a hand-marked payment — a real settled payment
     // is reversed with a credit note, not by rewriting this record.
-    const reason = window.prompt(`سبب إرجاع الفاتورة ${inv.period || inv.id} إلى «غير مدفوعة»؟\n(للتصحيح اليدوي فقط — عكس دفعة حقيقية يكون بإشعار دائن)`, 'تسجيل دفع بالخطأ')
+    const reason = window.prompt(`سبب إرجاع الفاتورة ${inv.period || inv.id} إلى «غير مدفوعة»؟\n(للتصحيح اليدوي فقط، عكس دفعة حقيقية يكون بإشعار دائن)`, 'تسجيل دفع بالخطأ')
     if (reason === null) return
     try { await markUnpaid(inv.id, reason); toast.success('أُعيدت كغير مدفوعة') } catch { toast.error('تعذّر التحديث') }
   }
@@ -125,7 +125,7 @@ function InvoicesTab({ invoices, tenants }) {
     // NOT a delete. A financial record with a sequential number leaves a hole
     // when deleted, and a hole is what an auditor looks for. It is voided with
     // a stated reason and stays in the ledger.
-    const reason = window.prompt(`إلغاء الفاتورة ${inv.period || inv.id} بمبلغ ${inv.amount || 0} ${inv.currency || 'SAR'}؟\nتبقى في السجل ملغاةً بسبب مكتوب — ولا تُحذف.`, '')
+    const reason = window.prompt(`إلغاء الفاتورة ${inv.period || inv.id} بمبلغ ${inv.amount || 0} ${inv.currency || 'SAR'}؟\nتبقى في السجل ملغاةً بسبب مكتوب، ولا تُحذف.`, '')
     if (reason === null) return
     try {
       await voidInvoice(inv.id, { reason, by: user?.email || '' })
@@ -193,7 +193,7 @@ function CollectionTab({ invoices }) {
   const groups = useMemo(() => {
     const map = new Map()
     invoices.filter((i) => i.status !== 'paid' && i.status !== 'void').forEach((i) => {
-      const key = i.tenantId || '—'
+      const key = i.tenantId || '__unlinked__'
       const g = map.get(key) || { tenantId: i.tenantId, tenantName: i.tenantName, items: [], total: 0, currency: i.currency || 'SAR' }
       g.items.push(i)
       g.total += Number(i.amount) || 0
@@ -202,14 +202,16 @@ function CollectionTab({ invoices }) {
     return Array.from(map.values()).sort((a, b) => b.total - a.total)
   }, [invoices])
 
-  if (groups.length === 0) return <Empty icon="check" title="لا مستحقات" hint="كل الفواتير مدفوعة — لا يوجد ما يُحصّل" />
+  if (groups.length === 0) return <Empty icon="check" title="لا مستحقات" hint="كل الفواتير مدفوعة، لا يوجد ما يُحصّل" />
 
   return (
     <div className="stack" style={{ gap: 'var(--sp-2)' }}>
       {groups.map((g) => (
-        <div key={g.tenantId || '—'} className="card card-pad stack" style={{ gap: 8 }}>
+        <div key={g.tenantId || '__unlinked__'} className="card card-pad stack" style={{ gap: 8 }}>
           <div className="row-between" style={{ flexWrap: 'wrap', gap: 8 }}>
-            <Link to={`/platform/venues/${g.tenantId}`} className="bold">{g.tenantName || g.tenantId}</Link>
+            {g.tenantId
+              ? <Link to={`/platform/venues/${g.tenantId}`} className="bold">{g.tenantName || g.tenantId}</Link>
+              : <span className="bold">غير مرتبطة بمنشأة</span>}
             <span className="badge badge-warning num">مستحق <Price value={g.total} currency={g.currency || 'SAR'} lang="ar" symbolSize="0.85em" /></span>
           </div>
           <div className="stack divide" style={{ gap: 0 }}>

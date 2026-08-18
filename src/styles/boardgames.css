@@ -231,7 +231,7 @@
   overflow: hidden;
   border: 1px solid rgba(0, 0, 0, 0.5);
   box-shadow: 0 10px 34px rgba(0, 0, 0, 0.45);
-  touch-action: manipulation;
+  touch-action: pan-x pan-y;
 }
 
 /* Pre-container-query engines: width is the specified side, so the ratio always
@@ -556,7 +556,7 @@
   border-radius: 9px;
   transition: transform 180ms var(--bgm-spring), opacity 180ms var(--bgm-ease),
     filter 180ms var(--bgm-ease);
-  touch-action: manipulation;
+  touch-action: pan-x pan-y;
 }
 /* The tile SVG viewBox is "-0.58 -1.08 1.16 2.16", i.e. exactly 29:54 — the
    ratio is declared so width is the only specified side and the tile can scale

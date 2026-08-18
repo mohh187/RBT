@@ -13,10 +13,13 @@
 // Nothing here talks to Firestore. It is pure functions over session documents.
 import * as shared from '../../lib/behavior.js'
 import { normalizePhone } from '../../lib/format.js'
+import { arPlural } from '../../lib/forecast.js'
 
 /* ---------------- primitives ---------------- */
 
 export const num = (v) => (Number.isFinite(Number(v)) ? Number(v) : 0)
+// Arabic counted-noun agreement: "5 جلسات" but "42 جلسة".
+export const nSessions = (n) => arPlural(n, { one: 'جلسة', two: 'جلستان', few: 'جلسات', many: 'جلسة' })
 export const pct = (r) => Math.round(num(r) * 1000) / 10 // 0.4237 -> 42.4
 const S = (s) => s || {}
 const C = (s) => S(s).counts || {}
@@ -30,10 +33,10 @@ export const sidOf = (s) => S(s).sid || S(s).id || ''
 
 // Latin digits everywhere (hard project rule). en-GB / en-CA keep both the
 // digits and the separators Latin; ar-SA would switch the calendar too.
-export const clock = (ms) => (ms ? new Date(num(ms)).toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' }) : '—')
-export const clockSec = (ms) => (ms ? new Date(num(ms)).toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit', second: '2-digit' }) : '—')
-export const dayStamp = (ms) => (ms ? new Date(num(ms)).toLocaleDateString('en-CA') : '—')
-export const dateTime = (ms) => (ms ? `${dayStamp(ms)} ${clock(ms)}` : '—')
+export const clock = (ms) => (ms ? new Date(num(ms)).toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' }) : '·')
+export const clockSec = (ms) => (ms ? new Date(num(ms)).toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit', second: '2-digit' }) : '·')
+export const dayStamp = (ms) => (ms ? new Date(num(ms)).toLocaleDateString('en-CA') : '·')
+export const dateTime = (ms) => (ms ? `${dayStamp(ms)} ${clock(ms)}` : '·')
 
 // Compact duration, always Latin digits.
 export function dur(ms, ar = true) {
@@ -163,20 +166,20 @@ export function dropOffPointsLocal(sessions = []) {
 /* ---------------- item interest ---------------- */
 
 export function itemVerdict(r) {
-  if (r.sessions < 5) return { key: 'thin', ar: 'عينة قليلة — لا حكم', tone: 'neutral' }
+  if (r.sessions < 5) return { key: 'thin', ar: 'عينة قليلة، لا حكم بعد', tone: 'neutral' }
   if (r.lost >= 5 && r.lostAvgDwellMs >= 8000 && r.orderRate < 0.1) {
-    return { key: 'interest_no_order', ar: 'اهتمام طويل بلا طلب — المانع غالباً السعر أو الصورة أو الوصف', tone: 'bad' }
+    return { key: 'interest_no_order', ar: 'اهتمام طويل بلا طلب، والمانع غالباً السعر أو الصورة أو الوصف', tone: 'bad' }
   }
   if (r.added >= 4 && r.addToOrderRate < 0.4) {
-    return { key: 'cart_drop', ar: 'يُضاف للسلة ثم يُترك — الحاجز في مرحلة إتمام الطلب', tone: 'bad' }
+    return { key: 'cart_drop', ar: 'يُضاف للسلة ثم يُترك، والحاجز عند إتمام الطلب', tone: 'bad' }
   }
   if (r.removed >= 3 && r.removed >= r.added * 0.5) {
-    return { key: 'removed', ar: 'يُحذف من السلة كثيراً — راجع السعر أو الإضافات', tone: 'bad' }
+    return { key: 'removed', ar: 'يُحذف من السلة كثيراً، راجع السعر والإضافات', tone: 'bad' }
   }
   if (r.views >= 10 && r.avgDwellMs < 2500) {
-    return { key: 'glance', ar: 'نظرة عابرة فقط — العرض لا يوقف العين', tone: 'warn' }
+    return { key: 'glance', ar: 'نظرة عابرة فقط، العرض لا يوقف العين', tone: 'warn' }
   }
-  if (r.orderRate >= 0.35) return { key: 'strong', ar: 'يتحوّل جيداً — رشّحه أكثر', tone: 'good' }
+  if (r.orderRate >= 0.35) return { key: 'strong', ar: 'يتحوّل جيداً، رشّحه أكثر', tone: 'good' }
   return { key: 'ok', ar: 'أداء اعتيادي', tone: 'neutral' }
 }
 
@@ -362,7 +365,7 @@ export function cohortsLocal(sessions = []) {
     },
     {
       key: 'return', ar: 'زائر عائد أم أول مرة', icon: 'repeat',
-      note: 'العودة محسوبة داخل الفترة المختارة فقط — زيارة أقدم من الفترة لا تظهر.',
+      note: 'العودة محسوبة داخل الفترة المختارة فقط. الزيارة الأقدم من الفترة لا تظهر.',
       groups: [
         { key: 'returning', ar: 'عائد', ...groupStats(rY) },
         { key: 'first', ar: 'أول مرة', ...groupStats(rN) },
@@ -548,7 +551,7 @@ export function ruleFindings({ sessions = [], steps = [], drops = null, itemRows
       key: 'drop',
       tone: 'bad',
       title: `أكبر تسريب في المسار: بين «${prev ? prev.ar : ''}» و«${worstStep.ar}»`,
-      body: `فقدت ${worstStep.lost} جلسة من أصل ${worstStep.base} عند هذه الخطوة، أي أن ${pct(worstStep.stepRate)} بالمئة فقط أكملوا إليها.`,
+      body: `فقدت ${nSessions(worstStep.lost)} من أصل ${worstStep.base} عند هذه الخطوة، أي أن ${pct(worstStep.stepRate)} بالمئة فقط أكملوا إليها.`,
       sample: worstStep.base,
     })
   }
@@ -559,9 +562,9 @@ export function ruleFindings({ sessions = [], steps = [], drops = null, itemRows
       key: 'spot',
       tone: spot.thin ? 'neutral' : 'warn',
       title: `أكثر نقطة توقّف: ${spot.label}`,
-      body: `${spot.lost} جلسة من ${drops.nonConverting} جلسة غير محوَّلة انتهت هنا (${pct(spot.rate)} بالمئة منها)`
+      body: `${nSessions(spot.lost)} من ${nSessions(drops.nonConverting)} غير محوَّلة انتهت هنا (${pct(spot.rate)} بالمئة منها)`
         + (spot.thin ? '. العينة صغيرة عند هذه النقطة تحديداً، فاقرأها كمؤشّر لا كحكم.' : '.')
-        + (drops.unknown > 0 ? ` كما توجد ${drops.unknown} جلسة غير محوَّلة بلا نقطة توقّف مسجّلة، وهي خارج هذا الحساب.` : ''),
+        + (drops.unknown > 0 ? ` كما توجد ${nSessions(drops.unknown)} غير محوَّلة بلا نقطة توقّف مسجّلة، وهي خارج هذا الحساب.` : ''),
       sample: drops.nonConverting,
     })
   }
@@ -571,7 +574,7 @@ export function ruleFindings({ sessions = [], steps = [], drops = null, itemRows
       key: 'conv',
       tone: done.rate >= 0.15 ? 'good' : 'warn',
       title: `التحويل الكلي ${pct(done.rate)} بالمئة`,
-      body: `${done.count} جلسة انتهت بطلب من أصل ${total} جلسة في الفترة.`,
+      body: `${nSessions(done.count)} انتهت بطلب من أصل ${nSessions(total)} في الفترة.`,
       sample: total,
     })
   }
@@ -581,7 +584,7 @@ export function ruleFindings({ sessions = [], steps = [], drops = null, itemRows
       key: 'item',
       tone: 'bad',
       title: `«${leak.name}» يوقف النظر ولا يُطلب`,
-      body: `${leak.lost} جلسة فتحت هذا الصنف وبقيت عليه بمتوسط ${dur(leak.lostAvgDwellMs)} ثم لم تضِفه للسلة إطلاقاً، ومعدل الطلب ${pct(leak.orderRate)} بالمئة فقط. مدة البقاء لا تثبت الاهتمام — اقرأها كسؤال يستحق التحقق لا كحقيقة.`,
+      body: `${nSessions(leak.lost)} فتحت هذا الصنف وبقيت عليه بمتوسط ${dur(leak.lostAvgDwellMs)} ثم لم تضِفه للسلة إطلاقاً، ومعدل الطلب ${pct(leak.orderRate)} بالمئة فقط. مدة البقاء لا تثبت الاهتمام، فاقرأها كسؤال يستحق التحقق لا كحقيقة.`,
       sample: leak.sessions,
     })
   }
@@ -603,7 +606,7 @@ export function ruleFindings({ sessions = [], steps = [], drops = null, itemRows
         key: `cohort_${c.key}_thin`,
         tone: 'neutral',
         title: `${c.ar}: العينة غير كافية`,
-        body: `المجموعتان ${a.n} و ${b.n} جلسة — الحد الأدنى للحكم ${COHORT_MIN} جلسة لكل مجموعة.`,
+        body: `المجموعتان ${nSessions(a.n)} و ${nSessions(b.n)}، والحد الأدنى للحكم ${nSessions(COHORT_MIN)} لكل مجموعة.`,
         sample: Math.min(a.n, b.n),
       })
       return
@@ -614,7 +617,7 @@ export function ruleFindings({ sessions = [], steps = [], drops = null, itemRows
       key: `cohort_${c.key}`,
       tone: diff > 0 ? 'good' : 'warn',
       title: `${c.ar}: فرق تحويل ${pct(Math.abs(diff))} نقطة`,
-      body: `«${a.ar}» ${pct(a.convRate)} بالمئة على ${a.n} جلسة، مقابل «${b.ar}» ${pct(b.convRate)} بالمئة على ${b.n} جلسة. الفرق ارتباط وليس سبباً.`,
+      body: `«${a.ar}» ${pct(a.convRate)} بالمئة على ${nSessions(a.n)}، مقابل «${b.ar}» ${pct(b.convRate)} بالمئة على ${nSessions(b.n)}. الفرق ارتباط وليس سبباً.`,
       sample: Math.min(a.n, b.n),
     })
   })
@@ -623,7 +626,7 @@ export function ruleFindings({ sessions = [], steps = [], drops = null, itemRows
       key: 'thin',
       tone: 'warn',
       title: 'عينة قليلة',
-      body: `الفترة تحوي ${total} جلسة فقط. أي نسبة هنا قابلة للتغيّر الكبير — وسّع الفترة قبل اتخاذ قرار.`,
+      body: `الفترة تحوي ${nSessions(total)} فقط. أي نسبة هنا قابلة للتغيّر الكبير، فوسّع الفترة قبل اتخاذ قرار.`,
       sample: total,
     })
   }
@@ -818,10 +821,10 @@ export function funnel(sessions = []) {
    glances. The table hint states this so the number is never over-read.        */
 const VERDICT_AR = {
   ignored: { key: 'ignored', ar: 'موجود في المنيو ولم يُفتح إطلاقاً', tone: 'warn' },
-  'thin-data': { key: 'thin', ar: 'عينة قليلة — لا حكم', tone: 'neutral' },
-  'converts-well': { key: 'strong', ar: 'يتحوّل جيداً — رشّحه أكثر', tone: 'good' },
-  'high-interest-no-order': { key: 'interest_no_order', ar: 'وقفوا عنده طويلاً ولم يضيفوه — اسأل عن السعر أو الصورة أو الوصف', tone: 'bad' },
-  'quick-bounce': { key: 'glance', ar: 'يُفتح ويُغلق سريعاً — العرض لا يقنع', tone: 'warn' },
+  'thin-data': { key: 'thin', ar: 'عينة قليلة، لا حكم بعد', tone: 'neutral' },
+  'converts-well': { key: 'strong', ar: 'يتحوّل جيداً، رشّحه أكثر', tone: 'good' },
+  'high-interest-no-order': { key: 'interest_no_order', ar: 'وقفوا عنده طويلاً ولم يضيفوه، اسأل عن السعر أو الصورة أو الوصف', tone: 'bad' },
+  'quick-bounce': { key: 'glance', ar: 'يُفتح ويُغلق سريعاً، العرض لا يقنع', tone: 'warn' },
   neutral: { key: 'ok', ar: 'أداء اعتيادي', tone: 'neutral' },
 }
 
@@ -944,7 +947,7 @@ export function cohorts(sessions = [], orders = []) {
     key: 'returning',
     ar: 'زائر عائد أم أول مرة',
     icon: 'repeat',
-    note: 'العودة محسوبة داخل الفترة المختارة فقط — زيارة أقدم من الفترة لا تظهر هنا.',
+    note: 'العودة محسوبة داخل الفترة المختارة فقط. الزيارة الأقدم من الفترة لا تظهر هنا.',
     groups: [
       { key: 'returning', ar: 'عائد', ...groupStats(sessions.filter((s) => back.get(sidOf(s)))) },
       { key: 'first', ar: 'أول مرة', ...groupStats(sessions.filter((s) => !back.get(sidOf(s)))) },

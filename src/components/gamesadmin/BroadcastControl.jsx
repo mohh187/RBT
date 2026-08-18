@@ -45,8 +45,8 @@ const MODES = [
   {
     key: 'off', icon: 'eyeOff', tone: 'off',
     ar: 'إيقاف البث', en: 'Broadcast off',
-    descAr: 'لا تستولي أي مباراة على الشاشات — تبقى على قوائمها وعروضها المعتادة.',
-    descEn: 'No match ever takes a screen over — playlists and offers only.',
+    descAr: 'لا تستولي أي مباراة على الشاشات، تبقى على قوائمها وعروضها المعتادة.',
+    descEn: 'No match takes a screen over. Screens keep running their playlists and offers.',
   },
   {
     key: 'tournaments', icon: 'award', tone: 'gold',
@@ -57,14 +57,14 @@ const MODES = [
   {
     key: 'all', icon: 'zap', tone: 'live',
     ar: 'كل الطاولات المباشرة', en: 'Any live table',
-    descAr: 'أي طاولة تبدأ اللعب تظهر على الجدار فوراً — حتى بلا بطولة. عدة طاولات؟ تتناوب كل 45 ثانية.',
-    descEn: 'Any table that starts playing takes the wall — no tournament needed. Several rotate every 45s.',
+    descAr: 'أي طاولة تبدأ اللعب تظهر على الجدار فوراً، حتى بلا بطولة. وإن لعبت عدة طاولات تناوبت كل 45 ثانية.',
+    descEn: 'Any table that starts playing takes the wall, even without a tournament. Several tables rotate every 45s.',
   },
   {
     key: 'pinned', icon: 'pin', tone: 'pin',
     ar: 'طاولة محددة', en: 'One pinned table',
-    descAr: 'أنت تختار طاولة واحدة بعينها — تُعرض هي فقط، حتى لو كان لاعب واحد ضد الكمبيوتر.',
-    descEn: 'You pick exactly one table — only it shows, even a solo player versus the computer.',
+    descAr: 'أنت تختار طاولة واحدة بعينها، فتُعرض هي وحدها، حتى لو كان لاعب واحد ضد الكمبيوتر.',
+    descEn: 'You pick exactly one table, and only it shows, even a solo player versus the computer.',
   },
 ]
 
@@ -104,23 +104,23 @@ function liveNow({ cfg, rooms, match, cupRunning, screens, ar, now }) {
     return {
       tone: 'live',
       text: ar
-        ? `يُعرض الآن: ${game} — ${who} على ${where}${extra}`
-        : `Now showing: ${game} — ${who} on ${where}${extra}`,
+        ? `يُعرض الآن: ${game} · ${who} على ${where}${extra}`
+        : `Now showing: ${game} · ${who} on ${where}${extra}`,
     }
   }
   if (cfg.mode === 'off') {
-    return { tone: 'off', text: ar ? 'البث متوقف — الشاشات تعرض قوائمها وعروضها المعتادة.' : 'Broadcast is off — screens play their normal playlists.' }
+    return { tone: 'off', text: ar ? 'البث متوقف، والشاشات تعرض قوائمها وعروضها المعتادة.' : 'Broadcast is off. Screens play their normal playlists.' }
   }
   if (Array.isArray(cfg.screens) && cfg.screens.length === 0) {
-    return { tone: 'off', text: ar ? 'لم تُختر أي شاشة — البث مفعّل لكنه لن يظهر على أي شاشة حتى تختار واحدة أدناه.' : 'No screen selected — broadcasting is on but will appear nowhere until you pick a screen below.' }
+    return { tone: 'off', text: ar ? 'لم تُختر أي شاشة. البث مفعّل لكنه لن يظهر في أي مكان حتى تختار شاشة من الأسفل.' : 'No screen selected. Broadcasting is on but will appear nowhere until you pick a screen below.' }
   }
   if (cfg.mode === 'pinned') {
     if (!cfg.pinnedRoomId) {
-      return { tone: 'idle', text: ar ? 'لم تُثبَّت طاولة بعد — اختر واحدة من قائمة الطاولات المباشرة أدناه.' : 'No table pinned yet — pick one from the live list below.' }
+      return { tone: 'idle', text: ar ? 'لم تُثبَّت طاولة بعد. اختر واحدة من قائمة الطاولات المباشرة أدناه.' : 'No table pinned yet. Pick one from the live list below.' }
     }
     const room = rooms.find((r) => String(r.roomId || r.id) === cfg.pinnedRoomId)
     if (room) return on(room)
-    return { tone: 'idle', text: ar ? 'الطاولة المثبّتة ليست مباشرة الآن — ستُعرض تلقائياً لحظة بدء اللعب، وإلى حينها تعرض الشاشات قوائمها.' : 'The pinned table is not live right now — it will show the moment play starts; until then, playlists run.' }
+    return { tone: 'idle', text: ar ? 'الطاولة المثبّتة ليست مباشرة الآن. ستُعرض تلقائياً لحظة بدء اللعب، وإلى حينها تعرض الشاشات قوائمها.' : 'The pinned table is not live right now. It will show the moment play starts, and until then playlists run.' }
   }
   // matches (table-versus-table challenges) outrank plain rooms on the wall
   const matchRoom = match && match.roomId ? rooms.find((r) => String(r.roomId || r.id) === String(match.roomId)) : null
@@ -133,18 +133,18 @@ function liveNow({ cfg, rooms, match, cupRunning, screens, ar, now }) {
     }
     const room = pickSpectateRoom(rooms, now)
     if (room) return on(room)
-    return { tone: 'idle', text: ar ? 'البطولة جارية ولا طاولة مباشرة الآن — أول طاولة تبدأ ستظهر على الشاشة تلقائياً.' : 'Tournament running, no live table yet — the first one to start will take the screen.' }
+    return { tone: 'idle', text: ar ? 'البطولة جارية ولا طاولة مباشرة الآن. أول طاولة تبدأ ستظهر على الشاشة تلقائياً.' : 'Tournament running, no live table yet. The first one to start will take the screen.' }
   }
   // mode 'all'
   const room = pickBroadcastRoom(rooms, now)
   if (room) {
     const n = countBroadcastRooms(rooms, now)
     const extra = n > 1
-      ? (ar ? ` — بالتناوب بين ${fmtInt(n)} طاولات، ${fmtInt(Math.round(BROADCAST_ROTATE_MS / 1000))} ثانية لكل طاولة` : ` — rotating across ${fmtInt(n)} tables, ${fmtInt(Math.round(BROADCAST_ROTATE_MS / 1000))}s each`)
+      ? (ar ? `. التناوب بين ${fmtInt(n)} من الطاولات، ${fmtInt(Math.round(BROADCAST_ROTATE_MS / 1000))} ثانية لكل واحدة` : `. Rotating across ${fmtInt(n)} tables, ${fmtInt(Math.round(BROADCAST_ROTATE_MS / 1000))}s each`)
       : ''
     return on(room, extra)
   }
-  return { tone: 'idle', text: ar ? 'لا توجد طاولة مباشرة الآن — أول طاولة تبدأ اللعب ستظهر على الشاشة تلقائياً، بلا أي إعداد إضافي.' : 'No table is live right now — the first one to start playing takes the screen automatically.' }
+  return { tone: 'idle', text: ar ? 'لا توجد طاولة مباشرة الآن. أول طاولة تبدأ اللعب ستظهر على الشاشة تلقائياً، بلا أي إعداد إضافي.' : 'No table is live right now. The first one to start playing takes the screen automatically.' }
 }
 
 export default function BroadcastControl({ ar = true, tenantId, tenant, canEdit = false, onSave }) {
@@ -219,8 +219,8 @@ export default function BroadcastControl({ ar = true, tenantId, tenant, canEdit 
         <div className="ga-card">
           <p className="ga-hint">
             {ar
-              ? 'أنت تشاهد الإعداد الحالي فقط — تغييره يحتاج صلاحية الإعدادات.'
-              : 'You are viewing the current setting only — changing it needs the settings permission.'}
+              ? 'أنت تشاهد الإعداد الحالي فقط. تغييره يحتاج صلاحية الإعدادات.'
+              : 'You are viewing the current setting only. Changing it needs the settings permission.'}
           </p>
         </div>
       )}
@@ -235,7 +235,7 @@ export default function BroadcastControl({ ar = true, tenantId, tenant, canEdit 
         <p className="ga-hint">
           {ar
             ? 'يُطبّق فوراً على كل شاشة معرض مقترنة. لا تُعرض إلا الألعاب المعتمدة للشاشات العامة، وأوراق اللاعبين لا تظهر أبداً.'
-            : 'Applies instantly to every paired screen. Only games certified for public screens are shown — nobody’s hand ever appears.'}
+            : 'Applies instantly to every paired screen. Only games certified for public screens are shown. Nobody’s hand ever appears.'}
         </p>
         <div className="bc-modes">
           {MODES.map((m) => (
@@ -267,8 +267,8 @@ export default function BroadcastControl({ ar = true, tenantId, tenant, canEdit 
               <p className="ga-empty-t">{ar ? 'لا توجد طاولة مباشرة الآن' : 'No live table right now'}</p>
               <p className="ga-hint">
                 {ar
-                  ? 'عندما يبدأ ضيوف — أو لاعب واحد ضد الكمبيوتر — جولة، تظهر طاولتهم هنا فوراً لتثبيتها على الشاشة.'
-                  : 'When guests — or one player versus the computer — start a round, their table appears here instantly.'}
+                  ? 'حين تبدأ جولة، سواء بين ضيوف أو لاعب واحد ضد الكمبيوتر، تظهر طاولتهم هنا فوراً لتثبيتها على الشاشة.'
+                  : 'When guests, or one player versus the computer, start a round, their table appears here instantly.'}
               </p>
             </>
           ) : (
@@ -289,7 +289,7 @@ export default function BroadcastControl({ ar = true, tenantId, tenant, canEdit 
                     <span className="bc-room-meta ga-num">
                       {r.tableLabel ? `${r.tableLabel} · ` : ''}{ar ? 'رمز' : 'code'} {id}
                     </span>
-                    <span className="bc-room-pick">{active ? (ar ? 'مثبّتة — تُعرض الآن' : 'Pinned — showing') : (ar ? 'تثبيت' : 'Pin')}</span>
+                    <span className="bc-room-pick">{active ? (ar ? 'مثبّتة، تُعرض الآن' : 'Pinned, showing') : (ar ? 'تثبيت' : 'Pin')}</span>
                   </button>
                 )
               })}
@@ -298,8 +298,8 @@ export default function BroadcastControl({ ar = true, tenantId, tenant, canEdit 
           {cfg.pinnedRoomId && !rooms.some((r) => String(r.roomId || r.id) === cfg.pinnedRoomId) && (
             <p className="ga-hint">
               {ar
-                ? 'الطاولة المثبّتة سابقاً ليست مباشرة الآن — إن عادت للعب تُعرض من جديد، أو ثبّت غيرها.'
-                : 'The previously pinned table is not live now — pin another, or it will show again if play resumes.'}
+                ? 'الطاولة المثبّتة سابقاً ليست مباشرة الآن. إن عادت للعب عُرضت من جديد، أو ثبّت غيرها.'
+                : 'The previously pinned table is not live now. Pin another, or it will show again if play resumes.'}
             </p>
           )}
         </div>
@@ -356,14 +356,14 @@ export default function BroadcastControl({ ar = true, tenantId, tenant, canEdit 
             {!allScreens && cfg.screens.length === 0 && (
               <div className="ga-warn">
                 <Icon name="warning" size={15} />
-                <span>{ar ? 'لم تُختر أي شاشة — البث لن يظهر في أي مكان حتى تختار شاشة واحدة على الأقل.' : 'No screen selected — the broadcast will appear nowhere until you pick at least one.'}</span>
+                <span>{ar ? 'لم تُختر أي شاشة. البث لن يظهر في أي مكان حتى تختار شاشة واحدة على الأقل.' : 'No screen selected. The broadcast will appear nowhere until you pick at least one.'}</span>
               </div>
             )}
             {!allScreens && cfg.screens.some((c) => !scr.some((s) => String(s.id).toUpperCase() === c)) && (
               <p className="ga-hint">
                 {ar
-                  ? 'بعض الشاشات المختارة سابقاً حُذفت من إدارة الشاشات — اختيارها محفوظ لكنه بلا أثر.'
-                  : 'Some previously selected screens were deleted — their selection is kept but has no effect.'}
+                  ? 'بعض الشاشات المختارة سابقاً حُذفت من إدارة الشاشات، واختيارها محفوظ لكنه بلا أثر.'
+                  : 'Some previously selected screens were deleted. Their selection is kept but has no effect.'}
               </p>
             )}
           </>

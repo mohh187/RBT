@@ -73,7 +73,7 @@ export default function HappyHourBanner({
     <Card brand={brand} hot>
       <Head
         icon="flame"
-        title={pick(lang, 'ساعة الذروة — الكل يلعب الآن', 'Happy hour — everyone is playing')}
+        title={pick(lang, 'ساعة الذروة، والكل يلعب الآن', 'Happy hour, everyone is playing')}
         right={<LivePill>{fmtLeft(win.msLeft, lang)}</LivePill>}
       />
 

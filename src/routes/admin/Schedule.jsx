@@ -54,7 +54,7 @@ export default function Schedule() {
     try { await Promise.all(days.map((d) => setShift(tenantId, { date: isoDate(d), staffUid: m.uid, staffName: m.name || m.email, start: m.shiftStart, end: m.shiftEnd }))); toast.success(ar ? 'تمت التعبئة' : 'Filled') } catch (_) { toast.error(ar ? 'خطأ' : 'Error') }
   }
 
-  const weekLabel = `${days[0].toLocaleDateString(ar ? 'ar-SA-u-nu-latn' : 'en-US', { day: 'numeric', month: 'short' })} – ${days[6].toLocaleDateString(ar ? 'ar-SA-u-nu-latn' : 'en-US', { day: 'numeric', month: 'short' })}`
+  const weekLabel = `${days[0].toLocaleDateString(ar ? 'ar-SA-u-nu-latn' : 'en-US', { day: 'numeric', month: 'short' })}. ${days[6].toLocaleDateString(ar ? 'ar-SA-u-nu-latn' : 'en-US', { day: 'numeric', month: 'short' })}`
 
   return (
     <div className="page stack">

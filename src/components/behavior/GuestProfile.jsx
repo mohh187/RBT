@@ -2,6 +2,7 @@ import { useMemo, useState } from 'react'
 import Icon from '../Icon.jsx'
 import { Price } from '../Riyal.jsx'
 import { fmtNum, normalizePhone } from '../../lib/format.js'
+import { arPlural } from '../../lib/forecast.js'
 import { customerProfile, dur, clock, dayStamp, dateTime, num, phoneOf, sidOf } from './engine.jsx'
 
 const toMs = (v) => {
@@ -142,19 +143,19 @@ function GuestStory({ p, customer, orders, reservations, tickets, ar, currency, 
         <span className="bhv-card-t"><Icon name="user" size={17} /> {p.name || p.phone || (ar ? 'زائر مجهول' : 'Anonymous')}</span>
         {p.phone
           ? <span className="bhv-mini bhv-num">{p.phone}</span>
-          : <span className="bhv-mini">{ar ? 'بلا رقم — لا يمكن مراسلته' : 'unreachable'}</span>}
+          : <span className="bhv-mini">{ar ? 'بلا رقم، لا يمكن مراسلته' : 'unreachable'}</span>}
       </div>
 
       <div className="bhv-kpis bhv-kpis-sm">
         <div className="bhv-kpi"><span className="bhv-kpi-l">{ar ? 'الجلسات' : 'Sessions'}</span><strong className="bhv-kpi-v bhv-num">{fmtNum(p.sessionCount)}</strong><span className="bhv-kpi-s">{fmtNum(p.orderedCount)} {ar ? 'انتهت بطلب' : 'ordered'}</span></div>
         <div className="bhv-kpi"><span className="bhv-kpi-l">{ar ? 'إجمالي الوقت النشط' : 'Active time'}</span><strong className="bhv-kpi-v bhv-num">{dur(p.totalActiveMs, ar)}</strong><span className="bhv-kpi-s">{ar ? 'داخل المنيو' : 'in menu'}</span></div>
         <div className="bhv-kpi"><span className="bhv-kpi-l">{ar ? 'أصناف شاهدها' : 'Items viewed'}</span><strong className="bhv-kpi-v bhv-num">{fmtNum(p.itemsViewed.length)}</strong><span className="bhv-kpi-s">{fmtNum(p.itemsOrdered.length)} {ar ? 'طلبها فعلاً' : 'ordered'}</span></div>
-        <div className="bhv-kpi"><span className="bhv-kpi-l">{ar ? 'الإنفاق' : 'Spend'}</span><strong className="bhv-kpi-v">{showMoney ? <Price value={spent} currency={currency} lang={lang} /> : <span className="bhv-of">—</span>}</strong><span className="bhv-kpi-s">{fmtNum(orders.length)} {ar ? 'طلباً مسجّلاً' : 'orders'}</span></div>
+        <div className="bhv-kpi"><span className="bhv-kpi-l">{ar ? 'الإنفاق' : 'Spend'}</span><strong className="bhv-kpi-v">{showMoney ? <Price value={spent} currency={currency} lang={lang} /> : <span className="bhv-of">·</span>}</strong><span className="bhv-kpi-s">{ar ? arPlural(orders.length, { one: 'طلب مسجّل', two: 'طلبان مسجّلان', few: 'طلبات مسجّلة', many: 'طلباً مسجّلاً' }) : `${fmtNum(orders.length)} orders`}</span></div>
       </div>
 
       <div className="bhv-facts">
-        <span>{ar ? 'أول ظهور' : 'First seen'} <b className="bhv-num">{p.firstAt ? dateTime(p.firstAt) : '—'}</b></span>
-        <span>{ar ? 'آخر ظهور' : 'Last seen'} <b className="bhv-num">{p.lastAt ? dateTime(p.lastAt) : '—'}</b></span>
+        <span>{ar ? 'أول ظهور' : 'First seen'} <b className="bhv-num">{p.firstAt ? dateTime(p.firstAt) : '·'}</b></span>
+        <span>{ar ? 'آخر ظهور' : 'Last seen'} <b className="bhv-num">{p.lastAt ? dateTime(p.lastAt) : '·'}</b></span>
         <span>{ar ? 'عرض ثلاثي الأبعاد' : 'AR opens'} <b className="bhv-num">{fmtNum(p.arOpens)}</b></span>
         <span>{ar ? 'ألعاب' : 'Games'} <b className="bhv-num">{fmtNum(p.gamePlays)}</b></span>
         <span>{ar ? 'أجهزة' : 'Devices'} <b className="bhv-num">{fmtNum(p.deviceIds.length)}</b></span>
@@ -229,7 +230,7 @@ function GuestStory({ p, customer, orders, reservations, tickets, ar, currency, 
       <div className="bhv-sub-block">
         <strong className="bhv-sub-t"><Icon name="orders" size={13} /> {ar ? 'طلباته' : 'Orders'}</strong>
         {!p.phone ? (
-          <p className="bhv-hint">{ar ? 'زائر مجهول بلا رقم — لا يمكن ربطه بطلبات مسجّلة.' : 'Anonymous guest: cannot be linked to orders.'}</p>
+          <p className="bhv-hint">{ar ? 'زائر مجهول بلا رقم، فلا يمكن ربطه بطلبات مسجّلة.' : 'Anonymous guest: cannot be linked to orders.'}</p>
         ) : !orders.length ? (
           <p className="bhv-hint">{ar ? 'لا طلبات مسجّلة بهذا الرقم داخل الفترة المحمّلة.' : 'No orders for this phone in the loaded period.'}</p>
         ) : (
@@ -239,7 +240,7 @@ function GuestStory({ p, customer, orders, reservations, tickets, ar, currency, 
                 <span className="bhv-num">{o.code || o.id.slice(0, 6)}</span>
                 <span className="bhv-num">{dateTime(toMs(o.createdAt))}</span>
                 <span>{o.status}</span>
-                <span>{showMoney ? <Price value={num(o.total)} currency={currency} lang={lang} /> : '—'}</span>
+                <span>{showMoney ? <Price value={num(o.total)} currency={currency} lang={lang} /> : '·'}</span>
               </div>
             ))}
           </div>

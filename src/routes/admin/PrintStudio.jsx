@@ -100,7 +100,7 @@ function standFace({ page, brand, tenant, x0, fw, kind }) {
     )
   } else {
     const t = kind === 'games'
-      ? { title: 'ركن الألعاب', body: 'وست · ليدو · دومينو · شطرنج — والمزيد والمزيد داخل القائمة.', cta: 'امسح والعب' }
+      ? { title: 'ركن الألعاب', body: 'وست · ليدو · دومينو · شطرنج، والمزيد والمزيد داخل القائمة.', cta: 'امسح والعب' }
       : { title: 'نادي الولاء', body: 'اجمع زياراتك واحصل على مشروبك المجاني، وعروضنا تصلك أولاً.', cta: 'امسح وسجّل' }
     out.push(
       mkText({ text: t.title, size: relSize(page, 0.05), weight: 800, color: brand, align: 'center', x: L, y: R(page.h * 0.1), w: W, h: R(page.h * 0.08) }),
@@ -121,8 +121,8 @@ function standFace({ page, brand, tenant, x0, fw, kind }) {
 // the edge by this much or the trim eats it.
 const MATERIALS = [
   { id: 'none', ar: 'بلا حدود طباعة', bleed: 0, safe: 0 },
-  { id: 'paper', ar: 'ورق لاصق — قص مستقيم', bleed: 3, safe: 4 },
-  { id: 'vinyl', ar: 'فينيل — قص بالسكين', bleed: 5, safe: 6 },
+  { id: 'paper', ar: 'ورق لاصق، قص مستقيم', bleed: 3, safe: 4 },
+  { id: 'vinyl', ar: 'فينيل، قص بالسكين', bleed: 5, safe: 6 },
   { id: 'laminated', ar: 'مغلّف/لامينيت', bleed: 3, safe: 5 },
   { id: 'diecut', ar: 'قص خاص (Die-cut)', bleed: 5, safe: 7 },
 ]
@@ -182,7 +182,7 @@ const TEMPLATES = [
           x: R(page.w * 0.36), y: R(page.h * 0.2), w: R(page.w * 0.28), h: R(page.h * 0.56) }),
         ...wing(0.06),
         ...wing(0.81),
-        mkText({ text: 'اختر مزاجك — القائمة والألعاب في جوالك', size: relSize(page, 0.026), weight: 600, color: '#f4e9dc', align: 'center',
+        mkText({ text: 'اختر مزاجك، القائمة والألعاب في جوالك', size: relSize(page, 0.026), weight: 600, color: '#f4e9dc', align: 'center',
           x: R(page.w * 0.25), y: R(page.h * 0.85), w: R(page.w * 0.5), h: R(page.h * 0.08) }),
       ]
     },
@@ -208,7 +208,7 @@ const TEMPLATES = [
     },
   },
   {
-    id: 'standMinimal', ar: 'استاند مبسّط — أقصى مسح',
+    id: 'standMinimal', ar: 'استاند مبسّط، أقصى مسح',
     prev: [[30, 14, 40, 44, 'a'], [26, 64, 48, 10, '']],
     build: ({ page, brand, tenant }) => {
       const qr = R(Math.min(page.w * 0.44, page.h * 0.5))
@@ -829,7 +829,7 @@ export default function PrintStudio({ embedded = false }) {
   }, [tenantId, toast])
 
   const closeEditor = () => {
-    if (dirty && !window.confirm('لديك تغييرات غير محفوظة — الخروج بدون حفظ؟')) return
+    if (dirty && !window.confirm('لديك تغييرات غير محفوظة، الخروج بدون حفظ؟')) return
     setDesign(null); designRef.current = null; setSelectedIds([])
   }
 
@@ -888,7 +888,7 @@ export default function PrintStudio({ embedded = false }) {
   const doPrintAllTables = async () => {
     if (exporting) return
     const list = tables.filter((tb) => tb.qrToken)
-    if (!list.length) { toast.error('لا توجد طاولات لها رمز — أضِف طاولات أولاً'); return }
+    if (!list.length) { toast.error('لا توجد طاولات لها رمز، أضِف طاولات أولاً'); return }
     setExporting(true)
     const urls = []
     const failed = []
@@ -942,7 +942,7 @@ export default function PrintStudio({ embedded = false }) {
   const doPngPerTable = async () => {
     if (exporting) return
     const list = tables.filter((tb) => tb.qrToken)
-    if (!list.length) { toast.error('لا توجد طاولات لها رمز — أضِف طاولات أولاً'); return }
+    if (!list.length) { toast.error('لا توجد طاولات لها رمز، أضِف طاولات أولاً'); return }
     setExporting(true)
     const base = (designRef.current.name || 'sticker').replace(/[\\/:*?"<>|]/g, '')
     const failed = []
@@ -953,7 +953,7 @@ export default function PrintStudio({ embedded = false }) {
         downloadBlob(blob, `${base}-${String(tb.label || tb.id).replace(/[\\/:*?"<>|\s]/g, '-')}.png`)
       }
       if (failed.length) toast.error(`تعذّر توليد رمز: ${failed.join('، ')}`)
-      else toast.success(`نزلت ${list.length} ملصقاً — واحد لكل طاولة`)
+      else toast.success(`نزلت ${list.length} ملصقاً، واحد لكل طاولة`)
     } catch (e) {
       toast.error(String(e?.message || e))
     } finally { setExporting(false) }
@@ -1032,7 +1032,7 @@ export default function PrintStudio({ embedded = false }) {
         'ممنوع الرموز التعبيرية نهائياً، والأرقام لاتينية فقط.',
       ].join(' ')
       const out = cleanCaption(await aiQuick(p))
-      if (!out) throw new Error('لم يصل اقتراح — أعد المحاولة')
+      if (!out) throw new Error('لم يصل اقتراح، أعد المحاولة')
       setAiSuggest(out)
     } catch (e) {
       toast.error(String(e?.message || e))
@@ -1189,7 +1189,7 @@ export default function PrintStudio({ embedded = false }) {
           {!embedded && <Link to="/admin/print-menu" className="icon-btn" aria-label="رجوع"><Icon name="back" size={18} /></Link>}
           <div className="stack" style={{ gap: 2 }}>
             <strong style={{ fontSize: 'var(--fs-md)' }}>استوديو التصميم الحر</strong>
-            <span className="xs faint">تصاميم لامحدودة بأشكال لامحدودة — منيوهات، بوسترات، منشورات وستوري للطباعة والنشر</span>
+            <span className="xs faint">تصاميم لامحدودة بأشكال لامحدودة: منيوهات، بوسترات، منشورات وستوري للطباعة والنشر</span>
           </div>
           <div className="grow" />
           <button className="btn btn-primary" onClick={() => setCreating((v) => !v)}><Icon name="add" size={16} /> تصميم جديد</button>
@@ -1197,7 +1197,7 @@ export default function PrintStudio({ embedded = false }) {
 
         {creating && (
           <div className="card ps-presets">
-            <strong className="xs faint">1 — مقاس الصفحة</strong>
+            <strong className="xs faint">1: مقاس الصفحة</strong>
             <div className="ps-presets-row">
               {PAGE_PRESETS.map((p) => (
                 <button
@@ -1237,7 +1237,7 @@ export default function PrintStudio({ embedded = false }) {
               {!customSize.ok ? <span className="xs faint num">المقاس المسموح بين 120 و 6000 بكسل</span> : null}
             </div>
 
-            <strong className="xs faint">2 — ابدأ من قالب</strong>
+            <strong className="xs faint">2: ابدأ من قالب</strong>
             <div className="ps-tpl-grid">
               {tplList.map((t) => (
                 <button key={t.id} className="ps-tpl" onClick={() => newDesign(activeSize, t)}>
@@ -1251,7 +1251,7 @@ export default function PrintStudio({ embedded = false }) {
               ))}
             </div>
             {TEMPLATES.some((t) => t.needsItems) && !items.some((it) => !it.archived) ? (
-              <p className="xs faint">قالب «قائمة أصناف» يظهر بعد إضافة أصناف للمنيو — لا نعرض بطاقات لأصناف غير موجودة.</p>
+              <p className="xs faint">قالب «قائمة أصناف» يظهر بعد إضافة أصناف للمنيو. لا نعرض بطاقات لأصناف غير موجودة.</p>
             ) : null}
           </div>
         )}
@@ -1260,7 +1260,7 @@ export default function PrintStudio({ embedded = false }) {
           <Empty
             icon="shapes"
             title="لا توجد تصاميم بعد"
-            hint="ابدأ أول تصميم حر — اختر مقاساً وقالباً وشكّله كما تريد"
+            hint="ابدأ أول تصميم حر، اختر مقاساً وقالباً وشكّله كما تريد"
             action={<button className="btn btn-primary" onClick={() => setCreating(true)}><Icon name="add" size={15} /> تصميم جديد</button>}
           />
         ) : (
@@ -1408,7 +1408,7 @@ export default function PrintStudio({ embedded = false }) {
                 <>
                   <strong className="ps-sect">بلوكات ميزات منشأتك</strong>
                   <p className="xs faint" style={{ lineHeight: 1.65, margin: '0 0 4px' }}>
-                    مأخوذة من إعدادات منشأتك الفعلية — لا تَعِد بميزة مطفأة. كل بلوك يُضاف كمجموعة واحدة.
+                    مأخوذة من إعدادات منشأتك الفعلية، فلا تَعِد بميزة مطفأة. كل بلوك يُضاف كمجموعة واحدة.
                   </p>
                   {featureBlocks.map((f, i) => (
                     <button key={i} className="btn btn-sm btn-outline" style={{ justifyContent: 'flex-start', textAlign: 'start' }}
@@ -1506,7 +1506,7 @@ export default function PrintStudio({ embedded = false }) {
                     </span>
                   </div>
                 ))}
-                {zSorted.length === 0 ? <p className="ps-layer-empty">الصفحة فارغة — أضف عنصراً من التبويبات</p> : null}
+                {zSorted.length === 0 ? <p className="ps-layer-empty">الصفحة فارغة. أضف عنصراً من التبويبات</p> : null}
               </div>
               <p className="xs faint">الأعلى في القائمة = الأعلى في الطبقات. العناصر المخفية لا تُطبع ولا تُصدَّر.</p>
             </div>
@@ -1521,7 +1521,7 @@ export default function PrintStudio({ embedded = false }) {
               {(page.material && page.material !== 'none') && (
                 <p className="xs faint" style={{ lineHeight: 1.7 }}>
                   {`نزيف ${materialById(page.material).bleed} مم حول الحواف، ومنطقة آمنة ${materialById(page.material).safe} مم.`}
-                  {' '}مدّ الخلفية إلى الخط الخارجي، وأبقِ كل نص داخل الخط الداخلي — القص يتحرّك مليمتراً أو اثنين ويأكل ما يلامس الحافة.
+                  {' '}مدّ الخلفية إلى الخط الخارجي، وأبقِ كل نص داخل الخط الداخلي. القص يتحرّك مليمتراً أو اثنين ويأكل ما يلامس الحافة.
                   {' '}الأدلّة إرشادية على الشاشة فقط ولا تُطبع.
                 </p>
               )}
@@ -1548,7 +1548,7 @@ export default function PrintStudio({ embedded = false }) {
                 </label>
               </div>
               <p className="xs faint num" style={{ direction: 'ltr', textAlign: 'start' }}>
-                {mmOf(page.w)} × {mmOf(page.h)} mm — 96dpi
+                {mmOf(page.w)} × {mmOf(page.h)} mm · 96dpi
               </p>
 
               <strong className="ps-sect">لون وخلفية</strong>
@@ -1640,7 +1640,7 @@ export default function PrintStudio({ embedded = false }) {
               </div>
               <div className="ps-align-grid">
                 {DIST_TOOLS.map(([mode, ar, ico]) => (
-                  <button key={mode} className="ps-align-btn" title={`${ar} — يحتاج 3 عناصر أو أكثر`} aria-label={ar}
+                  <button key={mode} className="ps-align-btn" title={`${ar}، يحتاج 3 عناصر أو أكثر`} aria-label={ar}
                     disabled={nSel < 3} onClick={() => distributeSel(mode)}>{ico}</button>
                 ))}
               </div>
@@ -1779,7 +1779,7 @@ export default function PrintStudio({ embedded = false }) {
                             </>
                           )}
                           {selected.fx === 'outline' && (
-                            <p className="xs" style={{ color: 'var(--warning)' }}>الحدّ الخارجي لا يجتمع مع التعبئة المتدرّجة — اختر أحدهما.</p>
+                            <p className="xs" style={{ color: 'var(--warning)' }}>الحدّ الخارجي لا يجتمع مع التعبئة المتدرّجة. اختر أحدهما.</p>
                           )}
                         </>
                       )}
@@ -1787,7 +1787,7 @@ export default function PrintStudio({ embedded = false }) {
                         {slider(selected.curve || 0, (v) => patchEl(selected.id, { curve: v }), { min: -100, max: 100, step: 5 })}
                       </label>
                       {!!selected.curve && (
-                        <p className="xs faint" style={{ lineHeight: 1.6 }}>النص المنحني يُرسم كمسار SVG — يحافظ على اتصال الحروف العربية، ولا يلتفّ على أسطر.</p>
+                        <p className="xs faint" style={{ lineHeight: 1.6 }}>النص المنحني يُرسم كمسار SVG، فيحافظ على اتصال الحروف العربية، ولا يلتفّ على أسطر.</p>
                       )}
 
                       {/* Effects. Each is implemented twice on purpose — CSS for
@@ -1912,9 +1912,9 @@ export default function PrintStudio({ embedded = false }) {
                       </label>
                       <p className="xs faint" style={{ lineHeight: 1.7 }}>
                         {!tenant?.slug
-                          ? 'لم يُضبط رابط المنيو (slug) للمنشأة بعد — الرمز لن يُطبع ولن يُصدَّر حتى يُضبط.'
+                          ? 'لم يُضبط رابط المنيو (slug) للمنشأة بعد، الرمز لن يُطبع ولن يُصدَّر حتى يُضبط.'
                           : (selected.kind || 'menu') === 'table'
-                            ? 'يفتح طاولة الضيف مباشرةً — فيعمل الطلب من الطاولة والسلة المشتركة. صمّم مرة، ثم ولّد نسخة لكل طاولة من لوحة «الطاولات».'
+                            ? 'يفتح طاولة الضيف مباشرةً. فيعمل الطلب من الطاولة والسلة المشتركة. صمّم مرة، ثم ولّد نسخة لكل طاولة من لوحة «الطاولات».'
                             : 'رمز QR حي يقود إلى المنيو الرقمي لمنشأتك. حجّمه من المقابض.'}
                       </p>
                       <label className="ps-field"><span>الإطار</span>

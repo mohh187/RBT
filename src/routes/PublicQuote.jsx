@@ -42,7 +42,7 @@ export default function PublicQuote() {
       await startPayment('subscription', r.data.tenantId || state.doc?.tenantId, invoiceId)
     } catch (e) {
       const msg = e?.message || ''
-      toast.error(/انتهت صلاحية/.test(msg) ? msg : (msg || 'تعذّر إتمام القبول — تواصل معنا'))
+      toast.error(/انتهت صلاحية/.test(msg) ? msg : (msg || 'تعذّر إتمام القبول، تواصل معنا'))
       setAccepting(false)
     }
   }

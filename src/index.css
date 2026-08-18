@@ -45,7 +45,12 @@
   --info: #3a6ea5;
   --info-soft: #e2ecf6; /* was dark-mode-only — KDS status + dashboard tones lost their bg in light mode */
 
-  --ring: color-mix(in srgb, var(--brand) 35%, transparent);
+  /* A 35% wash of any brand colour lands near 2:1 against its own surface, and
+     on .btn/.chip/.icon-btn/.list-row/links the ring is the ONLY focus cue —
+     WCAG 1.4.11 wants 3:1. The ring is the solid brand; --ring-soft keeps the
+     old tint for the INPUT glow, where the border colour carries the state. */
+  --ring: var(--brand);
+  --ring-soft: color-mix(in srgb, var(--brand) 35%, transparent);
 
   /* ===== Type ===== */
   /* IBM Plex Sans Arabic is the system face. It ships 100-700 and NOTHING
@@ -153,7 +158,7 @@
   --info: #7aa7d6;
   --info-soft: rgba(122, 167, 214, 0.15);
 
-  --ring: color-mix(in srgb, var(--brand) 45%, transparent);
+  --ring-soft: color-mix(in srgb, var(--brand) 45%, transparent);
   --sh-1: 0 1px 2px rgba(0, 0, 0, 0.3), 0 2px 8px rgba(0, 0, 0, 0.25);
   --sh-2: 0 8px 24px rgba(0, 0, 0, 0.4);
   --sh-3: 0 16px 48px rgba(0, 0, 0, 0.5);
@@ -329,7 +334,7 @@
   --danger: #C0262C;
   --danger-soft: #f6e2e2;
   --info: #4f46e5;
-  --ring: color-mix(in srgb, #6d28d9 35%, transparent);
+  --ring-soft: color-mix(in srgb, #6d28d9 35%, transparent);
 
   background:
     radial-gradient(1100px 420px at 100% -10%, color-mix(in srgb, #6d28d9 12%, transparent), transparent),
@@ -363,7 +368,7 @@
   --danger: #e57373;
   --danger-soft: rgba(229, 115, 115, 0.15);
   --info: #818cf8;
-  --ring: color-mix(in srgb, #a78bfa 45%, transparent);
+  --ring-soft: color-mix(in srgb, #a78bfa 45%, transparent);
 
   background:
     radial-gradient(1000px 460px at 100% -12%, color-mix(in srgb, #7c3aed 24%, transparent), transparent),
@@ -476,8 +481,11 @@ ul {
   padding: 0;
 }
 :focus-visible {
-  outline: 3px solid var(--ring);
+  outline: 2px solid var(--ring);
   outline-offset: 2px;
+  /* the halo fills the offset gap with the page ground, so the solid ring keeps
+     its 3:1 no matter what colour the focused control itself is */
+  box-shadow: 0 0 0 4px var(--bg);
 }
 .price,
 .num {
@@ -789,11 +797,6 @@ ul {
   transition: color var(--dur-fast);
   min-height: var(--tap);
 }
-.bottom-nav a .ic,
-.bottom-nav > button .ic {
-  font-size: 20px;
-  line-height: 1;
-}
 .bottom-nav a.active,
 .bottom-nav > button.active {
   color: var(--sel, var(--chrome-active, var(--brand)));
@@ -1014,7 +1017,7 @@ ul {
 .textarea:focus {
   outline: none;
   border-color: var(--brand);
-  box-shadow: 0 0 0 3px var(--ring);
+  box-shadow: 0 0 0 3px var(--ring-soft);
 }
 .textarea {
   min-height: 84px;
@@ -1608,23 +1611,29 @@ select option,
    1) Kill the platform tap-highlight box — Samsung/One-UI paints a teal square
       on EVERY tap; other devices flash grey. Never wanted in an app shell.
    2) Suppress the long-press callout + accidental text selection on controls.
-   3) `touch-action: manipulation` drops the ~300ms double-tap-zoom delay so
+   3) `touch-action: pan-x pan-y` drops the ~300ms double-tap-zoom delay so
       taps register instantly on slow tablets.
    Real text stays selectable in inputs / editable / .allow-select. */
-/* APP-LIKE, NO NATIVE ZOOM (user 2026-08-18): pinch-zoom and double-tap-zoom
-   are off EVERYWHERE — menu, table menu, staff screens. touch-action composes
-   by intersection down the tree, so scrolling keeps working while zoom can't
-   come back on any descendant. Every in-app zoom surface (GalleryZoom, Viewer,
-   GenImageZoom, model-viewer) is custom pointer-gesture code and unaffected.
-   Pairs with the gesturestart/gesturechange kill switch in index.html (iOS
-   Safari ignores both the viewport meta AND touch-action for pinch). */
+/* APP-LIKE, NO NATIVE ZOOM AT ALL (owner rule, 2026-08-18). Exactly one
+   photograph may zoom: the one open in the lightbox, which now does it itself
+   in JS (GalleryZoom).
+   THE BUG THIS FIXES: every rule below used to say `touch-action: manipulation`,
+   which is literally `pan-x pan-y PINCH-ZOOM`. It was reached for only to kill
+   the 300 ms tap delay, but it also GRANTED pinch on `.food-card`,
+   `.showcase-card`, `.store-card`, every button and every chip, that is, on
+   exactly the surface a guest pinches. An ancestor cannot take that back: the
+   browser reads the touched element's own value, so `html { pan-x pan-y }`
+   never won. `pan-x pan-y` kills the tap delay and double-tap zoom just the
+   same and simply never grants pinch. Paired with the JS kill switch in
+   index.html, because iOS Safari honours neither the viewport meta nor
+   touch-action for page pinch. */
 html { touch-action: pan-x pan-y; }
 * { -webkit-tap-highlight-color: transparent; }
 button, a, label, .btn, .icon-btn, .chip, [role='button'], .segmented button,
 .list-row, .food-card, .showcase-card, .store-card, .special-card, .pos-opt,
 .order-ticket, .board-col, .dish-tab, .side-cat, .bottom-nav a, .m-bottomnav a,
 .tpl-thumb, .scr-btn {
-  touch-action: manipulation;
+  touch-action: pan-x pan-y;
   -webkit-touch-callout: none;
   -webkit-user-select: none;
   user-select: none;
@@ -2113,7 +2122,7 @@ body[data-custheme] .setup-shell {
   --danger-soft: rgba(229, 115, 115, 0.16);
   --info: #7aa7d6;
   --info-soft: rgba(122, 167, 214, 0.16);
-  --ring: color-mix(in srgb, var(--brand) 45%, transparent);
+  --ring-soft: color-mix(in srgb, var(--brand) 45%, transparent);
   background: var(--bg);
   color: var(--text);
 }
@@ -2171,7 +2180,10 @@ body[data-custheme] .setup-shell {
   --bg: #e9edf3;
   --bg-2: #e2e7ef;
   --surface: rgba(255, 255, 255, var(--glass-alpha));
-  --surface-2: rgba(255, 255, 255, calc(var(--glass-alpha) - 0.17));
+  /* floored: the slider goes down to 0.08, and a bare -0.17 clamps to ZERO
+     alpha inside its own range — the app bar, sidebar, POS topbar and the KDS
+     lanes then have no fill at all. Cards keep the venue's full transparency. */
+  --surface-2: rgba(255, 255, 255, max(0.30, calc(var(--glass-alpha) - 0.17)));
   --text: #16181d;
   /* stronger than the flat themes: these sit on TRANSLUCENT surfaces over busy
      photo/video backdrops, so muted/faint need extra weight to stay readable */
@@ -2282,11 +2294,17 @@ body[data-custheme] .setup-shell {
   transform: scale(1.05);
 }
 [data-systheme='glass'] .segmented button { border-radius: var(--r-pill); }
-/* bottom-nav: the active icon floats up inside a glass lens */
-[data-systheme='glass'] .bottom-nav a .ic,
-.bottom-nav > button .ic { transition: transform var(--dur) var(--ease-out-strong), background var(--dur), box-shadow var(--dur); border-radius: var(--r-pill); padding: 4px 14px; }
-[data-systheme='glass'] .bottom-nav > button.active .ic,
-[data-systheme='glass'] .bottom-nav a.active .ic {
+/* bottom-nav: the active icon floats up inside a glass lens.
+   These were written against a `.ic` wrapper that the markup never renders —
+   AdminLayout/PlatformLayout put <Icon> (a bare <svg>) straight in the tab, so
+   the whole lens was dead CSS. Target the svg, including the badge wrapper span
+   the platform console nests it in. */
+[data-systheme='glass'] .bottom-nav a > svg,
+[data-systheme='glass'] .bottom-nav a > span > svg,
+[data-systheme='glass'] .bottom-nav > button > svg { transition: transform var(--dur) var(--ease-out-strong), background var(--dur), box-shadow var(--dur); border-radius: var(--r-pill); padding: 4px 14px; box-sizing: content-box; }
+[data-systheme='glass'] .bottom-nav > button.active > svg,
+[data-systheme='glass'] .bottom-nav a.active > svg,
+[data-systheme='glass'] .bottom-nav a.active > span > svg {
   background: var(--surface);
   backdrop-filter: blur(var(--glass-blur)) saturate(var(--glass-sat));
   box-shadow:
@@ -2312,7 +2330,7 @@ body[data-custheme] .setup-shell {
   --bg: #101218;
   --bg-2: #0c0e13;
   --surface: rgba(28, 30, 40, calc(var(--glass-alpha) - 0.05));
-  --surface-2: rgba(44, 47, 60, calc(var(--glass-alpha) - 0.1));
+  --surface-2: rgba(44, 47, 60, max(0.30, calc(var(--glass-alpha) - 0.1)));
   --text: #f2f3f7;
   --text-muted: #a9adbb;
   /* raised from #767b8a (3.93:1 — an AA fail) — .faint carries REAL data here:
@@ -2748,7 +2766,12 @@ body[data-glass-ripple='3'] [data-systheme='glass'] :is(.card, .pos-tile, .kds-t
 .order-ticket.age-warn .cash-timer { background: var(--warning-soft); color: var(--warning); }
 .order-ticket.age-late .cash-timer { background: var(--danger-soft); color: var(--danger); }
 .cash-mods { margin-top: 2px; font-size: var(--fs-xs); font-weight: 700; color: var(--brand); }
-.cash-note { font-size: var(--fs-xs); color: var(--warning); background: var(--warning-soft); border-radius: 6px; padding: 3px 7px; margin-top: 2px; }
+/* same tier as .kds-warn: allergies and special requests are SAFETY info, and
+   orange-on-cream measured 3.62:1 on a glossy, side-lit till screen. */
+.cash-note { font-size: var(--fs-sm); font-weight: 800; color: #fff; background: var(--warning); border-radius: 6px; padding: 3px 7px; margin-top: 2px; }
+/* dark mode lightens --warning to #e0a050, where white drops to ~2:1 — the fill
+   stays, the ink flips. */
+[data-theme='dark'] .cash-note { color: #241704; }
 
 /* ===== Compact settings (denser so more fits without scrolling) ===== */
 .settings-page .card-pad { padding: var(--sp-3); }
@@ -3294,6 +3317,13 @@ body[data-theme='dark'] .pos-fullscreen[data-systheme='glass'] { background: var
   .pos-order-foot .btn-lg,
   .pos-order-foot .btn-primary { min-height: 54px; font-size: var(--fs-md); }
   .pos-topbar .segmented button { min-height: 40px; }
+  /* the option chips and the qty stepper are the MOST-tapped controls on the
+     till, and they were the smallest (34px, 30px on 3-group cards, 38px). --tap
+     is 44px and the cashier is a touch surface at every width. The 3-group
+     density trim keeps its tighter gaps but stops shrinking the targets. */
+  .pos-opt-group .chip,
+  .pos-opt-card:has(.pos-opt-group:nth-of-type(3)) .pos-opt-group .chip { min-height: 44px; }
+  .stepper button { width: 44px; height: 44px; }
   /* media HEIGHT is now the single fixed base above (140/160px) for EVERY
      pointer — the old coarse-pointer overrides here shrank it back to 96-124px
      on the real tablet, which is exactly the "cards too small, image cut" the
@@ -3490,42 +3520,206 @@ body[data-theme='dark'] .pos-fullscreen[data-systheme='glass'] { background: var
 .order-ticket.age-warn { border-inline-start-color: var(--warning); }
 .order-ticket.age-late { border-inline-start-color: var(--danger); }
 
-/* ===== Staff entry (/app) — the venue's own front door, zero marketing ===== */
+/* ===== Staff entry (/app) — "the storefront sign" =====
+   A deep board in THE VENUE'S OWN brand colour fills the top; the venue's logo
+   sits on a plate straddling its lower edge like a sign mounted on a shopfront;
+   the calm working surface below holds the form. One saturated moment in an
+   otherwise neutral app — and since colour, logo and display font all come from
+   the tenant's skin, every venue gets a different door from one stylesheet. */
 .staff-entry {
   min-height: 100dvh;
   display: flex;
   flex-direction: column;
   align-items: center;
-  justify-content: center;
-  gap: 18px;
-  padding: 24px;
   background: var(--bg);
-  position: relative;
+  animation: se-in 260ms ease both;
 }
-.staff-entry-theme { position: absolute; top: calc(var(--safe-t, 0px) + 14px); inset-inline-end: 14px; }
-.staff-entry-card {
-  width: min(400px, 100%);
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  gap: 6px;
+@keyframes se-in { from { opacity: 0; } to { opacity: 1; } }
+
+/* the board. Mixed against a near-black base rather than lightened, so ANY
+   venue colour — pale gold through near-black — lands dark enough to carry
+   white text at AA. The radial adds the pure hue back as a bloom. */
+.staff-entry-board {
+  width: 100%;
+  /* The board — not the content — absorbs a tall viewport's slack, capped so it
+     never becomes a slab of empty colour. Letting the FORM take the slack
+     instead (margin:auto) tore a 450 px hole between the subtitle and the
+     fields on a tablet; the sign, the name and the form must read as one unit. */
+  flex: 1 1 auto;
+  min-height: 178px;
+  max-height: 34dvh;
+  padding: calc(var(--safe-t, 0px) + 16px) 18px 62px;
+  color: #fff;
+  background:
+    radial-gradient(120% 88% at 50% -10%, color-mix(in srgb, var(--brand) 42%, transparent), transparent 68%),
+    linear-gradient(168deg,
+      color-mix(in srgb, var(--brand) 62%, #0b0b0f) 0%,
+      color-mix(in srgb, var(--brand) 34%, #0b0b0f) 62%,
+      color-mix(in srgb, var(--brand) 48%, #0b0b0f) 100%);
+  position: relative;
+  overflow: hidden;
+  animation: se-board-in 420ms var(--ease-out-strong) both;
+}
+/* the drawn counter, white and faint, bleeding off both edges. `slice` keeps the
+   line weight honest at every width instead of stretching the drawing. */
+/* the frieze sits ON the board's lower edge, never stretched: a bounded band so
+   the counter stays a counter at phone width and at tablet width alike */
+.staff-entry-scene {
+  position: absolute; inset-inline: 0; bottom: 0;
+  width: 100%; height: clamp(124px, 22dvh, 196px);
+  opacity: 0.15; pointer-events: none;
+}
+/* a real edge, not a colour change: the hairline is what makes the board read as
+   a physical fascia the sign is mounted on */
+.staff-entry-board::after {
+  content: ''; position: absolute; inset-inline: 0; bottom: 0; height: 1px;
+  background: rgba(255, 255, 255, 0.16);
+}
+.staff-entry-top { position: relative; z-index: 1; }
+/* TRANSFORM-ONLY entrances below (never opacity): a paused animation must
+   degrade to a visible, slightly-offset element — never an invisible one. */
+@keyframes se-board-in { from { transform: translateY(-10px); } to { transform: none; } }
+.staff-entry-top { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
+/* Latin wordmark only — letter-spacing is applied to NO Arabic text anywhere on
+   this screen: it severs the script's joins. */
+.staff-entry-wordmark {
+  font-family: 'Montserrat', system-ui, sans-serif;
+  font-size: 12px; font-weight: 800; letter-spacing: 0.18em;
+  color: rgba(255, 255, 255, 0.82);
+}
+.staff-entry-tools { display: flex; gap: 8px; }
+/* frosted controls with a lit top edge — the same material language the rest of
+   the app's glass surfaces use, so this screen belongs to the product */
+.staff-entry-tools button {
+  width: 44px; height: 44px; border-radius: 13px;
+  display: grid; place-items: center; cursor: pointer;
+  background: rgba(255, 255, 255, 0.12);
+  border: 1px solid rgba(255, 255, 255, 0.24);
+  box-shadow: 0 1px 0 rgba(255, 255, 255, 0.16) inset;
+  backdrop-filter: blur(10px) saturate(1.15);
+  color: #fff; font: inherit; font-size: 13px; font-weight: 800;
+  transition: background var(--dur-fast), transform 120ms var(--ease-out-strong);
+}
+.staff-entry-tools button:active { transform: scale(0.94); background: rgba(255, 255, 255, 0.22); }
+.staff-entry-tools button:focus-visible { outline: 2px solid #fff; outline-offset: 2px; }
+
+/* THE SIGNATURE: the plate straddling the board's edge. `contain` never crops a
+   venue's wordmark logo; the shadow is what sells it as a mounted object. */
+.staff-entry-plate {
+  margin-top: -46px;
+  width: 96px; height: 96px;
+  border-radius: 27px;
+  display: grid; place-items: center;
   background: var(--surface);
   border: 1px solid var(--border);
-  border-radius: 20px;
-  padding: 28px 24px;
-  box-shadow: var(--sh-2, 0 10px 32px rgba(0, 0, 0, 0.1));
+  box-shadow: 0 20px 42px -14px rgba(0, 0, 0, 0.5), 0 2px 6px rgba(0, 0, 0, 0.12);
+  color: var(--brand);
+  overflow: hidden;
+  position: relative; z-index: 1;
+  animation: se-plate-in 460ms var(--ease-out-strong) 130ms both;
 }
-.staff-entry-card .rlauth-body { width: 100%; display: flex; flex-direction: column; gap: 12px; margin-top: 14px; }
-.staff-entry-card .rlauth-submit {
-  min-height: 48px; border: none; border-radius: 12px;
-  background: var(--brand); color: var(--on-brand);
-  font-weight: 800; font-size: 15px; cursor: pointer;
+@keyframes se-plate-in { from { transform: scale(0.9); } to { transform: none; } }
+.staff-entry-plate img { width: 100%; height: 100%; object-fit: contain; padding: 9px; }
+
+.staff-entry-body {
+  width: min(400px, 100%);
+  padding: 0 20px calc(var(--safe-b, 0px) + 28px);
+  display: flex; flex-direction: column; align-items: center;
+  /* top-aligned ON PURPOSE: the name belongs directly under its own sign.
+     Centring this block instead tore the plate away from the title. */
+  flex: 1; justify-content: flex-start;
 }
-.staff-entry-logo { width: 74px; height: 74px; border-radius: 22px; object-fit: cover; }
-.staff-entry-logo-ph { display: grid; place-items: center; background: var(--brand-soft); color: var(--brand); }
-.staff-entry-name { font-size: 21px; font-weight: 800; margin: 4px 0 0; text-align: center; }
-.staff-entry-sub { font-size: 13px; color: var(--text-muted); margin: 0; }
-.staff-entry-powered { font-size: 11px; color: var(--text-faint); letter-spacing: 0.06em; }
+.staff-entry-name {
+  font-family: var(--font-display, inherit);
+  font-size: clamp(22px, 5.6vw, 28px); font-weight: 800; letter-spacing: -0.01em;
+  margin: 16px 0 4px; text-align: center;
+  animation: se-rise 420ms var(--ease-out-strong) 230ms both;
+}
+.staff-entry-sub {
+  font-size: 13.5px; color: var(--text-muted); margin: 0; text-align: center;
+  animation: se-rise 420ms var(--ease-out-strong) 290ms both;
+}
+.staff-entry-form { width: 100%; margin-top: 26px; animation: se-rise 460ms var(--ease-out-strong) 350ms both; }
+@keyframes se-rise { from { transform: translateY(10px); } to { transform: none; } }
+.staff-entry-form .rlauth-body { width: 100%; display: flex; flex-direction: column; gap: 13px; }
+/* THE SHARED FORM'S FIELDS ARE PAINTED BY landing.css (`.rlauth-body .input`)
+   using LANDING tokens — --card / --line-2 / --ink — that only exist inside the
+   .rlauth scope. On this screen those variables resolve to nothing, so the
+   inputs rendered with NO background and NO border: a label floating above an
+   invisible box. (This predates the redesign; it is why the screen looked
+   broken.) Re-paint them here with the APP's own tokens, at a specificity that
+   beats landing.css whichever order the sheets load in. */
+.staff-entry .staff-entry-form .field { display: flex; flex-direction: column; gap: 6px; }
+.staff-entry .staff-entry-form .field label { font-size: var(--fs-xs); font-weight: 700; color: var(--text-muted); }
+.staff-entry .staff-entry-form .input {
+  width: 100%; min-height: var(--tap); padding: 13px 15px;
+  border-radius: 13px; border: 1px solid var(--border-strong);
+  background: var(--surface); color: var(--text);
+  font: inherit; font-size: var(--fs-sm);
+  /* a hairline of depth so the field reads as a recess, not a drawn outline */
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.04) inset;
+  transition: border-color var(--dur-fast), box-shadow var(--dur-fast);
+}
+.staff-entry .staff-entry-form .input:focus {
+  outline: none; border-color: var(--brand);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--brand) 22%, transparent);
+}
+/* the show/hide eye sits inside the password field, on the trailing edge */
+.staff-entry .staff-entry-form .rlauth-pass { position: relative; }
+.staff-entry .staff-entry-form .rlauth-pass .input { padding-inline-end: 46px; }
+.staff-entry .staff-entry-form .rlauth-eye {
+  position: absolute; inset-inline-end: 6px; top: 50%; transform: translateY(-50%);
+  width: 36px; height: 36px; display: grid; place-items: center;
+  background: none; border: 0; cursor: pointer; color: var(--text-faint);
+}
+/* A real key, not a coloured rectangle: a top-lit face, a shadow cast in the
+   venue's own colour, and a press that travels DOWN (translateY, not a shrink) —
+   the difference between a button that looks drawn and one that feels pressed. */
+.staff-entry .staff-entry-form .rlauth-submit {
+  min-height: 52px; border: none; border-radius: 14px; margin-top: 4px;
+  background: linear-gradient(180deg, color-mix(in srgb, var(--brand) 88%, #fff) 0%, var(--brand) 62%, color-mix(in srgb, var(--brand) 92%, #000) 100%);
+  color: var(--on-brand);
+  font: inherit; font-weight: 800; font-size: 15.5px; cursor: pointer;
+  box-shadow:
+    0 1px 0 rgba(255, 255, 255, 0.22) inset,
+    0 10px 22px -10px color-mix(in srgb, var(--brand) 78%, transparent),
+    0 2px 4px -2px rgba(0, 0, 0, 0.18);
+  transition: transform 120ms var(--ease-out-strong), box-shadow 160ms, filter 160ms;
+}
+.staff-entry .staff-entry-form .rlauth-submit:active:not(:disabled) {
+  transform: translateY(1.5px);
+  filter: brightness(0.96);
+  box-shadow:
+    0 1px 0 rgba(255, 255, 255, 0.14) inset,
+    0 4px 10px -8px color-mix(in srgb, var(--brand) 70%, transparent);
+}
+.staff-entry .staff-entry-form .rlauth-submit:focus-visible { outline: 2px solid var(--brand); outline-offset: 3px; }
+.staff-entry .staff-entry-form .rlauth-submit:disabled { opacity: 0.55; box-shadow: none; cursor: default; }
+
+/* THE VENUE GATE wears RBT360's own purple. Re-pointing --brand is the ONLY
+   change: board gradient, plate glow, focus ring and the key all derive from it,
+   so the platform screen and the venue screen can never drift apart — and typing
+   a venue name visibly re-paints the same layout in that venue's colour. */
+.staff-entry-gate { --brand: #6429DE; --on-brand: #fff; }
+:root[data-theme='dark'] .staff-entry-gate { --brand: #7C4DFF; }
+.staff-entry-gate .staff-entry-plate { color: var(--brand); }
+.staff-entry-hint { font-size: var(--fs-xs); color: var(--text-faint); margin-top: 2px; }
+.staff-entry-err {
+  display: flex; align-items: center; gap: 6px; margin: 0;
+  font-size: var(--fs-xs); font-weight: 700; color: var(--danger);
+}
+/* quiet by design — an escape hatch, not an invitation */
+.staff-entry-switch {
+  margin-top: 18px; padding: 8px 14px; border-radius: 999px;
+  background: none; border: 0; cursor: pointer;
+  font: inherit; font-size: var(--fs-xs); font-weight: 700; color: var(--text-faint);
+}
+.staff-entry-switch:hover { color: var(--text-muted); }
+
+@media (prefers-reduced-motion: reduce) {
+  .staff-entry, .staff-entry-board, .staff-entry-plate,
+  .staff-entry-name, .staff-entry-sub, .staff-entry-form { animation: none; }
+}
 
 /* ===== Stat cards (dashboard) ===== */
 .stat-grid {
@@ -6416,7 +6610,7 @@ video.spot-img { object-fit: contain; }
 [data-systheme='airy'] .textarea:focus {
   background: var(--surface);
   border-color: var(--brand);
-  box-shadow: 0 0 0 4px var(--ring);
+  box-shadow: 0 0 0 4px var(--ring-soft);
 }
 [data-systheme='airy'] .admin-sidebar { background: var(--bg); border-inline-end: none; }
 [data-systheme='airy'] .admin-side-nav { gap: 4px; }
@@ -12067,7 +12261,7 @@ img.edt-dish:not([data-ld]) { filter: none !important; }
   min-width: 0;
   min-height: 0;
   perspective: 720px;
-  touch-action: manipulation;
+  touch-action: pan-x pan-y;
   -webkit-tap-highlight-color: transparent;
 }
 .gmsm-inner {

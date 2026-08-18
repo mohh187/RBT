@@ -2,6 +2,7 @@ import { useMemo, useState } from 'react'
 import Icon from '../Icon.jsx'
 import { aiQuick, aiConfigured } from '../../lib/aiBridge.js'
 import { downloadCsv, downloadJson, parseReportSpec, ACCOUNTS } from '../../lib/accounting.js'
+import { arPlural } from '../../lib/forecast.js'
 
 // Asks the model for a REPORT SPEC (columns + filter), never for data. The rows
 // are then produced locally from the real datasets, so a custom report cannot
@@ -56,25 +57,25 @@ export default function ExportView({ datasets, snapshot, ar = true, showMoney = 
       if (!parsed) {
         // Honest failure: no fabricated fallback report.
         setError(ar
-          ? 'لم يُرجع النموذج مواصفة تقرير صالحة، ولن أختلق تقريراً. أعد صياغة طلبك بذكر الأعمدة المطلوبة بوضوح.'
-          : 'The model did not return a usable report spec, and no report will be invented.')
+          ? 'ما وضح شكل التقرير المطلوب، ولن نعرض تقريراً مختلقاً. أعد صياغة طلبك واذكر الأعمدة التي تريدها.'
+          : 'The request was not clear enough to build a report, and nothing will be invented. Say which columns you want and try again.')
         return
       }
       if (!(datasets?.[parsed.source] || []).length) {
         setError(ar
-          ? `المصدر المطلوب (${parsed.source}) لا يحتوي أي بيانات في هذه الفترة، لذلك التقرير سيكون فارغاً.`
-          : `The requested source has no data in this period.`)
+          ? 'لا توجد بيانات لهذا التقرير داخل الفترة المختارة، لذلك سيظهر فارغاً. وسّع الفترة وأعد المحاولة.'
+          : 'There is no data for this report inside the selected period, so it will come out empty. Widen the period and try again.')
       }
       const valid = parsed.columns.filter((c) => (fields[parsed.source] || []).includes(c.key))
       if (!valid.length) {
         setError(ar
-          ? 'الأعمدة التي اقترحها النموذج غير موجودة في البيانات الفعلية، لذلك لن أعرض تقريراً مضلّلاً.'
-          : 'The proposed columns do not exist in the real data.')
+          ? 'الأعمدة المطلوبة غير موجودة في بياناتك، ولن نعرض تقريراً مضلّلاً. اذكر أعمدة أوضح وأعد المحاولة.'
+          : 'The requested columns do not exist in your data, and nothing misleading will be shown. Name clearer columns and try again.')
         return
       }
       setSpec({ ...parsed, columns: valid })
     } catch (e) {
-      setError((ar ? 'تعذّر الوصول إلى المساعد: ' : 'Assistant unavailable: ') + (e?.message || e))
+      setError(ar ? 'ما وصلنا للمساعد الآن. تأكد من الاتصال وأعد المحاولة بعد لحظات.' : 'Could not reach the assistant. Check your connection and try again in a moment.')
     } finally { setBusy(false) }
   }
 
@@ -120,7 +121,7 @@ export default function ExportView({ datasets, snapshot, ar = true, showMoney = 
         <span className="acc-card-title"><Icon name="sparkles" size={17} /> {ar ? 'تقرير مخصص بالذكاء' : 'AI custom report'}</span>
         <p className="acc-hint">
           {ar
-            ? 'صف التقرير الذي تريده بالعربية. الذكاء يحدد الأعمدة والترتيب فقط — الأرقام تأتي من بياناتك الحقيقية، ولو تعذّر ذلك سأخبرك بصراحة بدل اختلاق تقرير.'
+            ? 'صف التقرير الذي تريده بالعربية. الذكاء يختار الأعمدة والترتيب فقط، والأرقام تأتي من بياناتك الحقيقية. وإن تعذّر ذلك نقولها لك بصراحة بدل اختلاق تقرير.'
             : 'The model only chooses columns and ordering; the numbers come from your real data.'}
         </p>
         <div className="acc-ask">
@@ -159,7 +160,7 @@ export default function ExportView({ datasets, snapshot, ar = true, showMoney = 
                       <tr key={i}>
                         {spec.columns.map((c) => (
                           <td key={c.key} className={typeof r[c.key] === 'number' ? 'acc-num acc-ta-end' : ''}>
-                            {typeof r[c.key] === 'number' && !showMoney ? '—' : String(r[c.key] ?? '—')}
+                            {typeof r[c.key] === 'number' && !showMoney ? '-' : String(r[c.key] ?? '-')}
                           </td>
                         ))}
                       </tr>
@@ -169,7 +170,7 @@ export default function ExportView({ datasets, snapshot, ar = true, showMoney = 
               </div>
             )}
             <p className="acc-hint">
-              {ar ? `المصدر: ${spec.source}${spec.filterAccount ? ` · مُرشَّح على ${ACCOUNTS[spec.filterAccount]?.ar}` : ''} · ${rows.length} صف` : `Source: ${spec.source} · ${rows.length} rows`}
+              {ar ? `${arPlural(rows.length, { one: 'صف', two: 'صفان', few: 'صفوف', many: 'صفاً' })}${spec.filterAccount ? ` · مُرشَّح على ${ACCOUNTS[spec.filterAccount]?.ar}` : ''}` : `${rows.length} rows`}
             </p>
           </>
         )}

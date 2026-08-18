@@ -56,6 +56,6 @@ export function orderingState(tenant) {
 export function orderingClosedMessage(reason, lang = 'ar') {
   const ar = lang !== 'en'
   if (reason === 'paused') return ar ? 'المطعم متوقف عن استقبال الطلبات مؤقتاً' : 'The venue has paused new orders'
-  if (reason === 'closed') return ar ? 'المطعم مغلق الآن — تصفّح المنيو وعُد في وقت العمل' : 'Closed right now — browse the menu and come back during opening hours'
+  if (reason === 'closed') return ar ? 'مغلق الآن، تصفّح المنيو وعُد في وقت العمل' : 'Closed right now — browse the menu and come back during opening hours'
   return ''
 }

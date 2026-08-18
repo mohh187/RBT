@@ -30,7 +30,7 @@ import {
   newTournament, normalizeTournament, validateTournament, statusOf, modeInfo,
   toDayInput, fromDayInput, valueLabel, MAX_WINNERS,
 } from '../../lib/tournaments.js'
-import { fetchPlays, fmtInt, dateTime, dayStamp } from './engine.jsx'
+import { fetchPlays, fmtInt, dateTime, dayStamp, nPlays } from './engine.jsx'
 
 const num = (v, f = 0) => {
   const n = Number(v)
@@ -62,10 +62,10 @@ function prizeText(prize, ar) {
   const label = String(p.label || '').trim()
   const v = num(p.value)
   if (p.kind === 'discount' && v > 0) {
-    return `${ar ? 'خصم' : ''} ${v.toLocaleString('ar-SA-u-nu-latn')}٪${label ? ` — ${label}` : ''}`.trim()
+    return `${ar ? 'خصم' : ''} ${v.toLocaleString('ar-SA-u-nu-latn')}٪${label ? ` · ${label}` : ''}`.trim()
   }
   if (p.kind === 'points' && v > 0) {
-    return `${v.toLocaleString('ar-SA-u-nu-latn')} ${ar ? 'نقطة ولاء' : 'points'}${label ? ` — ${label}` : ''}`
+    return `${v.toLocaleString('ar-SA-u-nu-latn')} ${ar ? 'نقطة ولاء' : 'points'}${label ? ` · ${label}` : ''}`
   }
   return label
 }
@@ -173,8 +173,8 @@ function Editor({ ar, draft, onChange, onSave, onCancel, saving }) {
       </label>
       <p className="ga-hint">
         {ar
-          ? 'هذا الخيار يُحفظ كوسم فقط — لا يُرسل النظام أي رسالة أو إشعار تلقائي اليوم. الإعلان يتم بضغطك على «إنهاء وإعلان الفائزين».'
-          : 'Stored as a flag only — nothing is sent automatically today.'}
+          ? 'هذا الخيار يُحفظ كوسم فقط، ولا تُرسل أي رسالة أو إشعار تلقائي اليوم. الإعلان يتم بضغطك على «إنهاء وإعلان الفائزين».'
+          : 'Stored as a flag only. Nothing is sent automatically today.'}
       </p>
 
       {problems.length > 0 && (
@@ -354,7 +354,7 @@ function Detail({
           <span className="ga-ico"><Icon name="award" size={22} /></span>
           <div className="ga-sheet-t">
             <strong>{t.name}</strong>
-            <span className="ga-num">{dayStamp(t.from)} — {dayStamp(t.to)}</span>
+            <span className="ga-num">{dayStamp(t.from)} · {dayStamp(t.to)}</span>
           </div>
         </div>
         <div className="ga-figs">
@@ -397,7 +397,7 @@ function Detail({
               <p className="ga-hint">
                 {ar
                   ? `هذه النتيجة مجمّدة على البطولة ولا تتغيّر بعد اليوم، حتى لو سُجّلت جولات جديدة. أعلى ${fmtInt(MAX_WINNERS)} مراكز تُحفظ.`
-                  : 'Frozen — later plays do not change it.'}
+                  : 'Frozen. Later plays do not change it.'}
               </p>
             </>
           ) : (
@@ -431,8 +431,8 @@ function Detail({
                 {computed.thin && (
                   <p className="ga-hint">
                     {ar
-                      ? `العيّنة صغيرة (أقل من ${fmtInt(computed.minSample)} جولة). الترتيب صحيح لكنه قد ينقلب بجولة واحدة.`
-                      : 'Thin sample — the order can flip on a single play.'}
+                      ? `العيّنة صغيرة (أقل من ${nPlays(computed.minSample)}). الترتيب صحيح لكنه قد ينقلب بجولة واحدة.`
+                      : 'Thin sample. The order can flip on a single play.'}
                   </p>
                 )}
                 {readFailed && (
@@ -450,7 +450,7 @@ function Detail({
                     <Icon name="warning" size={15} />
                     <span>
                       {ar
-                        ? `قُرئت ${fmtInt(read.scanned)} جولة ثم توقف المسح عند سقف الأمان (${fmtInt(read.cap)} جولة) قبل أن يستوفي فترة البطولة${oldestRead ? ` — لم يتجاوز ${oldestRead}` : ''}. هذا الترتيب محسوب على ما قُرئ وحده وقد ينقصه فائز حقيقي. اجعل فترة البطولة أقصر: الفترة الأقصر تحوي جولات أقل فيكتمل مسحها.`
+                        ? `قُرئت ${fmtInt(read.scanned)} جولة ثم توقف المسح عند سقف الأمان (${fmtInt(read.cap)} جولة) قبل أن يستوفي فترة البطولة${oldestRead ? `، ولم يتجاوز ${oldestRead}` : ''}. هذا الترتيب محسوب على ما قُرئ وحده وقد ينقصه فائز حقيقي. اجعل فترة البطولة أقصر: الفترة الأقصر تحوي جولات أقل فيكتمل مسحها.`
                         : `Read ${read.scanned} plays, then stopped at the safety ceiling (${read.cap}) before finishing the tournament window${oldestRead ? `; it reached back only to ${oldestRead}` : ''}. This ranking covers what was read only. Shorten the window so the scan can finish.`}
                     </span>
                   </div>
@@ -470,11 +470,11 @@ function Detail({
                 <p className="ga-hint">
                   {readFailed
                     ? (ar
-                      ? 'تعذّرت قراءة سجل الجولات من قاعدة البيانات، فلم يصلنا شيء عن هذه الفترة. الفراغ هنا يعني «لم يُقرأ»، لا «لم يشارك أحد» — أعد تحميل الصفحة، ولا تُنهِ البطولة الآن.'
+                      ? 'تعذّرت قراءة سجل الجولات، فلم يصلنا شيء عن هذه الفترة. الفراغ هنا يعني «لم يُقرأ»، لا «لم يشارك أحد». أعد تحميل الصفحة، ولا تُنهِ البطولة الآن.'
                       : 'The play log could not be read at all, so nothing about this window reached us. Empty means "not read", not "nobody entered". Reload before finalizing.')
                     : capShort
                       ? (ar
-                        ? `قُرئت ${fmtInt(read.scanned)} جولة ثم توقف المسح عند سقف الأمان (${fmtInt(read.cap)} جولة) قبل أن يستوفي فترة هذه البطولة${oldestRead ? `، وأقدم جولة قرأناها بتاريخ ${oldestRead}` : ''}. الفراغ هنا يعني «لم يُقرأ»، لا «لم يشارك أحد» — اجعل فترة البطولة أقصر ليكتمل المسح، ولا تُنهِها على هذه الشاشة.`
+                        ? `قُرئت ${fmtInt(read.scanned)} جولة ثم توقف المسح عند سقف الأمان (${fmtInt(read.cap)} جولة) قبل أن يستوفي فترة هذه البطولة${oldestRead ? `، وأقدم جولة قرأناها بتاريخ ${oldestRead}` : ''}. الفراغ هنا يعني «لم يُقرأ»، لا «لم يشارك أحد». اجعل فترة البطولة أقصر ليكتمل المسح، ولا تُنهِها على هذه الشاشة.`
                         : `Read ${read.scanned} plays, then stopped at the safety ceiling (${read.cap}) before finishing this tournament's window${oldestRead ? `; the oldest play read is dated ${oldestRead}` : ''}. Empty means "not read", not "nobody entered". Shorten the window so the scan can finish.`)
                       : (ar
                         ? 'يظهر الترتيب هنا تلقائياً عند أول جولة تستوفي شروط البطولة. لن يُعرض ترتيب مُختلق لملء الفراغ.'
@@ -501,8 +501,8 @@ function Detail({
                       ? 'الإعلان موقوف: تعذّرت قراءة سجل الجولات، وتجميد ترتيب لم يُقرأ من بيانات ليس إعلاناً بل خطأ دائم. أعد تحميل الصفحة، فإن تكرّر الخطأ راجع صلاحيات القراءة.'
                       : 'Announcing is blocked: the play log could not be read, and freezing a standing built on no data is a permanent error. Reload the page; if it keeps failing, check read permissions.')
                     : (ar
-                      ? 'الإعلان موقوف: جولات هذه الفترة أكثر من سقف المسح الآمن، فالقراءة لم تشملها كاملة، وتجميد ترتيب يعرف النظام أنه قد يكون ناقصاً ليس إعلاناً بل خطأ دائم. عدّل تاريخ البطولة إلى فترة أقصر — الفترة الأقصر تحوي جولات أقل فيكتمل مسحها ويُفتح الإعلان.'
-                      : 'Announcing is blocked: this window holds more plays than the safety ceiling scans, so the read did not cover it, and freezing a standing known to be possibly incomplete is a permanent error. Edit the tournament to a shorter window — fewer plays fit in it, the scan completes, and announcing unlocks.')}
+                      ? 'الإعلان موقوف: جولات هذه الفترة أكثر من سقف المسح الآمن، فالقراءة لم تشملها كاملة، وتجميد ترتيب يعرف النظام أنه قد يكون ناقصاً ليس إعلاناً بل خطأ دائم. عدّل تاريخ البطولة إلى فترة أقصر. الفترة الأقصر تحوي جولات أقل فيكتمل مسحها ويُفتح الإعلان.'
+                      : 'Announcing is blocked: this window holds more plays than the safety ceiling scans, so the read did not cover it, and freezing a standing known to be possibly incomplete is a permanent error. Edit the tournament to a shorter window. Fewer plays fit in it, the scan completes, and announcing unlocks.')}
                 </span>
               ) : !confirming ? (
                 <button type="button" className="ga-btn is-primary" disabled={working} onClick={() => setConfirming(true)}>
@@ -528,7 +528,7 @@ function Detail({
                             : 'The read did not cover the window, so "nobody qualified" is unknown. Closing now would record no winner on incomplete data.')
                           : (ar
                             ? 'لا يوجد أي فائز مؤهّل. الإغلاق سيسجّل «بلا فائز» ولن يخترع أحداً.'
-                            : 'Nobody qualified — it will close with no winner.')}
+                            : 'Nobody qualified, so it will close with no winner.')}
                   </span>
                   <button type="button" className="ga-btn is-primary" disabled={working} onClick={doFinalize}>
                     <Icon name="check" size={14} /> {ar ? 'تأكيد' : 'Confirm'}
@@ -633,7 +633,7 @@ export default function TournamentsPanel({
         </div>
         <p className="ga-hint">
           {ar
-            ? 'البطولة تُرتَّب من جولات اللعب الحقيقية داخل فترتها — لا يُدخل أحد النتائج يدوياً، ولا يظهر فائز لم يلعب.'
+            ? 'البطولة تُرتَّب من جولات اللعب الحقيقية داخل فترتها. لا يُدخل أحد النتائج يدوياً، ولا يظهر فائز لم يلعب.'
             : 'Ranked from real recorded plays inside its own window.'}
         </p>
       </div>
@@ -678,7 +678,7 @@ export default function TournamentsPanel({
               <span className="ga-rowstats ga-num">
                 <span>{gameName(t.gameId, ar)}</span>
                 <span>{modeInfo(t.mode).ar}</span>
-                <span>{dayStamp(t.from)} — {dayStamp(t.to)}</span>
+                <span>{dayStamp(t.from)} · {dayStamp(t.to)}</span>
                 {t.finalizedAt
                   ? <span>{fmtInt(t.winners.length)} {ar ? 'فائز' : 'winners'}</span>
                   : null}

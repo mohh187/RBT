@@ -35,12 +35,15 @@ const POINT_SEGMENTS = [
 const TXT = {
   ar: {
     title: 'دولاب الحظ',
-    pointsOnly: 'هذا الدولاب يمنح نقاطاً فقط تُضاف إلى رصيدك في الألعاب — لا يشمل خصومات أو هدايا.',
+    pointsOnly: 'هذا الدولاب يمنح نقاطاً فقط تُضاف إلى رصيدك في الألعاب، ولا يشمل خصومات أو هدايا.',
     withPrizes: 'أدر الدولاب لتربح إحدى الجوائز التي أعدّها المكان.',
     spin: 'أدر الدولاب',
     spinning: 'يدور...',
     youWon: 'ربحت',
-    points: 'نقطة',
+    // Arabic tamyeez: 3-10 take the plural («نقاط»), everything else the
+    // singular («نقطة»). A flat 'نقطة' printed «5 نقطة» on the small segments.
+    points: (n) => (n >= 3 && n <= 10 ? 'نقاط' : 'نقطة'),
+    plus: 'ومعها',
     noPoints: 'من دون نقاط في هذه الجولة',
     showStaff: 'اعرض هذه النتيجة على الموظف.',
     oneSpin: 'لديك دورة واحدة في كل جلسة.',
@@ -49,12 +52,13 @@ const TXT = {
   },
   en: {
     title: 'Prize Wheel',
-    pointsOnly: 'This wheel awards game points only — no discounts or gifts.',
+    pointsOnly: 'This wheel awards game points only. There are no discounts or gifts.',
     withPrizes: 'Spin to win one of the venue prizes.',
     spin: 'Spin',
     spinning: 'Spinning...',
     youWon: 'You won',
-    points: 'points',
+    points: () => 'points',
+    plus: 'plus',
     noPoints: 'No points this round',
     showStaff: 'Show this result to a staff member.',
     oneSpin: 'One spin per session.',
@@ -351,12 +355,12 @@ export default function PrizeWheel({ onScore, onExit, lang = 'ar', brand = '#0e7
         {phase === 'done' && result && (
           <>
             <strong className="gb-title arb-won">
-              {playerName ? `${playerName} — ` : ''}{t.youWon}
+              {playerName ? `${playerName}: ` : ''}{t.youWon}
             </strong>
             <p className="gb-line">
               {isPointsOnly
-                ? <><b>{result.points}</b> {t.points}</>
-                : <><b>{result.label}</b>{result.points ? <> {'—'} {result.points} {t.points}</> : null}</>}
+                ? <><b>{result.points}</b> {t.points(result.points)}</>
+                : <><b>{result.label}</b>{result.points ? <> {t.plus} {result.points} {t.points(result.points)}</> : null}</>}
             </p>
             {/* only shown when the venue actually configured a prize list */}
             {!isPointsOnly && <p className="gb-line faint">{t.showStaff}</p>}

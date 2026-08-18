@@ -50,7 +50,7 @@ const TXT = {
     goNext: 'المرحلة التالية',
     correctOf: 'إجابات صحيحة',
     thin: 'يحتاج هذا الاختبار إلى قائمة أكمل: نحتاج ستة أصناف على الأقل تحمل أسعاراً حقيقية حتى نبني أسئلة صادقة. لن نخترع معلومات عن الأصناف.',
-    thinTitle: 'القائمة غير كافية',
+    thinTitle: 'المنيو غير كافٍ',
     qPricey: 'أي صنف أغلى؟',
     qCheap: 'أي صنف أقل سعراً؟',
     qCal: (n) => `كم سعرة حرارية في ${n}؟`,
@@ -252,7 +252,7 @@ export default function TasteQuiz({
         text: cheap ? t.qCheap : t.qPricey,
         choices: shuffle(four).map((x) => ({ key: x.id, label: x.name })),
         answer: ext.id,
-        note: `${ext.name} — ${ext.price}`,
+        note: `${ext.name}: ${ext.price}`,
       })
     }
 
@@ -279,7 +279,7 @@ export default function TasteQuiz({
         text: t.qCal(it.name),
         choices: opts.map((v) => ({ key: String(v), label: `${v} ${t.cal}` })),
         answer: String(it.calories),
-        note: `${it.name} — ${it.calories} ${t.cal}`,
+        note: `${it.name}: ${it.calories} ${t.cal}`,
       })
     }
 
@@ -300,7 +300,7 @@ export default function TasteQuiz({
         text: t.qIng(ing),
         choices: four.map((x) => ({ key: x.id, label: x.name })),
         answer: it.id,
-        note: `${it.name} — ${ing}`,
+        note: `${it.name}: ${ing}`,
       })
     }
 

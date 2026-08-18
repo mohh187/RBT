@@ -46,7 +46,7 @@ export default function PlayerPanel({ player, ar = true, onBack }) {
         <div className="gp-panel-id">
           <strong>{playerLabel(p, ar)}</strong>
           <span className="gp-num">
-            {p.customerPhone ? maskPhone(p.customerPhone) : (ar ? 'بلا رقم جوال — لا يمكن مراسلته' : 'no phone — unreachable')}
+            {p.customerPhone ? maskPhone(p.customerPhone) : (ar ? 'بلا رقم جوال، لا يمكن مراسلته' : 'no phone, unreachable')}
             {' · '}{ar ? 'الجهاز' : 'device'} {shortDevice(p.deviceId)}
           </span>
           <span className="gp-num">
@@ -77,7 +77,7 @@ export default function PlayerPanel({ player, ar = true, onBack }) {
         </div>
         <div className="gp-kpi">
           <span className="gp-kpi-l">{ar ? 'دقة الإجابات' : 'Accuracy'}</span>
-          <span className="gp-kpi-v gp-num">{p.accuracy == null ? '—' : `${fmtNum(Math.round(p.accuracy * 100))}%`}</span>
+          <span className="gp-kpi-v gp-num">{p.accuracy == null ? '-' : `${fmtNum(Math.round(p.accuracy * 100))}%`}</span>
           <span className="gp-kpi-s gp-num">
             {ar ? `من ${fmtNum((p.knowledge && p.knowledge.answered) || 0)} سؤالاً` : `of ${fmtNum((p.knowledge && p.knowledge.answered) || 0)}`}
           </span>
@@ -192,7 +192,7 @@ export default function PlayerPanel({ player, ar = true, onBack }) {
           <div className="gp-warn" style={{ marginTop: 8 }}>
             <Icon name="warning" size={15} />
             <span>{ar
-              ? 'هذا اللاعب له ملف مجمّع لكن لا توجد له محاولات داخل الفترة المختارة. الأرقام أعلاه من ملفه التراكمي — وسّع الفترة لرؤية تفاصيل محاولاته.'
+              ? 'هذا اللاعب له ملف مجمّع لكن لا محاولات له داخل الفترة المختارة، والأرقام أعلاه من ملفه التراكمي. وسّع الفترة لرؤية تفاصيل محاولاته.'
               : 'Profile exists but no plays inside the selected period.'}</span>
           </div>
         )}
@@ -231,8 +231,8 @@ export default function PlayerPanel({ player, ar = true, onBack }) {
                       {!answers.length ? (
                         <p className="gp-hint">
                           {ar
-                            ? 'لعبة بلا أسئلة (لعبة مهارة أو سرعة)، فلا توجد إجابات تُعرض — النتيجة والمرحلة أعلاه هما كل ما سجّلته.'
-                            : 'A skill game with no questions — score and stage above are the whole record.'}
+                            ? 'لعبة بلا أسئلة (لعبة مهارة أو سرعة)، فلا توجد إجابات تُعرض. النتيجة والمرحلة أعلاه هما كل ما سجّلته.'
+                            : 'A skill game with no questions, so the score and stage above are the whole record.'}
                         </p>
                       ) : (
                         <div className="gp-qa">
@@ -258,7 +258,7 @@ export default function PlayerPanel({ player, ar = true, onBack }) {
                       )}
                       {x.resumeState && (
                         <p className="gp-hint">
-                          {ar ? 'لهذه المحاولة نقطة استئناف محفوظة — يستطيع الضيف إكمالها من حيث توقّف.' : 'A resume point is stored for this play.'}
+                          {ar ? 'لهذه المحاولة نقطة استئناف محفوظة، ويستطيع الضيف إكمالها من حيث توقّف.' : 'A resume point is stored for this play.'}
                         </p>
                       )}
                     </div>

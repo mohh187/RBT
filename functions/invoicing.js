@@ -158,9 +158,9 @@ async function notifyReceipt(tenant, phone, { code, total, currency, link, email
     const brand = venueBrand(tenant, mailLang)
     await sendEmail({
       to: email, fromName: venueName, lang: mailLang, replyTo: tenant.contactEmail || undefined, meter: mailMeter,
-      subject: `${venueName} — ${p('فاتورتك', 'your invoice')} ${code ? '#' + code : ''}`.replace(/[\r\n]+/g, ' '),
+      subject: `${p('فاتورتك من', 'Your invoice from')} ${venueName} ${code ? '#' + code : ''}`.replace(/[\r\n]+/g, ' '),
       html: shell(brand, {
-        title: `${venueName} — ${p('إيصال الدفع', 'Payment receipt')}`,
+        title: `${p('إيصال الدفع من', 'Payment receipt from')} ${venueName}`,
         preheader: p(`فاتورتك من ${venueName}`, `Your invoice from ${venueName}`),
         body: `<p style="margin:0 0 10px;">${p('تم استلام دفعتك بنجاح.', 'Your payment was received.')}</p>`
           + facts([[p('رقم الطلب', 'Order number'), code || ''], [p('المبلغ', 'Amount'), `${amount} ${currency}`]], { dir: brand.dir }),

@@ -6,6 +6,7 @@ import { Price } from '../Riyal.jsx'
 import Icon from '../Icon.jsx'
 import { useToast } from '../Toast.jsx'
 import { EXPENSE_ACCOUNTS, accountAr, accountEn, mapExpenseAccount, toMs, fmtDate, downloadCsv } from '../../lib/accounting.js'
+import { arPlural } from '../../lib/forecast.js'
 
 const BILL_FOLDER = 'accounting/bills'
 const todayInput = () => new Date().toISOString().slice(0, 10)
@@ -40,7 +41,7 @@ export default function BillsVault({ tenantId, expenses = [], ar = true, lang = 
 
   const withBills = useMemo(() => rows.filter((r) => r.billUrl), [rows])
   const total = useMemo(() => rows.reduce((s, r) => s + (Number(r.amount) || 0), 0), [rows])
-  const M = ({ v }) => (showMoney ? <Price value={v} currency={currency} lang={lang} /> : <span className="faint">—</span>)
+  const M = ({ v }) => (showMoney ? <Price value={v} currency={currency} lang={lang} /> : <span className="faint">-</span>)
 
   const autoVat = (amount) => {
     const g = Number(amount) || 0
@@ -82,7 +83,7 @@ export default function BillsVault({ tenantId, expenses = [], ar = true, lang = 
       if (fileRef.current) fileRef.current.value = ''
       toast?.success?.(ar ? 'سُجّل المصروف' : 'Expense recorded')
     } catch (err) {
-      toast?.error?.((ar ? 'تعذّر الحفظ: ' : 'Save failed: ') + (err?.message || err))
+      toast?.error?.(ar ? 'ما انحفظ المصروف. تأكد من الاتصال وحاول مرة أخرى.' : 'The expense was not saved. Check your connection and try again.')
     } finally { setSaving(false) }
   }
 
@@ -94,7 +95,7 @@ export default function BillsVault({ tenantId, expenses = [], ar = true, lang = 
       await updateDoc(doc(db, 'tenants', tenantId, 'expenses', row.id), { billUrl: url, billName: f.name || '' })
       toast?.success?.(ar ? 'أُرفقت الفاتورة' : 'Bill attached')
     } catch (err) {
-      toast?.error?.((ar ? 'تعذّر الرفع: ' : 'Upload failed: ') + (err?.message || err))
+      toast?.error?.(ar ? 'ما رُفعت الفاتورة. تأكد من الاتصال وحاول مرة أخرى.' : 'The bill was not uploaded. Check your connection and try again.')
     } finally { setUploadingId('') }
   }
 
@@ -140,10 +141,10 @@ export default function BillsVault({ tenantId, expenses = [], ar = true, lang = 
         })
         done += 1
       }
-      toast?.success?.(ar ? `استُوردت ${done} حركة` : `Imported ${done} rows`)
+      toast?.success?.(ar ? `استُوردت ${arPlural(done, { one: 'حركة', two: 'حركتان', few: 'حركات', many: 'حركة' })}` : `Imported ${done} rows`)
       setImportText(''); setImportOpen(false)
     } catch (err) {
-      toast?.error?.((ar ? `توقف الاستيراد بعد ${done}: ` : `Import stopped after ${done}: `) + (err?.message || err))
+      toast?.error?.(ar ? `توقف الاستيراد بعد ${done}. المسجّل قبلها محفوظ، أعد المحاولة للباقي.` : `Import stopped after ${done}. What landed is saved; try again for the rest.`)
     } finally { setSaving(false) }
   }
 
@@ -203,7 +204,7 @@ export default function BillsVault({ tenantId, expenses = [], ar = true, lang = 
           </label>
           {form.vatable && (
             <label className="acc-field" style={{ maxWidth: 220 }}>
-              <span>{ar ? `قيمة الضريبة — اتركه فارغاً ليُحسب بنسبة ${vatRate}%` : `VAT amount (auto at ${vatRate}%)`}</span>
+              <span>{ar ? `قيمة الضريبة (اتركه فارغاً ليُحسب بنسبة ${vatRate}%)` : `VAT amount (auto at ${vatRate}%)`}</span>
               <input className="input num" type="number" step="0.01" min="0" value={form.vatAmount} onChange={(e) => set('vatAmount', e.target.value)} placeholder={String(autoVat(form.amount) || '')} />
             </label>
           )}
@@ -278,7 +279,7 @@ export default function BillsVault({ tenantId, expenses = [], ar = true, lang = 
                       <span className="acc-acc-tag" data-cat="expense">{ar ? accountAr(r.accountCode) : accountEn(r.accountCode)}</span>
                       {r.vatable && <span className="acc-vat-tag">{ar ? 'ضريبية' : 'VAT'}</span>}
                     </td>
-                    <td className="acc-note-cell">{[r.supplier, r.note].filter(Boolean).join(' · ') || '—'}</td>
+                    <td className="acc-note-cell">{[r.supplier, r.note].filter(Boolean).join(' · ') || '-'}</td>
                     <td className="acc-ta-end acc-num"><M v={r.amount} /></td>
                     <td className="acc-ta-end">
                       <span className="acc-row-actions">
@@ -289,7 +290,7 @@ export default function BillsVault({ tenantId, expenses = [], ar = true, lang = 
                             {uploadingId === r.id ? <Icon name="reload" size={15} /> : <Icon name="clip" size={15} />}
                             <input type="file" accept="image/*,application/pdf" onChange={(e) => { const f = e.target.files?.[0]; e.target.value = ''; attachBill(r, f) }} />
                           </label>
-                        ) : <span className="faint">—</span>}
+                        ) : <span className="faint">-</span>}
                         {canEdit && <button className="icon-btn acc-danger" title={ar ? 'حذف' : 'Delete'} onClick={() => remove(r)}><Icon name="delete" size={14} /></button>}
                       </span>
                     </td>
@@ -304,7 +305,7 @@ export default function BillsVault({ tenantId, expenses = [], ar = true, lang = 
       <div className="acc-card">
         <span className="acc-card-title"><Icon name="folder" size={17} /> {ar ? 'خزنة الفواتير' : 'Bills vault'}</span>
         {!withBills.length ? (
-          <p className="acc-empty">{ar ? 'لا فواتير مرفقة بعد — أرفق صورة أو PDF لكل مصروف ليبقى مستنده محفوظاً.' : 'No bills attached yet.'}</p>
+          <p className="acc-empty">{ar ? 'لا فواتير مرفقة بعد. أرفق صورة أو ملف PDF لكل مصروف ليبقى مستنده محفوظاً.' : 'No bills attached yet.'}</p>
         ) : (
           <div className="acc-bill-grid">
             {withBills.map((r) => (
@@ -335,7 +336,7 @@ export default function BillsVault({ tenantId, expenses = [], ar = true, lang = 
             <div className="acc-lightbox-body acc-scroll-y">
               {isImage(preview)
                 ? <img src={preview.billUrl} alt={preview.billName || ''} />
-                : <p className="acc-hint">{ar ? 'الملف ليس صورة — افتحه في تبويب جديد.' : 'Not an image file.'}</p>}
+                : <p className="acc-hint">{ar ? 'هذا الملف ليس صورة، افتحه في تبويب جديد.' : 'Not an image file.'}</p>}
             </div>
             <a className="btn btn-sm btn-outline" href={preview.billUrl} target="_blank" rel="noreferrer">
               <Icon name="share" size={15} /> {ar ? 'فتح الملف' : 'Open file'}

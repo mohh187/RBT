@@ -67,7 +67,7 @@ export default function MemberCard() {
             </div>
             <div style={{ height: 6, borderRadius: 99, background: 'var(--surface-2)' }}><div style={{ width: `${pct}%`, height: '100%', borderRadius: 99, background: nextMeta?.color || meta.color }} /></div>
           </div>
-        ) : <div className="xs" style={{ color: meta.color, display: 'inline-flex', alignItems: 'center', gap: 4 }}><Icon name="star" size={12} /> {ar ? 'أعلى مستوى — بلاتيني' : 'Top tier — Platinum'}</div>}
+        ) : <div className="xs" style={{ color: meta.color, display: 'inline-flex', alignItems: 'center', gap: 4 }}><Icon name="star" size={12} /> {ar ? 'أعلى مستوى، بلاتيني' : 'Top tier, Platinum'}</div>}
       </div>
 
       {qr && (

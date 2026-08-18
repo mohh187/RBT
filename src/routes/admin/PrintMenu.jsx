@@ -127,7 +127,7 @@ export default function PrintMenu() {
       font: tenant?.skin?.overrides?.font || x.font,
       subtitle: tenant?.descAr || x.subtitle,
     }))
-    toast.success(ar ? 'طُبّقت هوية منيوك الرقمي — عدّل ما تشاء ثم احفظ' : 'Digital identity applied')
+    toast.success(ar ? 'طُبّقت هوية منيوك الرقمي، عدّل ما تشاء ثم احفظ' : 'Digital identity applied')
   }
 
   const save = async () => {

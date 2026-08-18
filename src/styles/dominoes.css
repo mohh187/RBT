@@ -253,7 +253,7 @@
   height: calc(100% - var(--dmo-fs) * 0.56);
   display: block;
   pointer-events: none;
-  touch-action: manipulation;
+  touch-action: pan-x pan-y;
 }
 .dmo-slot { pointer-events: none; }
 .dmo-slot[data-live='1'] { pointer-events: auto; cursor: pointer; }
@@ -546,7 +546,7 @@
   height: var(--dmo-tile-h);
   width: calc(var(--dmo-tile-h) / 2);
   cursor: pointer;
-  touch-action: manipulation;
+  touch-action: pan-x pan-y;
   transition: transform 220ms var(--dmo-spring), opacity 200ms var(--dmo-ease),
     filter 200ms var(--dmo-ease);
 }

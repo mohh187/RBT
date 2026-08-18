@@ -5,7 +5,7 @@ import { useAuth } from '../../lib/auth.jsx'
 import { useI18n } from '../../lib/i18n.jsx'
 import { Spinner, Empty } from '../../components/ui.jsx'
 import {
-  updateOrderStatus, resolveWaiterCall, claimWaiterCall, watchOrdersSince, watchFlaggedCustomers,
+  updateOrderStatus, claimOrder, resolveWaiterCall, claimWaiterCall, watchOrdersSince, watchFlaggedCustomers,
   payOrder, payPartial, cancelOrderWithReason, watchOpenCashierSession,
 } from '../../lib/db.js'
 import { useActiveOrders, useOpenWaiterCalls } from '../../lib/liveBoard.js'
@@ -104,7 +104,7 @@ export default function Cashier() {
     if (!found && todays === null) return // completed orders still loading — keep waiting
     const p = new URLSearchParams(params); p.delete('order'); setParams(p, { replace: true })
     if (found) setDetailId(want)
-    else toast.error(lang === 'ar' ? 'العنصر لم يعد موجوداً' : 'Item no longer exists')
+    else toast.error(lang === 'ar' ? 'هذا الطلب لم يعد موجوداً، ربما أُلغي' : 'This order no longer exists, it may have been cancelled')
   }, [params, orders, todays])
 
   const sensors = useSensors(
@@ -215,9 +215,21 @@ export default function Cashier() {
     if (status === 'served') { extra.servedByName = actorName; extra.servedByUid = user?.uid || '' }
     return extra
   }
+  // LEAVING 'pending' IS A CLAIM, not a status write. A plain updateOrderStatus
+  // has no compare-and-set, so the coworker who tapped Accept a second later
+  // overwrote the name of the one who actually took the order. Every surface
+  // that takes an order goes through here (button, drag, IncomingAlerts).
+  const claim = async (o) => {
+    const res = await claimOrder(tenantId, o.id, { name: actorName, uid: user?.uid || '' })
+    if (res.ok) return true
+    if (res.by) toast.toast(lang === 'ar' ? `سبقك ${res.by} إليها` : `${res.by} got it first`)
+    else if (!res.gone) toast.error(lang === 'ar' ? 'تعذّر قبول الطلب، جرّب مرة ثانية' : 'Could not accept the order, try again')
+    return false
+  }
   const advance = (o) => {
     const n = NEXT_STEP[o.status]
     if (!n) return
+    if (o.status === 'pending') { claim(o); return }
     // fire-and-forget: the local snapshot moves the card instantly; the error
     // path only matters if rules deny the write (surfaced as a toast).
     updateOrderStatus(tenantId, o.id, n.to, { ...stampFor(n.to), _code: o.code || '' })
@@ -254,7 +266,7 @@ export default function Cashier() {
       setPayTarget(null)
       toast.success(lang === 'ar' ? 'تم تحصيل الدفعة' : 'Payment recorded')
     } catch (e) {
-      toast.error((lang === 'ar' ? 'فشل تسجيل الدفع — أعد المحاولة' : 'Payment failed — retry') + (e?.code ? ` · ${e.code}` : ''))
+      toast.error((lang === 'ar' ? 'لم يُسجَّل الدفع، أعد المحاولة' : 'The payment was not recorded, try again') + (e?.code ? ` · ${e.code}` : ''))
     } finally {
       payBusy.current = false
     }
@@ -281,15 +293,17 @@ export default function Cashier() {
   // servedByName, the drag recorded nothing — which meant "who accepted this
   // order" depended on which control the staffer happened to reach for. On a
   // shared till that is the difference between an audit trail and a guess.
-  const onDragEnd = ({ active, over }) => {
+  const onDragEnd = async ({ active, over }) => {
     if (!over) return
     const status = COL_STATUS[over.id]
     if (!status) return
     const o = orders.find((x) => x.id === active.id)
-    if (o && o.status !== status) {
-      updateOrderStatus(tenantId, active.id, status, { ...stampFor(status), _code: o.code || '' })
-        .catch(() => toast.error(lang === 'ar' ? 'تعذّر تحديث الحالة' : 'Status update failed'))
-    }
+    if (!o || o.status === status) return
+    // Dragging a waiting ticket out of «جديدة» takes the order, so it claims
+    // first (same compare-and-set as the button) and only then advances.
+    if (o.status === 'pending' && !(await claim(o))) return
+    updateOrderStatus(tenantId, active.id, status, { ...stampFor(status), _code: o.code || '' })
+      .catch(() => toast.error(lang === 'ar' ? 'تعذّر تحديث الحالة' : 'Status update failed'))
   }
 
   if (orders === null) return <Spinner />
@@ -317,8 +331,11 @@ export default function Cashier() {
         {tenant?.pinLock?.enabled && <button className="icon-btn" onClick={requestLock} title={lang === 'ar' ? 'قفل الشاشة' : 'Lock'}><Icon name="key" size={18} /></button>}
         <StaffBell tenantId={tenantId} />
         <button className="icon-btn ab-devcheck" onClick={() => setDevOpen(true)} aria-label={lang === 'ar' ? 'فحص الجهاز' : 'Device check'} title={lang === 'ar' ? 'فحص الجهاز' : 'Device check'}><Icon name="settings" size={18} /></button>
-        <Link to="/scan" className="icon-btn" title={t('scan')}><Icon name="scan" /></Link>
-        <Link to="/kds" className="icon-btn" title={t('kitchen')}><Icon name="kitchen" /></Link>
+        {/* Cap-filtered like the portal's quick links: a cashier or waiter has
+            neither SCAN_TICKETS nor KITCHEN, so these two bounced them to
+            /portal — the till looked broken rather than out of reach. */}
+        {can(CAP.SCAN_TICKETS) && <Link to="/scan" className="icon-btn" title={t('scan')}><Icon name="scan" /></Link>}
+        {can(CAP.KITCHEN) && <Link to="/kds" className="icon-btn" title={t('kitchen')}><Icon name="kitchen" /></Link>}
         <button className="icon-btn" onClick={toggleTheme}><Icon name={theme === 'dark' ? 'sun' : 'moon'} /></button>
       </header>
 
@@ -391,7 +408,7 @@ export default function Cashier() {
                           flag={flagged[digits(o.customerPhone)]}
                           onAdvance={advance} onServePay={(x) => askPay(x, true)} onCancel={askCancel} onPrint={print} onPrintTable={printTable} onOpen={setDetailId} onOpenCustomer={openCustomer} />
                       ))}
-                      {col.items.length === 0 && <p className="xs faint text-center" style={{ padding: 8 }}>—</p>}
+                      {col.items.length === 0 && <p className="xs faint text-center" style={{ padding: 8 }}>{lang === 'ar' ? 'لا طلبات هنا' : 'Nothing here'}</p>}
                     </Column>
                   ))}
                 </div>
@@ -490,10 +507,10 @@ function Ticket({ order: o, currency, lang, t, orders, flag, isManager, canPay =
         const cfg = paid
           ? { icon: 'ok', color: 'var(--success)', label: lang === 'ar' ? 'مدفوع أونلاين' : 'Paid online' }
           : pm === 'card_terminal'
-            ? { icon: 'card', color: 'var(--brand)', label: lang === 'ar' ? 'شبكة — يُحصّل عند الاستلام' : 'Card machine — collect on handover' }
+            ? { icon: 'card', color: 'var(--brand)', label: lang === 'ar' ? 'شبكة، يُحصّل عند الاستلام' : 'Card machine, collect on handover' }
             : pm === 'online'
               ? { icon: 'wallet', color: 'var(--text-muted)', label: lang === 'ar' ? 'بانتظار الدفع أونلاين' : 'Awaiting online payment' }
-              : { icon: 'wallet', color: 'var(--text-muted)', label: lang === 'ar' ? 'نقدي — يُحصّل عند الاستلام' : 'Cash — collect on handover' }
+              : { icon: 'wallet', color: 'var(--text-muted)', label: lang === 'ar' ? 'نقدي، يُحصّل عند الاستلام' : 'Cash, collect on handover' }
         return (
           <div className="xs" style={{ display: 'inline-flex', alignItems: 'center', gap: 4, fontWeight: 700, color: cfg.color }}>
             <Icon name={cfg.icon} size={12} /> {cfg.label}
@@ -517,7 +534,7 @@ function Ticket({ order: o, currency, lang, t, orders, flag, isManager, canPay =
       ) : null}
       {flag ? (
         <div className="badge badge-danger" style={{ marginTop: 4, whiteSpace: 'normal', textAlign: 'start', lineHeight: 1.3 }}>
-          <Icon name="warning" size={12} style={{ verticalAlign: 'middle' }} /> {lang === 'ar' ? 'عميل موسوم' : 'Tagged customer'}{flag.flagNote ? ` — ${flag.flagNote}` : ''}
+          <Icon name="warning" size={12} style={{ verticalAlign: 'middle' }} /> {lang === 'ar' ? 'عميل موسوم' : 'Tagged customer'}{flag.flagNote ? `: ${flag.flagNote}` : ''}
         </div>
       ) : null}
       {(o.acceptedByName || o.servedByName) ? (

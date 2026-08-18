@@ -1,6 +1,6 @@
 import Icon from '../Icon.jsx'
 import { fmtNum } from '../../lib/format.js'
-import { dur, pct, THIN_SESSIONS } from './engine.jsx'
+import { dur, pct, THIN_SESSIONS, nSessions } from './engine.jsx'
 
 const ROW_H = 66
 
@@ -107,7 +107,7 @@ export default function FunnelView({ steps = [], drops = null, over, ar = true, 
             {drops.fromFunnelSteps
               ? (ar ? 'محسوبة من خطوات المسار، لأن نقاط التوقّف التفصيلية غير متاحة.' : 'Derived from funnel steps.')
               : (ar
-                ? `آخر شاشة أو صنف وصلت إليه الجلسة قبل أن تنتهي بلا طلب. الأساس هو ${fmtNum(drops.nonConverting)} جلسة غير محوَّلة.`
+                ? `آخر شاشة أو صنف وصلت إليه الجلسة قبل أن تنتهي بلا طلب. الأساس هو ${nSessions(drops.nonConverting)} غير محوَّلة.`
                 : `The last screen or item before a non-converting session ended. Base: ${fmtNum(drops.nonConverting)} sessions.`)}
           </p>
           <div className="bhv-drops">
@@ -124,7 +124,7 @@ export default function FunnelView({ steps = [], drops = null, over, ar = true, 
           {drops.unknown > 0 && (
             <p className="bhv-hint">
               {ar
-                ? `${fmtNum(drops.unknown)} جلسة غير محوَّلة لم تسجّل نقطة توقّف واضحة، فهي غير محسوبة أعلاه — لا تُقرأ النسب كأنها تغطي كل من غادر.`
+                ? `${nSessions(drops.unknown)} غير محوَّلة لم تسجّل نقطة توقّف واضحة، فهي غير محسوبة أعلاه. لا تُقرأ النسب كأنها تغطي كل من غادر.`
                 : `${fmtNum(drops.unknown)} non-converting sessions have no recorded drop-off point and are excluded above.`}
             </p>
           )}

@@ -587,7 +587,7 @@ export default function CakeTower({
               <span /><span /><span />
             </div>
             <h3 className="gmx-title">برج الكيك</h3>
-            <p className="gmx-line">اضغط في أي مكان لإسقاط الطبقة فوق البرج. الجزء الزائد يُقطع، والإسقاط المثالي يمنحك مكافأة تتابع. كل خمس طبقات مرحلة جديدة — أسرع، ومع الرياح.</p>
+            <p className="gmx-line">اضغط في أي مكان لإسقاط الطبقة فوق البرج. الجزء الزائد يُقطع، والإسقاط المثالي يمنحك مكافأة تتابع. كل خمس طبقات مرحلة جديدة: أسرع، ومعها رياح.</p>
             {saved ? (
               <div className="gmx-actions">
                 <button type="button" className="gmx-btn" onClick={() => restart({ stage: Number(saved.stage), score: Number(saved.score) || 0 })}>
@@ -609,7 +609,7 @@ export default function CakeTower({
             <h3 className="gmx-title">انتهت اللعبة</h3>
             <div className="gmx-big">{fmt(score)}</div>
             <p className="gmx-line">
-              بلغت المرحلة {fmt(stage)} و{fmt(tall)} طبقة{playerName ? ` — أحسنت يا ${playerName}` : ''}
+              بلغت المرحلة {fmt(stage)} وعدد الطبقات {fmt(tall)}{playerName ? `. أحسنت يا ${playerName}` : ''}
             </p>
             <p className="gmx-sub">أفضل نتيجة {fmt(Math.max(best, score))}</p>
             <div className="gmx-actions">

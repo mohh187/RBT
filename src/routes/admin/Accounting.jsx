@@ -157,7 +157,7 @@ export default function Accounting() {
     drawerSessions: data.drawerSessions, findings, tenant, from: fromMs, to: toMsX, vatRate,
   }) : null), [data, ledger, findings, tenant, fromMs, toMsX, vatRate])
 
-  const periodLabel = `${fmtDate(fromMs, ar)} — ${fmtDate(toMsX, ar)}`
+  const periodLabel = `${fmtDate(fromMs, ar)}. ${fmtDate(toMsX, ar)}`
 
   // Flat, export-ready datasets (the AI custom report also builds from these).
   const datasets = useMemo(() => ({
@@ -234,7 +234,7 @@ export default function Accounting() {
           {periodKey === 'custom' && (
             <div className="acc-period-custom">
               <input className="input" type="date" value={custom.from} onChange={(e) => setCustom((c) => ({ ...c, from: e.target.value }))} />
-              <span className="acc-period-label">—</span>
+              <span className="acc-period-label">·</span>
               <input className="input" type="date" value={custom.to} onChange={(e) => setCustom((c) => ({ ...c, to: e.target.value }))} />
             </div>
           )}
@@ -261,8 +261,8 @@ export default function Accounting() {
                 <input type="checkbox" checked={includePayroll} onChange={(e) => setIncludePayroll(e.target.checked)} />
                 <span>
                   {ar
-                    ? `احتساب الرواتب (${payroll.length} موظف) — مأخوذة من الرواتب الشهرية المسجّلة في ملفات الطاقم وموزّعة على أيام الفترة، وليست دفعات فعلية.`
-                    : `Include payroll (${payroll.length}) — accrued from registered monthly salaries, not actual payments.`}
+                    ? `احتساب الرواتب (${payroll.length} موظف). مأخوذة من الرواتب الشهرية المسجّلة في ملفات الطاقم وموزّعة على أيام الفترة، وليست دفعات فعلية.`
+                    : `Include payroll (${payroll.length}). Accrued from registered monthly salaries, not actual payments.`}
                 </span>
               </label>
             </div>

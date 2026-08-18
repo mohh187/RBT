@@ -759,7 +759,11 @@ export async function updateOrderStatus(tid, id, status, extra = {}) {
         return setDoc(subDoc(tid, 'public', 'readyOrders'), { [id]: { code: code || '', at: Date.now() } }, { merge: true })
       }
       writeMirror().catch(() => { /* signage mirror is best-effort */ })
-    } else if (['served', 'paid', 'cancelled', 'preparing'].includes(status)) {
+    } else {
+      // ANY status that is not 'ready' clears the mirror. The old whitelist
+      // missed pending/accepted, so dragging a ticket back off the ready lane
+      // left the TV still calling that number and guests walked up for food
+      // nobody had finished.
       setDoc(subDoc(tid, 'public', 'readyOrders'), { [id]: deleteField() }, { merge: true })
         .catch(() => { /* signage mirror is best-effort */ })
     }
@@ -985,6 +989,16 @@ export async function payPartial(tid, id, { amount = 0, method = 'cash', actor =
     // paid" with «متبقّي 0.00» and no way to close them from the UI
     const paid = Math.round(((d.amountPaid || 0) + (Number(amount) || 0)) * 100) / 100
     const fields = { amountPaid: paid, lastPaymentMethod: method, updatedAt: serverTimestamp() }
+    // ACCUMULATE A LEG PER METHOD. Only the CLOSING method used to be stamped,
+    // so 50 cash then 50 card was recorded as card 100: the drawer's expected
+    // cash was short by the first instalment, and closeCashierSession persisted
+    // that difference as a real variance the cashier had to answer for.
+    // CashDrawer already prefers paymentBreakdown when the order carries one.
+    const prev = d.paymentBreakdown || {}
+    fields.paymentBreakdown = {
+      ...prev,
+      [method]: Math.round(((prev[method] || 0) + (Number(amount) || 0)) * 100) / 100,
+    }
     const completed = paid >= (d.total || 0) - 0.005
     if (completed) {
       const hist = d.statusHistory || []
@@ -1083,11 +1097,28 @@ export async function cancelOrderWithReason(tid, id, { reason = '', actor = '', 
 }
 
 // Record a refund (full or partial). A FULL refund also reverses the order's CRM/loyalty effects.
+//
+// A PARTIAL refund must leave the order 'paid'. Stamping 'refunded' for any
+// amount dropped the order out of the cashier's completed list AND made the
+// remainder unrefundable forever (every refund control is gated on a paid order
+// that carries no refund yet). `refundTotal` is the running figure every book
+// should read; `refund` keeps holding the LATEST entry because several screens
+// still render it, and `refunds[]` is the audit trail.
 export async function refundOrder(tid, id, { amount = 0, reason = '', actor = '', policy = null } = {}) {
   const order = await getOrder(tid, id)
   const amt = Number(amount) || 0
-  await updateOrderStatus(tid, id, 'refunded', { refund: { amount: amt, reason, by: actor, at: Date.now() }, _actor: actor })
-  if (order && !order.reversed && amt >= (order.total || 0)) {
+  const total = Number(order?.total) || 0
+  const before = Number(order?.refundTotal) || Number(order?.refund?.amount) || 0
+  // halalas, not raw floats — the same rounding payPartial needs to ever close
+  const refundTotal = Math.round((before + amt) * 100) / 100
+  const full = refundTotal >= total - 0.005
+  const entry = { amount: amt, reason, by: actor, at: Date.now() }
+  // a partial refund leaves the status ALONE (a pay-first online order settles on
+  // the kitchen track and is 'served', not 'paid' — forcing 'paid' would rewind it)
+  await updateOrderStatus(tid, id, full ? 'refunded' : (order?.status || 'paid'), {
+    refund: entry, refundTotal, refunds: arrayUnion(entry), _actor: actor,
+  })
+  if (order && !order.reversed && full) {
     await reverseOrderEffects(tid, order, policy).catch(() => {})
     await restoreOrderStock(tid, order, id) // full refund returns stock
     await updateDoc(subDoc(tid, 'orders', id), { reversed: true }).catch(() => {})
@@ -2127,6 +2158,13 @@ export async function savePushToken(tid, token, uid) {
   return setDoc(doc(db, 'tenants', tid, 'pushTokens', id), {
     token, uid: uid || '', ua: navigator.userAgent, updatedAt: serverTimestamp(),
   })
+}
+
+// Sign-out must drop the device's token doc, or an ex-employee's personal phone
+// keeps buzzing with the venue's orders long after the account is gone.
+export async function deletePushToken(tid, token) {
+  const id = token.replace(/[^a-zA-Z0-9_-]/g, '_').slice(0, 256)
+  return deleteDoc(doc(db, 'tenants', tid, 'pushTokens', id))
 }
 
 // Called at login. Claiming is SERVER-SIDE now: the callable reads the address

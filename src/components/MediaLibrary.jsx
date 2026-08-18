@@ -107,8 +107,8 @@ export default function MediaLibrary({ open, onClose, onPick, tenantId, kind, fo
     const limit = LIB_LIMITS_MB[k]
     if (f.size > limit * 1024 * 1024) {
       throw new Error(ar
-        ? `الملف كبير جداً (${fmtMB(f.size)}) — الحد الأقصى ${limit}MB`
-        : `File too large (${fmtMB(f.size)}) — max ${limit}MB`)
+        ? `حجم الملف (${fmtMB(f.size)}) أكبر من الحد المسموح ${limit}MB. اختر ملفاً أصغر.`
+        : `The file (${fmtMB(f.size)}) is bigger than the ${limit}MB limit. Pick a smaller one.`)
     }
     const meta = { name: f.name || '', size: f.size || 0 }
     const fire = (detail) => { try { window.dispatchEvent(new CustomEvent('ml:upload', { detail })) } catch (_) { /* ignore */ } }
@@ -264,7 +264,7 @@ export default function MediaLibrary({ open, onClose, onPick, tenantId, kind, fo
           <div style={{ textAlign: 'center', padding: 24 }}><span className="spinner" /></div>
         ) : shown.length === 0 ? (
           <p className="muted small" style={{ textAlign: 'center', padding: 20, lineHeight: 1.6 }}>
-            {ar ? 'المكتبة فارغة — أي ملف ترفعه في النظام يُحفظ هنا تلقائياً لإعادة استخدامه.' : 'Library empty — every upload is saved here automatically to reuse.'}
+            {ar ? 'المكتبة فارغة. أي ملف ترفعه في النظام يُحفظ هنا تلقائياً لتعيد استخدامه.' : 'The library is empty. Every file you upload is saved here automatically so you can reuse it.'}
           </p>
         ) : (
           <div className="ml-grid">

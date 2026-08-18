@@ -18,7 +18,7 @@ export const PLATFORM_ACCOUNTS = {
   packRevenue: { category: 'revenue', ar: 'إيرادات حزم الرصيد' },
   setupRevenue: { category: 'revenue', ar: 'إيرادات التأسيس والتدريب' },
   refunds: { category: 'contra', ar: 'مردودات وإشعارات دائنة' },
-  cogsMessaging: { category: 'cogs', ar: 'تكلفة الرسائل — واتساب وبريد' },
+  cogsMessaging: { category: 'cogs', ar: 'تكلفة الرسائل (واتساب وبريد)' },
   cogsAi: { category: 'cogs', ar: 'تكلفة الذكاء الاصطناعي' },
   gatewayFees: { category: 'expense', ar: 'رسوم بوابة الدفع' },
   vatPayable: { category: 'liability', ar: 'ضريبة القيمة المضافة المستحقة' },
@@ -79,7 +79,7 @@ export function buildPlatformLedger({ invoices = [], spendRollups = {}, from, to
     const gross = Number(inv.total != null ? inv.total : inv.amount) || 0
     const net = legacy ? round2(gross / 1.15) : (Number(inv.subtotal) || 0)
     const vat = legacy ? round2(gross - net) : (Number(inv.vat) || 0)
-    if (legacy) missing.push({ kind: 'legacyInvoice', id: inv.id, note: 'مستند قبل النظام الجديد — قُسّم على أساس أن المبلغ شامل الضريبة' })
+    if (legacy) missing.push({ kind: 'legacyInvoice', id: inv.id, note: 'مستند قبل النظام الجديد، قُسّم على أساس أن المبلغ شامل الضريبة' })
 
     const sign = isCredit ? -1 : 1
     entries.push({

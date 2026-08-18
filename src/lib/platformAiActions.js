@@ -15,9 +15,12 @@ import { mrrFromTenants } from './platformInsights.js'
 import { logPlatformAction } from './platformAudit.js'
 import { groupErrors } from './platformAI.js'
 import { PLANS } from './plans.js'
+import { arPlural } from './forecast.js'
 
 // ---- small helpers ----------------------------------------------------------
 const rows = (s) => s.docs.map((d) => ({ id: d.id, ...d.data() }))
+// «7 يوماً» is not Arabic; counted nouns follow the 1/2/3-10/11+ rule.
+const nDays = (n) => arPlural(n, { one: 'يوم', two: 'يومان', few: 'أيام', many: 'يوماً' })
 const num = (d) => ({ type: 'number', description: d })
 const str = (d) => ({ type: 'string', description: d })
 const obj = (properties, required) => ({ type: 'object', properties, ...(required ? { required } : {}) })
@@ -88,7 +91,7 @@ async function resolveVenue(ctx, nameOrSlug) {
     return {
       out: {
         ambiguous: true,
-        message: 'الاسم يطابق أكثر من منشأة — اعرض هذه القائمة على المالك واسأله أيّها يقصد، ولا تنفّذ أي إجراء قبل تحديدها.',
+        message: 'الاسم يطابق أكثر من منشأة، اعرض هذه القائمة على المالك واسأله أيّها يقصد، ولا تنفّذ أي إجراء قبل تحديدها.',
         candidates: pool.slice(0, 8).map((t) => ({ name: t.name || t.id, slug: t.slug || '', plan: t.plan || 'enterprise', status: statusOf(t) })),
       },
     }
@@ -292,7 +295,7 @@ export const PLATFORM_TOOLS = [
       const reason = String(a.reason || '').trim() || 'تجميد إداري من المنصة'
       await setTenantActive(r.t.id, false, reason)
       await audit(ctx, 'suspend_venue', r.t, reason)
-      return { ok: true, message: `تم إيقاف منشأة «${r.t.name || r.t.id}» — السبب المسجل: ${reason}.` }
+      return { ok: true, message: `تم إيقاف منشأة «${r.t.name || r.t.id}». السبب المسجل: ${reason}.` }
     },
   },
   {
@@ -319,7 +322,7 @@ export const PLATFORM_TOOLS = [
       let expTxt = ''
       if (a.expiresAt) {
         const d = new Date(a.expiresAt)
-        if (isNaN(d)) return { error: 'صيغة التاريخ غير صحيحة — استخدم YYYY-MM-DD.' }
+        if (isNaN(d)) return { error: 'صيغة التاريخ غير صحيحة. استخدم YYYY-MM-DD.' }
         patch.planStatus = 'active'
         patch.planExpiresAt = d
         expTxt = ` حتى ${iso(d)}`
@@ -345,8 +348,8 @@ export const PLATFORM_TOOLS = [
       const from = base && !isNaN(base) && base.getTime() > Date.now() ? base : new Date()
       const next = new Date(from.getTime() + n * 86400000)
       await setTenantPlan(t.id, { planStatus: t.planStatus === 'trial' ? 'trial' : 'active', planExpiresAt: next })
-      await audit(ctx, 'extend_trial', t, `${n} يوم حتى ${iso(next)}`)
-      return { ok: true, message: `تم تمديد اشتراك «${t.name || t.id}» ${n} يوماً — ينتهي في ${iso(next)}.` }
+      await audit(ctx, 'extend_trial', t, `${nDays(n)} حتى ${iso(next)}`)
+      return { ok: true, message: `تم تمديد اشتراك «${t.name || t.id}» ${nDays(n)}، وينتهي في ${iso(next)}.` }
     },
   },
   {

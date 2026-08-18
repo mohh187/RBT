@@ -51,7 +51,7 @@ export default function Chat() {
     if (!window.confirm('هل أنت متأكد من تسجيل الدخول والمحاكاة باسم مالك هذه المنشأة؟')) return
     try {
       await impersonateTenantOwner(tid)
-      toast.success('نجحت المحاكاة — سيتم تحويلك الآن')
+      toast.success('نجحت المحاكاة، سيتم تحويلك الآن')
       setTimeout(() => {
         window.location.href = '/admin'
       }, 800)
@@ -181,7 +181,7 @@ export default function Chat() {
                   <div className="grow" style={{ minWidth: 0 }}>
                     <div className="small bold">{th.tenantName || nameOf[th.id] || th.id}</div>
                     <div className="xs faint" style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                      {th.lastFrom === 'platform' ? 'أنت: ' : ''}{th.lastText || '—'}
+                      {th.lastFrom === 'platform' ? 'أنت: ' : ''}{th.lastText || '·'}
                     </div>
                   </div>
                   <div className="stack" style={{ alignItems: 'flex-end', gap: 2 }}>
@@ -227,7 +227,7 @@ export default function Chat() {
                 tenantName={nameOf[tid] || ''}
                 commands={commands}
                 placeholder="اكتب رسالتك الإدارية…"
-                emptyHint="ابدأ المحادثة — ستصل رسالتك لمدراء المنشأة فوراً مع إشعار"
+                emptyHint="ابدأ المحادثة، ستصل رسالتك لمدراء المنشأة فوراً مع إشعار"
               />
             </>
           )}

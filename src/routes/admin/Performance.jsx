@@ -180,7 +180,7 @@ export default function Performance() {
                 <span className="small row" style={{ gap: 4 }}><Icon name="customers" size={13} className="faint" /> {r.custCount}</span>
                 {r.ratingN > 0 && <span className="small rating" style={{ gap: 3 }}><Icon name="star" size={13} fill="currentColor" strokeWidth={1.5} /> {r.avgRating.toFixed(1)}</span>}
                 <span className="grow" />
-                <span className="price small">{showMoney ? <Price value={r.revenue} currency={currency} lang={lang} /> : <span className="faint">—</span>}</span>
+                <span className="price small">{showMoney ? <Price value={r.revenue} currency={currency} lang={lang} /> : <span className="faint">·</span>}</span>
               </div>
 
               {/* target progress (role-aware) */}

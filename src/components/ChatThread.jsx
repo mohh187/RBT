@@ -206,7 +206,7 @@ export default function ChatThread({
     // support-path rules cap 25MB; storage.js caps unknown/'file' kinds at 10MB
     const capMB = type === 'image' || type === 'file' ? 10 : 25
     if (file.size > capMB * 1024 * 1024) {
-      toast.error(ar ? `الملف كبير جداً — الحد الأقصى ${capMB}MB` : `File too large — max ${capMB}MB`)
+      toast.error(ar ? `حجم الملف أكبر من ${capMB}MB. اختر ملفاً أصغر.` : `The file is bigger than ${capMB}MB. Pick a smaller one.`)
       return
     }
     setUploading(true)
@@ -232,7 +232,7 @@ export default function ChatThread({
   // ---------- voice notes ----------
   const startRecording = async () => {
     if (!canRecord) {
-      toast.error(ar ? 'التسجيل الصوتي غير مدعوم على هذا المتصفح — أرفق ملفاً صوتياً بدلاً منه' : 'Voice recording is not supported on this browser')
+      toast.error(ar ? 'متصفحك لا يدعم التسجيل الصوتي. أرفق ملفاً صوتياً بدلاً منه.' : 'This browser cannot record voice notes. Attach an audio file instead.')
       return
     }
     try {
@@ -375,7 +375,7 @@ export default function ChatThread({
           )}
           {messages.length === 0 ? (
             <p className="muted small" style={{ textAlign: 'center', marginTop: 28 }}>
-              {emptyHint || (ar ? 'اكتب رسالتك — يصلنا إشعار فوري وسنرد عليك هنا' : 'Write a message — we get notified instantly')}
+              {emptyHint || (ar ? 'اكتب رسالتك ويصلنا إشعار فوري، وسنرد عليك هنا.' : 'Write a message. We get notified right away and reply here.')}
             </p>
           ) : (
             messages.map((m, i) => {

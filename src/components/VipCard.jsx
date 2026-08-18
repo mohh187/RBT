@@ -41,7 +41,7 @@ export default function VipCard({ tenant, card, lang = 'ar' }) {
       <div className="vip-bottom">
         <div className="vip-name">{memberName}</div>
         <div className="vip-meta">
-          <span className="vip-id" dir="ltr">{card?.memberId || '—'}</span>
+          <span className="vip-id" dir="ltr">{card?.memberId || ''}</span>
           {card?.discountPct ? <span className="vip-disc">{card.discountPct}%</span> : null}
         </div>
       </div>

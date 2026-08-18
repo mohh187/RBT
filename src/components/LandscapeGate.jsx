@@ -44,7 +44,7 @@ export default function LandscapeGate({ enabled }) {
         <p style={{ opacity: 0.85, lineHeight: 1.7, fontSize: 14, margin: 0 }}>
           {lockable
             ? 'ادخل بملء الشاشة والوضع الأفقي لعرض الكتالوج والفاتورة معاً بمساحة كاملة.'
-            : 'أدِر جهازك أفقياً للحصول على أفضل تجربة كاشير — يظهر الكتالوج والفاتورة جنباً إلى جنب.'}
+            : 'أدِر جهازك أفقياً لأفضل تجربة كاشير، فيظهر الكتالوج والفاتورة جنباً إلى جنب.'}
         </p>
         {lockable && (
           <button onClick={go} style={{ background: 'var(--brand, #c0392b)', color: '#fff', border: 'none', borderRadius: 999, padding: '13px 30px', fontSize: 16, fontWeight: 800, cursor: 'pointer' }}>

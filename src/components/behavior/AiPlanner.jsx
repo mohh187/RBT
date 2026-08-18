@@ -2,7 +2,7 @@ import { useRef, useState } from 'react'
 import Icon from '../Icon.jsx'
 import { fmtNum } from '../../lib/format.js'
 import { aiQuick, aiConfigured } from '../../lib/aiBridge.js'
-import { buildPlannerPrompt, parsePlan } from './engine.jsx'
+import { buildPlannerPrompt, parsePlan, nSessions } from './engine.jsx'
 
 const QUICK_AR = [
   'ما أكبر تسريب في مسار الشراء؟',
@@ -107,14 +107,14 @@ export default function AiPlanner({
             : 'Every segment is a real, de-duplicated list of phone numbers.'}
         </p>
         {!segments.length ? (
-          <p className="bhv-hint">{ar ? 'لا شرائح — لا توجد جلسات في الفترة.' : 'No segments.'}</p>
+          <p className="bhv-hint">{ar ? 'لا توجد شرائح، فالفترة بلا جلسات.' : 'No segments.'}</p>
         ) : (
           <>
             <select className="input" value={manualSeg} onChange={(e) => setManualSeg(e.target.value)}>
               <option value="">{ar ? 'اختر شريحة' : 'Pick a segment'}</option>
               {segments.map((s) => (
                 <option key={s.id} value={s.id}>
-                  {s.ar} — {fmtNum(s.sessionCount)} {ar ? 'جلسة' : 'sessions'}
+                  {s.ar} · {ar ? nSessions(s.sessionCount) : `${fmtNum(s.sessionCount)} sessions`}
                 </option>
               ))}
             </select>
@@ -152,7 +152,7 @@ export default function AiPlanner({
         {blocked && (
           <div className="bhv-warn">
             <Icon name="warning" size={15} />
-            <span>{disabledReason || (ar ? 'المساعد الذكي غير مُهيَّأ في هذه البيئة — الاستنتاجات أعلاه وبناء الجمهور يعملان بدونه.' : 'AI unavailable.')}</span>
+            <span>{disabledReason || (ar ? 'المساعد الذكي غير متاح الآن. الاستنتاجات أعلاه وبناء الجمهور يعملان بدونه.' : 'AI unavailable.')}</span>
           </div>
         )}
         {!blocked && sample === 0 && (
@@ -164,7 +164,7 @@ export default function AiPlanner({
         {!blocked && sample > 0 && sample < 20 && (
           <div className="bhv-warn">
             <Icon name="warning" size={15} />
-            <span>{ar ? `الفترة تحوي ${fmtNum(sample)} جلسة فقط. المخطِّط مُلزَم بأن يقول «العينة غير كافية» بدل بناء خطة على أرقام هشّة.` : `Only ${fmtNum(sample)} sessions in period.`}</span>
+            <span>{ar ? `الفترة تحوي ${nSessions(sample)} فقط. المخطِّط مُلزَم بأن يقول «العينة غير كافية» بدل بناء خطة على أرقام هشّة.` : `Only ${fmtNum(sample)} sessions in period.`}</span>
           </div>
         )}
 
@@ -307,7 +307,7 @@ function CampaignDraft({ c, itemRows, ar, periodLabel, onPrepare, canPrepare }) 
       ) : (
         <div className="bhv-warn">
           <Icon name="warning" size={14} />
-          <span>{ar ? 'لم يحدّد النموذج شريحة معروفة، فلا جمهور حقيقي لهذه المسودة. اختر شريحة يدوياً من «بناء جمهور حقيقي» أعلاه.' : 'No known segment — pick one manually above.'}</span>
+          <span>{ar ? 'لم يحدّد النموذج شريحة معروفة، فلا جمهور حقيقي لهذه المسودة. اختر شريحة يدوياً من «بناء جمهور حقيقي» أعلاه.' : 'No known segment. Pick one manually above.'}</span>
         </div>
       )}
     </div>

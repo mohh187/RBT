@@ -8,6 +8,7 @@ import Icon from '../Icon.jsx'
 import { pickLang } from '../../lib/i18n.jsx'
 import { LINK_TARGETS, AUDIENCES, safeUrl } from '../../lib/ads.js'
 import { lex } from '../../lib/venueTypes.js'
+import { arPlural } from '../../lib/forecast.js'
 
 const num = (n) => Number(n || 0).toLocaleString('ar-SA-u-nu-latn')
 
@@ -47,7 +48,7 @@ function PickList({ rows, value, onPick, emptyText, lang }) {
         {shown.length < rows.length ? (
           <p className="ads-hint">
             {ar
-              ? `عُرض ${num(shown.length)} من ${num(rows.length)} — استخدم البحث للوصول لبقيتها.`
+              ? `يظهر ${num(shown.length)} من ${num(rows.length)}. استخدم البحث للوصول إلى البقية.`
               : `Showing ${shown.length} of ${rows.length}.`}
           </p>
         ) : null}
@@ -112,7 +113,7 @@ export default function AdTargeting({ ad, onChange, tenant, items = [], categori
           onPick={(id) => target({ itemId: id })}
           lang={lang}
           emptyText={ar
-            ? `لا توجد ${lex(tenant, 'items')} في القائمة بعد — أضف واحداً أولاً ثم عد إلى هنا.`
+            ? `لا توجد ${lex(tenant, 'items')} في القائمة بعد. أضف واحداً أولاً ثم عد إلى هنا.`
             : 'No menu items yet.'}
         />
       ) : null}
@@ -133,7 +134,7 @@ export default function AdTargeting({ ad, onChange, tenant, items = [], categori
           value={ad.target.offerId}
           onPick={(id) => target({ offerId: id })}
           lang={lang}
-          emptyText={ar ? 'لا توجد عروض معرّفة بعد — أنشئ عرضاً من صفحة العروض.' : 'No offers defined yet.'}
+          emptyText={ar ? 'لا توجد عروض بعد. أنشئ عرضاً من صفحة العروض ثم عد إلى هنا.' : 'No offers defined yet.'}
         />
       ) : null}
 
@@ -150,7 +151,7 @@ export default function AdTargeting({ ad, onChange, tenant, items = [], categori
           />
           {!urlOk && ad.target.url ? (
             <span className="ads-ai-err">
-              {ar ? 'الرابط غير صالح — يجب أن يبدأ بـ https ويكون رابطاً كاملاً.' : 'Invalid URL.'}
+              {ar ? 'الرابط غير مكتمل. اكتبه كاملاً وابدأه بـ https.' : 'That link is not complete. Write it in full, starting with https.'}
             </span>
           ) : null}
           <span className="ads-hint">
@@ -172,7 +173,7 @@ export default function AdTargeting({ ad, onChange, tenant, items = [], categori
         <h4>{ar ? 'من يرى هذا الإعلان' : 'Audience'}</h4>
         <p className="ads-hint">
           {ar
-            ? 'عدد الزيارات يُحسب لكل جهاز عبر متصفح الضيف — من يمسح بياناته أو يبدل جواله يُحسب زائراً جديداً.'
+            ? 'عدد الزيارات يُحسب لكل جهاز عبر متصفح الضيف، ومن يمسح بياناته أو يبدّل جواله يُحسب زائراً جديداً.'
             : 'Visits are counted per browser on the guest device.'}
         </p>
       </div>
@@ -213,7 +214,7 @@ export default function AdTargeting({ ad, onChange, tenant, items = [], categori
         <span className="ads-hint">
           {ad.audience.minVisits > 0
             ? (ar
-              ? `لن يظهر إلا لمن زار المكان ${num(ad.audience.minVisits)} مرة أو أكثر.`
+              ? `لن يظهر إلا لمن زار المكان ${arPlural(ad.audience.minVisits, { one: 'مرة', two: 'مرتين', few: 'مرات', many: 'مرة' })} أو أكثر.`
               : `Shown from visit ${ad.audience.minVisits} onward.`)
             : (ar ? 'صفر يعني بلا شرط على عدد الزيارات.' : 'Zero means no visit condition.')}
         </span>

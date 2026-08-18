@@ -204,7 +204,7 @@ export function initialState() {
 }
 
 export const RULES_AR = [
-  'الوِست — أربعة لاعبون، فريقان، الشريك يجلس مقابلك (المقاعد 0 و 2 ضد 1 و 3).',
+  'الوِست: أربعة لاعبون، فريقان، الشريك يجلس مقابلك (المقاعد 0 و 2 ضد 1 و 3).',
   '',
   'التوزيع: ثلاث عشرة ورقة لكل لاعب. الآس أعلى ورقة ثم K ثم Q ثم J ثم 10 فما دون.',
   '',
@@ -222,7 +222,7 @@ export const RULES_AR = [
   '',
   'الفوز: أول فريق يبلغ 41 نقطة. إن تجاوز الفريقان 41 في اليد نفسها فالأعلى يفوز، وإن تعادلا تُلعب يد إضافية.',
   '',
-  'على الطاولة: يظهر «عدّاد العقد» طوال اللعب — كم يحتاج فريق المزايدة، وكم أخذ، وكم بقي من الأكلات. الورقة التي لا يجوز لعبها تظهر باهتة، وإن ضغطتها يخبرك الشريط بالسبب.',
+  'على الطاولة: يظهر «عدّاد العقد» طوال اللعب، ويبيّن كم يحتاج فريق المزايدة، وكم أخذ، وكم بقي من الأكلات. الورقة التي لا يجوز لعبها تظهر باهتة، وإن ضغطتها يخبرك الشريط بالسبب.',
   '',
   'إن توقّف لاعب عن اللعب أو انقطع اتصاله، يظهر لبقية الطاولة زر «تخطّي المتوقف» بعد دقيقة وربع، فتمضي اليد ولا تتجمّد الغرفة.',
   '',
@@ -230,7 +230,7 @@ export const RULES_AR = [
 ].join('\n')
 
 const RULES_EN = [
-  'Wist — four players in two fixed partnerships, partners sitting opposite (seats 0+2 against 1+3).',
+  'Wist: four players in two fixed partnerships, partners sitting opposite (seats 0+2 against 1+3).',
   '',
   'Deal: thirteen cards each. Ace is high, then K Q J 10 down to 2.',
   '',
@@ -244,7 +244,7 @@ const RULES_EN = [
   '',
   'Match: first side to 41. Both crossing on the same hand, the higher total wins; a dead tie plays one more hand.',
   '',
-  'On the table: the contract tracker is on screen the whole time — what the bidding side needs, what it has, and how many tricks are left. A card you may not play is dimmed; tap it and the hint line says why.',
+  'On the table: the contract tracker stays on screen and shows what the bidding side needs, what it has, and how many tricks are left. A card you may not play is dimmed; tap it and the hint line says why.',
   '',
   'If a player stops responding or drops, everyone else gets a «skip stalled player» button after seventy-five seconds, so a room can never freeze.',
 ].join('\n')
@@ -1022,25 +1022,25 @@ export default function Wist({
     ? {
       us: 'فريقنا', them: 'الخصوم', trump: 'الحكم',
       rules: 'الشرح', close: 'إغلاق', deal: 'وزّع الورق', next: 'اليد التالية',
-      waitPlayers: 'بانتظار اكتمال الطاولة', needFour: 'اللعبة لأربعة لاعبين — كل لاعب يجلس مقابل شريكه.',
-      pass: 'باس', chooseTrump: 'اختر الحكم — الشدة التي تقطع بها',
+      waitPlayers: 'بانتظار اكتمال الطاولة', needFour: 'اللعبة لأربعة لاعبين، كل لاعب يجلس مقابل شريكه.',
+      pass: 'باس', chooseTrump: 'اختر الحكم، وهو الشدة التي تقطع بها',
       chooseBid: 'زايد بعدد الأكلات أو قل باس', floorIs: 'أقل مزايدة الآن',
       follow: 'اتبع النوع المطلوب', tapCard: 'اختر ورقة والعبها', playIt: 'العب',
       cancel: 'تراجع', tapTwice: 'اضغط الورقة مرة أخرى للعبها',
-      won: 'أخذ الأكلة', kaboot: 'كبوت', washout: 'لا مزايدة — تُعاد اليد',
+      won: 'أخذ الأكلة', kaboot: 'كبوت', washout: 'لا مزايدة، تُعاد اليد',
       handOver: 'انتهت اليد', matchOver: 'انتهت المباراة', youWin: 'فزتم', youLose: 'فاز الخصوم',
       tricks: 'أكلات', exit: 'خروج', cover: 'سلّم الجهاز إلى', reveal: 'اضغط لعرض أوراقك',
       bidOf: 'زايد', passed: 'باس', hostStarts: 'يبدأ مضيف الغرفة التوزيع.',
-      auction: 'المزايدة', standing: 'المزايدة القائمة', kabootNote: 'المزايدة بـ 13 اسمها «كبوت» — قيمتها 26 نقطة لك أو عليك.',
+      auction: 'المزايدة', standing: 'المزايدة القائمة', kabootNote: 'المزايدة بـ 13 اسمها «كبوت»، وقيمتها 26 نقطة لك أو عليك.',
       left: 'بقي', usBid: 'العقد لفريقك', themBid: 'العقد للخصوم',
       yourTurn: 'دورك', turnOf: 'الدور على', turnNow: 'الدور',
       waitingBid: 'المزايدة على', waitingTrump: 'يختار الحكم:', partner: 'شريكك', rival: 'خصم', you: 'أنت',
       skip: 'تخطّي المتوقف', offline: 'منقطع',
-      stallNote: 'اللاعب متوقف أو انقطع اتصاله — يستطيع أي لاعب تخطّيه ليمضي الدور.',
-      watcher: 'متفرّج', watchNote: 'أنت تتابع الطاولة فقط — أوراق اللاعبين مخفية.',
+      stallNote: 'اللاعب متوقف أو انقطع اتصاله، ويستطيع أي لاعب تخطّيه ليمضي الدور.',
+      watcher: 'متفرّج', watchNote: 'أنت تتابع الطاولة فقط، وأوراق اللاعبين مخفية.',
       teamA: 'الفريق أ', teamB: 'الفريق ب', contractOf: 'العقد لـ',
-      cantFollow: (s) => 'لا يمكن لعبها — عندك ' + s + ' ويجب اتّباع النوع المطلوب.',
-      notYourTurn: 'ليس دورك بعد — هذه معاينة فقط.',
+      cantFollow: (s) => 'عندك ' + s + '، فيجب اتّباع النوع المطلوب.',
+      notYourTurn: 'ليس دورك بعد، وهذه معاينة فقط.',
       levelLbl: 'الكمبيوتر', easy: 'سهل', normal: 'عادي', hard: 'صعب',
       levelTip: 'اضغط لتغيير مستوى الكمبيوتر',
       trickNo: 'الأكلة', ofThirteen: 'من 13', namingTrump: 'يختار الحكم الآن',
@@ -1050,24 +1050,24 @@ export default function Wist({
       us: 'Us', them: 'Them', trump: 'Trump',
       rules: 'Rules', close: 'Close', deal: 'Deal', next: 'Next hand',
       waitPlayers: 'Waiting for the table', needFour: 'Four players, partners opposite.',
-      pass: 'Pass', chooseTrump: 'Name trump — the suit that cuts',
+      pass: 'Pass', chooseTrump: 'Name trump, the suit that cuts',
       chooseBid: 'Bid a number of tricks, or pass', floorIs: 'Lowest bid now',
       follow: 'Follow the led suit', tapCard: 'Pick a card, then play it', playIt: 'Play',
       cancel: 'Undo', tapTwice: 'Tap the card again to play it',
-      won: 'takes the trick', kaboot: 'Kaboot', washout: 'All passed — redealing',
+      won: 'takes the trick', kaboot: 'Kaboot', washout: 'All passed, redealing',
       handOver: 'Hand over', matchOver: 'Match over', youWin: 'You win', youLose: 'They win',
       tricks: 'tricks', exit: 'Exit', cover: 'Pass the phone to', reveal: 'Tap to see your cards',
       bidOf: 'Bid', passed: 'Pass', hostStarts: 'The host deals.',
-      auction: 'Auction', standing: 'Standing bid', kabootNote: 'A bid of 13 is a kaboot — worth 26 points for you or against you.',
+      auction: 'Auction', standing: 'Standing bid', kabootNote: 'A bid of 13 is a kaboot, worth 26 points for you or against you.',
       left: 'left', usBid: 'Your side holds the contract', themBid: 'They hold the contract',
       yourTurn: 'Your turn', turnOf: 'Turn:', turnNow: 'To play',
       waitingBid: 'Bidding:', waitingTrump: 'Naming trump:', partner: 'partner', rival: 'opponent', you: 'You',
       skip: 'Skip stalled player', offline: 'offline',
-      stallNote: 'This player has stalled or dropped — anyone at the table can skip them so the hand moves on.',
-      watcher: 'Watching', watchNote: 'You are watching this table — every hand stays hidden.',
+      stallNote: 'This player has stalled or dropped. Anyone at the table can skip them so the hand moves on.',
+      watcher: 'Watching', watchNote: 'You are watching this table, and every hand stays hidden.',
       teamA: 'Side A', teamB: 'Side B', contractOf: 'Contract:',
-      cantFollow: (s) => 'Not legal — you still hold ' + s + ' and must follow suit.',
-      notYourTurn: 'Not your turn yet — this is only a preview.',
+      cantFollow: (s) => 'You still hold ' + s + ', so you must follow suit.',
+      notYourTurn: 'Not your turn yet. This is only a preview.',
       levelLbl: 'Computer', easy: 'Easy', normal: 'Normal', hard: 'Hard',
       levelTip: 'Tap to change the computer level',
       trickNo: 'Trick', ofThirteen: 'of 13', namingTrump: 'is naming trump',
@@ -1204,12 +1204,12 @@ export default function Wist({
   else if (showLobby) hint = t.waitPlayers
   else if (st.phase === 'bid') {
     hint = myBidTurn
-      ? t.chooseBid + ' — ' + t.floorIs + ' ' + fmt(bidFloor, ar)
+      ? t.chooseBid + '. ' + t.floorIs + ' ' + fmt(bidFloor, ar)
       : t.waitingBid + ' ' + nameOf(st.bidTurn)
   } else if (st.phase === 'trump') {
     hint = myTrumpTurn ? t.chooseTrump : t.waitingTrump + ' ' + nameOf(st.highBid?.seat ?? 0)
   } else if (st.phase === 'play') {
-    if (st.doneWinner != null) hint = nameOf(st.doneWinner) + ' — ' + t.won
+    if (st.doneWinner != null) hint = nameOf(st.doneWinner) + ' ' + t.won
     else if (!isMyTurn) hint = t.turnOf + ' ' + nameOf(st.turnSeat)
     else if (sel) hint = t.tapTwice
     else if (mustFollow) hint = t.follow + ': ' + (ar ? SUIT_AR[ledSuit] : SUIT_EN[ledSuit])
@@ -1440,7 +1440,7 @@ export default function Wist({
             </div>
             {st.phase === 'trump' && st.highBid ? (
               <span className="wst-pad-note">
-                {nameOf(st.highBid.seat)} — {t.bidOf} {fmt(st.highBid.n, ar)}
+                {nameOf(st.highBid.seat)}: {t.bidOf} {fmt(st.highBid.n, ar)}
                 {st.highBid.n >= MAX_BID ? ' (' + t.kaboot + ')' : ''}
                 <br />
                 {t.namingTrump}
@@ -1478,7 +1478,7 @@ export default function Wist({
                     <i className="wst-arow-dot" />
                     <span className="wst-arow-name">{sx === seat && seated ? t.you : nameOf(sx)}</span>
                     <span className={'wst-arow-bid' + (bid === 'pass' ? ' is-pass' : '')}>
-                      {bid == null ? (onNow ? '…' : '—') : bid === 'pass' ? t.passed : fmt(bid, ar)}
+                      {bid == null ? '…' : bid === 'pass' ? t.passed : fmt(bid, ar)}
                     </span>
                   </div>
                 )
@@ -1489,7 +1489,7 @@ export default function Wist({
         ) : null}
 
         {st.doneWinner != null ? (
-          <div className="wst-banner">{nameOf(st.doneWinner)} — {t.won}</div>
+          <div className="wst-banner">{nameOf(st.doneWinner)} {t.won}</div>
         ) : null}
 
         {showLobby ? (
@@ -1504,7 +1504,7 @@ export default function Wist({
                   style={{ '--sc': seatColour(sx) }}
                 >
                   <span className="cg-av">{initialsOf(bySeat[sx]?.name)}</span>
-                  <span>{bySeat[sx]?.name || '—'}</span>
+                  <span>{nameOf(sx)}</span>
                   <span className={'cg-team-tag ' + (team(sx) === 0 ? 'is-a' : 'is-b')}>
                     {team(sx) === 0 ? (ar ? 'أ' : 'A') : (ar ? 'ب' : 'B')}
                   </span>
@@ -1662,7 +1662,7 @@ export default function Wist({
             </strong>
             {st.lastHand && !st.lastHand.washout ? (
               <p className="cg-modal-sub">
-                {nameOf(st.lastHand.bidSeat)} — {t.bidOf} {fmt(st.lastHand.bid, ar)}
+                {nameOf(st.lastHand.bidSeat)}: {t.bidOf} {fmt(st.lastHand.bid, ar)}
                 {st.lastHand.kaboot ? ' (' + t.kaboot + ')' : ''}
               </p>
             ) : null}
@@ -1722,7 +1722,7 @@ export default function Wist({
       {rules ? (
         <div className="cg-over">
           <div className="cg-over-head">
-            <strong>{ar ? 'الوِست — الشرح' : 'Wist — how to play'}</strong>
+            <strong>{ar ? 'شرح الوِست' : 'How to play Wist'}</strong>
             <button type="button" className="wst-iconbtn cg-press" onClick={() => setRules(false)} aria-label={t.close}>
               <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false">
                 <path d="M6 6 L18 18 M18 6 L6 18" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" />

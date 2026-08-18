@@ -52,7 +52,7 @@ export default function Domains() {
     <div className="page stack" style={{ gap: 'var(--sp-4)' }}>
       <div>
         <h2 className="page-title">النطاقات المخصّصة</h2>
-        <p className="muted small">اربط لكل منشأة (باقة متقدمة) نطاقها الخاص أو نطاقاً فرعياً — الباقة المجانية تبقى على {PLATFORM_APEX}/m/الاسم</p>
+        <p className="muted small">اربط لكل منشأة (باقة متقدمة) نطاقها الخاص أو نطاقاً فرعياً. الباقة المجانية تبقى على {PLATFORM_APEX}/m/الاسم</p>
       </div>
 
       <div className="card card-pad stack" style={{ borderColor: 'var(--info)', gap: 6 }}>

@@ -12,6 +12,7 @@ import { useMemo } from 'react'
 import Icon from '../Icon.jsx'
 import { GCard, GRefusal, GBasis, GTag, GNumbers, GLimits, GConfidence } from './parts.jsx'
 import { quietHourPlan, quietOfferDraft } from '../../lib/growth.js'
+import { arPlural } from '../../lib/forecast.js'
 
 export default function QuietHoursPanel({
   orders = [], items = [], materials = [], offers = [],
@@ -43,7 +44,7 @@ export default function QuietHoursPanel({
           icon="clock"
           title={ar ? 'لا توجد فترة هادئة يمكن التوصية بها' : 'No recommendable quiet window'}
           body={ar
-            ? `${plan.reasonAr}. لن نقترح خصماً على فترة قد يكون هدوؤها مجرد تذبذب: العينة ${plan.sample.ordersInWindow} طلباً على ${plan.sample.daysWithOrders} يوماً فيها طلبات.`
+            ? `${plan.reasonAr}. لن نقترح خصماً على فترة قد يكون هدوؤها مجرد تذبذب: العينة ${arPlural(plan.sample.ordersInWindow, { one: 'طلب', two: 'طلبان', few: 'طلبات', many: 'طلباً' })} على ${arPlural(plan.sample.daysWithOrders, { one: 'يوم', two: 'يومين', few: 'أيام', many: 'يوماً' })} فيها طلبات.`
             : `${plan.reasonAr}. Sample: ${plan.sample.ordersInWindow} orders across ${plan.sample.daysWithOrders} days with orders.`}
         />
       ) : (
@@ -51,7 +52,7 @@ export default function QuietHoursPanel({
           <GCard
             key={w.id}
             icon="clock"
-            title={ar ? `${w.weekdayName} · ${w.startTime} — ${w.endTime}` : `${w.weekdayName} ${w.startTime}-${w.endTime}`}
+            title={ar ? `${w.weekdayName} · من ${w.startTime} إلى ${w.endTime}` : `${w.weekdayName} ${w.startTime}-${w.endTime}`}
             badge={<GConfidence level={w.confidence} ar={ar} />}
             actions={typeof onCreateOffer === 'function' && (
               <button type="button" className="btn btn-sm btn-primary" onClick={() => onCreateOffer(quietOfferDraft(w, { lang }))}>
@@ -78,7 +79,7 @@ export default function QuietHoursPanel({
 
       <GCard title={ar ? 'العينة' : 'Sample'} icon="chartBar">
         <GNumbers data={{
-          [ar ? 'النافذة' : 'Window']: `${plan.sample.windowDays} ${ar ? 'يوماً' : 'days'}`,
+          [ar ? 'النافذة' : 'Window']: ar ? arPlural(plan.sample.windowDays, { one: 'يوم', two: 'يومين', few: 'أيام', many: 'يوماً' }) : `${plan.sample.windowDays} days`,
           [ar ? 'طلبات' : 'Orders']: plan.sample.ordersInWindow,
           [ar ? 'أيام فيها طلبات' : 'Days with orders']: plan.sample.daysWithOrders,
           [ar ? 'ساعات عمل مرصودة' : 'Operating hours']: plan.sample.openHours,

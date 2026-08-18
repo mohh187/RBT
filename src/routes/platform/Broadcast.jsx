@@ -30,7 +30,7 @@ export default function Broadcast() {
     try {
       await createBroadcast({ title: title.trim(), body: body.trim(), plan, push, days })
       setTitle(''); setBody('')
-      toast.success('أُرسل الإعلان — تتولى المنصة توزيعه الآن')
+      toast.success('أُرسل الإعلان، تتولى المنصة توزيعه الآن')
     } catch {
       toast.error('تعذّر الإرسال')
     } finally {

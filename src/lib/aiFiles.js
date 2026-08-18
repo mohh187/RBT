@@ -79,7 +79,7 @@ async function pdfToParts(file) {
     try {
       const tc = await page.getTextContent()
       const line = tc.items.map((it) => it.str).join(' ').trim()
-      if (line) textParts.push(`— صفحة ${i} —\n${line}`)
+      if (line) textParts.push(`[صفحة ${i}]\n${line}`)
     } catch (_) { /* image-only page: rely on the rendered image */ }
     canvas.width = 0; canvas.height = 0 // free the bitmap
   }

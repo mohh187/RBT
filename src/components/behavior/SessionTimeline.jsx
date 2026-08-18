@@ -19,11 +19,11 @@ const EV_ICON = {
 // printing a raw key at the manager.
 const evLabel = (t, ar, names = {}) => {
   const raw = String(t || '')
-  if (!ar) return raw || '—'
+  if (!ar) return raw || '·'
   if (EV_AR[raw]) return EV_AR[raw]
   if (raw.startsWith('item:')) { const id = raw.slice(5); return `صنف: ${names[id] || id}` }
   if (raw.startsWith('page:')) return `شاشة: ${raw.slice(5)}`
-  return raw || '—'
+  return raw || '·'
 }
 const evTime = (ev, startedAt) => {
   const t = num(ev && ev.t)
@@ -80,7 +80,7 @@ export default function SessionTimeline({ sessions = [], ar = true }) {
           onChange={(e) => setQ(e.target.value)}
           placeholder={ar ? 'ابحث برقم الجوال أو الاسم أو الطاولة' : 'Search by phone, name or table'}
         />
-        <p className="bhv-hint">{ar ? `معروض ${fmtNum(list.length)} جلسة` : `${fmtNum(list.length)} sessions`}</p>
+        <p className="bhv-hint">{ar ? `عدد الجلسات المعروضة ${fmtNum(list.length)}` : `${fmtNum(list.length)} sessions`}</p>
         <div className="bhv-slist bhv-scroll-y">
           {!list.length && <p className="bhv-hint">{ar ? 'لا نتائج مطابقة.' : 'No matches.'}</p>}
           {list.map((s) => (
@@ -201,7 +201,7 @@ function SessionDetail({ s, ar }) {
           </p>
         )}
         {!events.length ? (
-          <p className="bhv-hint">{ar ? 'لم تُسجَّل أحداث مفصّلة لهذه الجلسة — العدّادات فقط متاحة.' : 'No detailed events for this session.'}</p>
+          <p className="bhv-hint">{ar ? 'لم تُسجَّل أحداث مفصّلة لهذه الجلسة، العدّادات فقط متاحة.' : 'No detailed events for this session.'}</p>
         ) : (
           <ol className="bhv-tl bhv-scroll-y">
             {events.map((e, i) => (

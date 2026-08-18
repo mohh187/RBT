@@ -21,7 +21,7 @@ import { GAMES, GAME_TAGS } from '../../lib/games.js'
 import GameSheet from './GameSheet.jsx'
 import {
   GAME_KINDS, kindOf, kindLabel, splitCatalogue, enabledIds,
-  statsByGame, emptyStat, fmtInt, fmtPct, durText, THIN_PLAYS, soloNote,
+  statsByGame, emptyStat, fmtInt, fmtPct, durText, THIN_PLAYS, soloNote, nPlays,
 } from './engine.jsx'
 
 // One row of the list.
@@ -72,7 +72,7 @@ function GameRowView({
                   {fmtInt(s.plays)} {ar ? (s.soloPlays ? 'جولة أمام أشخاص' : 'جولة') : 'plays'}
                 </span>
                 <span>{fmtInt(s.players)} {ar ? 'لاعب' : 'players'}</span>
-                <span>{ar ? 'متوسط' : 'avg'} {s.avgScore == null ? '—' : fmtInt(s.avgScore)}</span>
+                <span>{ar ? 'متوسط' : 'avg'} {s.avgScore == null ? '·' : fmtInt(s.avgScore)}</span>
                 <span>{durText(s.avgDurationSec)}</span>
                 <span>{fmtPct(s.completionRate)} {ar ? 'إكمال' : 'done'}</span>
                 {s.soloPlays ? (
@@ -94,8 +94,8 @@ function GameRowView({
               ? (
                 <span className="ga-of">
                   {ar
-                    ? `${fmtInt(s.soloPlays)} جولة ضد الكمبيوتر فقط — لا جولة أمام أشخاص`
-                    : `${fmtInt(s.soloPlays)} computer rounds only — none against people`}
+                    ? `${nPlays(s.soloPlays)} ضد الكمبيوتر فقط، ولا جولة أمام أشخاص`
+                    : `${fmtInt(s.soloPlays)} computer rounds only, none against people`}
                 </span>
               )
               : covered
@@ -252,12 +252,12 @@ export default function GamesCatalogue({
           <p className="ga-hint">
             {ar
               ? 'هذا المكان لم يخصّص قائمته بعد، فكل الألعاب ظاهرة بالترتيب الافتراضي. أول تغيير هنا يثبّت القائمة والترتيب معاً.'
-              : 'Not customised yet — all games are on in the default order. The first change here pins both.'}
+              : 'Not customised yet. All games are on in the default order, and the first change here pins both.'}
           </p>
         )}
         {!canEdit && (
           <p className="ga-hint">
-            {ar ? 'أنت في وضع العرض فقط — تعديل قائمة الألعاب يحتاج صلاحية الإعدادات.' : 'View only — editing needs the settings permission.'}
+            {ar ? 'أنت في وضع العرض فقط. تعديل قائمة الألعاب يحتاج صلاحية الإعدادات.' : 'View only. Editing needs the settings permission.'}
           </p>
         )}
       </div>
@@ -305,8 +305,8 @@ export default function GamesCatalogue({
         {filtering && (
           <p className="ga-hint">
             {ar
-              ? 'السحب لإعادة الترتيب متوقّف أثناء التصفية — حرّك المرشّحات إلى «كل التصنيفات» و«كل الأنواع» لتفعيله.'
-              : 'Drag-to-reorder is off while filtered — clear both filters to enable it.'}
+              ? 'السحب لإعادة الترتيب متوقّف أثناء التصفية. أعد المرشّحات إلى «كل التصنيفات» و«كل الأنواع» لتفعيله.'
+              : 'Drag-to-reorder is off while filtered. Clear both filters to enable it.'}
           </p>
         )}
       </div>
@@ -322,8 +322,8 @@ export default function GamesCatalogue({
           <p className="ga-hint">
             {enabled.length === 0
               ? (ar
-                ? 'لا لعبة واحدة ظاهرة — ركن الألعاب لا يظهر للضيوف إطلاقاً الآن. فعّل لعبة واحدة على الأقل من القائمة أدناه.'
-                : 'No game is visible — the games corner is hidden from guests entirely.')
+                ? 'لا لعبة واحدة ظاهرة، وركن الألعاب لا يظهر للضيوف الآن. فعّل لعبة واحدة على الأقل من القائمة أدناه.'
+                : 'No game is visible, so the games corner is hidden from guests entirely.')
               : (ar ? 'لا نتيجة تطابق هذه التصفية بين الألعاب الظاهرة.' : 'No visible game matches this filter.')}
           </p>
         ) : (filtering || !canEdit) ? (
@@ -373,7 +373,7 @@ export default function GamesCatalogue({
         {shownDisabled.length > 0 && (
           <p className="ga-hint">
             {ar
-              ? 'أرقام لعبة مخفية تخصّ فترة كانت فيها ظاهرة — تُعرض كما هي ولا تُصفَّر.'
+              ? 'أرقام لعبة مخفية تخصّ فترة كانت فيها ظاهرة، تُعرض كما هي ولا تُصفَّر.'
               : 'A hidden game\'s figures come from when it was visible; they are shown as-is.'}
           </p>
         )}
@@ -385,8 +385,8 @@ export default function GamesCatalogue({
             ? `الأرقام في هذه الصفحة محسوبة من جولات فعلية مسجّلة${periodLabel ? ` خلال ${periodLabel}` : ''}. أي لعبة بأقل من ${fmtInt(THIN_PLAYS)} جولة تُوسم «عيّنة صغيرة» ولا تُبنى عليها قرارات.`
             : `Every figure is counted from recorded plays. Under ${THIN_PLAYS} plays is labelled thin.`)
           : (ar
-            ? `قراءة الجولات لم تغطِّ ${periodLabel || 'هذه الفترة'} كاملة${oldestRead ? ` — لم تصل إلى ما قبل ${oldestRead}` : ''}، فما تراه هنا حدّ أدنى وليس حصيلة. لا تُخفِ لعبة اعتماداً على هذه الشاشة قبل تضييق الفترة.`
-            : `The play read did not cover ${periodLabel || 'this period'}${oldestRead ? `; it reached back only to ${oldestRead}` : ''}. Figures are a floor, not a total — do not retire a game on this screen until the period is narrowed.`)}
+            ? `قراءة الجولات لم تغطِّ ${periodLabel || 'هذه الفترة'} كاملة${oldestRead ? `، ولم تصل إلى ما قبل ${oldestRead}` : ''}، فما تراه هنا حدّ أدنى وليس حصيلة. لا تُخفِ لعبة اعتماداً على هذه الشاشة قبل تضييق الفترة.`
+            : `The play read did not cover ${periodLabel || 'this period'}${oldestRead ? `; it reached back only to ${oldestRead}` : ''}. Figures are a floor, not a total. Do not retire a game on this screen until the period is narrowed.`)}
       </p>
 
       {soloTotal > 0 && (

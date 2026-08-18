@@ -344,7 +344,7 @@ const onOrderCustomerNotify = onDocumentUpdated('tenants/{tid}/orders/{oid}', as
   const mapsUrl = /^https?:\/\//.test(String(tenant.googleMapsUrl || '')) ? String(tenant.googleMapsUrl).trim() : ''
   const thankText = (tenant.msgTemplates && tenant.msgTemplates.thankYou)
     ? fillTpl(tenant.msgTemplates.thankYou)
-    : `شكراً لك${after.customerName ? ` يا ${customerName}` : ''} على زيارتك لـ${venueName} — سعدنا بخدمتك ونتمنى أن يكون كل شيء نال رضاك.`
+    : `شكراً لك${after.customerName ? ` يا ${customerName}` : ''} على زيارتك لـ${venueName}. سعدنا بخدمتك، ونتمنى أن يكون كل شيء نال رضاك.`
   const rateLine = mapsUrl
     ? `يسعدنا تقييمك لنا على خرائط جوجل: ${mapsUrl}`
     : 'يسعدنا سماع رأيك في زيارتك القادمة.'
@@ -452,14 +452,14 @@ const onOrderCustomerNotify = onDocumentUpdated('tenants/{tid}/orders/{oid}', as
       // The SUBJECT is the first thing seen and is built out here, outside
       // shell() — an English body under an Arabic subject reads worse than an
       // all-Arabic email, so it follows the same language.
-      subject: `${venueName} — ${mailStatus} ${code}`.replace(/[\r\n]+/g, ' '),
+      subject: `${venueName} · ${mailStatus} ${code}`.replace(/[\r\n]+/g, ' '),
       fromName: venueName,
       lang: mailLang,
       replyTo: tenant.contactEmail || undefined,
       meter: mailMeter,
       html: shell(brand, {
-        title: `${venueName} — ${mailStatus}`,
-        preheader: `${mailStatus} — ${venueName}`,
+        title: `${venueName} · ${mailStatus}`,
+        preheader: `${mailStatus} · ${venueName}`,
         body: bodyHtml,
         cta,
         secondaryCta,
@@ -487,13 +487,13 @@ const onVenueWelcomeEmail = onDocumentCreated('tenants/{tid}', async (event) => 
     meter: 'platform',
     to: email,
     lang: wl,
-    subject: p(`مرحباً بك في rbt360 — ${(t.name || '').replace(/[\r\n]+/g, ' ')}`, `Welcome to rbt360 — ${(t.name || '').replace(/[\r\n]+/g, ' ')}`),
+    subject: p(`مرحباً بـ${(t.name || '').replace(/[\r\n]+/g, ' ')} في rbt360`, `Welcome to rbt360, ${(t.name || '').replace(/[\r\n]+/g, ' ')}`),
     // OURS, not the venue's. This is RBT 360 introducing itself to a new owner,
     // so it wears the platform identity — the one email in the venue's life
     // where that is the right answer.
     html: shell(platformBrand({}, wl), {
       title: p(`أهلاً ${t.name || ''}`, `Welcome, ${t.name || ''}`),
-      preheader: p('منشأتك جاهزة — إليك رابط منيوك', 'Your venue is ready — here is your menu link'),
+      preheader: p('منشأتك جاهزة، وهذا رابط منيوك', 'Your venue is ready, here is your menu link'),
       body: p(
         '<p style="margin:0 0 10px;">تم إنشاء منشأتك بنجاح. منيوك العام صار على الإنترنت وتستطيع مشاركته الآن.</p>',
         '<p style="margin:0 0 10px;">Your venue is set up. Your public menu is live and ready to share.</p>',

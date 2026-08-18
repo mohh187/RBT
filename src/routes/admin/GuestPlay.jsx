@@ -188,7 +188,7 @@ export default function GuestPlay({ onCreateCampaign }) {
     [over, games, quiz, hard, segments, players],
   )
 
-  const periodLabel = `${dayStamp(fromMs)} — ${dayStamp(toMs)}`
+  const periodLabel = `${dayStamp(fromMs)}, ${dayStamp(toMs)}`
 
   // The ONLY object that ever reaches the model. Built from the same functions
   // that render every table above, so the two can never disagree.

@@ -1,7 +1,7 @@
 import Icon from '../Icon.jsx'
 import { Price } from '../Riyal.jsx'
 import { fmtNum } from '../../lib/format.js'
-import { dur, pct, COHORT_MIN } from './engine.jsx'
+import { dur, pct, COHORT_MIN, nSessions } from './engine.jsx'
 
 // A cohort comparison is only shown as a comparison when BOTH sides clear the
 // sample threshold. Below it the card refuses to draw a conclusion instead of
@@ -26,7 +26,7 @@ export default function CohortView({ cohortList = [], ar = true, currency = 'SAR
         <span className="bhv-card-t"><Icon name="warning" size={17} /> {ar ? 'اقرأ هذا أولاً' : 'Read this first'}</span>
         <p className="bhv-hint">
           {ar
-            ? `الفروق هنا ارتباط وليست سببية: من يلعب لعبة قد يكون أصلاً أكثر حماساً للطلب. لا تُعرض المقارنة إلا إذا بلغت كل مجموعة ${fmtNum(COHORT_MIN)} جلسة على الأقل، وإلا فالمكتوب هو «العينة غير كافية».`
+            ? `الفروق هنا ارتباط وليست سببية: من يلعب لعبة قد يكون أصلاً أكثر حماساً للطلب. لا تُعرض المقارنة إلا إذا بلغت كل مجموعة ${nSessions(COHORT_MIN)} على الأقل، وإلا فالمكتوب هو «العينة غير كافية».`
             : `Differences are correlation, not causation. Comparisons need at least ${fmtNum(COHORT_MIN)} sessions per group.`}
         </p>
       </div>
@@ -66,14 +66,14 @@ export default function CohortView({ cohortList = [], ar = true, currency = 'SAR
                         <span className="bhv-bar-p bhv-num">{fmtNum(g.ordered)}/{fmtNum(g.n)}</span>
                       </div>
                       <div className="bhv-facts">
-                        <span>{ar ? 'متوسط قيمة الطلب' : 'Avg order'} <b>{showMoney ? <Price value={g.avgOrder} currency={currency} lang={lang} /> : '—'}</b></span>
+                        <span>{ar ? 'متوسط قيمة الطلب' : 'Avg order'} <b>{showMoney ? <Price value={g.avgOrder} currency={currency} lang={lang} /> : '·'}</b></span>
                         <span>{ar ? 'متوسط الوقت النشط' : 'Avg active'} <b className="bhv-num">{dur(g.avgActiveMs, ar)}</b></span>
                       </div>
                     </>
                   ) : (
                     <p className="bhv-hint">
                       {ar
-                        ? `العينة غير كافية — ${fmtNum(g.n)} جلسة فقط مقابل حد أدنى ${fmtNum(COHORT_MIN)}. لن نعرض نسبة تحويل قد تكون مضلّلة.`
+                        ? `العينة غير كافية: ${nSessions(g.n)} فقط مقابل حد أدنى ${nSessions(COHORT_MIN)}. لن نعرض نسبة تحويل قد تكون مضلّلة.`
                         : `Sample too small (${fmtNum(g.n)} of ${fmtNum(COHORT_MIN)}).`}
                     </p>
                   )}

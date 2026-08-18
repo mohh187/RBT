@@ -55,7 +55,7 @@ const stageLabel = (n, lang) => (lang === 'en' ? stageAt(n - 1).en : stageAt(n -
 const TXT = {
   ar: {
     title: 'فقاعات الشاي',
-    how: 'اضغط على فقاعة لتفجيرها مع كل الفقاعات الملاصقة لها بنفس اللون. السلاسل الكبيرة تضاعف النقاط وتخفض ضغط الكوب — لا تدع الشاي يتجاوز الخط.',
+    how: 'اضغط على فقاعة لتفجيرها مع كل الفقاعات الملاصقة لها بنفس اللون. السلاسل الكبيرة تضاعف النقاط وتخفض ضغط الكوب. لا تدع الشاي يتجاوز الخط.',
     start: 'ابدأ',
     again: 'العب مجدداً',
     cont: 'تابع من المرحلة',
@@ -70,7 +70,7 @@ const TXT = {
     pressure: 'الضغط',
     cleared: 'مرحلة مكتملة',
     tap: 'اضغط على الفقاعات',
-    hintIce: 'الفقاعة المتجمدة لا تُضغط — فجّر بجانبها ليتشقق الجليد',
+    hintIce: 'فجّر فقاعة بجانب المتجمدة ليتشقق جليدها',
     hintBomb: 'فقاعة قنبلة: اضغطها لتفجير كل ما حولها',
     ice: 'تشقق الجليد',
     boom: 'انفجار',
@@ -78,7 +78,7 @@ const TXT = {
   },
   en: {
     title: 'BubblePop',
-    how: 'Tap a pearl to pop it with every touching pearl of the same colour. Long chains multiply the score and relieve the cup — do not let the tea cross the line.',
+    how: 'Tap a pearl to pop it with every touching pearl of the same colour. Long chains multiply the score and relieve the cup. Do not let the tea cross the line.',
     start: 'Start',
     again: 'Play again',
     cont: 'Continue from stage',
@@ -93,7 +93,7 @@ const TXT = {
     pressure: 'Pressure',
     cleared: 'Stage cleared',
     tap: 'Tap the pearls',
-    hintIce: 'Frozen pearls cannot be tapped — pop beside them to crack the ice',
+    hintIce: 'Pop a pearl beside a frozen one to crack its ice',
     hintBomb: 'Bomb pearl: tap it to blow up everything around it',
     ice: 'Ice cracked',
     boom: 'Boom',

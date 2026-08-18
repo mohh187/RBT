@@ -73,7 +73,7 @@ export default function StaffProfile({ tid, row, reviews = [], target = 0, curre
       const msg = String(e?.message || '')
       toast.error(msg.includes('email-taken') ? (ar ? 'هذا البريد مستخدم لحساب آخر' : 'Email already in use')
         : msg.includes('password too short') ? (ar ? 'كلمة المرور قصيرة (6 أحرف على الأقل)' : 'Password too short (min 6)')
-          : (ar ? 'تعذّر التحديث — تحقق من الصلاحيات والاتصال' : 'Update failed — check permissions and connection'))
+          : (ar ? 'تعذّر التحديث، تحقق من الصلاحيات والاتصال' : 'Update failed, check permissions and connection'))
     } finally { setCredBusy(false) }
   }
 
@@ -249,7 +249,7 @@ export default function StaffProfile({ tid, row, reviews = [], target = 0, curre
             )}
             <div className="row" style={{ gap: 'var(--sp-4)', flexWrap: 'wrap' }}>
               {isManager && <span className="small">{ar ? 'الراتب' : 'Salary'}: <strong><Price value={Number(row.salary) || 0} currency={currency} lang={lang} /></strong></span>}
-              {row.shiftStart && <span className="small">{ar ? 'الدوام' : 'Shift'}: <strong dir="ltr">{row.shiftStart}{row.shiftEnd ? `–${row.shiftEnd}` : ''}</strong></span>}
+              {row.shiftStart && <span className="small">{ar ? 'الدوام' : 'Shift'}: <strong dir="ltr">{row.shiftStart}{row.shiftEnd ? `, ${row.shiftEnd}` : ''}</strong></span>}
               <span className="small">{ar ? 'أيام العمل' : 'Work days'}: <strong>{workDaysLabel}</strong></span>
             </div>
           </div>
@@ -395,7 +395,7 @@ export default function StaffProfile({ tid, row, reviews = [], target = 0, curre
                   </div>
                 ) : (
                   <div className="row" style={{ gap: 'var(--sp-4)', flexWrap: 'wrap' }}>
-                    {row.shiftStart && <span className="small">{ar ? 'الدوام' : 'Shift'}: <strong dir="ltr">{row.shiftStart}{row.shiftEnd ? `–${row.shiftEnd}` : ''}</strong> {row.shiftPeriod ? `(${row.shiftPeriod === 'evening' ? (ar ? 'مسائية' : 'Eve') : (ar ? 'صباحية' : 'Morn')})` : ''}</span>}
+                    {row.shiftStart && <span className="small">{ar ? 'الدوام' : 'Shift'}: <strong dir="ltr">{row.shiftStart}{row.shiftEnd ? `, ${row.shiftEnd}` : ''}</strong> {row.shiftPeriod ? `(${row.shiftPeriod === 'evening' ? (ar ? 'مسائية' : 'Eve') : (ar ? 'صباحية' : 'Morn')})` : ''}</span>}
                     <span className="small">{ar ? 'أيام العمل' : 'Work days'}: <strong>{workDaysLabel}</strong></span>
                   </div>
                 )}
@@ -415,7 +415,7 @@ export default function StaffProfile({ tid, row, reviews = [], target = 0, curre
             {/* recent attendance */}
             <div className="stack" style={{ gap: 'var(--sp-2)' }}>
               <strong className="small">{ar ? 'آخر الحضور' : 'Recent attendance'}</strong>
-              {punches.length === 0 ? <p className="muted small">—</p> : punches.slice(0, 10).map((p) => (
+              {punches.length === 0 ? <p className="muted small">{ar ? 'لا تسجيلات حضور بعد' : 'No punches yet'}</p> : punches.slice(0, 10).map((p) => (
                 <div key={p.id} className="list-row" style={{ alignItems: 'center' }}>
                   {p.selfieUrl ? <img src={p.selfieUrl} alt="" onClick={() => setZoom(p.selfieUrl)} style={{ width: 34, height: 34, borderRadius: 9, objectFit: 'cover', flex: 'none', cursor: 'zoom-in' }} /> : <span className="center" style={{ width: 34, height: 34, borderRadius: 9, background: 'var(--surface-2)', flex: 'none' }}><Icon name="user" size={15} /></span>}
                   <div className="grow">
@@ -468,7 +468,7 @@ export default function StaffProfile({ tid, row, reviews = [], target = 0, curre
             {isPrivileged ? (
               <div className="card card-pad row" style={{ gap: 8, background: 'var(--surface-2)' }}>
                 <Icon name="lock" size={16} className="faint" />
-                <span className="small">{ar ? 'المالك والمدير يملكان كل الصلاحيات — لا يمكن تقييدهما.' : 'Owner & manager hold every permission and cannot be limited.'}</span>
+                <span className="small">{ar ? 'المالك والمدير يملكان كل الصلاحيات، لا يمكن تقييدهما.' : 'Owner & manager hold every permission and cannot be limited.'}</span>
               </div>
             ) : (
               <>

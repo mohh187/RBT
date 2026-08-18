@@ -130,7 +130,7 @@ function ExportTab() {
               value={tid}
               onChange={(e) => setTid(e.target.value)}
             >
-              <option value="">— اختر منشأة —</option>
+              <option value="">اختر منشأة</option>
               {tenants.map((t) => (
                 <option key={t.id} value={t.id}>
                   {t.name || t.id}
@@ -329,7 +329,7 @@ function MaskTab() {
           >
             <span className="xs faint">الناتج</span>
             <span className="bold num" dir="ltr" style={{ letterSpacing: 1 }}>
-              {shown || '—'}
+              {shown || '·'}
             </span>
           </div>
         </div>

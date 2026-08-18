@@ -188,7 +188,7 @@ export default function Dashboard() {
         </div>
         <div className="pos-tpl-switch row" style={{ gap: 2, flex: 'none' }}>
           {templateOptions('dashboard').map((o) => (
-            <button key={o.id} type="button" className={`icon-btn ${tpl === o.id ? 'active' : ''}`} title={ar ? `${o.ar}${o.hint ? ' — ' + o.hint : ''}` : o.en} onClick={() => setTpl(o.id)}>
+            <button key={o.id} type="button" className={`icon-btn ${tpl === o.id ? 'active' : ''}`} title={ar ? `${o.ar}${o.hint ? '، ' + o.hint : ''}` : o.en} onClick={() => setTpl(o.id)}>
               <Icon name={{ exec: 'reports', ops: 'orders', min: 'home' }[o.id] || 'grid'} size={16} />
             </button>
           ))}

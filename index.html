@@ -14,19 +14,19 @@
     <meta name="mobile-web-app-capable" content="yes" />
     <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
     <meta name="apple-mobile-web-app-title" content="RBT 360" />
-    <meta name="description" content="RBT 360 — نظام تشغيل متكامل للمقاهي والمطاعم: منيو رقمي وطلب بالباركود، كاشير ومطبخ لحظي، مخزون، عروض وولاء، وفوترة متوافقة مع زاتكا — وبدون أي عمولة على طلباتك." />
+    <meta name="description" content="RBT 360: نظام تشغيل متكامل للمقاهي والمطاعم. منيو رقمي وطلب بالباركود، كاشير ومطبخ لحظي، مخزون، عروض وولاء، وفوترة متوافقة مع زاتكا، وبدون أي عمولة على طلباتك." />
 
     <!-- Open Graph / social sharing -->
     <meta property="og:type" content="website" />
     <meta property="og:site_name" content="RBT 360" />
-    <meta property="og:title" content="RBT 360 — نظام تشغيل منشأتك" />
-    <meta property="og:description" content="شغّل منشأتك كلها من نظام واحد عربي: منيو وطلب بالباركود، كاشير ومطبخ لحظي، مخزون ومساعد ذكي، وفوترة متوافقة مع زاتكا — بدون أي عمولة. ابدأ مجاناً." />
+    <meta property="og:title" content="RBT 360: نظام تشغيل منشأتك" />
+    <meta property="og:description" content="شغّل منشأتك كلها من نظام واحد عربي: منيو وطلب بالباركود، كاشير ومطبخ لحظي، مخزون ومساعد ذكي، وفوترة متوافقة مع زاتكا، وبدون أي عمولة. ابدأ مجاناً." />
     <meta property="og:image" content="https://rbt360sa.com/brand/og.png" />
     <meta property="og:image:width" content="1200" />
     <meta property="og:image:height" content="630" />
     <meta name="twitter:card" content="summary_large_image" />
-    <meta name="twitter:title" content="RBT 360 — نظام تشغيل منشأتك" />
-    <meta name="twitter:description" content="نظام تشغيل متكامل للمقاهي والمطاعم — بدون أي عمولة. ابدأ مجاناً." />
+    <meta name="twitter:title" content="RBT 360: نظام تشغيل منشأتك" />
+    <meta name="twitter:description" content="نظام تشغيل متكامل للمقاهي والمطاعم، بدون أي عمولة. ابدأ مجاناً." />
     <meta name="twitter:image" content="https://rbt360sa.com/brand/og.png" />
     <!-- Platform defaults — venue routes override icon/title/manifest at runtime -->
     <link rel="icon" type="image/png" href="/brand/favicon.png" />
@@ -82,13 +82,39 @@
           document.documentElement.setAttribute('dir', lang === 'ar' ? 'rtl' : 'ltr');
         } catch (e) {}
       })();
-      // APP-LIKE: no native page zoom, ever (user 2026-08-18). The viewport
-      // meta covers Chrome/Android, but iOS Safari IGNORES user-scalable=no —
-      // its proprietary gesture events are the only reliable off switch there.
-      // Custom in-app zoom (photo lightbox, viewer, AR) uses pointer events and
-      // is untouched. touch-action: pan-x pan-y in index.css handles the rest.
-      document.addEventListener('gesturestart', function (e) { e.preventDefault(); }, { passive: false });
-      document.addEventListener('gesturechange', function (e) { e.preventDefault(); }, { passive: false });
+      // APP-LIKE: NO native page zoom, anywhere, ever (owner rule 2026-08-18).
+      //
+      // Three layers, because no single one holds on both platforms:
+      //   · the viewport meta above  -> Chrome/Android
+      //   · touch-action: pan-x pan-y in index.css -> element-level pinch
+      //   · these listeners          -> iOS Safari, which honours NEITHER of
+      //     the two above for page pinch (user-scalable=no has been ignored
+      //     since iOS 10), and any Android case the meta misses.
+      //
+      // CAPTURE phase on window, so no component can swallow the event first,
+      // and a two-finger touchmove is cancelled outright, which is the one
+      // check that works on every engine.
+      //
+      // The photo lightbox is the single exception the owner asked for, and it
+      // no longer needs native zoom: GalleryZoom pinches its own image with
+      // pointer events, so nothing here has to let a gesture through.
+      (function () {
+        var stop = function (e) { e.preventDefault(); };
+        ['gesturestart', 'gesturechange', 'gestureend'].forEach(function (ev) {
+          window.addEventListener(ev, stop, { passive: false, capture: true });
+        });
+        window.addEventListener('touchmove', function (e) {
+          if (e.touches && e.touches.length > 1) e.preventDefault();
+        }, { passive: false, capture: true });
+        // Safari also zooms on a double-tap even with touch-action set; a second
+        // tap inside 300 ms is not a legitimate interaction anywhere in this app.
+        var lastTap = 0;
+        window.addEventListener('touchend', function (e) {
+          var now = e.timeStamp || 0;
+          if (now - lastTap < 300) e.preventDefault();
+          lastTap = now;
+        }, { passive: false, capture: true });
+      })();
     </script>
 
     <title>RBT 360</title>

@@ -107,7 +107,7 @@ export default function AssistantQuick({ open, onClose }) {
             <div className="stack" style={{ gap: 'var(--sp-2)' }}>
               <p className="small muted">
                 {ar
-                  ? 'سؤال سريع بأرقام منشأتك الحقيقية — دون مغادرة الشاشة. للأوامر التنفيذية (تعديل المنيو، الحملات…) استخدم المساعد الكامل.'
+                  ? 'اسأل عن أرقام منشأتك الحقيقية دون مغادرة الشاشة. وللأوامر التنفيذية مثل تعديل المنيو والحملات، استخدم المساعد الكامل.'
                   : 'A quick question over your venue\'s real numbers, without leaving the screen. For write commands use the full assistant.'}
               </p>
               <div className="aiq-chips">

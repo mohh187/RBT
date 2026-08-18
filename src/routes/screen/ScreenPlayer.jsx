@@ -566,8 +566,8 @@ export default function ScreenPlayer() {
           <h2 style={{ margin: 0 }}>ربط شاشة العرض</h2>
           {screen === null && code ? (
             !online
-              ? <p className="scr-err">لا يوجد اتصال بالإنترنت — سيُعاد الاتصال والربط تلقائياً عند عودة الشبكة</p>
-              : <p className="scr-err">الرمز «{code}» غير موجود — أنشئ الشاشة من لوحة الإدارة ← الشاشات</p>
+              ? <p className="scr-err">لا يوجد اتصال بالإنترنت. سيُعاد الاتصال والربط تلقائياً عند عودة الشبكة</p>
+              : <p className="scr-err">الرمز «{code}» غير موجود. أنشئ الشاشة من لوحة الإدارة ← الشاشات</p>
           ) : <p style={{ opacity: 0.75, margin: 0 }}>أدخل رمز الشاشة من: لوحة الإدارة ← الشاشات، أو امسح رمز QR من بطاقة الربط</p>}
           <input className="scr-input" dir="ltr" maxLength={8} placeholder="ABC123" value={entry}
             onChange={(e) => setEntry(e.target.value.toUpperCase())}
@@ -674,7 +674,7 @@ export default function ScreenPlayer() {
           title={cupRunning ? (cupBundle.live.name || 'بطولة جارية') : 'العب الآن من جوالك'}
           note={cupRunning
             ? (tournamentPrize(cupBundle.live) || 'جولتك تدخل لوحة البطولة مباشرة')
-            : 'ليدو، شطرنج، دومينو، وِست، جكارو وحريق — على طاولتك، من جوالك.'}
+            : 'ليدو، شطرنج، دومينو، وِست، جكارو وحريق. على طاولتك، من جوالك.'}
           invites={invites}
         />
       ) : slide.type === 'prayer' ? (
@@ -715,7 +715,7 @@ export default function ScreenPlayer() {
       {!online && (
         <div className="scr-offline">
           <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="M1 1l22 22M16.72 11.06A10.94 10.94 0 0 1 19 12.55M5 12.55a10.94 10.94 0 0 1 5.17-2.39M10.71 5.05A16 16 0 0 1 22.58 9M1.42 9a15.91 15.91 0 0 1 4.7-2.88M8.53 16.11a6 6 0 0 1 6.95 0M12 20h.01" /></svg>
-          انقطع الاتصال — العرض مستمر وسيُعاد الاتصال تلقائياً
+          انقطع الاتصال. العرض مستمر وسيُعاد الاتصال تلقائياً
         </div>
       )}
       {/* live "order ready" overlay — floats above any content */}

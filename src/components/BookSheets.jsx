@@ -87,7 +87,7 @@ function BookTicketSheet({ event, tenantId, currency, onlinePay = false, onClose
       }, { pending: true })
       addMyPass(tenantId, { id: res.id, code: res.code, kind: 'ticket', title: pickLang(event, 'title', lang) })
       setLocalCustomer({ name: name.trim(), phone: phone.trim() })
-      try { await startPayment('ticket', tenantId, res.id); return } catch (_) { toast.error(lang === 'ar' ? 'تعذّر فتح صفحة الدفع — تذكرتك محفوظة' : 'Could not open payment — your ticket is saved'); setBusy(false) }
+      try { await startPayment('ticket', tenantId, res.id); return } catch (_) { toast.error(lang === 'ar' ? 'تذكرتك محفوظة، لكن صفحة الدفع لم تفتح. حاول مرة أخرى.' : 'Your ticket is saved, but the payment page did not open. Please try again.'); setBusy(false) }
     } catch (_) {
       toast.error(t('error')); setBusy(false)
     }

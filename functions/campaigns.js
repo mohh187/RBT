@@ -223,7 +223,7 @@ const onOfferCreatedNotify = onDocumentCreated('tenants/{tid}/offers/{oid}', asy
   const name = offer.nameAr || offer.nameEn || 'عرض جديد'
   await sendPromo(db, event.params.tid, 'offers', null, ({ name: cn, venue, member }) =>
     member
-      ? `مرحباً ${cn}،\nبصفتك عضواً مميزاً في ${venue}: عرض جديد قبل الجميع — ${name}${offer.code ? `\nكود الخصم: ${offer.code}` : ''}`
+      ? `مرحباً ${cn}،\nبصفتك عضواً مميزاً في ${venue}، يوصلك العرض قبل الجميع: ${name}${offer.code ? `\nكود الخصم: ${offer.code}` : ''}`
       : `مرحباً ${cn}،\nعرض جديد في ${venue}: ${name}${offer.code ? `\nكود الخصم: ${offer.code}` : ''}`,
     { item: name, code: offer.code || '' })
     .catch(() => {})
@@ -238,7 +238,7 @@ const onItemFeaturedNotify = onDocumentUpdated('tenants/{tid}/items/{iid}', asyn
   const db = getFirestore()
   const dish = after.nameAr || after.nameEn || ''
   await sendPromo(db, event.params.tid, 'featured', after.promoNotify || null, ({ name: cn, venue }) =>
-    `مرحباً ${cn}،\n${venue} اختارت لك صنفاً مميزاً: ${dish} — جرّبه قبل الجميع.`, { item: dish })
+    `مرحباً ${cn}،\n${venue} اختارت لك صنفاً مميزاً: ${dish}. جرّبه قبل الجميع.`, { item: dish })
     .catch(() => {})
 })
 
@@ -261,7 +261,7 @@ const onItemCreatedNotify = onDocumentCreated('tenants/{tid}/items/{iid}', async
   if (!proceed) return
   const dish = item.nameAr || item.nameEn || ''
   await sendPromo(db, tid, 'newItems', item.promoNotify || null, ({ name: cn, venue }) =>
-    `مرحباً ${cn}،\nجديدنا في ${venue}: ${dish} وأصناف أخرى أُضيفت للتو — كن أول من يجرّبها.`, { item: dish })
+    `مرحباً ${cn}،\nجديدنا في ${venue}: ${dish} وأصناف أخرى أضفناها للتو. كن أول من يجرّبها.`, { item: dish })
     .catch(() => {})
 })
 
@@ -299,7 +299,7 @@ const onCustomerMembershipChange = onDocumentUpdated('tenants/{tid}/customers/{p
     const creds = await waCredsFor(db, tid)
     const text = tpls.welcome
       ? fillLc(tpls.welcome, { '\\{link\\}|\\{الرابط\\}': link })
-      : `أهلاً ${after.name || ''} — أصبحت عضواً في ${venue}.\nبطاقتك الرقمية جاهزة${link ? `:\n${link}` : '.'}`
+      : `أهلاً ${after.name || ''}، أصبحت عضواً في ${venue}.\nبطاقتك الرقمية جاهزة${link ? `:\n${link}` : '.'}`
     if (granted) await sendWhatsAppText(to, text, creds, 'claimed').catch(() => {})
     return
   }
@@ -311,7 +311,7 @@ const onCustomerMembershipChange = onDocumentUpdated('tenants/{tid}/customers/{p
     const tierAr = TIER_AR[mA.tier] || mA.tier
     const text = tpls.upgrade
       ? fillLc(tpls.upgrade, { '\\{tier\\}|\\{العضوية\\}': tierAr })
-      : `مبروك ${after.name || ''}!\nترقّيت إلى العضوية ${tierAr} في ${venue} — مزايا أكثر بانتظارك.`
+      : `مبروك ${after.name || ''}!\nترقّيت إلى العضوية ${tierAr} في ${venue}، ومزايا أكثر بانتظارك.`
     if (granted) await sendWhatsAppText(to, text, creds, 'claimed').catch(() => {})
   }
 })
@@ -353,7 +353,7 @@ const birthdayGreetings = onSchedule(
       const creds = await waCredsFor(db, t.id)
       await fanOut(targets.slice(0, quota), (c) => bdayTpl
         ? fill(bdayTpl, { name: c.name, venue: td.name || '' })
-        : `كل عام وأنت بخير ${c.name || ''}!\n${td.name || ''} تهنّئك بيوم ميلادك${bonus > 0 ? ` — ولك ${bonus} نقطة هدية على طلبك القادم.` : ' — نسعد بزيارتك اليوم.'}`, creds)
+        : `كل عام وأنت بخير ${c.name || ''}!\n${td.name || ''} تهنّئك بيوم ميلادك${bonus > 0 ? `، ورفعنا رصيد نقاطك بمقدار ${bonus} هدية لك.` : '، ونسعد بزيارتك اليوم.'}`, creds)
       await Promise.all(snap.docs.map((d) => d.ref.set({ lastBdayMsgYear: year }, { merge: true }).catch(() => {})))
     }
   }
@@ -382,7 +382,7 @@ const winbackNudge = onSchedule(
         .slice(0, 100)
       if (!targets.length) continue
       const quota = await takeQuota(db, t.id, targets.length)
-      const text = (wb.text || '').trim() || `اشتقنا لك {الاسم}! زُرنا هذا الأسبوع في {المنشأة} — جديدنا بانتظارك.`
+      const text = (wb.text || '').trim() || `اشتقنا لك {الاسم}! زُرنا هذا الأسبوع في {المنشأة}، جديدنا بانتظارك.`
       const creds = await waCredsFor(db, t.id)
       await fanOut(targets.slice(0, quota), (c) => fill(text, { name: c.name, venue: td.name || '' }), creds)
       await Promise.all(targets.map((c) => c.ref.set({ lastWinbackAt: Date.now() }, { merge: true }).catch(() => {})))
@@ -437,7 +437,7 @@ const followupMessages = onSchedule(
       const quota = await takeQuota(db, t.id, want)
       const creds = await waCredsFor(db, t.id)
       for (const tr of targets.slice(0, quota)) {
-        const msg = fill(base, { name: tr.name, venue: td.name || '' }) + (review ? `\n\nقيّمنا على خرائط جوجل — يعني لنا الكثير:\n${review}` : '')
+        const msg = fill(base, { name: tr.name, venue: td.name || '' }) + (review ? `\n\nقيّمنا على خرائط جوجل، رأيك يعني لنا الكثير:\n${review}` : '')
         try { await sendWhatsAppText(tr.phone, msg, creds, 'claimed') } catch (_) { /* per-guest best effort */ }
         await tr.ref.set({ followupSent: true }, { merge: true }).catch(() => {})
       }
@@ -542,7 +542,7 @@ const ownerDailyReport = onSchedule(
         }
 
         const lines = [
-          `${td.name || ''} — تقرير أمس (${yDate})`,
+          `${td.name || ''}: تقرير أمس (${yDate})`,
           '',
           `الطلبات المدفوعة: ${paidCount}`,
           `الإيرادات: ${revenue} ريال`,
@@ -552,7 +552,7 @@ const ownerDailyReport = onSchedule(
           lines.push('', 'الأكثر مبيعاً:')
           top.forEach(([n, q]) => lines.push(`- ${n}: ${q}`))
         }
-        lines.push('', `طرق الدفع: نقداً ${cash} | شبكة ${card} | أونلاين ${online}`)
+        lines.push('', `طرق الدفع: نقداً ${cash} | شبكة ${card} | الدفع الإلكتروني ${online}`)
         if (slowLines.length) {
           lines.push('', 'أصناف تحتاج انتباهك:')
           slowLines.forEach((s) => lines.push(`- ${s}`))
@@ -593,7 +593,7 @@ const ownerDailyReport = onSchedule(
           const avg = paidCount ? Math.round(revenue / paidCount) : 0
           const body = [
             `<p style="margin:0 0 6px;">${p('مرحباً,', 'Hello,')}</p>`,
-            `<p style="margin:0 0 16px;color:#5c6270;font-size:13.5px;">${p(`هذا تقرير مبيعات أمس لـ«${eesc(td.name || '')}»، مُجهَّز آلياً.`, `Yesterday's sales for ${eesc(td.name || '')}, prepared automatically.`)}</p>`,
+            `<p style="margin:0 0 16px;color:#5c6270;font-size:13.5px;">${p(`هذه مبيعات أمس في «${eesc(td.name || '')}»، أعددناها لك آلياً.`, `Yesterday's sales at ${eesc(td.name || '')}, prepared for you automatically.`)}</p>`,
             section(pb, p('الحركة', 'Movement'), [
               [p('الطلبات المدفوعة', 'Paid orders'), String(paidCount)],
               cancelledCount ? [p('الطلبات الملغاة', 'Cancelled orders'), String(cancelledCount)] : null,
@@ -603,7 +603,7 @@ const ownerDailyReport = onSchedule(
             section(pb, p('الإيراد حسب طريقة الدفع', 'Revenue by payment method'), [
               [p('نقداً', 'Cash'), String(cash)],
               [p('شبكة', 'Card'), String(card)],
-              [p('أونلاين', 'Online'), String(online)],
+              [p('الدفع الإلكتروني', 'Online payment'), String(online)],
               [p('مجموع الطلبات المسوّاة', 'Settled orders'), String(cash + card + online), 'strong'],
             ]),
             top.length ? section(pb, p('الأكثر مبيعاً', 'Best sellers'), top.map(([nm, q2]) => [nm, String(q2)])) : '',
@@ -614,10 +614,10 @@ const ownerDailyReport = onSchedule(
             meter: 'platform',
             to: reportTo,
             lang: rl,
-            subject: p(`تقرير مبيعات ${td.name || ''} — ${yDate}`, `Sales report ${td.name || ''} — ${yDate}`),
+            subject: p(`تقرير مبيعات ${td.name || ''} ليوم ${yDate}`, `Sales report for ${td.name || ''}, ${yDate}`),
             html: shell(pb, {
-              title: p(`تقرير مبيعات ${td.name || ''} — ${yDate}`, `Sales report ${td.name || ''} — ${yDate}`),
-              preheader: p(`إيراد أمس ${revenue} ${cur} من ${paidCount} طلباً`, `Yesterday: ${revenue} ${cur} from ${paidCount} orders`),
+              title: p(`تقرير مبيعات ${td.name || ''} ليوم ${yDate}`, `Sales report for ${td.name || ''}, ${yDate}`),
+              preheader: p(`إيراد أمس ${revenue} ${cur}، وعدد الطلبات ${paidCount}`, `Yesterday: ${revenue} ${cur} from ${paidCount} orders`),
               body,
               cta: { label: p('فتح التقرير الكامل', 'Open the full report'), href: (process.env.PUBLIC_BASE_URL || '').replace(/\/$/, '') + '/admin/daily-report' },
             }),

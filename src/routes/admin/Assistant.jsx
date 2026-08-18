@@ -86,6 +86,18 @@ function resultMedia(res) {
   return out
 }
 
+// A tool that refused used to print its raw payload to the owner, cut at 90
+// characters: `{"ok":false,"reason":"no allowed keys"}`. The reason is a
+// developer string, so it goes to the console and the owner reads one sentence.
+const loggedFails = new WeakSet() // this runs in render — log each payload once, not per frame
+function toolFailText(res, ar) {
+  if (res && typeof res === 'object' && !loggedFails.has(res)) { loggedFails.add(res); console.debug('[assistant] tool result', res) }
+  const why = String(res?.reason || res?.message || '')
+  if (/permission|denied|not allowed|allowed keys/i.test(why)) return ar ? 'لم يُنفَّذ: صلاحيتك لا تشمل هذا التعديل' : 'Not applied: your permissions do not cover this change'
+  if (/not found|missing|no such/i.test(why)) return ar ? 'لم يُنفَّذ: لم يعثر على العنصر المطلوب' : 'Not applied: the target was not found'
+  return ar ? 'لم يُنفَّذ الإجراء، أعد صياغة الطلب أو جرّبه مرة ثانية' : 'The action was not applied. Rephrase the request or try again'
+}
+
 export default function Assistant() {
   const { lang } = useI18n()
   const { tenantId, tenant, profile } = useAuth()
@@ -280,7 +292,7 @@ export default function Assistant() {
       // navigation to /pay/:intentId happens inside startPayment
     } catch (e) {
       toast.error(e?.message === 'no-checkout-url' || String(e?.message || '').includes('internal')
-        ? (ar ? 'الدفع المباشر غير مفعّل بعد (انشر الدوال) — أرسل طلباً للإدارة بدلاً عنه' : 'Direct checkout unavailable — send a request instead')
+        ? (ar ? 'الدفع بالبطاقة غير مفعّل على حسابك بعد. أرسل طلب شراء للإدارة وسنفعّله لك.' : 'Card checkout is not enabled on your account yet. Send a purchase request and we will enable it.')
         : String(e?.message || e))
       setBuyBusy(false)
     }
@@ -291,13 +303,13 @@ export default function Assistant() {
       await createIssue({
         tenantId,
         tenantName: tenant?.name || '',
-        title: `[شراء رصيد ذكاء] ${pack.qty} طلب — ${pack.price} ر.س`,
+        title: `[شراء رصيد ذكاء] ${pack.qty} طلب · ${pack.price} ر.س`,
         body: `طلب شراء رصيد مساعد ذكي.\nالباقة: ${pack.qty} طلب إضافي\nالسعر: ${pack.price} ر.س\nالاستهلاك الحالي: اليوم ${usageNorm?.dc ?? 0}/${limits.daily} · الشهر ${usageNorm?.mc ?? 0}/${limits.monthly + aiExtra}\nبعد اعتماد السداد: أضف الكمية إلى tenant.aiExtra من كونسول المنصة.`,
         priority: 'high',
         createdBy: profile?.id || null,
         createdByName: actor || '',
       })
-      toast.success(ar ? 'أُرسل طلب الشراء للإدارة — يُفعَّل الرصيد فور اعتماد السداد' : 'Purchase request sent')
+      toast.success(ar ? 'وصل طلب الشراء للإدارة، ويُضاف الرصيد فور اعتماد السداد' : 'Purchase request sent, credits are added once payment is approved')
       setBuyOpen(false)
     } catch (_) { toast.error(ar ? 'تعذّر إرسال الطلب' : 'Request failed') } finally { setBuyBusy(false) }
   }
@@ -371,7 +383,7 @@ export default function Assistant() {
               </span>
             </button>
           )}
-          <button className="ai-icon-btn" onClick={() => setLibOpen(true)} title={ar ? 'مكتبة المرفقات — كل الصور والملفات من كل المحادثات' : 'Attachment library'}><Icon name="folder" size={17} /></button>
+          <button className="ai-icon-btn" onClick={() => setLibOpen(true)} title={ar ? 'مكتبة المرفقات: كل الصور والملفات من كل المحادثات' : 'Attachment library'}><Icon name="folder" size={17} /></button>
           <button className={`ai-autorun ${autoRun ? 'on' : ''}`} onClick={() => setAutoRun((v) => !v)} title={ar ? 'تنفيذ الإجراءات تلقائياً دون تأكيد (عدا الحسّاسة)' : 'Auto-run write actions without asking (except destructive)'}>
             <Icon name={autoRun ? 'play' : 'check'} size={13} /> <span>{ar ? 'تنفيذ تلقائي' : 'Auto-run'}</span>
           </button>
@@ -447,7 +459,7 @@ export default function Assistant() {
                   )}
                   {m.result && (
                     <div className="xs" style={{ marginTop: 3, color: m.result.error ? 'var(--danger)' : 'var(--success)', fontWeight: 700 }}>
-                      {m.result.error ? <span className="row" style={{ gap: 4, alignItems: 'center', display: 'inline-flex' }}><Icon name="close" size={12} /> {m.result.error}</span> : (m.result.ok !== false ? <span className="row" style={{ gap: 4, alignItems: 'center', display: 'inline-flex' }}><Icon name="check" size={12} /> {ar ? 'تم بنجاح' : 'done'}{m.result.id ? ` · ${m.result.id}` : ''}</span> : <span className="row" style={{ gap: 4, alignItems: 'center', display: 'inline-flex' }}><Icon name="warning" size={12} /> {JSON.stringify(m.result).slice(0, 90)}</span>)}
+                      {m.result.error ? <span className="row" style={{ gap: 4, alignItems: 'center', display: 'inline-flex' }}><Icon name="close" size={12} /> {m.result.error}</span> : (m.result.ok !== false ? <span className="row" style={{ gap: 4, alignItems: 'center', display: 'inline-flex' }}><Icon name="check" size={12} /> {ar ? 'تم بنجاح' : 'done'}{m.result.id ? ` · ${m.result.id}` : ''}</span> : <span className="row" style={{ gap: 4, alignItems: 'center', display: 'inline-flex' }}><Icon name="warning" size={12} /> {toolFailText(m.result, ar)}</span>)}
                     </div>
                   )}
                 </div>
@@ -537,7 +549,7 @@ export default function Assistant() {
               <Icon name={ar ? 'back' : 'next'} size={18} />
             </button>
           </div>
-          <div className="ai-hint">{ar ? 'يمكنك إرفاق صور منتجات أو فواتير أو ملف إكسل — قد يخطئ المساعد، راجع الإجراءات قبل الموافقة.' : 'Attach product photos, invoices or an Excel file — the assistant can make mistakes; review actions before approving.'}</div>
+          <div className="ai-hint">{ar ? 'أرفق صور منتجات أو فواتير أو ملف إكسل. المساعد قد يخطئ، فراجع الإجراءات قبل الموافقة.' : 'Attach product photos, invoices or an Excel file. The assistant can make mistakes, so review actions before approving.'}</div>
         </div>
       </main>
 
@@ -569,7 +581,7 @@ export default function Assistant() {
             </div>
           ))}
           <p className="xs faint" style={{ margin: 0 }}>
-            {ar ? '«ادفع الآن»: بطاقة/مدى/Apple Pay — يُضاف الرصيد لحسابك تلقائياً لحظة نجاح الدفع وتظهر الفاتورة للإدارة فوراً. «طلب يدوي»: للتحويل البنكي وتعتمده الإدارة.' : 'Pay now: card/mada/Apple Pay — credits land automatically on settlement. Request: bank transfer confirmed by the platform.'}
+            {ar ? '«ادفع الآن»: بطاقة أو مدى أو Apple Pay، ويُضاف الرصيد لحسابك لحظة نجاح الدفع مع فاتورة تصل الإدارة فوراً. «طلب يدوي»: للتحويل البنكي، وتعتمده الإدارة.' : 'Pay now: card, mada or Apple Pay. Credits land the moment payment succeeds. Request: bank transfer, approved by the platform.'}
           </p>
         </div>
       </Sheet>
@@ -577,7 +589,7 @@ export default function Assistant() {
       <Sheet open={libOpen} onClose={() => setLibOpen(false)} title={ar ? 'مكتبة المرفقات' : 'Attachment library'}>
         {library.length === 0 ? (
           <p className="faint small" style={{ textAlign: 'center', padding: 'var(--sp-5)' }}>
-            {ar ? 'لا مرفقات بعد — كل صورة أو ملف ترفعه في أي محادثة يُجمع هنا تلقائياً.' : 'No attachments yet — every file you upload in any chat collects here.'}
+            {ar ? 'لا مرفقات بعد. كل صورة أو ملف ترفعه في أي محادثة يُجمع هنا تلقائياً.' : 'No attachments yet. Every file you upload in any chat collects here.'}
           </p>
         ) : (
           <div className="ai-lib-grid">

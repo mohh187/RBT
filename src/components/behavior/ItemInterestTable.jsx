@@ -18,7 +18,7 @@ const evLabel = (t) => {
   if (EV_AR[raw]) return EV_AR[raw]
   if (raw.startsWith('item:')) return `صنف: ${raw.slice(5)}`
   if (raw.startsWith('page:')) return `شاشة: ${raw.slice(5)}`
-  return raw || '—'
+  return raw || '·'
 }
 
 // `t` may be an absolute epoch or an offset from the session start.
@@ -76,7 +76,7 @@ export default function ItemInterestTable({ rows = [], sessions = [], ar = true 
         </div>
         <p className="bhv-hint">
           {ar
-            ? 'عمود «شاهدوه ولم يطلبوه» يعني بالضبط: فتح الزائر الصنف، وبقي عليه أكثر من أربع ثوانٍ، ولم يضِفه للسلة إطلاقاً — لا يشمل من مرّ عليه سريعاً. اضغط أي صف لترى الجلسات الفعلية وماذا فعل الزائر قبل الصنف وبعده.'
+            ? 'عمود «شاهدوه ولم يطلبوه» يعني بالضبط: فتح الزائر الصنف، وبقي عليه أكثر من أربع ثوانٍ، ولم يضِفه للسلة إطلاقاً. لا يشمل من مرّ عليه سريعاً. اضغط أي صف لترى الجلسات الفعلية وماذا فعل الزائر قبل الصنف وبعده.'
             : 'The "viewed, not ordered" column means: opened the item, stayed past four seconds, never added it to the cart. Tap a row for the real sessions behind the number.'}
         </p>
         <p className="bhv-hint">
@@ -125,7 +125,7 @@ export default function ItemInterestTable({ rows = [], sessions = [], ar = true 
                     <td>
                       <span className={`bhv-verdict is-${r.verdict ? r.verdict.tone : 'neutral'}`}>
                         <Icon name={TONE_ICON[r.verdict ? r.verdict.tone : 'neutral']} size={12} />
-                        {r.verdict ? r.verdict.ar : '—'}
+                        {r.verdict ? r.verdict.ar : '·'}
                       </span>
                     </td>
                   </tr>
@@ -139,7 +139,7 @@ export default function ItemInterestTable({ rows = [], sessions = [], ar = true 
       {open && (
         <div className="bhv-card bhv-evidence">
           <div className="bhv-row-between">
-            <span className="bhv-card-t"><Icon name="eye" size={17} /> {ar ? 'الدليل' : 'Evidence'} — {open.name}</span>
+            <span className="bhv-card-t"><Icon name="eye" size={17} /> {ar ? 'الدليل' : 'Evidence'}: {open.name}</span>
             <button className="btn btn-sm btn-outline" onClick={() => setOpenId('')}><Icon name="close" size={14} /> {ar ? 'إغلاق' : 'Close'}</button>
           </div>
           <p className="bhv-hint">
@@ -148,7 +148,7 @@ export default function ItemInterestTable({ rows = [], sessions = [], ar = true 
               : `Real sessions where this item was opened, lingered on, and never added to the cart.`}
           </p>
           {!evidence.length ? (
-            <p className="bhv-hint">{ar ? 'لا توجد أحداث مسجّلة لهذه الجلسات — العدّاد موجود لكن سجل الأحداث فارغ، فلا يمكن إثبات التسلسل.' : 'No event trail recorded for these sessions.'}</p>
+            <p className="bhv-hint">{ar ? 'لا توجد أحداث مسجّلة لهذه الجلسات. العدّاد موجود لكن سجل الأحداث فارغ، فلا يمكن إثبات التسلسل.' : 'No event trail recorded for these sessions.'}</p>
           ) : (
             <div className="bhv-ev-list bhv-scroll-y">
               {evidence.map((ev) => (
@@ -174,7 +174,7 @@ export default function ItemInterestTable({ rows = [], sessions = [], ar = true 
                       {ev.trail.map((e, i) => (
                         <li key={i} className={`bhv-trail-i${e.focus ? ' is-focus' : ''}`}>
                           <span className="bhv-trail-t bhv-num">{clockSec(e.at)}</span>
-                          <span className="bhv-trail-x">{evLabel(e.type)}{e.target ? ` — ${e.targetName || e.target}` : ''}</span>
+                          <span className="bhv-trail-x">{evLabel(e.type)}{e.target ? `: ${e.targetName || e.target}` : ''}</span>
                         </li>
                       ))}
                     </ol>

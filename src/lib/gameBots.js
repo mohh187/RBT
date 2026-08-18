@@ -84,15 +84,15 @@ export const BOT_NOTE = {
     en: 'Three levels, picked on the board: Easy counts material only and never defends, Normal adds a one-ply hanging-piece guard, Hard also weighs your reply (two plies, alpha-beta) and will not walk into mate in one. None of them is a chess engine or AI.',
   },
   dominoes: {
-    ar: 'يرى أحجاره وما نزل على الطاولة فقط، ولا يطّلع على أحجار غيره: يتخلّص من الدبل والأحجار الثقيلة مبكراً، ويبقي طرفاً يملك له أحجاراً، ويحاول ترك طرف قليل النظائر ليصعّب على الخصم — ويشدّد ذلك إذا فرغ المخزن أو قارب أحدهم الخروج. لا يتذكّر على أي رقم مرّر خصمه ولا يحسب نقلة قادمة.',
+    ar: 'يرى أحجاره وما نزل على الطاولة فقط، ولا يطّلع على أحجار غيره: يتخلّص من الدبل والأحجار الثقيلة مبكراً، ويبقي طرفاً يملك له أحجاراً، ويحاول ترك طرف قليل النظائر ليصعّب على الخصم، ويشدّد ذلك إذا فرغ المخزن أو قارب أحدهم الخروج. لا يتذكّر على أي رقم مرّر خصمه ولا يحسب نقلة قادمة.',
     en: 'Sees only its own tiles and the table, never another hand: sheds doubles and heavy tiles early, keeps an end it can answer, and tries to leave an end the others are short of — pressing harder once the boneyard is dry or a rival is nearly out. It does not remember which pip a player passed on and never looks a move ahead.',
   },
   wist: {
-    ar: 'ثلاثة مستويات: «سهل» يزايد بلا حساب ويرمي أوراقه شبه عشوائية، و«عادي» يقدّر أكلاته ويتبع النوع ويقطع عند الحاجة ويوفّر العالية إذا كان شريكه فائزاً، و«صعب» يعدّ الأوراق التي نزلت فعلاً على الطاولة فيعرف ما بقي من كل نوع وكم حكماً لم يظهر ومن أظهر نقصاً في نوع، فيصرف الأوراق الرابحة ويسحب الحكم ويقرأ إشارة شريكه ويشير له بما يرميه، ويلعب الأكلة التي يتوقّف عليها العقد بأغلى ما عنده. لا مستوى منها يرى ورق غيره — كلها تقرأ يدها هي وما ظهر على الطاولة فقط. صعب يتفوّق على سهل بفارق واضح وعلى عادي بفارق أقل.',
+    ar: 'ثلاثة مستويات: «سهل» يزايد بلا حساب ويرمي أوراقه شبه عشوائية، و«عادي» يقدّر أكلاته ويتبع النوع ويقطع عند الحاجة ويوفّر العالية إذا كان شريكه فائزاً، و«صعب» يعدّ الأوراق التي نزلت فعلاً على الطاولة فيعرف ما بقي من كل نوع وكم حكماً لم يظهر ومن أظهر نقصاً في نوع، فيصرف الأوراق الرابحة ويسحب الحكم ويقرأ إشارة شريكه ويشير له بما يرميه، ويلعب الأكلة التي يتوقّف عليها العقد بأغلى ما عنده. لا مستوى منها يرى ورق غيره، فكلها تقرأ يدها هي وما ظهر على الطاولة فقط. صعب يتفوّق على سهل بفارق واضح وعلى عادي بفارق أقل.',
     en: 'Three levels. Easy bids without arithmetic and discards close to at random. Normal estimates its tricks, follows suit, ruffs when it must and saves high cards when its partner is winning. Hard counts the cards that have actually hit the table: it knows what is left in every suit, how many trumps are unaccounted for and who has shown a void, so it cashes winners, draws trumps, reads and sends partner signals, and spends whatever it must on the trick the contract turns on. No level ever sees another hand — each reads its own cards and the public table. Hard beats Easy by a wide margin and Normal by a narrower one.',
   },
   jackaroo: {
-    ar: 'يجرّب كل حركة تسمح بها ورقته ويختار ما يقدّم فريقه أكثر — الدخول إلى الخانة ثم القتل ثم التقدّم ثم الخروج من البيت. يزن ورقة واحدة فقط ولا يخطّط للجولة القادمة.',
+    ar: 'يجرّب كل حركة تسمح بها ورقته ويختار ما يقدّم فريقه أكثر، وهو الدخول إلى الخانة ثم القتل ثم التقدّم ثم الخروج من البيت. يزن ورقة واحدة فقط ولا يخطّط للجولة القادمة.',
     en: 'Tries every move its card allows and takes the one that advances its side most — lane, kill, progress, release. One card deep, no planning.',
   },
   haree: {

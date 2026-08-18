@@ -48,7 +48,7 @@ export default function Signup() {
   return (
     <AuthShell
       title={t('createYourAccount')}
-      subtitle={ar ? 'أنشئ حسابك وابدأ استقبال الطلبات اليوم — مجاناً' : 'Create your account and start taking orders today — free'}
+      subtitle={ar ? 'أنشئ حسابك وابدأ استقبال الطلبات اليوم، مجاناً' : 'Create your account and start taking orders today, free'}
       err={err}
       foot={<>{t('haveAccount')} <Link to="/login">{t('login')}</Link></>}
     >

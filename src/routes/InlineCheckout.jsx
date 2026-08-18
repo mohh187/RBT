@@ -180,7 +180,7 @@ export default function InlineCheckout() {
 
         <div className="row center" style={{ gap: 6, color: 'var(--text-muted)', fontSize: 'var(--fs-xs)' }}>
           <Icon name="lock" size={13} />
-          <span>{ar ? 'دفع آمن — تُعالَج بياناتك عبر ميسر' : 'Secure payment — processed by Moyasar'}</span>
+          <span>{ar ? 'دفع آمن، تُعالَج بياناتك عبر ميسر' : 'Secure payment, processed by Moyasar'}</span>
         </div>
         {hostedUrl && (
           <button className="btn btn-ghost btn-sm btn-block" onClick={() => { window.location.href = hostedUrl }}>

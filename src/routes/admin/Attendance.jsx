@@ -102,7 +102,7 @@ export default function Attendance() {
       streamRef.current = stream
       if (videoRef.current) { videoRef.current.srcObject = stream; videoRef.current.play().catch(() => {}) }
     } catch (_) {
-      setCamError(ar ? 'تعذّر فتح الكاميرا — تتطلّب HTTPS وإذن الكاميرا.' : 'Cannot open camera — needs HTTPS + camera permission.')
+      setCamError(ar ? 'تعذّر فتح الكاميرا، تتطلّب HTTPS وإذن الكاميرا.' : 'Cannot open camera, needs HTTPS + camera permission.')
     }
   }
 
@@ -142,8 +142,8 @@ export default function Attendance() {
       })
       if (nextType === 'in' && late.lateMinutes > 0) {
         toast.error(ar
-          ? `تم تسجيل حضورك — لكنك متأخّر ${late.lateMinutes} دقيقة${late.deduction ? ` وسيُحتسب خصم ${late.deduction}` : '، ويُحتسب كتأخير'}`
-          : `Clocked in — you're ${late.lateMinutes}m late${late.deduction ? `, deduction ${late.deduction}` : ', counted as late'}`)
+          ? `تم تسجيل حضورك، لكنك متأخّر ${late.lateMinutes} دقيقة${late.deduction ? ` وسيُحتسب خصم ${late.deduction}` : '، ويُحتسب كتأخير'}`
+          : `Clocked in, you're ${late.lateMinutes}m late${late.deduction ? `, deduction ${late.deduction}` : ', counted as late'}`)
       } else {
         toast.success(nextType === 'in' ? (ar ? 'تم تسجيل حضورك' : 'Clocked in') : (ar ? 'تم تسجيل انصرافك' : 'Clocked out'))
       }
@@ -161,7 +161,7 @@ export default function Attendance() {
       {r.selfieUrl ? <img src={r.selfieUrl} alt="" onClick={() => setZoom(r.selfieUrl)} style={{ width: 40, height: 40, borderRadius: 10, objectFit: 'cover', flex: 'none', cursor: 'zoom-in' }} /> : <span className="center" style={{ width: 40, height: 40, borderRadius: 10, background: 'var(--surface-2)', flex: 'none' }}><Icon name="user" size={18} /></span>}
       <div className="grow">
         <div className="small bold row" style={{ gap: 6 }}>
-          {tab === 'team' && <span>{r.staffName || '—'} ·</span>}
+          {tab === 'team' && r.staffName && <span>{r.staffName} ·</span>}
           <span style={{ color: r.type === 'in' ? 'var(--success)' : 'var(--text-muted)' }}>{r.type === 'in' ? (ar ? 'حضور' : 'In') : (ar ? 'انصراف' : 'Out')}</span>
         </div>
         <div className="xs faint">{fmtTime(r.at, lang)}</div>
@@ -193,12 +193,12 @@ export default function Attendance() {
         )}
         {!clockedIn && wouldBeLate.lateMinutes > 0 && (
           <div className="badge badge-gold" style={{ padding: '8px 12px', textAlign: 'center', width: '100%' }}>
-            <Icon name="clock" size={14} /> {ar ? `أنت متأخّر ${wouldBeLate.lateMinutes} دقيقة — سيُحتسب عند التسجيل${wouldBeLate.deduction ? ` (خصم ${wouldBeLate.deduction})` : ''}` : `You're ${wouldBeLate.lateMinutes}m late — will be recorded${wouldBeLate.deduction ? ` (−${wouldBeLate.deduction})` : ''}`}
+            <Icon name="clock" size={14} /> {ar ? `أنت متأخّر ${wouldBeLate.lateMinutes} دقيقة، سيُحتسب عند التسجيل${wouldBeLate.deduction ? ` (خصم ${wouldBeLate.deduction})` : ''}` : `You're ${wouldBeLate.lateMinutes}m late, will be recorded${wouldBeLate.deduction ? ` (−${wouldBeLate.deduction})` : ''}`}
           </div>
         )}
         {offToday && (
           <div className="badge badge-success" style={{ padding: '8px 12px', textAlign: 'center', width: '100%' }}>
-            <Icon name="calendar" size={14} /> {ar ? 'اليوم إجازتك — لا يُحتسب تأخير أو غياب' : "It's your day off — no lateness or absence counted"}
+            <Icon name="calendar" size={14} /> {ar ? 'اليوم إجازتك، لا يُحتسب تأخير أو غياب' : "It's your day off, no lateness or absence counted"}
           </div>
         )}
         <button className={`btn btn-lg btn-block ${clockedIn ? 'btn-outline' : 'btn-primary'}`} disabled={busy} onClick={openCamera}>
@@ -249,7 +249,7 @@ export default function Attendance() {
           ) : (
             <video ref={videoRef} playsInline muted style={{ width: '100%', maxWidth: 360, borderRadius: 'var(--r-lg)', background: '#000', transform: 'scaleX(-1)' }} />
           )}
-          <p className="xs faint">{ar ? 'لا يمكن رفع صورة — الكاميرا فقط.' : 'No uploads — camera only.'}</p>
+          <p className="xs faint">{ar ? 'لا يمكن رفع صورة، الكاميرا فقط.' : 'No uploads, camera only.'}</p>
         </div>
       </Sheet>
 

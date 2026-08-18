@@ -44,7 +44,7 @@
 
 // ---------- tone contract, exported so reviewers and the AI read the same text ----------
 export const MEMORY_TONE_NOTE_AR = [
-  'ذاكرة المكان — قواعد النبرة (ملزمة):',
+  'ذاكرة المكان، قواعد النبرة (ملزمة):',
   'اذكر فقط ما يعرفه الضيف عن نفسه أصلاً: أنه زارنا، وماذا طلب، وكم مرة، وأنه لم يجرّب صنفاً بعد.',
   'لا تذكر أبداً مدة بقائه على الشاشة، ولا معرّف جهازه، ولا كم مرة فتح المنيو، ولا كم مرة شاهد صنفاً.',
   'هذه البيانات تُستخدم لاختيار ما يستحق أن يُقال فقط، ولا تُقال أبداً.',
@@ -299,7 +299,7 @@ export function recallFor({ orders, sessions, plays, customer, items, tenant, no
     if (hit) {
       out.push(line(
         'birthday', 'birthday',
-        'كل عام وأنت بخير — سعداء أنك اخترت أن تكون معنا اليوم.',
+        'كل عام وأنت بخير. سعداء أنك اخترت أن تكون معنا اليوم.',
         'Happy birthday — we are glad you chose to spend it with us.',
         0.98,
         { source: 'customer.birthday', birthday: bday, heldByVenue: true },
@@ -361,7 +361,7 @@ export function recallFor({ orders, sessions, plays, customer, items, tenant, no
         usual = { itemId: top.itemId, ar, en, times: top.times }
         out.push(line(
           'usual', 'usual',
-          `${ar} هو المعتاد لك — طلبته ${arTimes(top.times)} من ${arVisits(visitCount)}.`,
+          `${ar} هو المعتاد لك، طلبته ${arTimes(top.times)} من ${arVisits(visitCount)}.`,
           `${en} is your usual — ordered on ${top.times} of ${visitCount} visits.`,
           0.8,
           { source: 'orders', itemId: top.itemId, times: top.times, ofVisits: visitCount, onMenuNow: canReorder },
@@ -421,7 +421,7 @@ export function recallFor({ orders, sessions, plays, customer, items, tenant, no
       : `Last time you were here ${agoEn(daysSince)}.`
     out.push(line(
       'last-visit', 'lastVisit',
-      stale ? `طال غيابك — آخر مرة كنت معنا ${agoAr(daysSince)}. أهلاً بعودتك.` : ar,
+      stale ? `طال غيابك، آخر مرة كنت معنا ${agoAr(daysSince)}. أهلاً بعودتك.` : ar,
       stale ? `It has been a while — last time you were here ${agoEn(daysSince)}. Welcome back.` : en,
       stale ? 0.85 : 0.6,
       { source: 'orders', lastVisitDay: last.day, daysSince, itemsOnThatVisit: names.length, orderCountThatDay: last.orders },
@@ -473,7 +473,7 @@ export function recallFor({ orders, sessions, plays, customer, items, tenant, no
       const en = nameOf(pick.menuRec, 'en')
       out.push(line(
         'curious', 'curious',
-        `${ar} ما زال بانتظارك — لم تجرّبه معنا بعد.`,
+        `${ar} ما زال بانتظارك، لم تجرّبه معنا بعد.`,
         `${en} is still waiting for you — you have not tried it with us yet.`,
         0.5,
         {
@@ -512,7 +512,7 @@ export function recallFor({ orders, sessions, plays, customer, items, tenant, no
       const game = str(best.gameAr || best.gameId)
       const score = Math.round(num(best.score))
       const ar = archetype
-        ? `أفضل نتيجة لك ${game ? `في «${game}» ` : ''}كانت ${score} — واخترت لنفسك نمط «${archetype}».`
+        ? `أفضل نتيجة لك ${game ? `في «${game}» ` : ''}كانت ${score}، واخترت لنفسك نمط «${archetype}».`
         : `أفضل نتيجة لك ${game ? `في «${game}» ` : ''}كانت ${score}.`
       const en = archetype
         ? `Your best score${game ? ` in ${game}` : ''} was ${score} — and you picked "${archetype}" for yourself.`

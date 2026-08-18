@@ -54,7 +54,8 @@ function daysAgo(n) {
 }
 
 // Server-side aggregation count with a graceful fallback to a capped snapshot
-// size (older SDK / rules edge). Returns null when both fail (rendered as «—»).
+// size (older SDK / rules edge). Returns null when both fail (fmtNum renders a
+// middle dot «·» for that, and «…» while the count is still loading).
 async function countAgg(q, fallbackQ) {
   try {
     return (await getCountFromServer(q)).data().count
@@ -152,7 +153,7 @@ function SpendCaps({ tid, tenant, toast }) {
     try {
       await platformUpdateTenant(tid, CAP_FIELD[key](next, tenant))
       setEdits((e) => { const c = { ...e }; delete c[key]; return c })
-      toast.success('حُدّث السقف — يسري فوراً')
+      toast.success('حُدّث السقف، يسري فوراً')
     } catch {
       toast.error('تعذّر الحفظ')
     } finally { setSaving('') }
@@ -188,7 +189,7 @@ function SpendCaps({ tid, tenant, toast }) {
               </div>
               {blocked > 0 && (
                 <div className="xs" style={{ color: 'var(--danger)' }}>
-                  رُفضت {blocked.toLocaleString('en-US')} — {{ cap: 'السقف الشهري', daily: 'السقف اليومي', burst: 'الحد اللحظي', killed: 'إيقاف من المنصة' }[usage?.blockedReason?.[c.key]] || 'بلوغ الحد'}
+                  رُفضت {blocked.toLocaleString('en-US')} · {{ cap: 'السقف الشهري', daily: 'السقف اليومي', burst: 'الحد اللحظي', killed: 'إيقاف من المنصة' }[usage?.blockedReason?.[c.key]] || 'بلوغ الحد'}
                 </div>
               )}
               <div className="row" style={{ gap: 8, alignItems: 'flex-end' }}>
@@ -222,12 +223,12 @@ function KV({ k, v, ltr }) {
   return (
     <div className="row-between" style={{ gap: 10, padding: '4px 0', flexWrap: 'wrap' }}>
       <span className="xs faint bold" style={{ flex: 'none' }}>{k}</span>
-      <span className={ltr ? 'v360-mono' : 'small'} style={{ textAlign: 'start', wordBreak: 'break-word' }}>{v ?? '—'}</span>
+      <span className={ltr ? 'v360-mono' : 'small'} style={{ textAlign: 'start', wordBreak: 'break-word' }}>{v ?? '·'}</span>
     </div>
   )
 }
 
-const fmtNum = (v) => (v === undefined ? '…' : v === null ? '—' : Number(v).toLocaleString('en-US'))
+const fmtNum = (v) => (v === undefined ? '…' : v === null ? '·' : Number(v).toLocaleString('en-US'))
 
 // ============================== نظرة عامة ==============================
 function OverviewTab({ tid, tenant, cache }) {
@@ -300,7 +301,7 @@ function OverviewTab({ tid, tenant, cache }) {
       {/* headline counts (server aggregation, on demand) */}
       <Section icon="chartBar" title="أرقام إجمالية">
         {countsFailed ? (
-          <p className="small" style={{ color: 'var(--danger)' }}>تعذّر تحميل العدادات — أعد فتح التبويب</p>
+          <p className="small" style={{ color: 'var(--danger)' }}>تعذّر تحميل العدادات. أعد فتح التبويب</p>
         ) : (
           <div className="stat-grid">
             <div className="stat"><div className="label">الأصناف</div><div className="value num">{fmtNum(counts?.items)}</div></div>
@@ -341,11 +342,11 @@ function OverviewTab({ tid, tenant, cache }) {
             <p className="muted small">لا يوجد ملف مستخدم لهذا المالك في users</p>
           ) : (
             <div>
-              <KV k="الاسم" v={owner.name || owner.displayName || '—'} />
-              <KV k="البريد" v={owner.email || '—'} ltr />
-              <KV k="الجوال" v={owner.phone || '—'} ltr />
-              <KV k="الدور" v={owner.role || '—'} />
-              <KV k="آخر دخول" v={owner.lastLoginAt ? fmtWhen(owner.lastLoginAt) : owner.lastSeenAt ? fmtWhen(owner.lastSeenAt) : '—'} />
+              <KV k="الاسم" v={owner.name || owner.displayName || '·'} />
+              <KV k="البريد" v={owner.email || '·'} ltr />
+              <KV k="الجوال" v={owner.phone || '·'} ltr />
+              <KV k="الدور" v={owner.role || '·'} />
+              <KV k="آخر دخول" v={owner.lastLoginAt ? fmtWhen(owner.lastLoginAt) : owner.lastSeenAt ? fmtWhen(owner.lastSeenAt) : '·'} />
               <KV k="UID" v={tenant.ownerUid} ltr />
             </div>
           )}
@@ -568,7 +569,7 @@ function PlanTab({ tid, tenant, toast, toggleActive, toggling }) {
           </label>
         </div>
         <button className="btn btn-outline" disabled={savingAi} onClick={saveAi}>{savingAi ? 'جارٍ الحفظ…' : 'حفظ حدود الذكاء'}</button>
-        <p className="xs faint">الافتراضي 60 يومياً / 900 شهرياً. الرصيد الإضافي يُضاف للحد الشهري بعد شراء المنشأة باقة رصيد. مجسمات 3D: حد التحويلات الواقعية الشهري (الافتراضي 20 — كل تحويل يستهلك رصيد Meshy المدفوع من المنصة، وحد كل صنف تحويلان شهرياً مفروض على الخادم).</p>
+        <p className="xs faint">الافتراضي 60 يومياً / 900 شهرياً. الرصيد الإضافي يُضاف للحد الشهري بعد شراء المنشأة باقة رصيد. مجسمات 3D: حد التحويلات الواقعية الشهري (الافتراضي 20، وكل تحويل يستهلك رصيد Meshy المدفوع من المنصة، وحد كل صنف تحويلان شهرياً مفروض على الخادم).</p>
       </Section>
 
       {/* per-venue feature control (override plan gating) */}
@@ -636,20 +637,20 @@ function TeamTab({ tid, tenant }) {
             ))}
           </div>
         )}
-        <p className="xs faint">عرض فقط — تعديل الأدوار والصلاحيات التفصيلي يتم من لوحة المنشأة نفسها (الإدارة ← الأدوار) أو عبر «الدخول كمالك».</p>
+        <p className="xs faint">عرض فقط. تعديل الأدوار والصلاحيات التفصيلي يتم من لوحة المنشأة نفسها (الإدارة ← الأدوار) أو عبر «الدخول كمالك».</p>
       </Section>
 
       <div className="v360-cols">
         <Section icon="user" title="مالك الحساب">
           <div>
-            <KV k="UID" v={tenant.ownerUid || '—'} ltr />
+            <KV k="UID" v={tenant.ownerUid || '·'} ltr />
           </div>
           <p className="xs faint">بطاقة المالك الكاملة في تبويب «نظرة عامة».</p>
         </Section>
 
         <Section icon="key" title="تخصيص صلاحيات الأدوار (roleCaps)">
           {roleEntries.length === 0 ? (
-            <p className="muted small">لا تخصيص — تعمل المنشأة بافتراضيات أدوار النظام</p>
+            <p className="muted small">لا تخصيص، تعمل المنشأة بافتراضيات أدوار النظام</p>
           ) : (
             <div>
               {roleEntries.map(([role, caps]) => (
@@ -681,7 +682,7 @@ function DataTab({ tid, tenant, cache }) {
     return rows
   })
   const currency = tenant.currency || 'SAR'
-  const adminHint = <p className="xs faint">عرض فقط — للتحرير استخدم «الدخول كمالك» لفتح النظام كمدير.</p>
+  const adminHint = <p className="xs faint">عرض فقط. للتحرير استخدم «الدخول كمالك» لفتح النظام كمدير.</p>
 
   return (
     <>
@@ -754,7 +755,7 @@ function DataTab({ tid, tenant, cache }) {
             {invoices.map((inv) => (
               <div key={inv.id} className="row-between" style={{ padding: '8px 0', gap: 8, flexWrap: 'wrap' }}>
                 <div className="grow" style={{ minWidth: 120 }}>
-                  <div className="small bold num">{inv.period || '—'} · {(PLANS.find((p) => p.id === inv.plan)?.ar) || inv.plan || ''}</div>
+                  <div className="small bold num">{[inv.period, (PLANS.find((p) => p.id === inv.plan)?.ar) || inv.plan].filter(Boolean).join(' · ')}</div>
                   <div className="xs faint">{fmtWhen(inv.createdAt)}{inv.source ? ` · ${inv.source === 'manual' ? 'يدوية' : inv.source}` : ''}</div>
                 </div>
                 <span className="num small bold">{(Number(inv.amount) || 0).toLocaleString('en-US')} <span className="xs faint">{inv.currency || 'SAR'}</span></span>
@@ -835,7 +836,7 @@ function CommsTab({ tid, tenant, cache, toast }) {
         </Section>
       </div>
 
-      <Section icon="key" title="التكاملات السرّية (وجود فقط — بلا قيم)">
+      <Section icon="key" title="التكاملات السرّية (وجود فقط، بلا قيم)">
         {privFailed ? (
           <p className="small" style={{ color: 'var(--danger)' }}>تعذّر قراءة إعدادات التكاملات</p>
         ) : priv === undefined ? <Skeleton rows={2} h={30} /> : (
@@ -859,11 +860,11 @@ function CommsTab({ tid, tenant, cache, toast }) {
             ))}
             <div className="row-between" style={{ padding: '6px 0', gap: 8, flexWrap: 'wrap' }}>
               <span className="small bold">بوابة الدفع (Moyasar)</span>
-              <span className="badge badge-info">مفاتيح على مستوى المنصة — لا مفاتيح خاصة بالمنشأة</span>
+              <span className="badge badge-info">مفاتيح على مستوى المنصة، لا مفاتيح خاصة بالمنشأة</span>
             </div>
           </div>
         )}
-        <p className="xs faint">تُعرض أسماء الحقول فقط للتأكد من الضبط — القيم السرّية لا تُقرأ ولا تُعرض في هذه الشاشة إطلاقاً.</p>
+        <p className="xs faint">تُعرض أسماء الحقول فقط للتأكد من الضبط. القيم السرّية لا تُقرأ ولا تُعرض في هذه الشاشة إطلاقاً.</p>
       </Section>
     </>
   )
@@ -885,7 +886,7 @@ function AdvancedTab({ tid, tenant, toast, impersonate, toggleActive, toggling }
   const [credBusy, setCredBusy] = useState(false)
   const saveOwnerCredentials = async () => {
     if (credBusy || !tenant.ownerUid || (!credEmail.trim() && !credPass)) return
-    const ok = window.confirm(`تغيير بيانات دخول مالك «${tenant.name || tid}» — يسري فوراً على تسجيل الدخول. متابعة؟`)
+    const ok = window.confirm(`تغيير بيانات دخول مالك «${tenant.name || tid}»، يسري فوراً على تسجيل الدخول. متابعة؟`)
     if (!ok) return
     setCredBusy(true)
     try {
@@ -908,7 +909,7 @@ function AdvancedTab({ tid, tenant, toast, impersonate, toggleActive, toggling }
   }
 
   const parseJson = (text) => {
-    if (!String(text).trim()) return { error: 'القيمة فارغة — اكتب JSON صالحاً (مثال: true أو "نص" أو {"a":1})' }
+    if (!String(text).trim()) return { error: 'القيمة فارغة، اكتب JSON صالحاً (مثال: true أو "نص" أو {"a":1})' }
     try {
       return { value: JSON.parse(text) }
     } catch (e) {
@@ -960,14 +961,14 @@ function AdvancedTab({ tid, tenant, toast, impersonate, toggleActive, toggling }
   return (
     <>
       <div className="v360-warn">
-        <Icon name="warning" size={16} /> منطقة خطرة: الكتابة هنا تعدّل وثيقة المنشأة مباشرة دون أي تحقق من جانب التطبيق. حقول التواريخ (Timestamp) تظهر ككائن seconds/nanoseconds — لا تعدّلها من هنا لأنها ستُحفظ كخريطة عادية وتُفسد التاريخ.
+        <Icon name="warning" size={16} /> منطقة خطرة: الكتابة هنا تعدّل وثيقة المنشأة مباشرة دون أي تحقق من جانب التطبيق. حقول التواريخ (Timestamp) تظهر ككائن seconds/nanoseconds، فلا تعدّلها من هنا لأنها ستُحفظ كخريطة عادية وتُفسد التاريخ.
       </div>
 
       <Section icon="wrench" title="محرر حقول الوثيقة (خام)" danger>
         <label className="stack" style={{ gap: 4 }}>
           <span className="xs faint bold">الحقل</span>
           <select className="input" value={sel} onChange={(e) => pick(e.target.value)}>
-            <option value="">— اختر حقلاً —</option>
+            <option value="">اختر حقلاً</option>
             {keys.map((k) => <option key={k} value={k}>{k}</option>)}
           </select>
         </label>
@@ -997,7 +998,7 @@ function AdvancedTab({ tid, tenant, toast, impersonate, toggleActive, toggling }
       </Section>
 
       <Section icon="mail" title="تغيير بيانات دخول المالك" danger>
-        <p className="xs faint">تغيير بريد أو كلمة مرور دخول مالك المنشأة (عبر دالة updateStaffCredentials — يسري فوراً، ويُسجَّل في سجل النشاط ويصل إشعار بريدي للنظام المركزي).</p>
+        <p className="xs faint">تغيير بريد أو كلمة مرور دخول مالك المنشأة (عبر دالة updateStaffCredentials). يسري فوراً، ويُسجَّل في سجل النشاط ويصل إشعار بريدي للنظام المركزي.</p>
         <div className="row" style={{ gap: 8, flexWrap: 'wrap' }}>
           <input className="input" style={{ minWidth: 220 }} type="email" autoComplete="off" dir="ltr" placeholder="بريد جديد (اختياري)" value={credEmail} onChange={(e) => setCredEmail(e.target.value)} />
           <input className="input" style={{ minWidth: 220 }} type="password" autoComplete="new-password" dir="ltr" placeholder="كلمة مرور جديدة (اختياري، 6+)" value={credPass} onChange={(e) => setCredPass(e.target.value)} />
@@ -1054,7 +1055,7 @@ export default function VenueDetail() {
         toast.success('تم إيقاف الحساب')
       }
     } catch {
-      toast.error('تعذّر تحديث حالة المنشأة — أعد المحاولة')
+      toast.error('تعذّر تحديث حالة المنشأة، أعد المحاولة')
     } finally {
       setToggling(false)
     }
@@ -1070,7 +1071,7 @@ export default function VenueDetail() {
       await impersonateTenantOwner(tid)
       navigate('/admin')
     } catch {
-      toast.error('تعذّر الدخول — تأكد من نشر دالة platformImpersonate')
+      toast.error('تعذّر الدخول، تأكد من نشر دالة platformImpersonate')
     }
   }
 

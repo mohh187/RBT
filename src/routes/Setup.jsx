@@ -90,7 +90,7 @@ export default function Setup() {
     try {
       // don't declare "you're live" and leave if the write actually failed
       if (!(await persist({ setupDone: true }))) return
-      toast.success(ar ? 'مبروك! منشأتك جاهزة' : 'Congrats — you are live')
+      toast.success(ar ? 'مبروك! منشأتك جاهزة' : 'Congrats, you are live')
       navigate('/admin', { replace: true })
     } finally { setBusy(false) }
   }
@@ -101,7 +101,7 @@ export default function Setup() {
         <div className="stack center" style={{ gap: 4, textAlign: 'center' }}>
           {tenant?.logoUrl ? <img src={tenant.logoUrl} alt="" style={{ width: 58, height: 58, borderRadius: '50%', objectFit: 'cover' }} /> : <Icon name="coffee" size={38} style={{ color: 'var(--brand)' }} />}
           <strong style={{ fontSize: 'var(--fs-lg)' }}>{tenant?.name}</strong>
-          <span className="xs faint">{ar ? 'إعداد سريع — دقيقتان وتكون جاهزاً' : 'Quick setup — two minutes and you are live'}</span>
+          <span className="xs faint">{ar ? 'إعداد سريع، دقيقتان وتكون جاهزاً' : 'Quick setup, two minutes and you are live'}</span>
         </div>
 
         {/* steps indicator */}
@@ -166,7 +166,7 @@ export default function Setup() {
                 ))}
               </div>
             </div>
-            <p className="xs faint" style={{ margin: 0 }}>{ar ? 'منيو الزبائن له سكناته الخاصة — تخصصه بالكامل لاحقاً من: الإعدادات ← تصميم المظهر. هذه معاينته الحالية:' : 'The diner menu has its own skins (Appearance settings). Current preview:'}</p>
+            <p className="xs faint" style={{ margin: 0 }}>{ar ? 'منيو الزبائن له سكناته الخاصة، تخصصه بالكامل لاحقاً من: الإعدادات ← تصميم المظهر. هذه معاينته الحالية:' : 'The diner menu has its own skins (Appearance settings). Current preview:'}</p>
             {tenant?.slug && <MenuPreview slug={tenant.slug} mode="mobile" />}
           </div>
         )}

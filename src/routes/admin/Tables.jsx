@@ -253,7 +253,7 @@ export default function Tables() {
               {/* Preview & Status */}
               <div className="stack center" style={{ gap: 6 }}>
                 <TableShape seats={editSeats} shape={editShape} status={statusOf(sel)} label={editLabel || sel.label} size={70} activeOrdersCount={activeOrdersForSel.length} meta={metaOf(sel)} />
-                <span className="small faint">{editSeats} {t('seats')} · {statusOf(sel) === 'occupied' ? (ar ? 'مشغولة' : 'Occupied') : statusOf(sel) === 'billed' ? (ar ? 'مفوترة — بانتظار الدفع' : 'Billed — awaiting payment') : statusOf(sel) === 'reserved' ? (ar ? 'محجوزة' : 'Reserved') : (ar ? 'متاحة' : 'Free')}</span>
+                <span className="small faint">{editSeats} {t('seats')} · {statusOf(sel) === 'occupied' ? (ar ? 'مشغولة' : 'Occupied') : statusOf(sel) === 'billed' ? (ar ? 'مفوترة، بانتظار الدفع' : 'Billed, awaiting payment') : statusOf(sel) === 'reserved' ? (ar ? 'محجوزة' : 'Reserved') : (ar ? 'متاحة' : 'Free')}</span>
               </div>
 
               {/* SECTION 1: Active Orders list for direct navigation */}
@@ -335,7 +335,7 @@ export default function Tables() {
                 )
               )}
               {canFloor && activeOrdersForSel.length > 0 && (
-                <p className="xs faint">{ar ? 'الطاولة مشغولة بطلبات نشطة — تتحرر تلقائياً بعد التحصيل أو الإلغاء.' : 'Held by active orders — frees automatically on settle or cancel.'}</p>
+                <p className="xs faint">{ar ? 'الطاولة مشغولة بطلبات نشطة، تتحرر تلقائياً بعد التحصيل أو الإلغاء.' : 'Held by active orders, frees automatically on settle or cancel.'}</p>
               )}
 
               <div className="row" style={{ gap: 6 }}>

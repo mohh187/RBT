@@ -651,25 +651,25 @@ const TXT = {
     right: 'اليمين',
     draw: 'سحب',
     pass: 'تمرير',
-    openAny: 'ابدأ الجولة — اختر أي حجر من يدك',
-    openWith: 'الجولة الأولى تُفتح بأعلى دبل — العب',
+    openAny: 'ابدأ الجولة باختيار أي حجر من يدك',
+    openWith: 'الجولة الأولى تُفتح بأعلى دبل، العب',
     pickTile: 'اختر حجراً يطابق',
     or: 'أو',
-    pickEnd: 'الحجر يناسب الطرفين — اختر طرفاً',
-    drawing: 'لا حجر صالح — نسحب من المخزن',
-    mustPass: 'المخزن فارغ ولا حجر صالح — مرّر',
+    pickEnd: 'الحجر يناسب الطرفين، اختر طرفاً',
+    drawing: 'لا حجر صالح، نسحب من المخزن',
+    mustPass: 'المخزن فارغ ولا حجر صالح، مرّر',
     turnOf: 'الدور على',
-    watchOnly: 'أنت متفرّج — تتابع اللعب فقط',
+    watchOnly: 'أنت متفرّج تتابع اللعب فقط',
     whyNoFit: 'لا يطابق الطرفين',
-    whyDraw: 'عندك حجر صالح — لا يجوز السحب',
-    whyPass: 'المخزن فيه أحجار — اسحب قبل أن تمرّر',
+    whyDraw: 'عندك حجر صالح، لا يجوز السحب',
+    whyPass: 'المخزن فيه أحجار، اسحب قبل أن تمرّر',
     whyMustOpen: 'أول جولة: يلزم الفتح بأعلى دبل',
     notTurn: 'ليس دورك بعد',
     roundOver: 'انتهت الجولة',
     matchOver: 'انتهت المباراة',
     byDomino: 'أنزل آخر أحجاره',
-    byBlocked: 'انسدّ اللعب — الفوز لأقل مجموع',
-    byTie: 'انسدّ اللعب وتساوى الأقل — لا نقاط',
+    byBlocked: 'انسدّ اللعب، والفوز لأقل مجموع',
+    byTie: 'انسدّ اللعب وتساوى الأقل، فلا نقاط',
     remainTitle: 'ما تبقّى في الأيدي',
     scoreTitle: 'الحساب إلى',
     nextRound: 'الجولة التالية',
@@ -694,25 +694,25 @@ const TXT = {
     right: 'Right',
     draw: 'Draw',
     pass: 'Pass',
-    openAny: 'Open the round — pick any tile',
-    openWith: 'The first round opens on the highest double — play',
+    openAny: 'Open the round with any tile from your hand',
+    openWith: 'The first round opens on the highest double, so play',
     pickTile: 'Pick a tile matching',
     or: 'or',
-    pickEnd: 'It fits both ends — pick one',
-    drawing: 'Nothing playable — drawing from the boneyard',
-    mustPass: 'Boneyard empty and nothing playable — pass',
+    pickEnd: 'It fits both ends, so pick one',
+    drawing: 'Nothing playable, drawing from the boneyard',
+    mustPass: 'Boneyard empty and nothing playable, so pass',
     turnOf: 'Turn of',
     watchOnly: 'You are watching this table',
     whyNoFit: 'matches neither end',
-    whyDraw: 'You hold a playable tile — you may not draw',
-    whyPass: 'The boneyard still has tiles — draw first',
+    whyDraw: 'You hold a playable tile, so you may not draw',
+    whyPass: 'The boneyard still has tiles, so draw first',
     whyMustOpen: 'First round: you must open on the highest double',
     notTurn: 'Not your turn yet',
     roundOver: 'Round over',
     matchOver: 'Match over',
     byDomino: 'played the last tile',
-    byBlocked: 'Blocked — lowest pip count wins',
-    byTie: 'Blocked and tied — no points',
+    byBlocked: 'Blocked, lowest pip count wins',
+    byTie: 'Blocked and tied, so no points',
     remainTitle: 'Tiles left in hand',
     scoreTitle: 'Score to',
     nextRound: 'Next round',
@@ -1166,7 +1166,7 @@ export default function Dominoes({
     if (st.phase === 'roundEnd') return { tone: '', text: t.roundOver, icon: 'award' }
     if (st.phase === 'matchEnd') return { tone: '', text: t.matchOver, icon: 'award' }
     if (mp && players.length < (st.playerCount || 2)) return { tone: 'wait', text: t.waiting, icon: 'clock' }
-    if (watcher) return { tone: 'wait', text: `${t.watchOnly} — ${t.turnOf} ${nameFor(st.turn)}`, icon: 'eye' }
+    if (watcher) return { tone: 'wait', text: `${t.watchOnly}. ${t.turnOf} ${nameFor(st.turn)}`, icon: 'eye' }
     if (veiled) return { tone: 'wait', text: `${t.turnOf} ${nameFor(st.turn)}`, icon: 'lock' }
     if (!myTurn) return { tone: 'wait', text: `${t.turnOf} ${nameFor(st.turn)}`, icon: 'clock' }
     if (st.mustOpen) {
@@ -1191,7 +1191,7 @@ export default function Dominoes({
     if (!res) return t.roundOver
     if (res.kind === 'tie') return t.byTie
     if (res.kind === 'domino') return `${nameFor(res.winner)} ${t.byDomino}`
-    return `${t.byBlocked} — ${nameFor(res.winner)}`
+    return `${t.byBlocked}: ${nameFor(res.winner)}`
   }
 
   const target = st.target || TARGET

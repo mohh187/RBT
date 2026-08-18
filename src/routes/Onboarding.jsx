@@ -83,7 +83,7 @@ export default function Onboarding() {
         if (t) {
           await linkOwnerTenant(user.uid, t.id)
           await refreshProfile()
-          toast.success(ar ? `وجدنا منشأتك «${t.name || ''}» — أهلاً بعودتك` : `Found your venue "${t.name || ''}" — welcome back`)
+          toast.success(ar ? `وجدنا منشأتك «${t.name || ''}»، أهلاً بعودتك` : `Found your venue "${t.name || ''}", welcome back`)
           navigate('/admin', { replace: true })
         } else {
           setRecovering(false)
@@ -118,7 +118,7 @@ export default function Onboarding() {
       if (existing) {
         await linkOwnerTenant(user.uid, existing.id)
         await refreshProfile()
-        toast.success(ar ? 'منشأتك موجودة مسبقاً — تم الدخول إليها' : 'Your venue already exists — signed in')
+        toast.success(ar ? 'منشأتك موجودة مسبقاً، تم الدخول إليها' : 'Your venue already exists, signed in')
         navigate('/admin', { replace: true })
         return
       }
@@ -150,8 +150,8 @@ export default function Onboarding() {
     } catch (err) {
       const code = err?.code || err?.message || ''
       toast.error(
-        code.includes('permission') ? (ar ? 'رفض من الخادم — حدّث الصفحة وحاول مجدداً، وإن تكرر تواصل مع الدعم' : 'Server denied — refresh and retry; contact support if it persists')
-          : code.includes('slug') ? (ar ? 'الرابط المختصر محجوز — جرّب اسماً مختلفاً' : 'That link is taken — try another')
+        code.includes('permission') ? (ar ? 'رفض من الخادم. حدّث الصفحة وحاول مجدداً، وإن تكرر تواصل مع الدعم' : 'Server denied, refresh and retry; contact support if it persists')
+          : code.includes('slug') ? (ar ? 'الرابط المختصر محجوز، جرّب اسماً مختلفاً' : 'That link is taken, try another')
           : code.includes('network') || code.includes('unavailable') ? (ar ? 'تحقق من اتصالك بالإنترنت ثم أعد المحاولة' : 'Check your connection and retry')
           : (ar ? 'تعذّر الإنشاء، حاول مجدداً' : 'Could not create, try again'),
       )
@@ -228,7 +228,7 @@ export default function Onboarding() {
           {isPlatformAdmin && (
             <Link to="/platform" className="onb-admin">
               <Icon name="sparkles" size={15} />
-              {ar ? 'أنت مدير المنصة — الدخول إلى لوحة المنصّة' : 'You are a platform admin — open the console'}
+              {ar ? 'أنت مدير المنصة، الدخول إلى لوحة المنصّة' : 'You are a platform admin, open the console'}
             </Link>
           )}
 
@@ -278,7 +278,7 @@ export default function Onboarding() {
                     onChange={(e) => setTypeLabel(e.target.value)}
                   />
                 )}
-                <span className="onb-hint">يضبط النظام مفرداته على نشاطك — «مشروب» أو «طبق» أو «منتج» — ويستخدمها الذكاء في كل ما يكتبه ويصممه لك.</span>
+                <span className="onb-hint">يضبط النظام مفرداته على نشاطك («مشروب» أو «طبق» أو «منتج») ويستخدمها الذكاء في كل ما يكتبه ويصممه لك.</span>
               </div>
 
               <div className="onb-field">

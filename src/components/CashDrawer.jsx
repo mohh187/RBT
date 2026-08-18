@@ -21,7 +21,14 @@ export default function CashDrawer({ tid, lang = 'ar', actorName = '', uid = '',
   const refundOf = (o) => (o.status === 'refunded' ? (o.refund?.amount || 0) : 0)
   const byMethod = settled.reduce((acc, o) => {
     if (o.paymentBreakdown) { // mixed: credit each method its share, refund off cash
-      Object.entries(o.paymentBreakdown).forEach(([m, amt]) => { acc[m] = (acc[m] || 0) + (Number(amt) || 0) })
+      let legSum = 0
+      Object.entries(o.paymentBreakdown).forEach(([m, amt]) => { legSum += Number(amt) || 0; acc[m] = (acc[m] || 0) + (Number(amt) || 0) })
+      // Instalments accumulate legs in payPartial, but the CLOSING payment goes
+      // through payOrder, which stamps paymentMethod without adding its leg —
+      // credit that remainder to the closing method or the drawer loses it.
+      // (payOrder-mixed legs already sum to total+tip, so residual is 0 there.)
+      const residual = Math.round(((o.total || 0) + (o.tip || 0) - legSum) * 100) / 100
+      if (residual > 0.005) { const m = o.paymentMethod || 'cash'; acc[m] = (acc[m] || 0) + residual }
       if (refundOf(o)) acc.cash = (acc.cash || 0) - refundOf(o)
     } else {
       const m = o.paymentMethod || 'cash'
@@ -53,7 +60,7 @@ export default function CashDrawer({ tid, lang = 'ar', actorName = '', uid = '',
     try {
       await openCashierSession(tid, { openingFloat: Number(float0) || 0, actor: actorName, uid })
       setOpenSheet(false); setFloat0(''); toast?.success?.(ar ? 'تم فتح الدرج' : 'Drawer opened')
-    } catch (_) { toast?.error?.(ar ? 'تعذّر فتح الوردية — أعد المحاولة' : 'Could not open the session — retry') }
+    } catch (_) { toast?.error?.(ar ? 'ما انفتحت الوردية. تأكد من الاتصال وحاول مرة ثانية' : 'The session did not open. Check your connection and try again') }
     finally { setBusy(false) }
   }
   const doClose = async () => {
@@ -65,7 +72,7 @@ export default function CashDrawer({ tid, lang = 'ar', actorName = '', uid = '',
         cashSales, cardSales, onlineSales, totalSales, tips: tipsTotal, refunds: refundsTotal, byMethod, ordersCount: settled.length, closedByName: actorName,
       })
       setCloseSheet(false); setCounted(''); toast?.success?.(ar ? 'تم إغلاق الوردية' : 'Session closed')
-    } catch (_) { toast?.error?.(ar ? 'تعذّر إغلاق الوردية — أعد المحاولة' : 'Could not close the session — retry') }
+    } catch (_) { toast?.error?.(ar ? 'ما انقفلت الوردية. تأكد من الاتصال وحاول مرة ثانية' : 'The session did not close. Check your connection and try again') }
     finally { setBusy(false) }
   }
 
@@ -96,7 +103,7 @@ export default function CashDrawer({ tid, lang = 'ar', actorName = '', uid = '',
           <Row l={ar ? 'مبيعات نقدية' : 'Cash sales'} v={<Price value={cashSales} currency={currency} lang={lang} />} />
           <Row l={ar ? 'شبكة (مدى/بطاقة)' : 'Card machine'} v={<Price value={cardSales} currency={currency} lang={lang} />} />
           {(byMethod.transfer || 0) > 0 && <Row l={ar ? 'تحويل' : 'Transfer'} v={<Price value={byMethod.transfer || 0} currency={currency} lang={lang} />} />}
-          {onlineSales > 0 && <Row l={ar ? 'أونلاين (مدفوع مسبقاً)' : 'Online (prepaid)'} v={<Price value={onlineSales} currency={currency} lang={lang} />} />}
+          {onlineSales > 0 && <Row l={ar ? 'الدفع الإلكتروني (مدفوع مسبقاً)' : 'Online (prepaid)'} v={<Price value={onlineSales} currency={currency} lang={lang} />} />}
           <Row l={ar ? 'إكراميات' : 'Tips'} v={<Price value={tipsTotal} currency={currency} lang={lang} />} />
           {refundsTotal > 0 && <Row l={ar ? 'مستردّات' : 'Refunds'} v={<>−<Price value={refundsTotal} currency={currency} lang={lang} /></>} danger />}
           <Row l={ar ? 'النقد المتوقع بالدرج' : 'Expected cash'} v={<Price value={expectedCash} currency={currency} lang={lang} />} bold />

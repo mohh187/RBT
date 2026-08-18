@@ -141,7 +141,7 @@ export default function PostStudio() {
       sessionStorage.removeItem('rbt_content_draft')
       if (!raw) return
       const d = JSON.parse(raw)
-      const brief = [d?.subject, d?.style].filter(Boolean).join(' — ')
+      const brief = [d?.subject, d?.style].filter(Boolean).join(', ')
       if (brief) setFreePrompt(brief)
       if (d?.caption) setMCaption(String(d.caption))
       if (Array.isArray(d?.itemIds) && d.itemIds[0]) setAiItemId(String(d.itemIds[0]))
@@ -205,7 +205,7 @@ export default function PostStudio() {
       // second variant failed — keep the first as the preview, with a note
       setAbPair(null)
       setPreview((p) => { if (p?.url) URL.revokeObjectURL(p.url); return { blob: a.blob, url: a.url, caption: p?.caption || '' } })
-      toast.error(ar ? 'تعذر توليد النسخة الثانية — اعتُمدت الأولى' : 'Second variant failed — kept the first')
+      toast.error(ar ? 'تعذر توليد النسخة الثانية، اعتُمدت الأولى' : 'Second variant failed, kept the first')
     }
     finally { setGenBusy('') }
   }
@@ -248,7 +248,7 @@ export default function PostStudio() {
       '---',
       String(text || '').trim(),
     ].join('\n')))
-    if (!out) throw new Error(ar ? 'لم تصل ترجمة — أعد المحاولة' : 'No translation returned — retry')
+    if (!out) throw new Error(ar ? 'لم تصل ترجمة، أعد المحاولة' : 'No translation returned, retry')
     return out
   }
   const translatePreview = async () => {
@@ -285,7 +285,7 @@ export default function PostStudio() {
     const name = (window.prompt(ar ? 'اسم البرومبت:' : 'Prompt name:', prompt.slice(0, 24)) || '').trim().slice(0, 40)
     if (!name) return
     const rest = promptLib.filter((p) => p?.name !== name)
-    if (rest.length >= 20) { toast.error(ar ? 'الحد 20 برومبتاً — احذف واحداً أولاً' : 'Limit is 20 prompts — delete one first'); return }
+    if (rest.length >= 20) { toast.error(ar ? 'الحد 20 برومبتاً، احذف واحداً أولاً' : 'Limit is 20 prompts, delete one first'); return }
     await persistLib([{ name, prompt: prompt.slice(0, 400), styleId }, ...rest])
     toast.success(t('saved'))
   }
@@ -299,7 +299,7 @@ export default function PostStudio() {
   const plan = tenant?.contentPlan || null
   const generatePlan = async () => {
     if (planBusy || !canWrite) return
-    if (plan?.entries?.length && !window.confirm(ar ? 'توجد خطة محفوظة — استبدالها بخطة جديدة؟' : 'A saved plan exists — replace it?')) return
+    if (plan?.entries?.length && !window.confirm(ar ? 'توجد خطة محفوظة، استبدالها بخطة جديدة؟' : 'A saved plan exists, replace it?')) return
     setPlanBusy(true)
     try {
       const tops = [...(items || [])].sort((x, y) => (Number(y.soldCount) || 0) - (Number(x.soldCount) || 0)).slice(0, 8).map(iName).filter(Boolean)
@@ -310,13 +310,13 @@ export default function PostStudio() {
         'أجب بمصفوفة JSON صارمة فقط دون أي شرح أو Markdown أو أسوار كود، بهذا الشكل بالضبط:',
         '[{"day":1,"idea":"فكرة قصيرة للمنشور","itemName":"اسم صنف من القائمة أو اتركه فارغاً","caption":"نص المنشور الجاهز من سطرين مع هاشتاقات"}]',
         '30 عنصراً (day من 1 إلى 30) مع تنويع: أصناف، عروض، مناسبات، محتوى تفاعلي، كواليس.',
-        'ممنوع: الرموز التعبيرية والأرقام العربية المشرقية — أرقام لاتينية فقط.',
+        'ممنوع: الرموز التعبيرية والأرقام العربية المشرقية، أرقام لاتينية فقط.',
       ].filter(Boolean).join('\n')))
-      if (!entries.length) throw new Error(ar ? 'تعذرت قراءة خطة صالحة من الذكاء — أعد المحاولة' : 'Could not parse a valid plan — retry')
+      if (!entries.length) throw new Error(ar ? 'تعذرت قراءة خطة صالحة من الذكاء، أعد المحاولة' : 'Could not parse a valid plan, retry')
       const next = { month: new Date().toISOString().slice(0, 7), entries, createdAt: Date.now() }
       await updateTenant(tenantId, { contentPlan: next })
       updateTenantLocal?.({ contentPlan: next })
-      toast.success(ar ? `جاهزة — خطة ${entries.length} يوماً` : `Ready — a ${entries.length}-day plan`)
+      toast.success(ar ? `جاهزة، خطة ${entries.length} يوماً` : `Ready, a ${entries.length}-day plan`)
     } catch (e) { toast.error(String(e?.message || e)) }
     finally { setPlanBusy(false) }
   }
@@ -327,7 +327,7 @@ export default function PostStudio() {
       const entries = (plan?.entries || []).map((e, i) => (i === idx ? { ...e, drafted: true } : e))
       const next = { ...plan, entries }
       updateTenant(tenantId, { contentPlan: next }).then(() => updateTenantLocal?.({ contentPlan: next })).catch(() => {})
-      toast.success(ar ? 'أُنشئت المسودة — ولّد صورتها من قائمة الاعتماد' : 'Draft created — generate its image from the queue')
+      toast.success(ar ? 'أُنشئت المسودة، ولّد صورتها من قائمة الاعتماد' : 'Draft created, generate its image from the queue')
     } catch (e) { draftError(e) }
   }
   // V2: image for an image-less (plan-born) draft — scene from its caption/item
@@ -367,7 +367,7 @@ export default function PostStudio() {
       await saveDraftFromBlob(preview.blob, { kind: 'ai', itemId: aiItemId || '', itemName: iName(it), style: styleId, caption: cleanCaption(preview.caption || '') })
       URL.revokeObjectURL(preview.url)
       setPreview(null)
-      toast.success(ar ? 'حُفظت المسودة — بانتظار الاعتماد' : 'Draft saved — awaiting approval')
+      toast.success(ar ? 'حُفظت المسودة، بانتظار الاعتماد' : 'Draft saved, awaiting approval')
     } catch (e) { draftError(e) }
     finally { setSaveBusy(false) }
   }
@@ -467,7 +467,7 @@ export default function PostStudio() {
       const blob = await new Promise((res) => canvasRef.current.toBlob(res, 'image/jpeg', 0.92))
       if (!blob) throw new Error(ar ? 'تعذر تصدير التصميم' : 'Could not export the design')
       await saveDraftFromBlob(blob, { kind: 'manual', caption: cleanCaption(mCaption || [headline, subline].filter(Boolean).join('\n')) })
-      toast.success(ar ? 'حُفظت المسودة — بانتظار الاعتماد' : 'Draft saved — awaiting approval')
+      toast.success(ar ? 'حُفظت المسودة، بانتظار الاعتماد' : 'Draft saved, awaiting approval')
     } catch (e) { draftError(e) }
     finally { setSaveBusy(false) }
   }
@@ -506,8 +506,8 @@ export default function PostStudio() {
     window.open(url, '_blank', 'noopener,noreferrer')
     if (d.imageUrl) {
       toast.success(ar
-        ? 'فُتح إكس بالنص والرابط — أرفق الصورة من مكتبتك'
-        : 'X opened with the text and link — attach the image from your library')
+        ? 'فُتح إكس بالنص والرابط، أرفق الصورة من مكتبتك'
+        : 'X opened with the text and link, attach the image from your library')
     }
   }
 
@@ -547,7 +547,7 @@ export default function PostStudio() {
         toast.success(ar ? 'حُفظت كقالب في الحملات' : 'Saved as a campaign template')
       } else {
         await saveCampaign(tenantId, null, { ...base, status: 'scheduled', scheduleAt: Date.now() })
-        toast.success(ar ? 'جُدولت — ستُرسل خلال دقائق' : 'Scheduled — sending within minutes')
+        toast.success(ar ? 'جُدولت، ستُرسل خلال دقائق' : 'Scheduled, sending within minutes')
       }
       await markPublished(d, 'whatsapp')
       setCampFor(null)
@@ -655,27 +655,27 @@ export default function PostStudio() {
 
       <p className="ps-note">
         {ar
-          ? 'كل تصميم — بالذكاء أو يدوياً — يُحفظ كمسودة في «قائمة الاعتماد» ولا يُنشر أي شيء دون ضغطة اعتماد صريحة. المتاح الآن: الاستوري والأخبار داخل منيوك، وحملات واتساب، وزر «انشر على إكس» الذي يفتح إكس بنصك ورابط منيوك لتنشره بحسابك. النشر التلقائي لانستقرام قيد الإعداد ويتطلب توثيق المنشأة لدى Meta.'
-          : 'Every design (AI or manual) is saved as a DRAFT in the approval queue — nothing publishes without an explicit approval click. Available now: in-menu stories, profile posts, WhatsApp campaigns, and «Post on X», which opens X with your text and menu link so you post from your own account. Automatic Instagram publishing is in progress and needs Meta business verification.'}
+          ? 'كل تصميم. بالذكاء أو يدوياً. يُحفظ كمسودة في «قائمة الاعتماد» ولا يُنشر أي شيء دون ضغطة اعتماد صريحة. المتاح الآن: الاستوري والأخبار داخل منيوك، وحملات واتساب، وزر «انشر على إكس» الذي يفتح إكس بنصك ورابط منيوك لتنشره بحسابك. النشر التلقائي لانستقرام قيد الإعداد ويتطلب توثيق المنشأة لدى Meta.'
+          : 'Every design (AI or manual) is saved as a DRAFT in the approval queue. Nothing publishes without an explicit approval click. Available now: in-menu stories, profile posts, WhatsApp campaigns, and «Post on X», which opens X with your text and menu link so you post from your own account. Automatic Instagram publishing is in progress and needs Meta business verification.'}
       </p>
 
       {!canWrite && !canStories && (
         <div className="card card-pad row" style={{ gap: 8, alignItems: 'center' }}>
           <Icon name="lock" size={16} />
-          <span className="small">{ar ? 'صلاحياتك تسمح بالاطلاع فقط — الإنشاء والاعتماد يتطلبان صلاحية الحملات.' : 'View-only — creating and approving require the campaigns capability.'}</span>
+          <span className="small">{ar ? 'صلاحياتك تسمح بالاطلاع فقط، الإنشاء والاعتماد يتطلبان صلاحية الحملات.' : 'View-only, creating and approving require the campaigns capability.'}</span>
         </div>
       )}
 
       {/* ---- auto-pilot ---- */}
       <div className="card card-pad stack" style={{ gap: 8 }}>
         <div className="row-between" style={{ gap: 8, flexWrap: 'wrap' }}>
-          <strong className="small"><Icon name="zap" size={14} style={{ verticalAlign: 'middle' }} /> {ar ? 'مؤتمت مع موافقة — مسودات مقترحة أسبوعياً' : 'Auto-pilot — weekly suggested drafts'}</strong>
+          <strong className="small"><Icon name="zap" size={14} style={{ verticalAlign: 'middle' }} /> {ar ? 'مؤتمت مع موافقة، مسودات مقترحة أسبوعياً' : 'Auto-pilot, weekly suggested drafts'}</strong>
           <input type="checkbox" checked={pilot.enabled === true} disabled={!canWrite} onChange={(e) => togglePilot(e.target.checked)} style={{ width: 22, height: 22 }} />
         </div>
         <span className="xs faint">
           {ar
-            ? 'عند التفعيل: يقترح الاستوديو حتى مسودتين أسبوعياً من أصنافك الأكثر مبيعاً عند فتح هذه الصفحة (لا جدولة سحابية في هذه المرحلة) — وتبقى مسودات لا تُنشر إلا باعتمادك.'
-            : 'When on: up to 2 weekly drafts are generated from your best-sellers when this page opens (no cloud scheduling in this pass) — they stay drafts until you approve them.'}
+            ? 'عند التفعيل: يقترح الاستوديو حتى مسودتين أسبوعياً من أصنافك الأكثر مبيعاً عند فتح هذه الصفحة (لا جدولة سحابية في هذه المرحلة)، وتبقى مسودات لا تُنشر إلا باعتمادك.'
+            : 'When on: up to 2 weekly drafts are generated from your best-sellers when this page opens (no cloud scheduling in this pass), they stay drafts until you approve them.'}
         </span>
         {pilotBusy && <span className="small row" style={{ gap: 6, alignItems: 'center', color: 'var(--brand)' }}><Icon name="sparkles" size={14} /> {ar ? 'يجري توليد مسودات هذا الأسبوع…' : 'Generating this week’s drafts…'}</span>}
       </div>
@@ -716,8 +716,8 @@ export default function PostStudio() {
         ) : (
           <span className="xs faint">
             {ar
-              ? 'خطة شهر كاملة بضغطة: فكرة ونص جاهز لكل يوم اعتماداً على اسم منشأتك وأصنافك الأكثر مبيعاً — وكل فكرة تتحول لمسودة في قائمة الاعتماد (الصورة تولّدها لاحقاً من المسودة).'
-              : 'A full month in one tap: an idea and a ready caption for every day, based on your venue and best-sellers — each idea converts to a draft in the approval queue (generate its image later from the draft).'}
+              ? 'خطة شهر كاملة بضغطة: فكرة ونص جاهز لكل يوم اعتماداً على اسم منشأتك وأصنافك الأكثر مبيعاً، وكل فكرة تتحول لمسودة في قائمة الاعتماد (الصورة تولّدها لاحقاً من المسودة).'
+              : 'A full month in one tap: an idea and a ready caption for every day, based on your venue and best-sellers, each idea converts to a draft in the approval queue (generate its image later from the draft).'}
           </span>
         )}
       </div>
@@ -732,7 +732,7 @@ export default function PostStudio() {
                 <option value="">{ar ? 'اختر صنفاً…' : 'Pick an item…'}</option>
                 {withImages.map((i) => <option key={i.id} value={i.id}>{iName(i)}</option>)}
               </select>
-              {!withImages.length && <span className="xs" style={{ color: 'var(--warning)' }}>{ar ? 'لا توجد أصناف بصور — أضف صور المنتجات أولاً.' : 'No items with photos yet — add product photos first.'}</span>}
+              {!withImages.length && <span className="xs" style={{ color: 'var(--warning)' }}>{ar ? 'لا توجد أصناف بصور، أضف صور المنتجات أولاً.' : 'No items with photos yet, add product photos first.'}</span>}
               {/* direct reference uploads (product + logo …) — local files, immune to bucket CORS */}
               <div className="row" style={{ gap: 6, flexWrap: 'wrap', alignItems: 'center', marginTop: 6 }}>
                 <label className="btn btn-sm btn-outline" style={{ cursor: 'pointer' }}>
@@ -802,7 +802,7 @@ export default function PostStudio() {
             {/* V2: A/B toggle — two variants of the same prompt, keep the better one */}
             <label className="row xs" style={{ gap: 6, alignItems: 'center', cursor: 'pointer' }}>
               <input type="checkbox" checked={abMode} onChange={(e) => setAbMode(e.target.checked)} style={{ width: 16, height: 16 }} />
-              <span>{ar ? 'نسختان A/B — صورتان لنفس الوصف وتختار أفضلهما' : 'A/B — two variants of the same prompt, pick the better'}</span>
+              <span>{ar ? 'نسختان A/B، صورتان لنفس الوصف وتختار أفضلهما' : 'A/B. Two variants of the same prompt, pick the better'}</span>
             </label>
             <button className="btn btn-primary" disabled={!!genBusy || !canWrite || !aiConfigured()} onClick={doGenerate}>
               <Icon name="sparkles" size={15} /> {genBusy
@@ -813,14 +813,14 @@ export default function PostStudio() {
                   : (ar ? 'يولّد الصورة…' : 'Generating image…'))
                 : (ar ? 'توليد التصميم والنص' : 'Generate design + caption')}
             </button>
-            {!aiConfigured() && <span className="xs" style={{ color: 'var(--warning)' }}>{ar ? 'الذكاء غير مهيأ — أكمل إعداد Firebase/Gemini.' : 'AI not configured — finish Firebase/Gemini setup.'}</span>}
+            {!aiConfigured() && <span className="xs" style={{ color: 'var(--warning)' }}>{ar ? 'الذكاء غير مهيأ، أكمل إعداد Firebase/Gemini.' : 'AI not configured, finish Firebase/Gemini setup.'}</span>}
           </div>
 
           <div className="stack" style={{ gap: 'var(--sp-2)' }}>
             {abPair ? (
               <>
                 {/* V2: A/B chooser — the picked variant becomes the preview */}
-                <span className="xs faint">{ar ? 'قارن واختر — النسخة الأخرى تُهمل' : 'Compare and pick — the other variant is discarded'}</span>
+                <span className="xs faint">{ar ? 'قارن واختر، النسخة الأخرى تُهمل' : 'Compare and pick, the other variant is discarded'}</span>
                 <div className="ps2-ab">
                   {['a', 'b'].map((k) => (
                     <div key={k} className="ps2-ab-slot">
@@ -851,7 +851,7 @@ export default function PostStudio() {
             ) : (
               <div className="ps-empty-stage center stack" style={{ gap: 6 }}>
                 <Icon name="image" size={30} style={{ color: 'var(--text-muted)' }} />
-                <span className="xs faint">{ar ? 'المعاينة تظهر هنا — لا يُنشر شيء قبل اعتمادك' : 'Preview appears here — nothing publishes before your approval'}</span>
+                <span className="xs faint">{ar ? 'المعاينة تظهر هنا، لا يُنشر شيء قبل اعتمادك' : 'Preview appears here, nothing publishes before your approval'}</span>
               </div>
             )}
           </div>
@@ -859,7 +859,7 @@ export default function PostStudio() {
       ) : (
         <div className="card card-pad ps-gen-grid">
           <div className="stack" style={{ gap: 'var(--sp-3)' }}>
-            <span className="xs faint">{ar ? 'محرر منظم بقوالب جاهزة (مواضع وأحجام محددة — ليس سحباً حراً).' : 'A structured composer with presets (fixed positions/sizes — not free-drag).'}</span>
+            <span className="xs faint">{ar ? 'محرر منظم بقوالب جاهزة (مواضع وأحجام محددة، ليس سحباً حراً).' : 'A structured composer with presets (fixed positions/sizes, not free-drag).'}</span>
             <div className="row" style={{ gap: 8, flexWrap: 'wrap', alignItems: 'flex-end' }}>
               <div className="field grow" style={{ marginBottom: 0, minWidth: 160 }}>
                 <label>{ar ? 'صورة من صنف' : 'Image from an item'}</label>
@@ -904,7 +904,7 @@ export default function PostStudio() {
             </div>
             <div className="field" style={{ marginBottom: 0 }}>
               <label>{ar ? 'نص المنشور المرافق' : 'Accompanying caption'}</label>
-              <textarea className="textarea" rows={3} value={mCaption} onChange={(e) => setMCaption(e.target.value)} placeholder={ar ? 'يُستخدم عند النشر كستوري/خبر/حملة (اختياري — الافتراضي: العنوانان)' : 'Used when publishing (optional — defaults to the two lines)'} />
+              <textarea className="textarea" rows={3} value={mCaption} onChange={(e) => setMCaption(e.target.value)} placeholder={ar ? 'يُستخدم عند النشر كستوري/خبر/حملة (اختياري، الافتراضي: العنوانان)' : 'Used when publishing (optional, defaults to the two lines)'} />
             </div>
             <button className="btn btn-primary" disabled={saveBusy || !canWrite} onClick={saveManualDraft}>{saveBusy ? t('saving') : (ar ? 'حفظ في قائمة الاعتماد' : 'Save to approval queue')}</button>
           </div>
@@ -934,7 +934,7 @@ export default function PostStudio() {
         </div>
       )}
       {drafts.length === 0 && (
-        <Empty icon="image" title={ar ? 'لا تصاميم بعد' : 'No designs yet'} hint={ar ? 'ولّد تصميماً بالذكاء أو صمم يدوياً — وكلها تمر بالاعتماد قبل النشر' : 'Generate with AI or design manually — everything passes approval first'} />
+        <Empty icon="image" title={ar ? 'لا تصاميم بعد' : 'No designs yet'} hint={ar ? 'ولّد تصميماً بالذكاء أو صمم يدوياً، وكلها تمر بالاعتماد قبل النشر' : 'Generate with AI or design manually, everything passes approval first'} />
       )}
 
       {/* ---- WhatsApp campaign sheet ---- */}
@@ -959,7 +959,7 @@ export default function PostStudio() {
               </select>
             </div>
             <p className="xs faint" style={{ margin: 0 }}>
-              {ar ? 'واتساب يُرسل نصاً فقط — تُرفق الصورة كسطر رابط داخل الرسالة. تديرها شاشة «الحملات» كأي حملة أخرى.' : 'WhatsApp campaigns are text-only — the image is included as a link line. Manage it from Campaigns like any other campaign.'}
+              {ar ? 'واتساب يُرسل نصاً فقط، تُرفق الصورة كسطر رابط داخل الرسالة. تديرها شاشة «الحملات» كأي حملة أخرى.' : 'WhatsApp campaigns are text-only, the image is included as a link line. Manage it from Campaigns like any other campaign.'}
             </p>
           </div>
         )}

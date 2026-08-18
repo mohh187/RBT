@@ -154,10 +154,19 @@ export function AuthProvider({ children }) {
   }, [loadContext])
 
   const logout = useCallback(async () => {
+    // Revoke this device's push registration BEFORE the session goes: writing
+    // the token doc needs the session that is about to end. Without it, a
+    // staffer who leaves keeps getting the venue's orders on their own phone.
+    // Dynamically imported so firebase/messaging never lands in the auth chunk.
+    const tid = profile?.tenantId || tenant?.id || ''
+    try {
+      const { revokePush } = await import('./push.js')
+      await revokePush(tid)
+    } catch (_) { /* push is optional — never block a sign-out on it */ }
     await signOut(auth)
     setProfile(null)
     setTenant(null)
-  }, [])
+  }, [profile?.tenantId, tenant?.id])
 
   // PIN sign-in: the PIN identifies the staffer server-side; when it belongs to
   // someone other than the current Firebase user, the session is genuinely

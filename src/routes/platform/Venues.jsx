@@ -40,7 +40,7 @@ export default function Venues() {
         await setTenantActive(t.id, false, reason)
         toast.success(`تم إيقاف «${t.name}»`)
       }
-    } catch (_) { toast.error('تعذّر تحديث حالة المنشأة — أعد المحاولة') }
+    } catch (_) { toast.error('تعذّر تحديث حالة المنشأة، أعد المحاولة') }
     finally { setTogglingId('') }
   }
 

@@ -16,32 +16,32 @@ export const SYSTEM_THEMES = [
   {
     id: 'classic',
     ar: 'الكلاسيكي', en: 'Classic',
-    hintAr: 'المظهر الأصلي — نظيف ومحايد بلون هوية المنشأة',
+    hintAr: 'المظهر الأصلي، نظيف ومحايد بلون هوية المنشأة',
     // picker swatches: [bg, surface, accent-hint]
     swatch: ['#fafafa', '#ffffff', '#7c2d2d'],
   },
   {
     id: 'noir',
     ar: 'نوار الليلي', en: 'Noir',
-    hintAr: 'داكن فاخر بلمسات ذهبية — أزرار حبّة وقوائم عائمة وشريط تنقّل طافٍ، مريح للمناوبات الليلية',
+    hintAr: 'داكن فاخر بلمسات ذهبية، أزرار حبّة وقوائم عائمة وشريط تنقّل طافٍ، مريح للمناوبات الليلية',
     swatch: ['#0e0e11', '#17171c', '#e8b04b'],
   },
   {
     id: 'airy',
     ar: 'دافئ هادئ', en: 'Airy',
-    hintAr: 'فاتح دافئ بزوايا كبيرة ومسافات رحبة وبطاقات عائمة بلا حدود — إحساس مقهى مريح',
+    hintAr: 'فاتح دافئ بزوايا كبيرة ومسافات رحبة وبطاقات عائمة بلا حدود، بإحساس مكان مريح',
     swatch: ['#faf6f2', '#ffffff', '#c2410c'],
   },
   {
     id: 'glass',
     ar: 'زجاجي', en: 'Glass',
-    hintAr: 'شفافية وضبابية بنمط آبل — أسطح زجاجية وأزرار نقية على خلفية هادئة',
+    hintAr: 'شفافية وضبابية بنمط آبل، أسطح زجاجية وأزرار نقية على خلفية هادئة',
     swatch: ['#e9edf3', '#ffffff', '#5b7cfa'],
   },
   {
     id: 'glassdark',
     ar: 'زجاجي داكن', en: 'Glass Dark',
-    hintAr: 'الزجاج المدخّن الليلي دائماً — بغض النظر عن وضع الفاتح/الداكن',
+    hintAr: 'الزجاج المدخّن الليلي دائماً، بغض النظر عن وضع الفاتح والداكن',
     swatch: ['#101318', '#1a1f29', '#7ea2ff'],
   },
   {
@@ -53,25 +53,25 @@ export const SYSTEM_THEMES = [
   {
     id: 'sharp',
     ar: 'حاد عملي', en: 'Sharp',
-    hintAr: 'مسطّح حاد بزوايا مربّعة وفواصل شعرية وكثافة أعلى — طابع أدوات احترافي',
+    hintAr: 'مسطّح حاد بزوايا مربّعة وفواصل شعرية وكثافة أعلى، بطابع أدوات احترافي',
     swatch: ['#f6f6f7', '#ffffff', '#111111'],
   },
   {
     id: 'neon',
     ar: 'نيون ليلي', en: 'Neon',
-    hintAr: 'ليلي عميق بحدود سماوية وخط توهّج تحت الاختيار — للكوفيهات الشبابية',
+    hintAr: 'ليلي عميق بحدود سماوية وخط توهّج تحت الاختيار، للكوفيهات الشبابية',
     swatch: ['#0b0e14', '#131824', '#22d3ee'],
   },
   {
     id: 'paper',
     ar: 'ورقي طباعي', en: 'Paper',
-    hintAr: 'ورق دافئ بفواصل منقّطة وأزرار كالأختام الحبرية — طابع مطبوعات',
+    hintAr: 'ورق دافئ بفواصل منقّطة وأزرار كالأختام الحبرية، بطابع المطبوعات',
     swatch: ['#f7f4ee', '#fffdf8', '#4a4238'],
   },
   {
     id: 'wood',
     ar: 'خشبي دافئ', en: 'Wood',
-    hintAr: 'أسطح كريمية بإطارات مزدوجة وتدرّجات دافئة — للمقاهي التراثية',
+    hintAr: 'أسطح كريمية بإطارات مزدوجة وتدرّجات دافئة، للمقاهي التراثية',
     swatch: ['#efe3d3', '#faf3e8', '#8a5a2b'],
   },
 ]
@@ -207,7 +207,7 @@ export const CHROME_THEMES = [
   {
     id: 'auto',
     ar: 'تلقائي (يتبع الثيم)', en: 'Auto (follows theme)',
-    hintAr: 'يأخذ لونه من ثيم المنشأة ومن وضع الفاتح/الداكن — لا لون ثابت.',
+    hintAr: 'يأخذ لونه من ثيم المنشأة ومن وضع الفاتح والداكن، بلا لون ثابت.',
     hintEn: 'Takes its colour from the venue theme and the light/dark mode.',
     swatch: { bg: 'var(--surface)', text: 'var(--text)', muted: 'var(--text-muted)', active: 'var(--brand)', border: 'var(--border)' },
   },
@@ -221,7 +221,7 @@ export const CHROME_THEMES = [
   {
     id: 'ink',
     ar: 'حبري', en: 'Ink',
-    hintAr: 'أسود شبه صافٍ بنصوص فضية ونشاط ذهبي — أنيق وهادئ.',
+    hintAr: 'أسود شبه صافٍ بنصوص فضية ونشاط ذهبي، أنيق وهادئ.',
     hintEn: 'Near-black with silver text and a gold active tab.',
     swatch: { bg: '#101014', text: '#f6f6f7', muted: '#b4b4bd', active: '#ffcf7a', border: '#2b2b33' },
   },
@@ -242,7 +242,7 @@ export const CHROME_THEMES = [
   {
     id: 'sand',
     ar: 'رملي فاتح', en: 'Sand',
-    hintAr: 'رمادي رملي فاتح بنصوص داكنة ونشاط طوبي — الأنسب للمنيو الفاتح.',
+    hintAr: 'رمادي رملي فاتح بنصوص داكنة ونشاط طوبي، وهو الأنسب للمنيو الفاتح.',
     hintEn: 'Light sand grey with dark text and a brick active tab.',
     swatch: { bg: '#f4f2ef', text: '#1b1a18', muted: '#5b574f', active: '#8a4321', border: '#ddd8d1' },
   },

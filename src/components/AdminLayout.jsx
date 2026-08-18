@@ -14,6 +14,7 @@ import { CAP } from '../lib/permissions.js'
 import { planAllows, planExpired, EXPIRED_GRACE_DAYS } from '../lib/plans.js'
 import { alertParty } from '../lib/notify.js'
 import { orderNumber } from '../lib/format.js'
+import { arPlural } from '../lib/forecast.js'
 import { useCompactUI } from '../lib/useCompactUI.js'
 import { systemThemeAttr, useSystemThemeBody } from '../lib/systemThemes.js'
 import { applyStaffManifest, restorePlatformManifest } from '../lib/pwa.js'
@@ -570,11 +571,18 @@ export default function AdminLayout() {
               {lang === 'ar' ? 'الحساب موقوف مؤقتاً من إدارة المنصة' : 'Account suspended by the platform'}
             </p>
             <p className="small" style={{ marginTop: 4 }}>
-              {tenant?.suspendReason || (lang === 'ar' ? 'تم إيقاف الوصول للنظام. تواصل مع الدعم لإعادة التفعيل.' : 'Access is locked. Contact support to reactivate.')}
+              {tenant?.suspendReason || (lang === 'ar'
+                ? ((isManager || can(CAP.MANAGE_SETTINGS)) ? 'الوصول للنظام موقوف. تواصل مع الدعم لإعادة التفعيل.' : 'الوصول للنظام موقوف. أبلغ مدير المنشأة ليتواصل مع الدعم.')
+                : 'Access is locked. Contact support to reactivate.')}
             </p>
-            <div style={{ marginTop: 'var(--sp-4)' }}>
-              <Link to="/admin/support" className="btn btn-primary"><Icon name="mail" size={16} /> {lang === 'ar' ? 'التواصل مع الدعم' : 'Contact support'}</Link>
-            </div>
+            {/* /admin/support needs MANAGE_SETTINGS, so for anyone else this
+                button led out of the shell (its header still has logout) into a
+                screen with no way back. Only offer it to who can open it. */}
+            {(isManager || can(CAP.MANAGE_SETTINGS)) && (
+              <div style={{ marginTop: 'var(--sp-4)' }}>
+                <Link to="/admin/support" className="btn btn-primary"><Icon name="mail" size={16} /> {lang === 'ar' ? 'التواصل مع الدعم' : 'Contact support'}</Link>
+              </div>
+            )}
           </div>
         ) : (
           <>
@@ -592,8 +600,9 @@ export default function AdminLayout() {
                 <p className="small" style={{ marginTop: 4 }}>
                   {planExpired(tenant)
                     ? (lang === 'ar' ? 'تم تقييد المزايا إلى باقة «منيو» حتى التجديد.' : 'Features are limited to the Menu plan until renewal.')
-                    : (lang === 'ar' ? `المزايا مستمرة خلال مهلة ${EXPIRED_GRACE_DAYS} أيام — جدّد قبل انتهائها.` : `Full features continue during a ${EXPIRED_GRACE_DAYS}-day grace period.`)}
-                  {' '}<Link to="/admin/support" className="bold">{lang === 'ar' ? 'تجديد الاشتراك ←' : 'Renew →'}</Link>
+                    : (lang === 'ar' ? `المزايا مستمرة خلال مهلة ${arPlural(EXPIRED_GRACE_DAYS, { one: 'يوم', two: 'يومان', few: 'أيام', many: 'يوماً' })}، جدّد قبل انتهائها.` : `Full features continue during a ${EXPIRED_GRACE_DAYS}-day grace period.`)}
+                  {/* same MANAGE_SETTINGS gate as the suspended screen: /admin/support bounces anyone else out of the shell */}
+                  {(isManager || can(CAP.MANAGE_SETTINGS)) && <>{' '}<Link to="/admin/support" className="bold">{lang === 'ar' ? 'تجديد الاشتراك ←' : 'Renew →'}</Link></>}
                 </p>
               </div>
             )}

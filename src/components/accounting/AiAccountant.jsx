@@ -54,7 +54,7 @@ export default function AiAccountant({ snapshot, ar = true, disabled = false, di
     } catch (e) {
       setMessages((m) => [...m, {
         role: 'error',
-        text: (ar ? 'تعذّر الوصول إلى المساعد: ' : 'Assistant unavailable: ') + (e?.message || e),
+        text: ar ? 'ما وصلنا للمساعد الآن. تأكد من الاتصال وأعد السؤال بعد لحظات.' : 'Could not reach the assistant. Check your connection and ask again in a moment.',
       }])
     } finally {
       setBusy(false)
@@ -72,14 +72,14 @@ export default function AiAccountant({ snapshot, ar = true, disabled = false, di
         <span className="acc-card-title"><Icon name="sparkles" size={17} /> {ar ? 'المحاسب الذكي' : 'AI accountant'}</span>
         <p className="acc-hint">
           {ar
-            ? 'يجيب من أرقام هذه الفترة فقط — تُرسل إليه لقطة مالية حقيقية مع تعليمات صارمة بعدم اختراع أي رقم. مع كل إجابة يظهر «الأرقام المستخدمة» لتراجعها بنفسك.'
+            ? 'يجيب من أرقام هذه الفترة فقط. تصله لقطة مالية حقيقية مع تعليمات صارمة بألا يخترع أي رقم، ومع كل إجابة يظهر «الأرقام المستخدمة» لتراجعها بنفسك.'
             : 'Answers only from this period\'s real figures, with the exact snapshot shown under every reply.'}
         </p>
 
         {blocked && (
           <div className="acc-warn">
             <Icon name="warning" size={15} />
-            <span>{disabledReason || (ar ? 'المساعد الذكي غير مُهيَّأ في هذه البيئة.' : 'The assistant is not configured.')}</span>
+            <span>{disabledReason || (ar ? 'المحاسب الذكي غير متاح الآن. بقية أرقام الصفحة تعمل من دونه.' : 'The assistant is unavailable right now. Everything else on this page still works.')}</span>
           </div>
         )}
         {!blocked && thin && (

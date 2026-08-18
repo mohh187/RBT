@@ -499,7 +499,7 @@ export function initialState() {
 }
 
 export const RULES_AR = [
-  'الجكارو — أربعة لاعبون، فريقان، الشريك يجلس مقابلك (المقاعد 0 و 2 ضد 1 و 3).',
+  'الجكارو: أربعة لاعبون، فريقان، الشريك يجلس مقابلك (المقاعد 0 و 2 ضد 1 و 3).',
   '',
   'الدور والاتجاه: الدور ينتقل إلى اللاعب الذي على يمينك. أنت دائماً في الأسفل، والذي بعدك على اليمين، وشريكك في الأعلى، والرابع على اليسار. والبيادق تدور في نفس هذا الاتجاه.',
   '',
@@ -508,18 +508,18 @@ export const RULES_AR = [
   'الورق: مجموعتان كاملتان بلا جوكر (104 ورقة). يوزَّع أربع أوراق لكل لاعب، وحين تنفد أيدي الجميع تُوزَّع أربع جديدة.',
   '',
   'قيمة الأوراق:',
-  '• A — أخرج بيدقاً من البيت إلى خانة الانطلاق، أو تقدّم خانة واحدة.',
-  '• K — أخرج بيدقاً من البيت، أو تقدّم 13 خانة.',
-  '• Q — تقدّم 12 خانة.',
-  '• J — بدّل أحد بيادقك الموجودة على المسار ببيدق آخر على المسار، لك أو لشريكك أو لخصمك.',
-  '• 10 — تقدّم 10 خانات. 8 — تقدّم 8 خانات.',
-  '• 7 — تقدّم 7 خانات، ويجوز تقسيمها بين بيدقين اثنين من بيادقك.',
-  '• 4 — تراجع 4 خانات إلى الخلف.',
-  '• 2 و 3 و 5 و 6 و 9 — تقدّم بعددها.',
+  '• A: أخرج بيدقاً من البيت إلى خانة الانطلاق، أو تقدّم خانة واحدة.',
+  '• K: أخرج بيدقاً من البيت، أو تقدّم 13 خانة.',
+  '• Q: تقدّم 12 خانة.',
+  '• J: بدّل أحد بيادقك الموجودة على المسار ببيدق آخر على المسار، لك أو لشريكك أو لخصمك.',
+  '• 10: تقدّم 10 خانات. و8: تقدّم 8 خانات.',
+  '• 7: تقدّم 7 خانات، ويجوز تقسيمها بين بيدقين اثنين من بيادقك.',
+  '• 4: تراجع 4 خانات إلى الخلف.',
+  '• 2 و 3 و 5 و 6 و 9: تقدّم بعددها.',
   '',
   'القتل: من ينزل على بيدق يعيده إلى بيته، سواء كان للخصم أو للشريك أو لك أنت. المرور فوق البيادق مسموح.',
   '',
-  'الخانة الأخيرة: بعد أن يكمل بيدقك دورة كاملة (72 خانة) من انطلاقه ينعطف إلى خانتك. العدد يجب أن يكون مضبوطاً — لا تجاوز بعد الموضع الرابع، ولا قفز فوق بيدق راقد في الخانة.',
+  'الخانة الأخيرة: بعد أن يكمل بيدقك دورة كاملة (72 خانة) من انطلاقه ينعطف إلى خانتك. العدد يجب أن يكون مضبوطاً: لا تجاوز بعد الموضع الرابع، ولا قفز فوق بيدق راقد في الخانة.',
   '',
   'مساعدة الشريك: إذا دخلت بيادقك الأربعة خانتك، صارت أوراقك تُحرّك بيادق شريكك.',
   '',
@@ -531,19 +531,19 @@ export const RULES_AR = [
 ].join('\n')
 
 const RULES_EN = [
-  'Jackaroo — four players in two fixed partnerships, partners opposite (seats 0+2 against 1+3).',
+  'Jackaroo: four players in two fixed partnerships, partners opposite (seats 0+2 against 1+3).',
   '',
-  'Turn order: the turn passes to the player on your RIGHT. You always sit at the bottom, the next player is on your right, your partner is at the top, the fourth is on your left — and the marbles travel the same way around the board.',
+  'Turn order: the turn passes to the player on your RIGHT. You always sit at the bottom, the next player is on your right, your partner is at the top, the fourth is on your left. The marbles travel the same way around the board.',
   '',
   'Board: one shared loop of 72 squares, 18 along each side. Your start square is the middle of your side; behind it is your base with four marbles, and inward from it runs your private four-slot finish lane.',
   '',
   'Cards: two full packs, no jokers (104 cards). Four cards each; when every hand is empty, four more are dealt.',
   '',
-  'A — release from base, or move 1. K — release from base, or move 13. Q — 12. J — swap one of your marbles on the loop with any other marble on the loop. 10 — 10. 8 — 8. 7 — seven, splittable across exactly two of your marbles. 4 — four BACKWARDS. 2 3 5 6 9 — that many forward.',
+  'A: release from base, or move 1. K: release from base, or move 13. Q: move 12. J: swap one of your marbles on the loop with any other marble on the loop. 10: move ten. 8: move eight. 7: move seven, splittable across exactly two of your marbles. 4: move four squares backwards. 2, 3, 5, 6 and 9: that many forward.',
   '',
   'Landing on any marble (opponent, partner or your own) sends it back to base. Passing over marbles is free.',
   '',
-  'Finish lane: after a full lap of 72 from your own start, a marble turns in. The count must be exact — no overshooting past the fourth slot and no jumping a parked marble.',
+  'Finish lane: after a full lap of 72 from your own start, a marble turns in. The count must be exact: no overshooting past the fourth slot and no jumping a parked marble.',
   '',
   'Once all four of your marbles are parked, your cards move your partner\'s marbles.',
   '',
@@ -1302,26 +1302,26 @@ export default function Jackaroo({
   const t = ar
     ? {
       rules: 'الشرح', close: 'إغلاق', deal: 'ابدأ اللعب', exit: 'خروج',
-      waitPlayers: 'بانتظار اكتمال الطاولة', needFour: 'اللعبة لأربعة لاعبين — كل لاعب يجلس مقابل شريكه.',
+      waitPlayers: 'بانتظار اكتمال الطاولة', needFour: 'اللعبة لأربعة لاعبين، كل لاعب يجلس مقابل شريكه.',
       hostStarts: 'يبدأ مضيف الغرفة التوزيع.', waitingFor: 'الدور على',
-      pickCard: 'اختر ورقة من يدك', pickMarble: 'اختر بيدقاً — الأهداف مطوّقة بالذهب',
+      pickCard: 'اختر ورقة من يدك', pickMarble: 'اختر بيدقاً، والأهداف مطوّقة بالذهب',
       pickSwapA: 'اختر بيدقك الذي تريد تبديله', pickSwapB: 'اختر البيدق الذي تبادله معه',
-      pickSevenA: 'السبعة — اختر البيدق الأول', pickSevenN: 'كم خانة يتقدّم هذا البيدق؟',
+      pickSevenA: 'السبعة: اختر البيدق الأول', pickSevenN: 'كم خانة يتقدّم هذا البيدق؟',
       pickSevenB: 'اختر البيدق الثاني', rest: 'الباقي',
       noMove: 'لا حركة لهذه الورقة', discard: 'ارمِ الورقة', full7: 'كاملة',
       us: 'فريقنا', them: 'الخصوم', teamA: 'الفريق الأول', teamB: 'الفريق الثاني',
       win: 'فزتم', lose: 'فاز الخصوم', round: 'الجولة', now: 'الآن',
-      partnerNow: 'بيادقك كلها وصلت — أوراقك تحرّك بيادق شريكك الآن.',
+      partnerNow: 'بيادقك كلها وصلت، وأوراقك تحرّك بيادق شريكك الآن.',
       you: 'أنت', partner: 'شريكك', watching: 'أنت تشاهد الطاولة',
       skip: 'تخطَّ اللاعب المتوقف', undo: 'تراجع', off: 'منقطع',
       mHome: 'في البيت', mTrack: 'على المسار', mLane: 'في الخانة',
       played: 'لعب', out: 'أخرج بيدقاً', swapped: 'بدّل بيدقين', walked: 'تقدّم',
       sevenPlay: 'لعب السبعة', threw: 'رمى الورقة', andKill: 'وقتل بيدقاً',
-      rbase: 'هذا البيدق في البيت — لا يخرجه إلا آص أو شايب.',
+      rbase: 'هذا البيدق في البيت، لا يخرجه إلا آص أو شايب.',
       rlaneBack: 'البيدق دخل خانتك، ولا رجوع منها إلى المسار.',
       rtooFarBack: 'لا يمكن التراجع أبعد من دورة كاملة خلف انطلاقك.',
-      rovershoot: 'العدد يتجاوز آخر موضع في خانتك — العدد يجب أن يكون مضبوطاً.',
-      rlaneBlocked: 'بيدقك الراقد في الخانة يسدّ الطريق — لا قفز داخل الخانة.',
+      rovershoot: 'هذا العدد يتجاوز آخر موضع في خانتك، والدخول يحتاج عدداً مضبوطاً.',
+      rlaneBlocked: 'بيدقك الراقد في الخانة يسدّ الطريق، ولا قفز داخل الخانة.',
       rneedTrack: 'الولد يبدّل بيدقين على المسار فقط.',
       rnoSwapMate: 'لا يوجد بيدق آخر على المسار لتبادله.',
       rnoSecond: 'لا يوجد بيدق ثانٍ يكمل بقية السبعة.',
@@ -1330,33 +1330,33 @@ export default function Jackaroo({
       rnotNow: 'ليس هذا اختيار هذه الخطوة.',
       levelLbl: 'الكمبيوتر', easy: 'سهل', normal: 'عادي', hard: 'صعب',
       levelTip: 'اضغط لتغيير مستوى الكمبيوتر',
-      cA: 'آص — أخرج بيدقاً من البيت أو تقدّم خانة', cK: 'شايب — أخرج بيدقاً من البيت أو تقدّم 13',
-      cQ: 'بنت — تقدّم 12', cJ: 'ولد — بدّل بيدقين على المسار',
-      c7: 'سبعة — سبع خانات، ويجوز تقسيمها بين بيدقين', c4: 'أربعة — تراجع أربع خانات',
+      cA: 'آص: أخرج بيدقاً من البيت أو تقدّم خانة', cK: 'شايب: أخرج بيدقاً من البيت أو تقدّم 13',
+      cQ: 'بنت: تقدّم 12', cJ: 'ولد: بدّل بيدقين على المسار',
+      c7: 'سبعة: سبع خانات، ويجوز تقسيمها بين بيدقين', c4: 'أربعة: تراجع أربع خانات',
       cN: 'تقدّم', newDeal: 'أوراق جديدة',
     }
     : {
       rules: 'Rules', close: 'Close', deal: 'Start', exit: 'Exit',
       waitPlayers: 'Waiting for the table', needFour: 'Four players, partners opposite.',
       hostStarts: 'The host starts.', waitingFor: 'Turn:',
-      pickCard: 'Pick a card', pickMarble: 'Pick a marble — legal targets are ringed',
+      pickCard: 'Pick a card', pickMarble: 'Pick a marble. Legal targets are ringed',
       pickSwapA: 'Pick your marble to swap', pickSwapB: 'Pick the marble to swap with',
-      pickSevenA: 'Seven — pick the first marble', pickSevenN: 'How far does it go?',
+      pickSevenA: 'Seven: pick the first marble', pickSevenN: 'How far does it go?',
       pickSevenB: 'Pick the second marble', rest: 'left',
       noMove: 'No legal move for this card', discard: 'Discard', full7: 'Full',
       us: 'Us', them: 'Them', teamA: 'Team one', teamB: 'Team two',
       win: 'You win', lose: 'They win', round: 'Round', now: 'NOW',
-      partnerNow: 'All your marbles are in — your cards now move your partner\'s.',
+      partnerNow: 'All your marbles are in, so your cards now move your partner\'s.',
       you: 'You', partner: 'Partner', watching: 'You are watching',
       skip: 'Skip stalled player', undo: 'Back', off: 'offline',
       mHome: 'in base', mTrack: 'on track', mLane: 'parked',
       played: 'played', out: 'released a marble', swapped: 'swapped two marbles', walked: 'moved',
       sevenPlay: 'played the seven', threw: 'discarded', andKill: 'and sent one home',
-      rbase: 'This marble is in the base — only an Ace or a King releases it.',
+      rbase: 'This marble is in the base. Only an Ace or a King releases it.',
       rlaneBack: 'A marble inside your lane never comes back out.',
       rtooFarBack: 'It cannot go more than one lap behind your start.',
-      rovershoot: 'That count runs past the last slot of your lane — it must be exact.',
-      rlaneBlocked: 'Your own parked marble blocks the way — no jumping inside the lane.',
+      rovershoot: 'That count runs past the last slot of your lane, and it must be exact.',
+      rlaneBlocked: 'Your own parked marble blocks the way, and there is no jumping inside the lane.',
       rneedTrack: 'A Jack only swaps marbles that are out on the loop.',
       rnoSwapMate: 'There is no other marble on the loop to swap with.',
       rnoSecond: 'No second marble can take the rest of the seven.',
@@ -1365,9 +1365,9 @@ export default function Jackaroo({
       rnotNow: 'Not the choice this step is asking for.',
       levelLbl: 'Computer', easy: 'Easy', normal: 'Normal', hard: 'Hard',
       levelTip: 'Tap to change the computer level',
-      cA: 'Ace — release from base, or move 1', cK: 'King — release from base, or move 13',
-      cQ: 'Queen — move 12', cJ: 'Jack — swap two marbles on the loop',
-      c7: 'Seven — seven squares, splittable across two marbles', c4: 'Four — move BACKWARDS',
+      cA: 'Ace: release from base, or move 1', cK: 'King: release from base, or move 13',
+      cQ: 'Queen: move 12', cJ: 'Jack: swap two marbles on the loop',
+      c7: 'Seven: seven squares, splittable across two marbles', c4: 'Four: move four squares backwards',
       cN: 'Move', newDeal: 'new cards',
     }
 
@@ -1772,7 +1772,7 @@ export default function Jackaroo({
   }, [sel, t, ar])
 
   const hint = !seated
-    ? t.watching + ' — ' + t.waitingFor + ' ' + nameOf(st.turnSeat)
+    ? t.watching + '. ' + t.waitingFor + ' ' + nameOf(st.turnSeat)
     : note
       ? note.msg
       : !isMyTurn
@@ -1780,11 +1780,11 @@ export default function Jackaroo({
         : !sel
           ? t.pickCard
           : selDead
-            ? t.noMove + (deadWhy ? ' — ' + deadWhy : ' — ' + t.discard)
+            ? t.noMove + (deadWhy ? '. ' + deadWhy : '. ' + t.discard)
             : isJack
               ? (!pickA ? t.pickSwapA : t.pickSwapB)
               : isSeven
-                ? (stage === 'a' ? t.pickSevenA : stage === 'n' ? t.pickSevenN : t.pickSevenB + ' — ' + t.rest + ' ' + fmt(7 - legN, ar))
+                ? (stage === 'a' ? t.pickSevenA : stage === 'n' ? t.pickSevenN : t.pickSevenB + ' (' + t.rest + ' ' + fmt(7 - legN, ar) + ')')
                 : t.pickMarble
 
   const hintCls = 'jak-hint' + (note ? ' is-warn' : (isMyTurn && seated ? ' is-you' : ''))
@@ -1795,11 +1795,11 @@ export default function Jackaroo({
     const c = label(st.last.card)
     const mode = st.last.mode
     let what = t.played + ' ' + c
-    if (mode === 'out') what = c + ' — ' + t.out
-    else if (mode === 'swap') what = c + ' — ' + t.swapped
+    if (mode === 'out') what = t.out + ' (' + c + ')'
+    else if (mode === 'swap') what = t.swapped + ' (' + c + ')'
     else if (mode === 'seven') what = t.sevenPlay
     else if (mode === 'discard') what = t.threw + ' ' + c
-    else if (mode === 'step') what = c + ' — ' + t.walked + ' ' + fmt(Math.abs(stepsOf(st.last.card) || 0), ar)
+    else if (mode === 'step') what = t.walked + ' ' + fmt(Math.abs(stepsOf(st.last.card) || 0), ar)
     return { who, what, kills: st.last.kills > 0, seatIx: st.last.seat }
   }, [st.last, t, ar, bySeat])
 
@@ -1848,7 +1848,7 @@ export default function Jackaroo({
   const teamPill = (tm) => {
     const n = teamHome(st.marbles, tm)
     const mine = seated && tm === myTeam
-    const who = [tm, tm + 2].map((sx) => bySeat[sx]?.name || '—').join(' + ')
+    const who = [tm, tm + 2].map((sx) => bySeat[sx]?.name || (ar ? 'فارغ' : 'Empty')).join(' + ')
     return (
       <span className={'jak-team' + (mine ? ' is-us' : '')}>
         <span className="jak-team-nm">{seated ? (mine ? t.us : t.them) : (tm === 0 ? t.teamA : t.teamB)}</span>
@@ -2002,7 +2002,7 @@ export default function Jackaroo({
           {lastLine ? (
             <span className="jak-last" style={{ '--pc': SEAT_COLOR[lastLine.seatIx] }}>
               <i aria-hidden="true" />
-              <span>{lastLine.who} — {lastLine.what}{lastLine.kills ? ' ' + t.andKill : ''}</span>
+              <span>{lastLine.who} {lastLine.what}{lastLine.kills ? ' ' + t.andKill : ''}</span>
             </span>
           ) : (
             <span className="jak-last">{st.phase === 'play' ? t.waitingFor + ' ' + nameOf(st.turnSeat) : ''}</span>
@@ -2021,7 +2021,7 @@ export default function Jackaroo({
                   style={{ '--sc': SEAT_COLOR[sx] }}
                 >
                   <span className="cg-av">{initialsOf(bySeat[sx]?.name)}</span>
-                  <span>{bySeat[sx]?.name || '—'}</span>
+                  <span>{nameOf(sx)}</span>
                   <span className={'cg-team-tag ' + (team(sx) === 0 ? 'is-a' : 'is-b')}>
                     {team(sx) === 0 ? (ar ? 'أ' : 'A') : (ar ? 'ب' : 'B')}
                   </span>
@@ -2167,7 +2167,7 @@ export default function Jackaroo({
       {rules ? (
         <div className="cg-over">
           <div className="cg-over-head">
-            <strong>{ar ? 'الجكارو — الشرح' : 'Jackaroo — how to play'}</strong>
+            <strong>{ar ? 'شرح الجكارو' : 'How to play Jackaroo'}</strong>
             <button type="button" className="cg-iconbtn cg-press" onClick={() => setRules(false)} aria-label={t.close}>
               <span aria-hidden="true">&#215;</span>
             </button>

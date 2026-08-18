@@ -15,7 +15,7 @@ function daysAgo(n) {
 }
 // Rendered in place of an amount for staff lacking the view_revenue cap.
 function MaskedPrice() {
-  return <span className="faint">—</span>
+  return <span className="faint">·</span>
 }
 function toDate(ts) {
   if (!ts) return null
@@ -57,6 +57,8 @@ export default function Reports() {
   const addExp = () => { const amt = Number(expAmt) || 0; if (amt <= 0) return; addExpense(tenantId, { amount: amt, category: expCat.trim() || 'other', actor }); setExpAmt(''); setExpCat('') }
 
   const report = useMemo(() => {
+    // group label for orders with no server recorded — a real word, never a mark
+    const UNASSIGNED = lang === 'ar' ? 'غير محدد' : 'Unassigned'
     const periodStart = daysAgo(range).getTime()
     const list = (orders || []).filter((o) => o.status !== 'cancelled')
     const revenue = list.reduce((s, o) => s + (o.total || 0), 0)
@@ -116,7 +118,7 @@ export default function Reports() {
     // staff performance (by who served)
     const staff = {}
     list.filter((o) => ['served', 'paid'].includes(o.status)).forEach((o) => {
-      const k = o.servedByName || '—'
+      const k = o.servedByName || UNASSIGNED
       if (!staff[k]) staff[k] = { orders: 0, rev: 0 }
       staff[k].orders += 1
       staff[k].rev += o.total || 0
@@ -138,7 +140,7 @@ export default function Reports() {
       if (o.paymentBreakdown) Object.entries(o.paymentBreakdown).forEach(([m, a]) => { byMethod[m] = (byMethod[m] || 0) + (Number(a) || 0) })
       else { const m = o.paymentMethod || 'cash'; byMethod[m] = (byMethod[m] || 0) + net }
       tips += o.tip || 0
-      if (o.tip) { const k = o.servedByName || '—'; tipsByStaff[k] = (tipsByStaff[k] || 0) + (o.tip || 0) }
+      if (o.tip) { const k = o.servedByName || UNASSIGNED; tipsByStaff[k] = (tipsByStaff[k] || 0) + (o.tip || 0) }
       refunds += refundOf(o)
     })
     const grossPaid = paidList.reduce((s, o) => s + (o.total || 0) - refundOf(o), 0)
@@ -153,8 +155,8 @@ export default function Reports() {
     const catName = {}; cats.forEach((c) => { catName[c.id] = lang === 'en' && c.nameEn ? c.nameEn : c.nameAr })
     const catTally = {}
     list.forEach((o) => (o.items || []).forEach((it) => {
-      const cid = it.categoryId || catOfItem[it.itemId] || '—'
-      const nm = catName[cid] || (lang === 'ar' ? 'أخرى' : 'Other')
+      const cid = it.categoryId || catOfItem[it.itemId]
+      const nm = catName[cid] || (lang === 'ar' ? 'بدون تصنيف' : 'Uncategorized')
       catTally[nm] = (catTally[nm] || 0) + (it.lineTotal || 0)
     }))
     const byCat = Object.entries(catTally).sort((a, b) => b[1] - a[1]).slice(0, 8)
@@ -245,7 +247,7 @@ export default function Reports() {
             <ResponsiveContainer>
               <BarChart data={report.daily} margin={{ top: 8, right: 0, left: 0, bottom: 0 }}>
                 <XAxis dataKey="day" tick={{ fontSize: 11, fill: 'var(--text-muted)' }} interval="preserveStartEnd" />
-                <Tooltip cursor={{ fill: 'var(--surface-2)' }} contentStyle={{ background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: 12, fontSize: 13 }} formatter={(v) => [showMoney ? money(v, currency, lang) : '—', t('revenue')]} />
+                <Tooltip cursor={{ fill: 'var(--surface-2)' }} contentStyle={{ background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: 12, fontSize: 13 }} formatter={(v) => [showMoney ? money(v, currency, lang) : '·', t('revenue')]} />
                 <Bar dataKey="total" radius={[6, 6, 0, 0]}>{report.daily.map((_, i) => <Cell key={i} fill="var(--brand)" />)}</Bar>
               </BarChart>
             </ResponsiveContainer>
@@ -327,7 +329,7 @@ export default function Reports() {
           <strong className="row" style={{ gap: 6 }}><Icon name="star" size={18} /> {t('topItems')}</strong>
           <button className="btn btn-sm btn-outline" onClick={exportCsv}><Icon name="download" size={16} /> CSV</button>
         </div>
-        {report.top.length === 0 ? <p className="muted small">—</p> : (
+        {report.top.length === 0 ? <p className="muted small">{ar ? 'لا بيانات بعد' : 'No data yet'}</p> : (
           <div className="divide">
             {report.top.map(([name, v], i) => (
               <div key={name} className="row-between">

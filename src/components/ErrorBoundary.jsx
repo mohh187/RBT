@@ -152,12 +152,12 @@ export function readLastBoundaryError() {
 const TXT = {
   ar: {
     title: 'حدث خلل غير متوقع',
-    body: 'جرّب تحديث الصفحة — إن تكرر الخلل فسيصل تقريره لنا تلقائياً.',
+    body: 'تحديث الصفحة يحلّها غالباً. وإن تكرر الخلل فسيصل تقريره إلينا تلقائياً.',
     reload: 'حدّث',
     retry: 'إعادة المحاولة',
     // Deploy-moved files: not a fault, and already self-healing.
     staleTitle: 'يجري تحديث النسخة',
-    staleBody: 'صدر تحديث للنظام أثناء فتحك للصفحة — تُحمَّل النسخة الجديدة الآن.',
+    staleBody: 'صدر تحديث للنظام والصفحة مفتوحة. تُحمَّل النسخة الجديدة الآن.',
   },
   en: {
     title: 'Something went wrong',

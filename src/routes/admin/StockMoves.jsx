@@ -30,7 +30,7 @@ export default function StockMoves() {
 
   const mat = (id) => mats.find((x) => x.id === id)
   const matName = (id) => { const m = mat(id); return m ? (ar ? m.nameAr : (m.nameEn || m.nameAr)) : (id || '') }
-  const fmtTime = (ms) => { try { return new Date(ms).toLocaleString(ar ? 'ar-SA' : 'en-US', { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' }) } catch (_) { return '' } }
+  const fmtTime = (ms) => { try { return new Date(ms).toLocaleString(ar ? 'ar-SA-u-nu-latn-ca-gregory' : 'en-US', { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' }) } catch (_) { return '' } }
 
   if (moves === null) return <Spinner />
   if (!moves.length) return <Empty icon="file" title={ar ? 'لا حركات مخزون' : 'No stock movements'} />

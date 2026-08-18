@@ -87,18 +87,18 @@ export default function QrStylePicker({
         {verdict === null ? (
           <><span className="qrp-spin" /> يُختبر المسح…</>
         ) : verdict.ok === true ? (
-          <><Icon name="check" size={13} /> مُختبَر — قُرئ الرمز بنجاح (v{verdict.version} · EC {verdict.ec})</>
+          <><Icon name="check" size={13} /> مُختبَر: قُرئ الرمز بنجاح (v{verdict.version} · EC {verdict.ec})</>
         ) : verdict.ok === false ? (
-          <><Icon name="warning" size={13} /> لم يُقرأ هذا الشكل — اختر شكلاً آخر أو كبّر الرمز</>
+          <><Icon name="warning" size={13} /> لم يُقرأ هذا الشكل، اختر شكلاً آخر أو كبّر الرمز</>
         ) : (
-          <><Icon name="warning" size={13} /> تعذّر الاختبار في هذا المتصفح — اختبره بجوّالك قبل الطباعة</>
+          <><Icon name="warning" size={13} /> تعذّر الاختبار في هذا المتصفح، جرّب مسحه بجوّالك قبل الطباعة</>
         )}
       </div>
 
       {(tooSmall || style.risk === 'high') && (
         <p className="qrp-warn">
           {tooSmall
-            ? `هذا الشكل يحتاج ${minMm} مم على الأقل، والمقاس الحالي ${Math.round(printedMm)} مم — كبّره أو اختر «كلاسيكي/شرائط/سائل».`
+            ? `هذا الشكل يحتاج ${minMm} مم على الأقل، والمقاس الحالي ${Math.round(printedMm)} مم. كبّره أو اختر «كلاسيكي/شرائط/سائل».`
             : `شكل حسّاس: يغطّي مساحة أقل من الخلية، فلا تُصغّره تحت ${minMm} مم.`}
         </p>
       )}
@@ -110,7 +110,7 @@ export default function QrStylePicker({
               key={st.id}
               className={`qrp-cell ${value === st.id ? 'active' : ''}`}
               onClick={() => onChange?.(st.id)}
-              title={`${st.ar} — أقل مقاس ${qrMinMm(st.id)} مم`}
+              title={`${st.ar}: أقل مقاس ${qrMinMm(st.id)} مم`}
             >
               <span className="qrp-thumb" dangerouslySetInnerHTML={{ __html: thumbs[st.id] || '' }} />
               <span className="qrp-name">{st.ar}</span>

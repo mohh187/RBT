@@ -5,8 +5,8 @@
 import Icon from '../Icon.jsx'
 
 // Latin digits, always — matches the hard rule and the rest of the system.
-export const fmt = (n) => (Number.isFinite(Number(n)) ? Number(n).toLocaleString('ar-SA-u-nu-latn') : '—')
-export const pct = (v) => (v === null || v === undefined || !Number.isFinite(Number(v)) ? '—' : `${Math.round(Number(v) * 100)}%`)
+export const fmt = (n) => (Number.isFinite(Number(n)) ? Number(n).toLocaleString('ar-SA-u-nu-latn') : '-')
+export const pct = (v) => (v === null || v === undefined || !Number.isFinite(Number(v)) ? '-' : `${Math.round(Number(v) * 100)}%`)
 
 export function GCard({ title, icon, badge, children, actions }) {
   return (

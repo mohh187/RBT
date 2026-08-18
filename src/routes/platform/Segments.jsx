@@ -51,7 +51,7 @@ export default function Segments() {
     if (!title.trim() || !active) return
     const scopeTxt = active.plan
       ? `منشآت «${active.label}» (${members.length})`
-      : `كل المنشآت — لا يمكن حصر البث بهذه الشريحة تلقائيًا`
+      : `كل المنشآت، لا يمكن حصر البث بهذه الشريحة تلقائيًا`
     if (!window.confirm(`بث الإعلان إلى ${scopeTxt}${push ? ' + إشعار Push' : ''}. متابعة؟`)) return
     setBusy(true)
     try {
@@ -59,7 +59,7 @@ export default function Segments() {
       setTitle(''); setBody('')
       toast.success(
         res.scoped
-          ? `أُرسل إلى شريحة «${active.label}» — تتولى المنصة التوزيع`
+          ? `أُرسل إلى شريحة «${active.label}»، تتولى المنصة التوزيع`
           : 'أُرسل لكل المنشآت (هذه الشريحة غير قابلة للحصر في خط البث)',
       )
     } catch {

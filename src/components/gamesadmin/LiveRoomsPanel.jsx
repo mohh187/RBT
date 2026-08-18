@@ -128,7 +128,7 @@ export default function LiveRoomsPanel({ ar = true, tenantId, canEdit = false })
               : err === 'unavailable'
                 ? (ar ? 'الاتصال بقاعدة البيانات غير مُهيَّأ في هذه البيئة.' : 'Database not configured.')
                 : err === 'end-failed'
-                  ? (ar ? 'لم تُغلق الغرفة — قد تكون أُغلقت من جهاز آخر، أو منعت القواعد الكتابة. حدّث الصفحة ثم أعد المحاولة.' : 'The room was not closed — it may already be ended, or the write was denied.')
+                  ? (ar ? 'لم تُغلق الغرفة. قد تكون أُغلقت من جهاز آخر، أو لا تملك صلاحية إغلاقها. حدّث الصفحة ثم أعد المحاولة.' : 'The room was not closed. It may already be ended, or you may not have permission.')
                   : `${ar ? 'تعذّرت قراءة الغرف: ' : 'Could not read rooms: '}${err}`}
           </span>
         </div>
@@ -199,8 +199,8 @@ export default function LiveRoomsPanel({ ar = true, tenantId, canEdit = false })
             {seated.length > 0 && live === 0 && (
               <p className="ga-hint">
                 {ar
-                  ? `لا أحد من الجالسين أرسل إشارة حياة منذ أكثر من ${fmtInt(Math.round(DISCONNECT_MS / 1000))} ثانية — غالباً غادروا الطاولة وتركوا الغرفة مفتوحة.`
-                  : 'Nobody has checked in recently — the table was probably abandoned.'}
+                  ? `لم يظهر أي أثر للجالسين منذ أكثر من ${fmtInt(Math.round(DISCONNECT_MS / 1000))} ثانية، وغالباً غادروا الطاولة وتركوا الغرفة مفتوحة.`
+                  : 'Nobody has checked in recently, so the table was probably abandoned.'}
               </p>
             )}
 
@@ -236,7 +236,7 @@ export default function LiveRoomsPanel({ ar = true, tenantId, canEdit = false })
           <Icon name="warning" size={15} />
           <span>
             {ar
-              ? `تُعرض أول ${fmtInt(MAX_ROOMS)} غرفة فقط — قد تكون هناك غرف مفتوحة غير ظاهرة هنا.`
+              ? `تُعرض أول ${fmtInt(MAX_ROOMS)} غرفة فقط، وقد تكون هناك غرف مفتوحة غير ظاهرة هنا.`
               : `Showing the first ${MAX_ROOMS} rooms only.`}
           </span>
         </div>

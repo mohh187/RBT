@@ -149,7 +149,7 @@ function OnboardingEditor({ tenant, onBack }) {
           <span className="badge badge-info num">{pct}%</span>
         </div>
         {source === 'inferred' && (
-          <p className="xs faint">لم تُحفظ قائمة تهيئة بعد — الحالات الحالية مُستنتَجة من بيانات المنشأة. أي تعديل هنا ينشئ قائمة محفوظة.</p>
+          <p className="xs faint">لم تُحفظ قائمة تهيئة بعد. الحالات الحالية مُستنتَجة من بيانات المنشأة. أي تعديل هنا ينشئ قائمة محفوظة.</p>
         )}
         <div className="stack" style={{ gap: 8 }}>
           {ONBOARDING_STEPS.map((s) => {
@@ -231,7 +231,7 @@ function NpsTab() {
                 }}>{r.score}</span>
                 <div className="grow" style={{ minWidth: 0 }}>
                   {r.comment ? <div className="small">{r.comment}</div> : <div className="small faint">بدون تعليق</div>}
-                  <div className="xs faint">{r.tenantName || r.tenantId || '—'} · {fmtWhen(r.at)}</div>
+                  <div className="xs faint">{[r.tenantName || r.tenantId, fmtWhen(r.at)].filter(Boolean).join(' · ')}</div>
                 </div>
               </div>
             ))}
@@ -307,9 +307,9 @@ function AcquisitionTab() {
           <div className="divide">
             {referrals.map((r) => (
               <div key={r.id} className="row-between small" style={{ padding: '7px 0' }}>
-                <span className="chip num" dir="ltr">{r.code || '—'}</span>
+                <span className="chip num" dir="ltr">{r.code || '·'}</span>
                 <span className="grow faint xs" style={{ textAlign: 'center' }}>
-                  {r.fromTid ? <Link to={`/platform/venues/${r.fromTid}`}>{r.fromTid}</Link> : '—'}
+                  {r.fromTid ? <Link to={`/platform/venues/${r.fromTid}`}>{r.fromTid}</Link> : '·'}
                 </span>
                 <span className="xs faint num">{fmtWhen(r.at)}</span>
               </div>

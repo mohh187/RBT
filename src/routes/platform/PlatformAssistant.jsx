@@ -46,7 +46,7 @@ function buildContext(tenants, stats) {
   return [
     `إجمالي المنشآت: ${total} (نشطة: ${active}، موقوفة: ${suspended}).`,
     `حالة الاشتراك: تجريبي ${trial}، منتهٍ ${expired}.`,
-    `توزيع الخطط — ${planLine}.`,
+    `توزيع الخطط، ${planLine}.`,
     `إجمالي آخر ${days} يوم: الإيراد ${revenue.toLocaleString('en-US')}، الطلبات ${orders.toLocaleString('en-US')}.`,
     days ? `تفصيل آخر الأيام: ${recent}.` : 'لا توجد إحصاءات يومية بعد.',
   ].join('\n')
@@ -188,7 +188,7 @@ export default function PlatformAssistant() {
             هذا مساعد <span className="bold">تنفيذي</span> بصلاحية المنصّة كاملة: يقرأ بيانات كل المنشآت
             <span className="bold"> وينفّذ</span> إجراءات حقيقية (إيقاف/تفعيل منشأة، تغيير خطة، تمديد تجربة،
             تعاميم، رسائل مباشرة، نطاقات، كوبونات، تذاكر دعم). يطلب تأكيدك قبل الإجراءات الحسّاسة ما لم
-            تأمره بها صراحةً — راجع شارات «نفّذ» في المحادثة لتتبّع كل ما جرى.
+            تأمره بها صراحةً. راجع شارات «نفّذ» في المحادثة لتتبّع كل ما جرى.
           </span>
         </div>
       </div>
@@ -202,7 +202,7 @@ export default function PlatformAssistant() {
           <div className="card card-pad">
             <div className="row" style={{ gap: 8, marginBottom: 'var(--sp-3)', alignItems: 'center' }}>
               <Icon name="message" size={16} />
-              <span className="bold">اسأل، حلّل، ونفّذ — عبر كل المنشآت</span>
+              <span className="bold">اسأل، حلّل، ونفّذ عبر كل المنشآت</span>
               <span className="badge badge-info num" style={{ marginInlineStart: 'auto' }}>{tenants.length} منشأة</span>
             </div>
 
@@ -216,7 +216,7 @@ export default function PlatformAssistant() {
                     disabled={busy}
                     onClick={() => (s.includes('…') ? setInput(s) : send(s))}
                     style={{ cursor: 'pointer' }}
-                    title={s.includes('…') ? 'قالب — أكمل الفراغ ثم أرسل' : 'تنفيذ مباشر'}
+                    title={s.includes('…') ? 'قالب، أكمل الفراغ ثم أرسل' : 'تنفيذ مباشر'}
                   >
                     {s}
                   </button>
@@ -278,7 +278,7 @@ export default function PlatformAssistant() {
 
             {messages.length === 0 && !busy && (
               <div className="xs faint" style={{ marginTop: 'var(--sp-2)' }}>
-                يستند المساعد إلى بياناتك الحيّة: {tenants.length} منشأة، وإحصاءات آخر {stats.length} يوم — ويستطيع التنفيذ فعلياً، فراجع طلبك قبل الإرسال.
+                يستند المساعد إلى بياناتك الحيّة: {tenants.length} منشأة، وإحصاءات آخر {stats.length} يوم، ويستطيع التنفيذ فعلياً، فراجع طلبك قبل الإرسال.
               </div>
             )}
           </div>

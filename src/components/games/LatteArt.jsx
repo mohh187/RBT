@@ -688,7 +688,8 @@ export default function LatteArt({
             <b>{fmt(acc)}</b>
             <span>% دقة</span>
           </div>
-          <p className="gmla-grade">{gradeTxt} — {fmt(gained)} نقطة</p>
+          {/* Arabic tamyeez: 3-10 take «نقاط», everything else «نقطة» */}
+          <p className="gmla-grade">{gradeTxt}: {fmt(gained)} {gained >= 3 && gained <= 10 ? 'نقاط' : 'نقطة'}</p>
           <button type="button" className="gmx-btn" onClick={() => (deadRun ? finishRef.current() : nextRef.current())}>
             {deadRun ? 'انتهت الأكواب' : (pIndex >= pCount - 1 ? 'أنهِ المرحلة' : 'الشكل التالي')}
           </button>
@@ -724,7 +725,7 @@ export default function LatteArt({
               </svg>
             </div>
             <h3 className="gmx-title">فن اللاتيه</h3>
-            <p className="gmx-line">تتبّع الشكل الباهت على الكريما بحركة سحب واحدة متصلة. كل مرحلة أشكال أكثر ووقت أقل — وسكب ضعيف يكسر كوباً. لديك ثلاثة أكواب.</p>
+            <p className="gmx-line">تتبّع الشكل الباهت على الكريما بحركة سحب واحدة متصلة. كل مرحلة أشكال أكثر ووقت أقل، وسكب ضعيف يكسر كوباً. لديك ثلاثة أكواب.</p>
             {saved ? (
               <div className="gmx-actions">
                 <button type="button" className="gmx-btn" onClick={() => restart({ stage: Number(saved.stage), score: Number(saved.score) || 0 })}>

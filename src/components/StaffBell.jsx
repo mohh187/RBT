@@ -65,12 +65,14 @@ export default function StaffBell({ tenantId, onUnread = null }) {
   // snapshot) — same url as the row so a notification click lands on the object.
   const known = useRef(new Set())
   const primed = useRef(false)
-  const mountedAt = useRef(Date.now())
   useEffect(() => {
     const fresh = v2Items.filter((i) => !known.current.has(i.id))
     fresh.forEach((i) => known.current.add(i.id))
     if (primed.current) {
-      const alertable = fresh.filter((i) => i.at >= mountedAt.current && V2_ALERT.has(i.type))
+      // NO clock comparison here: `i.at` is a SERVER stamp and the tablet's own
+      // clock can run minutes ahead, which silently filtered out every incoming
+      // order. `primed` plus the known-id set already skip the first snapshot.
+      const alertable = fresh.filter((i) => V2_ALERT.has(i.type))
       if (alertable.length) {
         const top = alertable.sort((a, b) => b.at - a.at)[0]
         alertParty({ title: top.title, body: top.body, tag: top.type, url: top.to })

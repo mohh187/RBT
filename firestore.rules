@@ -16,6 +16,26 @@ rules_version = '2';
 //
 // Public (anonymous diners) may READ the menu and CREATE orders / waiter calls.
 // Everything operational is restricted to authenticated staff of THAT tenant.
+//
+// ---------------------------------------------------------------------------
+// OPEN: staff HR fields still readable by any member
+// ---------------------------------------------------------------------------
+// tenants/{tid}/staff/{uid} is `allow read: if isStaff(tid)` — the whole
+// directory is peer-readable, and salary / deductions / managerRating / hireDate
+// / phone all sit on that same document. One getDocs from a waiter's session
+// dumps the owner's salary. WRITING those fields is already manager-only (the
+// rule below admits only isManager or the staffer's own doc, and the self
+// branch blocks every HR key), so this is a READ exposure, not a tampering one.
+// Rules cannot hide individual fields, so closing it needs a data migration the
+// owner must run:
+//   1. Move salary, deductions, managerRating, hireDate, staffId and phone off
+//      staff/{uid} into a sibling doc tenants/{tid}/staffHr/{uid}.
+//   2. Add:  match /staffHr/{uid} { allow read, write: if hasCap(tid, 'manage_payroll'); }
+//   3. Point the payroll screen, StaffProfile and functions/payroll at the new
+//      path; leave staff/{uid} holding only directory fields (name, role, photo,
+//      active, caps) which every colleague legitimately sees.
+// Until then MANAGE_PAYROLL and VIEW_PERFORMANCE are UI-level gates only.
+// ---------------------------------------------------------------------------
 
 service cloud.firestore {
   match /databases/{database}/documents {
@@ -27,10 +47,22 @@ service cloud.firestore {
     function userDoc() {
       return get(/databases/$(database)/documents/users/$(request.auth.uid)).data;
     }
+    // A fired or suspended staffer keeps their password, so membership cannot rest
+    // on the users doc alone: without this, deactivating someone revoked NOTHING —
+    // they kept orders, the CRM, materials and every storage delete right.
+    // A MISSING staff doc stays allowed on purpose: it is both the bootstrap state
+    // (the doc is self-registered on first login, and isStaff gates that create) and
+    // the state of venues whose docs predate the `active` field. Same for a doc that
+    // never carried `active` — hence the .get() default rather than a bare read.
+    function staffActive(tid) {
+      return !exists(/databases/$(database)/documents/tenants/$(tid)/staff/$(request.auth.uid))
+        || get(/databases/$(database)/documents/tenants/$(tid)/staff/$(request.auth.uid)).data.get('active', true) != false;
+    }
     function isMember(tid) {
       return isSignedIn()
         && exists(/databases/$(database)/documents/users/$(request.auth.uid))
-        && userDoc().tenantId == tid;
+        && userDoc().tenantId == tid
+        && staffActive(tid);
     }
     function roleIn(tid, roles) {
       return isMember(tid) && (userDoc().role in roles);
@@ -57,6 +89,20 @@ service cloud.firestore {
             && exists(/databases/$(database)/documents/tenants/$(tid)/staff/$(request.auth.uid))
             && ('caps' in get(/databases/$(database)/documents/tenants/$(tid)/staff/$(request.auth.uid)).data)
             && (cap in staffCapsList(tid)));
+    }
+    // Money capabilities, with a ROLE fallback. The caps mirror (staff/{uid}.caps)
+    // is only written once a manager opens the admin (healStaffCapsMirrors), so a
+    // bare hasCap() here would stop the till at any venue that never did — the
+    // roles listed are exactly the ones holding the cap by default in
+    // src/lib/permissions.js. Cost of the fallback: stripping the cap from a
+    // cashier in the caps editor is still only enforced in the UI. Everyone else
+    // (waiter, barista, kitchen, driver, cleaner, marketing) is now blocked in the
+    // database, which is the hole this closes.
+    function canRefund(tid) {
+      return hasCap(tid, 'refund') || roleIn(tid, ['owner', 'manager', 'supervisor', 'accountant', 'cashier']);
+    }
+    function canCancel(tid) {
+      return hasCap(tid, 'cancel_order') || roleIn(tid, ['owner', 'manager', 'supervisor', 'cashier']);
     }
     // Platform super-admin (console owner). Membership is the existence of a
     // platformAdmins/{uid} doc — created ONLY via Firebase Console / Admin SDK
@@ -202,7 +248,13 @@ service cloud.firestore {
     // ---- digital signage screens: doc id = the pairing code the TV enters.
     //      TVs read anonymously; only staff of the owning venue manage. ----
     match /screens/{code} {
-      allow read: if true;
+      // The doc id IS the pairing code a TV types in, so a world-readable LIST
+      // handed anyone every venue on the platform plus the code to attach a rogue
+      // display. A paired TV only ever opens its own doc by that code, so `get`
+      // stays public; both listings in the app already filter by tid
+      // (watchScreens, platform/VenueDetail), so the per-doc check passes.
+      allow get: if true;
+      allow list: if isStaff(resource.data.tid) || isPlatformAdmin();
       allow create: if isStaff(request.resource.data.tid);
       // Anonymous paired TVs may write ONLY their health heartbeat (last-seen +
       // which slide is playing) — nothing else on the doc is reachable publicly.
@@ -426,7 +478,21 @@ service cloud.firestore {
             !(resource.data.status in ['paid', 'cancelled', 'refunded'])
             || request.resource.data.status == resource.data.status
             || (resource.data.status == 'paid' && request.resource.data.status == 'refunded')
-          );
+          )
+          // MONEY NEEDS THE CAP, NOT JUST A BADGE. isStaff alone let a waiter
+          // holding only take_orders settle, comp or refund straight from the
+          // database — the UI hid the buttons, nothing else did. An UNCHANGED
+          // status is not a transition, so a waiter may still touch notes or the
+          // table on an already-paid order.
+          && (request.resource.data.status == resource.data.status
+              || !(request.resource.data.status in ['paid', 'refunded'])
+              || canRefund(tid))
+          && (request.resource.data.status == resource.data.status
+              || request.resource.data.status != 'cancelled'
+              || canCancel(tid))
+          && (!request.resource.data.diff(resource.data).affectedKeys()
+                .hasAny(['paymentMethod', 'compDiscount', 'refund', 'refundTotal', 'refunds'])
+              || canRefund(tid));
         allow delete: if isManager(tid);
       }
 
@@ -866,7 +932,16 @@ service cloud.firestore {
       // trusts). Loyalty/stats/membership writes all happen from staff
       // sessions (settle/cancel/refund paths), so they stay staff-only.
       match /customers/{id} {
-        allow read: if isStaff(tid);
+        // The whole marketing list was one getDocs away from any account with a
+        // login — a cleaner or a driver could export it. view_customers now gates
+        // ENUMERATION; a single doc stays open to staff because the POS resolves a
+        // walk-in by phoneId (getCustomerByPhone) and a cashier does not hold the
+        // cap. The flagged escape hatch keeps the cashier board's «انتبه لهذا
+        // العميل» warning working (watchFlaggedCustomers queries flagged == true,
+        // so nothing else comes back through it).
+        allow get: if isStaff(tid);
+        allow list: if hasCap(tid, 'view_customers')
+          || (isStaff(tid) && resource.data.get('flagged', false) == true);
         // lastOrderAt is in the anonymous allowlist because the Customers
         // screen orders by it and Firestore hides docs missing the ordered
         // field — self-registration stamps it as "last activity" so a new
@@ -886,7 +961,10 @@ service cloud.firestore {
       // ---- member cards (VIP): public display mirror, get-by-token; staff write ----
       match /memberCards/{token} {
         allow get: if true; // diner opens their own card by its unguessable token
-        allow list: if isStaff(tid);
+        // Listing every card is reading the member roster, so it follows the CRM
+        // cap. Nothing in the app lists this collection today (cards are opened by
+        // token), so the narrower rule costs no screen.
+        allow list: if hasCap(tid, 'view_customers');
         allow write: if isStaff(tid);
       }
       // ---- phone→card lookup mirror: lets the menu recognize a returning member by
@@ -917,8 +995,18 @@ service cloud.firestore {
       // ONLY their own doc within their own tenant (strict isolation). ----
       match /staff/{uid} {
         allow read: if isStaff(tid);
+        // `role` was on the update denylist but not this one, and onStaffDocCreated
+        // mints caps from whatever role the new doc names — so a staffer whose doc
+        // had been deleted (exactly the post-firing state, users doc still bound)
+        // could re-create it as 'manager' and be handed manager caps by the server.
+        // It is not simply denied here: every staffer's doc is self-created on first
+        // login (upsertStaffMember in auth.jsx) and it carries the role, so denying
+        // the key would leave new hires with no directory doc and no caps mirror at
+        // all. Instead the role must MATCH the users doc, which only the server and
+        // a manager can write.
         allow create: if isManager(tid)
           || (isStaff(tid) && request.auth.uid == uid
+              && (!('role' in request.resource.data) || request.resource.data.role == userDoc().get('role', 'staff'))
               && !request.resource.data.keys().hasAny(['salary', 'caps', 'capsCustom', 'deductions', 'workDays', 'shiftStart', 'shiftEnd', 'managerRating', 'pinHash', 'hasPin', 'staffId', 'hireDate']));
         // managerRating/pinHash/hasPin/capsCustom/staffId/hireDate are manager-
         // owned — a staffer must not be able to inflate their own evaluation
@@ -981,8 +1069,15 @@ service cloud.firestore {
 
       // ---- push tokens (FCM): staff register their device; server reads via Admin SDK ----
       match /pushTokens/{id} {
-        allow read: if isStaff(tid);
-        allow write: if isStaff(tid);
+        // pushToStaff trusts the `uid` field to decide who gets a managersOnly
+        // push (nightly revenue, platform chat), so a device may only ever claim
+        // ITSELF: with a blanket write a waiter could stamp the owner's uid on
+        // their own token and read the venue's money over the lock screen — or
+        // wipe every token doc and silence the venue's push with no trace.
+        // No client reads this collection (the Admin SDK does), so read is closed.
+        allow read: if false;
+        allow create, update: if isStaff(tid) && request.resource.data.uid == request.auth.uid;
+        allow delete: if isStaff(tid) && resource.data.uid == request.auth.uid;
       }
 
       // ---- staff device registry (name + heartbeat) — operational, non-sensitive ----
@@ -1236,8 +1331,21 @@ service cloud.firestore {
       allow read, update, delete: if isPlatformAdmin();
     }
     // Consent records — a signed-in party may record consent; platform reads/manages.
+    // Bounded exactly like platformErrors above: an unconstrained create made this
+    // free unlimited storage on the platform's bill, and let anyone log a consent
+    // in someone else's name. The two writers are recordLegalConsent (legal.js)
+    // and recordConsent (platformCompliance.js) — hasOnly() is exact, so a new
+    // field on either must be added here or the record is refused.
     match /platformConsent/{id} {
-      allow create: if isSignedIn();
+      allow create: if isSignedIn()
+        && request.resource.data.keys().hasOnly(['tenantId', 'uid', 'byName', 'by', 'kind', 'docs', 'version', 'at'])
+        && request.resource.data.get('uid', request.auth.uid) == request.auth.uid
+        && request.resource.data.kind is string
+        && request.resource.data.kind.size() < 60
+        && (!('byName' in request.resource.data) || request.resource.data.byName.size() < 200)
+        && (!('by' in request.resource.data) || request.resource.data.by.size() < 120)
+        && (!('version' in request.resource.data) || request.resource.data.version.size() < 40)
+        && (!('docs' in request.resource.data) || request.resource.data.docs.size() <= 20);
       allow read, update, delete: if isPlatformAdmin();
     }
   }

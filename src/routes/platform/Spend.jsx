@@ -28,7 +28,7 @@ import { PlanBadge, fmtWhen } from './shared.jsx'
 const n = (v) => (Number(v) || 0).toLocaleString('en-US')
 
 const BUDGET_ACTIONS = [
-  { id: 'warn', ar: 'تنبيه فقط', hint: 'يُسجَّل تنبيه ويصل إشعار — لا يتوقف شيء.' },
+  { id: 'warn', ar: 'تنبيه فقط', hint: 'يُسجَّل تنبيه ويصل إشعار، لا يتوقف شيء.' },
   { id: 'stopMarketing', ar: 'إيقاف التسويق', hint: 'تتوقف الحملات والعروض. رسائل الطلبات والفواتير تستمر.' },
   { id: 'stopAll', ar: 'إيقاف كل الإرسال', hint: 'يتوقف كل شيء يكلّف مالاً، بما فيه إشعارات الطلبات.' },
 ]
@@ -55,7 +55,7 @@ export default function Spend() {
       <div>
         <h2 className="page-title">الإنفاق والحدود</h2>
         <p className="muted small">
-          كل ما يكلّف المنصة مالاً — رسائل واتساب والبريد وطلبات الذكاء الاصطناعي — يمر عبر عدّاد على الخادم
+          كل ما يكلّف المنصة مالاً (رسائل واتساب والبريد وطلبات الذكاء الاصطناعي) يمر عبر عدّاد على الخادم
           قبل أن يُرسل. هنا ترى الاستهلاك الفعلي لكل منشأة، وهنا يمكنك إيقافه.
         </p>
       </div>
@@ -88,7 +88,7 @@ function KillSwitch({ controls }) {
     setBusy(label)
     try {
       await saveSpendControls(patch)
-      toast.success('تم الحفظ — يسري خلال دقيقة')
+      toast.success('تم الحفظ، يسري خلال دقيقة')
     } catch (e) {
       toast.error(e?.message || 'تعذّر الحفظ')
     } finally { setBusy('') }
@@ -119,7 +119,7 @@ function KillSwitch({ controls }) {
 
       {controls.killAll && (
         <div className="spend-alert">
-          كل الإرسال موقوف الآن على مستوى المنصة — بما في ذلك إشعارات حالة الطلب للعملاء.
+          كل الإرسال موقوف الآن على مستوى المنصة، بما في ذلك إشعارات حالة الطلب للعملاء.
         </div>
       )}
 
@@ -135,7 +135,7 @@ function KillSwitch({ controls }) {
               title={c.hint}
             >
               <Icon name={off ? 'close' : c.icon} size={14} /> {c.short}
-              {off ? ' — موقوف' : ''}
+              {off ? '، موقوف' : ''}
             </button>
           )
         })}
@@ -183,7 +183,7 @@ function Budget({ controls, roll }) {
         <Icon name="wallet" size={16} /> ميزانية الشهر
       </div>
       <div className="xs faint">
-        تُفحص كل ساعتين. عند بلوغ ثمانين بالمئة يصلك تنبيه، وعند التجاوز يُنفَّذ الإجراء المختار تلقائياً — مرة واحدة في الشهر.
+        تُفحص كل ساعتين. عند بلوغ ثمانين بالمئة يصلك تنبيه، وعند التجاوز يُنفَّذ الإجراء المختار تلقائياً مرة واحدة في الشهر.
       </div>
 
       {budget > 0 && (
@@ -201,13 +201,13 @@ function Budget({ controls, roll }) {
 
       {fired && controls.budgetFired.trip && (
         <div className="spend-alert">
-          تجاوزت الميزانية هذا الشهر ونُفِّذ الإجراء. لن يتكرر التنفيذ حتى الشهر القادم — ارفع الميزانية أو أعد التشغيل يدوياً من الأعلى.
+          تجاوزت الميزانية هذا الشهر ونُفِّذ الإجراء. لن يتكرر التنفيذ حتى الشهر القادم. ارفع الميزانية أو أعد التشغيل يدوياً من الأعلى.
         </div>
       )}
 
       <div className="row" style={{ gap: 8, flexWrap: 'wrap', alignItems: 'flex-end' }}>
         <label className="stack" style={{ gap: 4, minWidth: 150 }}>
-          <span className="xs faint">الميزانية الشهرية (USD) — صفر يعني بلا ميزانية</span>
+          <span className="xs faint">الميزانية الشهرية (USD): صفر يعني بلا ميزانية</span>
           <input type="number" min="0" step="1" className="input num" dir="ltr" value={amount} onChange={(e) => setAmount(e.target.value)} />
         </label>
         <label className="stack" style={{ gap: 4, minWidth: 190 }}>
@@ -299,7 +299,7 @@ function VenueTable({ roll }) {
   return (
     <div className="card stack" style={{ gap: 10 }}>
       <div className="row-between" style={{ gap: 12, flexWrap: 'wrap' }}>
-        <div className="bold">المنشآت — مرتّبة حسب التكلفة</div>
+        <div className="bold">المنشآت مرتّبة حسب التكلفة</div>
         <button className={`btn btn-sm ${onlyBlocked ? 'btn-primary' : 'btn-outline'}`} onClick={() => setOnlyBlocked((v) => !v)}>
           <Icon name="warning" size={14} /> التي بلغت حدودها فقط
         </button>

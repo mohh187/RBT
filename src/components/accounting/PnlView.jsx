@@ -2,6 +2,7 @@ import { useState } from 'react'
 import { Price } from '../Riyal.jsx'
 import Icon from '../Icon.jsx'
 import { ACCOUNTS, accountAr, accountEn, entriesForLine, fmtDateTime, downloadCsv } from '../../lib/accounting.js'
+import { arPlural } from '../../lib/forecast.js'
 
 // Income statement. EVERY line is clickable and opens the exact journal entries
 // that produced it — a number the manager cannot trace is a number they cannot
@@ -9,7 +10,7 @@ import { ACCOUNTS, accountAr, accountEn, entriesForLine, fmtDateTime, downloadCs
 export default function PnlView({ pnl, ledger = [], ar = true, lang = 'ar', currency = 'SAR', showMoney = true, periodLabel = '' }) {
   const [open, setOpen] = useState(null)
 
-  const M = ({ v }) => (showMoney ? <Price value={v} currency={currency} lang={lang} /> : <span className="faint">—</span>)
+  const M = ({ v }) => (showMoney ? <Price value={v} currency={currency} lang={lang} /> : <span className="faint">-</span>)
   const toggle = (key) => setOpen((o) => (o === key ? null : key))
 
   const expenseRows = Object.entries(pnl.expensesByCategory || {}).sort((a, b) => b[1] - a[1])
@@ -22,7 +23,7 @@ export default function PnlView({ pnl, ledger = [], ar = true, lang = 'ar', curr
       <div className="acc-drill">
         <div className="row-between" style={{ marginBottom: 6 }}>
           <span className="acc-hint">
-            {ar ? `${entries.length} قيد${entries.length > 200 ? ' — يعرض أول ' + rows.length : ''}` : `${entries.length} entries`}
+            {ar ? `${arPlural(entries.length, { one: 'قيد', two: 'قيدان', few: 'قيود', many: 'قيداً' })}${entries.length > 200 ? `، يظهر منها أول ${rows.length}` : ''}` : `${entries.length} entries`}
           </span>
           <button
             className="btn btn-xs btn-outline"
@@ -110,7 +111,7 @@ export default function PnlView({ pnl, ledger = [], ar = true, lang = 'ar', curr
       <div className="acc-pnl-notes">
         <p className="acc-hint">
           {ar
-            ? `ضريبة القيمة المضافة المحصّلة (${ACCOUNTS.vatPayable.ar}) لا تدخل في الإيراد — هي التزام على المنشأة.`
+            ? `ضريبة القيمة المضافة المحصّلة (${ACCOUNTS.vatPayable.ar}) لا تدخل في الإيراد، فهي التزام على المنشأة.`
             : 'Collected VAT is a liability, not revenue, so it is excluded from the statement.'}
         </p>
         <div className="acc-pnl-memo">

@@ -130,7 +130,7 @@ function systemPrompt(ctx, cfg = {}, tenant = null, insight = null) {
     cfg.handoverEnabled !== false ? 'If the customer demands a human manager or is extremely angry, end your reply with [HUMAN_HANDOVER_REQUIRED].' : '',
     'HOW YOU WORK — execution discipline (this is critical):',
     'E1) EXECUTE, do not narrate. When a change is requested, DO IT by calling the write tool(s) in the SAME response. Never reply with only a description or a promise ("now I will add…", "next I will…") without the matching tool call attached. At most a one-line plan, then act.',
-    'E2) FINISH THE WHOLE TASK in one run. For bulk work ("add all of these", a spreadsheet, "clean the menu", "add a description to every item"), issue the tool calls for EVERY target — you may emit MANY tool calls in a single response — and keep going across steps until the task is 100% done. NEVER stop halfway to wait; the user must never have to say "continue/اكمل".',
+    'E2) FINISH THE WHOLE TASK in one run. For bulk work ("add all of these", a spreadsheet, "clean the menu", "add a description to every item"), issue the tool calls for EVERY target (you may emit MANY tool calls in a single response) and keep going across steps until the task is 100% done. NEVER stop halfway to wait; the user must never have to say "continue/اكمل".',
     'E3) APPROVAL is handled by the app, NOT by you. Do NOT ask "do you confirm?" in chat before a write — just call the tool; the app shows the user an approve/deny prompt per write, and when Auto-run is ON it approves automatically and you must execute silently with no confirmation questions. Asking again in text only wastes their time. For a large destructive batch (many deletes), give ONE short heads-up line, then proceed.',
     'E4) NEVER INVENT DATA. Never guess or fabricate ids, image URLs, prices, or names. Use ONLY ids returned by a read tool (list_items, list_materials, list_categories, …) — call the matching list_* first if you lack them. You MAY pass a human-readable name (itemName / materialName / categoryName) to the write tools and it will be resolved to the correct id for you — prefer this over ids. NEVER set a placeholder or made-up image URL (e.g. "…/placeholder.png"); a product photo may ONLY be a URL returned by upload_attached_image / crop_and_upload_image, or one the user explicitly gave.',
     'E5) On a tool error, READ it and self-correct (re-list to get the real id, fix the field, resolve by name) — never repeat the same failing call.',
@@ -138,7 +138,7 @@ function systemPrompt(ctx, cfg = {}, tenant = null, insight = null) {
     '  • INVOICES/RECEIPTS: for each line, list_materials → add_material if missing → receive_stock (qty + cost) → finally log_expense for the invoice total (note "Invoice from [Supplier]").',
     '  • MENU IMAGES/LISTS: create the categories/items directly. Product photo from an attachment → DEFAULT upload_attached_image (whole image, NO crop) then set_item_image; use crop_and_upload_image ONLY when the user explicitly asks to crop; never crop on your own; never set imageIndex when passing an imageUrl.',
     '  • SPREADSHEETS: read each row and add_item / add_material with correct fields; summarise what was imported.',
-    'MENU CRAFT: write appetising, authentic, CONCISE Arabic descriptions — no clichés, no repetition, no cheap/vulgar phrasing, no exclamation spam. Use correct serving words: فنجان only for espresso/small coffee; كوب or كاس for tea, iced and cold drinks (never call a glass drink "فنجان"). You CAN reorder the menu with reorder_items — e.g. strategy "images_first" to lead with photographed items, or pass an explicit order per category.',
+    'MENU CRAFT: write appetising, authentic, CONCISE Arabic descriptions: no clichés, no repetition, no cheap/vulgar phrasing, no exclamation spam. Use correct serving words: فنجان only for espresso/small coffee; كوب or كاس for tea, iced and cold drinks (never call a glass drink "فنجان"). You CAN reorder the menu with reorder_items, e.g. strategy "images_first" to lead with photographed items, or pass an explicit order per category.',
     'ANALYST & ADVISOR — GROUNDED, NEVER HALLUCINATED: be a sharp business consultant for THIS venue specifically. Every strategy must cite ITS real numbers — pull them first (sales_report, top_items, menu_engineering, cogs_report, item_profitability, slow_movers, peak_hours, staff_performance, forecast_sales, customer_ltv, basket_analysis). For a weak-selling item use item_doctor (real 30-day sales, price vs category average, unused levers) then propose a concrete plan AND offer to execute it (fix photo/description, feature it, set pairings, adjust price, create an offer + a targeted campaign). Never invent a number; if data is thin, say so.',
     'FULL SYSTEM SUPPORT: you know this entire platform. For ANY "how do I / where is / what does X do" question from a manager or staffer, call help_guide first and answer precisely from it (screen names, exact steps). You are the venue\'s support line.',
     'LIVE MARKET AWARENESS: for questions about the outside market (competitor prices, trending dishes, seasonal demand, supplier costs, Saudi/GCC food trends) call market_research (real Google Search) — never answer market questions from memory. Combine what it returns with the venue\'s own numbers to make localized recommendations.',
@@ -176,10 +176,10 @@ export async function runAssistant({ tid, tenant, actor = '', history = [], atta
     const dc = u.d === today ? Number(u.dc) || 0 : 0
     const mc = u.m === month ? Number(u.mc) || 0 : 0
     if (mc >= limMonthly + extra) {
-      throw new Error(`استهلكت رصيد الشهر بالكامل (${limMonthly}${extra ? ` + ${extra} إضافي` : ''} طلباً). اضغط «شراء رصيد» أعلى المحادثة لطلب المزيد — يُفعَّل فور اعتماد الدفع.`)
+      throw new Error(`استهلكت رصيد الشهر بالكامل (${limMonthly}${extra ? ` + ${extra} إضافي` : ''} طلباً). اضغط «شراء رصيد» أعلى المحادثة لطلب المزيد، ويُفعَّل فور اعتماد الدفع.`)
     }
     if (dc >= limDaily) {
-      throw new Error(`وصلت الحد اليومي للمساعد (${limDaily} طلباً) — يتجدد تلقائياً منتصف الليل، أو اطلب رفع الحد من «شراء رصيد».`)
+      throw new Error(`وصلت الحد اليومي للمساعد (${limDaily} طلباً). يتجدد تلقائياً منتصف الليل، أو اطلب رفع الحد من «شراء رصيد».`)
     }
     bumpAiUsage(tid).catch(() => {})
   }
@@ -297,7 +297,7 @@ export async function runAssistant({ tid, tenant, actor = '', history = [], atta
         // A PDF is delivered as rasterised page-images (+ any extracted text) so
         // that graphic menus and huge files both fit the inline request cap.
         if (a.kind === 'pdf' && Array.isArray(a.pages) && a.pages.length) {
-          last.parts.push({ text: `\n\n[ملف PDF: ${a.name}${a.note ? ' — ' + a.note : ''}] (مُرفَق كصور صفحات${a.text ? ' + نص مستخرج' : ''})` })
+          last.parts.push({ text: `\n\n[ملف PDF: ${a.name}${a.note ? ': ' + a.note : ''}] (مُرفَق كصور صفحات${a.text ? ' + نص مستخرج' : ''})` })
           if (a.text) last.parts.push({ text: a.text })
           a.pages.forEach((p) => last.parts.push({ inlineData: { mimeType: p.mime, data: p.data } }))
         } else if ((a.kind === 'image' || a.kind === 'pdf') && a.data) {
@@ -331,7 +331,10 @@ export async function runAssistant({ tid, tenant, actor = '', history = [], atta
     } catch (e) {
       const localKey = (import.meta.env.DEV ? import.meta.env.VITE_GEMINI_API_KEY : '')
       if (!localKey) {
-        const err = new Error(`AI error: ${e?.message || e}. (للتشغيل يرجى نشر الدوال السحابية عبر الأمر: firebase deploy --only functions أو أضف VITE_GEMINI_API_KEY في ملف .env.local للتجربة المحلية)`)
+        // The owner sees Arabic and an action they can actually take. The raw
+        // English cause rides on `detail` for the console, never in the chat.
+        const err = new Error('تعذّر الوصول إلى المساعد الآن. جرّب بعد دقيقة، وإن تكرر الأمر راسل الدعم.')
+        err.detail = `AI proxy error: ${e?.message || e}`
         err.transient = e?.transient || isTransient(e?.message) || isTransient(e?.code)
         throw err
       }
@@ -368,7 +371,7 @@ export async function runAssistant({ tid, tenant, actor = '', history = [], atta
         try { return await sendGemini(chain[ci], body) } catch (e) {
           lastErr = e
           if (!e?.transient) throw e
-          if (ci === 0 && n === 0) onEvent?.({ type: 'thought', text: 'النموذج مزدحم مؤقتاً — إعادة المحاولة تلقائياً…' })
+          if (ci === 0 && n === 0) onEvent?.({ type: 'thought', text: 'الخدمة مزدحمة الآن، نعيد المحاولة تلقائياً…' })
           if (ci === chain.length - 1 && n === tries - 1) break
           await new Promise((r) => setTimeout(r, 600 * Math.pow(2, n) + Math.floor(Math.random() * 250)))
         }

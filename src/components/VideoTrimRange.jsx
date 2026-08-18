@@ -55,7 +55,7 @@ export default function VideoTrimRange({ url, value, onChange, ar = true }) {
     <div className="field vtrim" dir="ltr">
       <label className="xs" dir="auto">
         {ar ? 'مقطع التشغيل' : 'Playback window'}{' '}
-        <span className="num">{fmt(start)} – {fmt(end)} / {fmt(dur)}</span>
+        <span className="num">{fmt(start)} → {fmt(end)} / {fmt(dur)}</span>
       </label>
       <div className="vtrim-track">
         <span
@@ -84,7 +84,7 @@ export default function VideoTrimRange({ url, value, onChange, ar = true }) {
       </div>
       {t && (
         <button type="button" className="btn-link xs" onClick={() => onChange(null)}>
-          {ar ? 'إلغاء القص — المقطع كاملاً' : 'Clear — play the whole clip'}
+          {ar ? 'إلغاء القص وتشغيل المقطع كاملاً' : 'Clear the trim and play the whole clip'}
         </button>
       )}
     </div>

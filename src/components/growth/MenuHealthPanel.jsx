@@ -7,6 +7,7 @@
 import { useState } from 'react'
 import Icon from '../Icon.jsx'
 import { GCard, GRefusal, GBasis, GTag, GNumbers, GLimits } from './parts.jsx'
+import { arPlural } from '../../lib/forecast.js'
 
 export default function MenuHealthPanel({ health, lang = 'ar', onFixItem }) {
   const ar = lang !== 'en'
@@ -34,7 +35,7 @@ export default function MenuHealthPanel({ health, lang = 'ar', onFixItem }) {
             <div className="g-formula">{health.formulaAr}</div>
             <div className="g-basis" style={{ marginTop: 6 }}>
               {ar
-                ? `أُجري ${health.measurableChecks} فحصاً من ${health.totalChecks}. الفحوص غير القابلة للقياس استُبعدت من الدرجة وأُعيد توزيع أوزانها — لا تُحتسب المنشأة على اختبار لم يُجرَ.`
+                ? `أُجري ${arPlural(health.measurableChecks, { one: 'فحص', two: 'فحصان', few: 'فحوص', many: 'فحصاً' })} من ${health.totalChecks}. الفحوص غير القابلة للقياس استُبعدت من الدرجة وأُعيد توزيع أوزانها، فلا تُحاسَب المنشأة على اختبار لم يُجرَ.`
                 : `${health.measurableChecks} of ${health.totalChecks} checks ran. Unmeasurable checks are excluded and their weight redistributed.`}
             </div>
           </div>
@@ -43,7 +44,7 @@ export default function MenuHealthPanel({ health, lang = 'ar', onFixItem }) {
         <GNumbers data={{
           [ar ? 'أصناف' : 'Items']: health.sample.items,
           [ar ? 'تصنيفات' : 'Categories']: health.sample.categories,
-          [ar ? `طلبات آخر ${health.days} يوماً` : `Orders in ${health.days}d`]: health.sample.ordersInWindow,
+          [ar ? `طلبات آخر ${arPlural(health.days, { one: 'يوم', two: 'يومين', few: 'أيام', many: 'يوماً' })}` : `Orders in ${health.days}d`]: health.sample.ordersInWindow,
           [ar ? 'أصناف بيعت في النافذة' : 'Items sold in window']: health.sample.itemsSoldInWindow,
           [ar ? 'مواد خام' : 'Materials']: health.sample.materials,
         }} />
@@ -73,7 +74,7 @@ export default function MenuHealthPanel({ health, lang = 'ar', onFixItem }) {
                     <>
                       <div className="g-bar"><i style={{ width: `${share}%` }} /></div>
                       <div className="g-basis" style={{ borderInlineStart: 0, paddingInlineStart: 0, marginTop: 4 }}>
-                        {f.affected} {ar ? 'من' : 'of'} {f.applicable} ({share}%){ar ? ` — ${f.whyAr}` : ''}
+                        {f.affected} {ar ? 'من' : 'of'} {f.applicable} ({share}%){ar ? `: ${f.whyAr}` : ''}
                       </div>
                     </>
                   ) : (
@@ -111,7 +112,7 @@ export default function MenuHealthPanel({ health, lang = 'ar', onFixItem }) {
 
       <GBasis>
         {ar
-          ? 'كل نتيجة تسرد أصنافها بالاسم، والضغط على أي صنف يفتحه في محرر الأصناف. لا توجد هنا نسبة مقارنة بمتوسط سوق — لا نملك بيانات عنه.'
+          ? 'كل نتيجة تسرد أصنافها بالاسم، والضغط على أي صنف يفتحه في محرر الأصناف. ولا توجد هنا مقارنة بمتوسط السوق، لأننا لا نملك بيانات عنه.'
           : 'Every finding lists its exact items. No market-average comparison appears here: we hold no such data.'}
       </GBasis>
     </div>

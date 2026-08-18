@@ -9,7 +9,7 @@ import { watchOrdersSince } from '../../lib/db.js'
 import { Price } from '../../components/Riyal.jsx'
 import { orderNumber, timeAgo } from '../../lib/format.js'
 // ONE definition of «the money moved» — see the comment on isSettled.
-import { isSettled } from '../../lib/accounting.js'
+import { isSettled, refundOf } from '../../lib/accounting.js'
 import { sectionTemplate, templateOptions } from '../../lib/systemTemplates.js'
 import { useSectionTemplate } from '../../lib/useSectionTemplate.js'
 
@@ -70,7 +70,9 @@ export default function Orders() {
 
     orders.forEach((o) => {
       if (isSettled(o)) {
-        sales += o.total || 0
+        // isSettled includes 'refunded' — count the money that STAYED, or this
+        // tile disagrees with the P&L, the Z-report and the drawer for one day.
+        sales += (o.total || 0) - refundOf(o)
         paidCount++
       } else if (!['cancelled', 'refunded'].includes(o.status)) {
         activeCount++
@@ -176,7 +178,7 @@ export default function Orders() {
           </span>
           <div className="pos-tpl-switch row" style={{ gap: 2, flex: 'none' }}>
             {templateOptions('orders').map((o) => (
-              <button key={o.id} type="button" className={`icon-btn ${tpl === o.id ? 'active' : ''}`} title={ar ? `${o.ar}${o.hint ? ' — ' + o.hint : ''}` : o.en} onClick={() => setTpl(o.id)}>
+              <button key={o.id} type="button" className={`icon-btn ${tpl === o.id ? 'active' : ''}`} title={ar ? `${o.ar}${o.hint ? ` (${o.hint})` : ''}` : o.en} onClick={() => setTpl(o.id)}>
                 <Icon name={{ kanban: 'list', grid: 'grid', timeline: 'clock' }[o.id] || 'grid'} size={16} />
               </button>
             ))}
@@ -326,7 +328,7 @@ export default function Orders() {
                 <div className="kds-lane-head"><strong>{lbl}</strong><span className="badge">{lane.length}</span></div>
                 <div className="stack" style={{ gap: 'var(--sp-2)' }}>
                   {lane.map((o) => renderOrderCard(o, true))}
-                  {lane.length === 0 && <p className="xs faint" style={{ textAlign: 'center', padding: 'var(--sp-2)' }}>—</p>}
+                  {lane.length === 0 && <p className="xs faint" style={{ textAlign: 'center', padding: 'var(--sp-2)' }}>{ar ? 'لا طلبات هنا' : 'Nothing here'}</p>}
                 </div>
               </section>
             )

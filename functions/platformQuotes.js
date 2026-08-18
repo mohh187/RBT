@@ -70,7 +70,7 @@ const createQuote = onCall(async (request) => {
   const planAr = { menu: 'منيو', ops: 'منيو + تشغيل', pro: 'احترافي', enterprise: 'متكامل' }[planId] || planId
   const lines = [{
     sku: `plan:${planId}`,
-    descAr: `اشتراك منصة RBT360 — باقة «${planAr}» (${yearly ? 'سنوي' : 'شهري'})`,
+    descAr: `اشتراك باقة «${planAr}» في منصة RBT360 (${yearly ? 'سنوي' : 'شهري'})`,
     qty: 1, listPrice, unitPrice,
     discountLabelAr: promo ? promo.labelAr : (Number.isFinite(negotiated) ? 'سعر متفق عليه' : ''),
   }]
@@ -133,9 +133,9 @@ const getPublicQuote = onCall(async (request) => {
   if (!id || !token) throw new HttpsError('invalid-argument', 'id + token required')
   const db = getFirestore()
   const snap = await db.doc(`platformQuotes/${id}`).get()
-  if (!snap.exists) throw new HttpsError('not-found', 'العرض غير موجود')
+  if (!snap.exists) throw new HttpsError('not-found', 'لم نجد هذا العرض. تأكد من الرابط أو تواصل معنا.')
   const q = snap.data()
-  if (!tokenMatches(q.publicToken, token)) throw new HttpsError('permission-denied', 'رابط غير صالح')
+  if (!tokenMatches(q.publicToken, token)) throw new HttpsError('permission-denied', 'هذا الرابط غير صالح. تأكد من نسخه كاملاً، أو اطلب منا رابطاً جديداً.')
 
   const expired = q.validUntil && Date.now() > Number(q.validUntil)
   // Mark it seen once, so the console knows the customer opened it.
@@ -166,12 +166,12 @@ const acceptQuote = onCall(async (request) => {
   if (!id || !token) throw new HttpsError('invalid-argument', 'id + token required')
   const db = getFirestore()
   const snap = await db.doc(`platformQuotes/${id}`).get()
-  if (!snap.exists) throw new HttpsError('not-found', 'العرض غير موجود')
+  if (!snap.exists) throw new HttpsError('not-found', 'لم نجد هذا العرض. تأكد من الرابط أو تواصل معنا.')
   const q = snap.data()
-  if (!tokenMatches(q.publicToken, token)) throw new HttpsError('permission-denied', 'رابط غير صالح')
+  if (!tokenMatches(q.publicToken, token)) throw new HttpsError('permission-denied', 'هذا الرابط غير صالح. تأكد من نسخه كاملاً، أو اطلب منا رابطاً جديداً.')
   if (q.convertedInvoiceId) return { invoiceId: q.convertedInvoiceId, already: true }
-  if (q.validUntil && Date.now() > Number(q.validUntil)) throw new HttpsError('failed-precondition', 'انتهت صلاحية هذا العرض — اطلب عرضاً محدّثاً')
-  if (!q.tenantId) throw new HttpsError('failed-precondition', 'العرض غير مرتبط بمنشأة بعد — تواصل معنا لإتمام التسجيل')
+  if (q.validUntil && Date.now() > Number(q.validUntil)) throw new HttpsError('failed-precondition', 'انتهت صلاحية هذا العرض. تواصل معنا ونرسل لك عرضاً محدّثاً.')
+  if (!q.tenantId) throw new HttpsError('failed-precondition', 'هذا العرض غير مرتبط بمنشأة بعد. تواصل معنا لإكمال التسجيل ثم اعتمده.')
 
   const inv = await issueDocument(db, {
     series: 'invoice', docType: 'taxInvoice', kind: 'subscription',
@@ -215,7 +215,7 @@ const convertQuoteToInvoice = onCall(async (request) => {
   const { quoteId, tenantId } = request.data || {}
   if (!quoteId) throw new HttpsError('invalid-argument', 'quoteId required')
   const snap = await db.doc(`platformQuotes/${quoteId}`).get()
-  if (!snap.exists) throw new HttpsError('not-found', 'العرض غير موجود')
+  if (!snap.exists) throw new HttpsError('not-found', 'لم نجد هذا العرض. تأكد من الرابط أو تواصل معنا.')
   const q = snap.data()
   if (q.convertedInvoiceId) return { invoiceId: q.convertedInvoiceId, already: true }
 
@@ -268,10 +268,10 @@ const linkDocumentTenant = onCall(async (request) => {
   if (!invoiceId || !tenantId) throw new HttpsError('invalid-argument', 'invoiceId + tenantId required')
   const ref = db.doc(`platformInvoices/${invoiceId}`)
   const snap = await ref.get()
-  if (!snap.exists) throw new HttpsError('not-found', 'المستند غير موجود')
+  if (!snap.exists) throw new HttpsError('not-found', 'لم نجد هذا المستند.')
   const inv = snap.data()
   if (inv.tenantId && inv.tenantId !== tenantId) {
-    throw new HttpsError('failed-precondition', 'المستند مرتبط بمنشأة أخرى — أصدر إشعاراً دائناً وفاتورة جديدة بدل نقله')
+    throw new HttpsError('failed-precondition', 'هذا المستند مرتبط بمنشأة أخرى. أصدر إشعاراً دائناً وفاتورة جديدة بدل نقله.')
   }
   const t = await db.doc(`tenants/${tenantId}`).get()
   if (!t.exists) throw new HttpsError('not-found', 'المنشأة غير موجودة')

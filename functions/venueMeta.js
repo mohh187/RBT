@@ -138,7 +138,7 @@ function injectHead(html, block) {
 // The venue's <head> block for a menu page (/m/:slug/**).
 function venueHeadBlock(tenant, slug, host, path) {
   const name = tenant.name || slug
-  const desc = tenant.descAr || `المنيو الرقمي — تصفح واطلب من ${name}`
+  const desc = tenant.descAr || `تصفّح المنيو واطلب من ${name}`
   const brand = safeColor(tenant.themeColor, '#171717')
   const logo = absUrl(tenant.logoUrl)
   const ogImage = absUrl(tenant.coverUrl) || logo
@@ -283,7 +283,7 @@ function staffHeadBlock(tenant, slug) {
   const iconUrl = `/app/${encodeURIComponent(slug)}/icon.svg`
   const lines = [
     `<title>${esc(name)}</title>`,
-    `<meta name="description" content="${esc(`بوابة فريق العمل — ${name}`)}" />`,
+    `<meta name="description" content="${esc(`بوابة فريق العمل في ${name}`)}" />`,
     `<meta name="theme-color" content="${esc(brand)}" />`,
     `<meta name="apple-mobile-web-app-title" content="${esc(name)}" />`,
     `<link rel="manifest" href="/app/${encodeURIComponent(slug)}/manifest.webmanifest" />`,
@@ -382,6 +382,17 @@ async function handler(req, res) {
 
     // /m/:slug/** — the menu shell wearing the venue's identity
     if ((m = path.match(/^\/m\/([^/]+)/))) {
+      const slug = decodeURIComponent(m[1])
+      const tenant = await internals.tenantBySlug(slug).catch(() => null)
+      await sendShell(res, tenant ? venueHeadBlock(tenant, slug, host, path) : null, true)
+      return
+    }
+
+    // /t/:slug/:token — the TABLE sticker scan, the same scan-to-first-paint
+    // path as /m/:slug and just as common: without this branch the firebase.json
+    // rewrite fell through to the plain shell and every sticker scan lost the
+    // venue's title/og/icon (and the CDN edge cache).
+    if ((m = path.match(/^\/t\/([^/]+)/))) {
       const slug = decodeURIComponent(m[1])
       const tenant = await internals.tenantBySlug(slug).catch(() => null)
       await sendShell(res, tenant ? venueHeadBlock(tenant, slug, host, path) : null, true)

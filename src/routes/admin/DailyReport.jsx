@@ -113,7 +113,7 @@ export default function DailyReport() {
       r.cancelled ? `${ar ? 'ملغاة' : 'Cancelled'}: ${r.cancelled}` : '',
       `${ar ? 'الحضور' : 'Attendance'}: ${r.present} ${ar ? 'حضروا' : 'present'} · ${r.lateCount} ${ar ? 'متأخرون' : 'late'} · ${r.absent.length} ${ar ? 'غائبون' : 'absent'}`,
       top.length ? (ar ? 'أبرز الموظفين:' : 'Top staff:') : '',
-      ...top.map((x, i) => `${i + 1}. ${x.name || x.email} — ${x.points} ${ar ? 'نقطة' : 'pts'}`),
+      ...top.map((x, i) => `${i + 1}. ${x.name || x.email}، ${x.points} ${ar ? 'نقطة' : 'pts'}`),
     ].filter(Boolean).join('\n')
     copyText(txt).then((ok) => (ok ? toast.success(ar ? 'نُسخ تقرير اليوم' : 'Day report copied') : toast.error(ar ? 'تعذّر النسخ' : 'Copy failed')))
   }
@@ -153,7 +153,7 @@ export default function DailyReport() {
       <div className="row" style={{ gap: 'var(--sp-2)' }}>
         <div className="card card-pad grow stack" style={{ gap: 4 }}>
           <span className="xs faint">{ar ? 'التقييمات' : 'Ratings'}</span>
-          <span className="bold row" style={{ gap: 6 }}><Icon name="star" size={15} fill="currentColor" strokeWidth={1.5} style={{ color: 'var(--gold)' }} /> {r.ratingN ? `${r.avgRating.toFixed(1)} (${r.ratingN})` : '—'}</span>
+          <span className="bold row" style={{ gap: 6 }}><Icon name="star" size={15} fill="currentColor" strokeWidth={1.5} style={{ color: 'var(--gold)' }} /> {r.ratingN ? `${r.avgRating.toFixed(1)} (${r.ratingN})` : '·'}</span>
         </div>
         <div className="card card-pad grow stack" style={{ gap: 4 }}>
           <span className="xs faint">{ar ? 'الشكاوى' : 'Complaints'}</span>
@@ -174,7 +174,7 @@ export default function DailyReport() {
 
       {/* staff — ALL active staff, best first; every row opens the day sheet */}
       <div className="stack" style={{ gap: 'var(--sp-2)' }}>
-        <strong className="small row" style={{ gap: 6 }}><Icon name="award" size={15} style={{ color: 'var(--gold)' }} /> {ar ? 'الموظفون — ترتيب اليوم' : 'Staff — day ranking'}</strong>
+        <strong className="small row" style={{ gap: 6 }}><Icon name="award" size={15} style={{ color: 'var(--gold)' }} /> {ar ? 'الموظفون، ترتيب اليوم' : 'Staff, day ranking'}</strong>
         {r.rows.length === 0 ? <p className="muted small">{ar ? 'لا موظفين' : 'No staff'}</p> : r.rows.map((row, i) => (
           <button key={row.uid} type="button" className="list-row" onClick={() => setStaffFor(row)} style={{ textAlign: 'start', width: '100%' }}>
             <span className="center" style={{ width: 26, height: 26, borderRadius: '50%', background: i === 0 && row.points > 0 ? 'var(--gold)' : 'var(--surface-2)', color: i === 0 && row.points > 0 ? '#fff' : 'var(--text-muted)', fontWeight: 800, fontSize: 12, flex: 'none' }}>{i + 1}</span>
@@ -245,7 +245,7 @@ function StaffDaySheet({ row, onClose, dayOrders, dayReviews, dayAtt, dayStart, 
   // an end-of-shift note, without retyping the numbers.
   const copySummary = () => {
     const txt = [
-      `${ar ? 'تقرير' : 'Report'} ${name} — ${dateLabel}`,
+      `${ar ? 'تقرير' : 'Report'} ${name}، ${dateLabel}`,
       `${ar ? 'قدّم' : 'Served'}: ${servedOrders.length} · ${ar ? 'الإيراد' : 'revenue'} ${Math.round(revenue)} ${currency}`,
       `${ar ? 'ساعات العمل' : 'Hours'}: ${hours.toFixed(1)}`,
       lateMin ? `${ar ? 'التأخير' : 'Late'}: ${lateMin} ${ar ? 'دقيقة' : 'min'}` : (ar ? 'بلا تأخير' : 'On time'),
@@ -259,7 +259,7 @@ function StaffDaySheet({ row, onClose, dayOrders, dayReviews, dayAtt, dayStart, 
       open
       onClose={onClose}
       tall
-      title={ar ? `تقرير ${name} — ${dayTitle}` : `${name} — ${dayTitle}`}
+      title={ar ? `تقرير ${name}، ${dayTitle}` : `${name}, ${dayTitle}`}
       footer={(
         <button type="button" className="btn btn-outline" style={{ width: '100%' }} onClick={copySummary}>
           <Icon name="copy" size={16} /> {ar ? 'نسخ الملخص' : 'Copy summary'}

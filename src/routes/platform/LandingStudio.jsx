@@ -65,9 +65,9 @@ export default function LandingStudio() {
     setBusy(true)
     try {
       await setDoc(doc(db, 'platformConfig', 'landing'), draft, { merge: false })
-      toast.success('نُشرت الصفحة — التغييرات مباشرة الآن')
+      toast.success('نُشرت الصفحة، التغييرات مباشرة الآن')
     } catch {
-      toast.error('تعذّر النشر — تحقق من صلاحياتك')
+      toast.error('تعذّر النشر، تحقق من صلاحياتك')
     } finally {
       setBusy(false)
     }
@@ -85,7 +85,7 @@ export default function LandingStudio() {
       <div className="row-between" style={{ flexWrap: 'wrap', gap: 'var(--sp-2)' }}>
         <div>
           <h1 className="page-title"><Icon name="penLine" size={20} /> استوديو صفحة الهبوط</h1>
-          <p className="muted small">تحكّم كامل بمحتوى الصفحة العامة — الافتراضي يُعرض دائماً حتى قبل أول نشر.</p>
+          <p className="muted small">تحكّم كامل بمحتوى الصفحة العامة. الافتراضي يُعرض دائماً حتى قبل أول نشر.</p>
         </div>
         <div className="row" style={{ gap: 8, flexWrap: 'wrap' }}>
           <button className="btn btn-outline" onClick={() => setShowPreview((v) => !v)}>
@@ -99,7 +99,7 @@ export default function LandingStudio() {
       {showPreview && (
         <div className="card" style={{ overflow: 'hidden' }}>
           <div className="row-between" style={{ padding: 'var(--sp-2) var(--sp-3)', borderBottom: '1px solid var(--border)' }}>
-            <span className="small bold"><Icon name="eye" size={14} /> معاينة — تعرض النسخة المنشورة، احفظ أولاً لرؤية تعديلاتك</span>
+            <span className="small bold"><Icon name="eye" size={14} /> معاينة: تعرض النسخة المنشورة، احفظ أولاً لرؤية تعديلاتك</span>
             <button className="btn btn-outline btn-xs" onClick={() => setPreviewN((n) => n + 1)}><Icon name="reload" size={13} /> تحديث</button>
           </div>
           <iframe key={previewN} src="/" title="معاينة صفحة الهبوط" style={{ width: '100%', height: 560, border: 0, display: 'block', background: '#fff' }} />
@@ -111,7 +111,7 @@ export default function LandingStudio() {
         <div className="row" style={{ gap: 'var(--sp-2)', marginBottom: 'var(--sp-3)' }}>
           <Icon name="arrowUpDown" size={18} />
           <div>
-            <div className="bold">أقسام الصفحة — الترتيب والظهور</div>
+            <div className="bold">أقسام الصفحة: الترتيب والظهور</div>
             <div className="small muted">فعّل أو أخفِ أي قسم وأعد ترتيبه. شريط الإعلان يظهر دائماً أعلى الصفحة عند تفعيله.</div>
           </div>
         </div>
@@ -173,7 +173,7 @@ export default function LandingStudio() {
         <Card title="شريط العملاء (شرائح نصية متحركة)" icon="store">
           <Switch on={draft.logos.enabled} onChange={(v) => upd((d) => { d.logos.enabled = v })} label="إظهار الشريط" wide />
           <TxtIn label="العنوان فوق الشريط" value={draft.logos.title} onChange={(v) => upd((d) => { d.logos.title = v })} />
-          <div className="xs faint">أسماء نصية فقط — لا شعارات مزيفة. أضف عملاءك الحقيقيين ثم فعّل الشريط.</div>
+          <div className="xs faint">أسماء نصية فقط، لا شعارات مزيفة. أضف عملاءك الحقيقيين ثم فعّل الشريط.</div>
           {draft.logos.items.map((it, i) => (
             <div key={i} className="row" style={{ gap: 6 }}>
               <input className="input grow" value={it.name} onChange={(e) => upd((d) => { d.logos.items[i].name = e.target.value })} placeholder="اسم المنشأة" />
@@ -197,7 +197,7 @@ export default function LandingStudio() {
             </select>
           </label>
           <div className="xs faint">
-            الإطار يميل ثم يستوي مع تمرير الزائر. الحركة زخرفية بالكامل — من يفعّل «تقليل الحركة» في جهازه يرى الشاشة مستوية ومقروءة من البداية.
+            الإطار يميل ثم يستوي مع تمرير الزائر. الحركة زخرفية بالكامل، ومن يفعّل «تقليل الحركة» في جهازه يرى الشاشة مستوية ومقروءة من البداية.
           </div>
         </Card>
       )}
@@ -247,7 +247,7 @@ export default function LandingStudio() {
       {tab === 'stats' && (
         <Card title="شريط الأرقام" icon="chartBar">
           <Switch on={draft.stats.enabled} onChange={(v) => upd((d) => { d.stats.enabled = v })} label="إظهار الأرقام" wide />
-          <div className="xs faint">أرقام صادقة فقط — لا تختلق أعداد عملاء. أرقام عامة عن النظام نفسه مقبولة.</div>
+          <div className="xs faint">أرقام صادقة فقط، لا تختلق أعداد عملاء. أرقام عامة عن النظام نفسه مقبولة.</div>
           {draft.stats.items.map((it, i) => (
             <div key={i} className="row" style={{ gap: 6 }}>
               <input className="input num" style={{ width: 110 }} dir="ltr" value={it.value} onChange={(e) => upd((d) => { d.stats.items[i].value = e.target.value })} placeholder="0%" />
@@ -271,7 +271,7 @@ export default function LandingStudio() {
           <div className="card card-pad">
             <div className="row-between" style={{ gap: 'var(--sp-3)', flexWrap: 'wrap' }}>
               <p className="small" style={{ margin: 0, maxWidth: '62ch' }}>
-                <Icon name="wallet" size={14} style={{ verticalAlign: 'middle' }} /> الأسعار المعروضة على الصفحة تأتي مباشرةً من <b>جدول الأسعار</b> — نفس المستند الذي يفوتر منه الخادم ويُبنى منه عرض السعر. لا يوجد سعر ثانٍ يُكتب هنا.
+                <Icon name="wallet" size={14} style={{ verticalAlign: 'middle' }} /> الأسعار المعروضة على الصفحة تأتي مباشرةً من <b>جدول الأسعار</b>، وهو نفس المستند الذي يفوتر منه الخادم ويُبنى منه عرض السعر. لا يوجد سعر ثانٍ يُكتب هنا.
               </p>
               <Link to="/platform/plans" className="btn btn-outline btn-sm"><Icon name="wallet" size={14} /> تعديل الأسعار</Link>
             </div>
@@ -291,7 +291,7 @@ export default function LandingStudio() {
                   >{o.ar}</button>
                 ))}
               </div>
-              <div className="xs faint">الزائر يستطيع التبديل بنفسه — هذا يحدّد ما يراه أولاً فقط. السعر السنوي محسوب دائماً من الشهري بخصم {fmtNum(Math.round((1 - (pricing.yearlyDiscount || 0.8)) * 100), 'ar')}%.</div>
+              <div className="xs faint">الزائر يستطيع التبديل بنفسه، وهذا يحدّد ما يراه أولاً فقط. السعر السنوي محسوب دائماً من الشهري بخصم {fmtNum(Math.round((1 - (pricing.yearlyDiscount || 0.8)) * 100), 'ar')}%.</div>
             </div>
           </Card>
           {PLANS.map((p) => {
@@ -305,14 +305,14 @@ export default function LandingStudio() {
                   <span className="badge">{fmtNum(monthly, 'ar')} ريال / شهر</span>
                   <span className="badge">{fmtNum(yearlyTotal(monthly, pricing), 'ar')} ريال / سنة</span>
                   {promo
-                    ? <span className="badge badge-success">{promo.labelAr} — قبل: {fmtNum(promo.listPrice, 'ar')} ريال</span>
+                    ? <span className="badge badge-success">{promo.labelAr}، قبل: {fmtNum(promo.listPrice, 'ar')} ريال</span>
                     : <span className="xs faint">لا يوجد سعر مشطوب لهذه الباقة</span>}
                 </div>
                 <div className="row" style={{ gap: 8, flexWrap: 'wrap' }}>
                   <TxtIn label="السطر التسويقي" value={t.tagline || ''} onChange={(v) => patch((x) => { x.tagline = v })} grow />
                   <TxtIn label="شارة أعلى البطاقة" value={t.badge || ''} onChange={(v) => patch((x) => { x.badge = v })} grow placeholder="الأكثر اختياراً" />
                 </div>
-                <Switch on={!!t.highlight} onChange={(v) => patch((x) => { x.highlight = v })} label="بطاقة مميزة (اجعلها لباقة واحدة فقط — أربع بطاقات مميزة تعني لا بطاقة مميزة)" wide />
+                <Switch on={!!t.highlight} onChange={(v) => patch((x) => { x.highlight = v })} label="بطاقة مميزة (اجعلها لباقة واحدة فقط، أربع بطاقات مميزة تعني لا بطاقة مميزة)" wide />
                 <Lines label="المزايا الظاهرة (سطر لكل ميزة)" value={t.bullets || []} onChange={(v) => patch((x) => { x.bullets = v })} />
                 <Lines label="مزايا «عرض المزيد» (سطر لكل ميزة)" value={t.more || []} onChange={(v) => patch((x) => { x.more = v })} rows={3} />
               </Card>
@@ -379,7 +379,7 @@ export default function LandingStudio() {
             {draft.theme.accent && <button className="btn btn-outline btn-sm" onClick={() => upd((d) => { d.theme.accent = '' })}>مسح</button>}
           </div>
           <div className="xs faint">
-            يغيّر لون كل أزرار الدعوة للتسجيل معاً. اختر لوناً <b>داكناً</b> — نصوص الأزرار بيضاء، ولون فاتح يجعلها غير مقروءة. اتركه فارغاً ليبقى بنفسجي العلامة.
+            يغيّر لون كل أزرار الدعوة للتسجيل معاً. اختر لوناً <b>داكناً</b>، فنصوص الأزرار بيضاء، ولون فاتح يجعلها غير مقروءة. اتركه فارغاً ليبقى بنفسجي العلامة.
           </div>
           <div className="bold small" style={{ marginTop: 8 }}>كثافة الأقسام</div>
           <div className="row" style={{ gap: 8 }}>

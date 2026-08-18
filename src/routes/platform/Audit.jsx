@@ -16,7 +16,7 @@ const ACTION_LABELS = {
 }
 
 function actionLabel(a) {
-  return ACTION_LABELS[a] || a || '—'
+  return ACTION_LABELS[a] || a || '·'
 }
 
 const BADGE = {
@@ -103,15 +103,15 @@ export default function Audit() {
                     <span className={`badge ${BADGE[r.action] || 'badge-info'}`}>{actionLabel(r.action)}</span>
                   </td>
                   <td>
-                    {r.targetName ? <div className="bold truncate">{r.targetName}</div> : <span className="faint">—</span>}
+                    {r.targetName ? <div className="bold truncate">{r.targetName}</div> : <span className="faint">·</span>}
                     {r.targetTid ? <div className="xs faint num truncate">{r.targetTid}</div> : null}
                   </td>
                   <td>
-                    <span className="truncate">{r.byEmail || <span className="faint">—</span>}</span>
+                    <span className="truncate">{r.byEmail || <span className="faint">·</span>}</span>
                   </td>
                   <td style={{ maxWidth: 320 }}>
                     <span className="xs muted" style={{ wordBreak: 'break-word' }}>
-                      {typeof r.detail === 'string' ? r.detail : r.detail ? JSON.stringify(r.detail) : '—'}
+                      {typeof r.detail === 'string' ? r.detail : r.detail ? JSON.stringify(r.detail) : '·'}
                     </span>
                   </td>
                   <td className="pc-nowrap">

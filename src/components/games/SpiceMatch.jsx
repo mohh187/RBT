@@ -389,7 +389,7 @@ export default function SpiceMatch({
 
         {phase === 'play' && (
           <p className="gmsm-foot">
-            {peek ? 'احفظ مواقع التوابل' : `اقلب بطاقتين متطابقتين — بقي ${fmt(pairsLeft)} زوج`}
+            {peek ? 'احفظ مواقع التوابل' : `اقلب بطاقتين متطابقتين، وبقي ${fmt(pairsLeft)} ${pairsLeft >= 3 && pairsLeft <= 10 ? 'أزواج' : 'زوج'}`}
           </p>
         )}
       </div>
@@ -405,7 +405,7 @@ export default function SpiceMatch({
               <span className="gmsm-chip"><SpiceArt id="zafaran" /></span>
             </div>
             <h3 className="gmx-title">توأم البهارات</h3>
-            <p className="gmx-line">تظهر البطاقات للحظة ثم تُقلب — اعثر على أزواج التوابل قبل نفاد الوقت أو النقلات. كل مرحلة لوحها أكبر ونقلاتها أقل، والمطابقات المتتالية ترفع المضاعف.</p>
+            <p className="gmx-line">تظهر البطاقات للحظة ثم تُقلب، فاعثر على أزواج التوابل قبل نفاد الوقت أو النقلات. كل مرحلة لوحها أكبر ونقلاتها أقل، والمطابقات المتتالية ترفع المضاعف.</p>
             {saved ? (
               <div className="gmx-actions">
                 <button type="button" className="gmx-btn" onClick={() => startLevel(Number(saved.stage), true, Number(saved.score) || 0)}>
@@ -426,7 +426,7 @@ export default function SpiceMatch({
           <div className="gmx-card">
             <h3 className="gmx-title">اكتمل المستوى {fmt(level)}</h3>
             <div className="gmx-big">{fmt(score)}</div>
-            <p className="gmx-line">مكافأة الوقت والنقلات {fmt(bonus)} نقطة — المستوى التالي أكبر وأسرع.</p>
+            <p className="gmx-line">مكافأة الوقت والنقلات {fmt(bonus)} {bonus >= 3 && bonus <= 10 ? 'نقاط' : 'نقطة'}. المستوى التالي أكبر وأسرع.</p>
             <div className="gmx-actions">
               <button type="button" className="gmx-btn" onClick={() => startLevel(level + 1, true)}>المستوى التالي</button>
               {typeof onExit === 'function' && (

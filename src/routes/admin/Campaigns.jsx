@@ -156,7 +156,7 @@ export default function Campaigns() {
       const out = await aiQuick(prompt)
       if (out) { setForm((f) => ({ ...f, text: out })); toast.success(ar ? 'كتب الذكاء نسخة محسّنة' : 'AI drafted an improved copy') }
       else toast.error(ar ? 'لم يصل رد من الذكاء' : 'No AI response')
-    } catch (_) { toast.error(ar ? 'تعذّر الاتصال بالذكاء — تأكد من نشر الدوال أو مفتاح Gemini' : 'AI unavailable — deploy functions or set a Gemini key') }
+    } catch (_) { toast.error(ar ? 'تعذّر الاتصال بالذكاء، تأكد من نشر الدوال أو مفتاح Gemini' : 'AI unavailable, deploy functions or set a Gemini key') }
     finally { setAiBusy(false) }
   }
 
@@ -272,7 +272,7 @@ export default function Campaigns() {
 
       {/* automation: item/offer promos + win-back */}
       <div className="card card-pad stack" style={{ gap: 10 }}>
-        <strong className="small"><Icon name="sparkles" size={14} style={{ verticalAlign: 'middle' }} /> {ar ? 'الأتمتة — رسائل تُرسل وحدها' : 'Automation — messages that send themselves'}</strong>
+        <strong className="small"><Icon name="sparkles" size={14} style={{ verticalAlign: 'middle' }} /> {ar ? 'الأتمتة، رسائل تُرسل وحدها' : 'Automation, messages that send themselves'}</strong>
         {[['offers', ar ? 'عند نشر عرض جديد' : 'New offer published'], ['featured', ar ? 'عند تمييز صنف بالنجمة' : 'Item starred'], ['newItems', ar ? 'عند إضافة أصناف جديدة' : 'New items added']].map(([k, label]) => (
           <div key={k} className="row-between" style={{ gap: 8, flexWrap: 'wrap' }}>
             <span className="small">{label}</span>
@@ -328,7 +328,7 @@ export default function Campaigns() {
           )}
         </div>
 
-        <p className="xs faint" style={{ margin: 0 }}>{ar ? 'أيضاً تلقائياً: ترحيب عند منح العضوية، تهنئة الترقية، وتهنئة عيد الميلاد — من إعدادات العضوية. لكل صنف خيار «وسم ترويجي» خاص في محرره يتجاوز هذه الإعدادات.' : 'Also automatic: membership welcome, tier-upgrade congrats, and birthday greetings. Each item can override these in its editor.'}</p>
+        <p className="xs faint" style={{ margin: 0 }}>{ar ? 'أيضاً تلقائياً: ترحيب عند منح العضوية، تهنئة الترقية، وتهنئة عيد الميلاد، من إعدادات العضوية. لكل صنف خيار «وسم ترويجي» خاص في محرره يتجاوز هذه الإعدادات.' : 'Also automatic: membership welcome, tier-upgrade congrats, and birthday greetings. Each item can override these in its editor.'}</p>
       </div>
 
       {/* the venue's own wording for every automated message */}
@@ -343,12 +343,12 @@ export default function Campaigns() {
             <span dir="ltr" className="mono">{'{الاسم} {المنشأة} {الصنف} {الكود} {الطلب} {الحالة} {المبلغ} {الرابط} {العضوية}'}</span>
           </p>
           {[
-            ['orderStatus', ar ? 'تحديث حالة الطلب' : 'Order status update', ar ? '{المنشأة}: {الحالة} — طلبك {الطلب}' : '{venue}: {status} — order {code}'],
+            ['orderStatus', ar ? 'تحديث حالة الطلب' : 'Order status update', ar ? '{المنشأة}: {الحالة}، طلبك {الطلب}' : '{venue}: {status}, order {code}'],
             ['receipt', ar ? 'رسالة الفاتورة' : 'Receipt message', ar ? '{المنشأة}: استلمنا دفعتك {المبلغ} ريال. فاتورتك: {الرابط}' : '{venue}: payment {total} received. Invoice: {link}'],
-            ['welcome', ar ? 'ترحيب العضوية الجديدة' : 'Membership welcome', ar ? 'أهلاً {الاسم} — صرت عضواً في {المنشأة}! بطاقتك: {الرابط}' : 'Welcome {name} — your card: {link}'],
+            ['welcome', ar ? 'ترحيب العضوية الجديدة' : 'Membership welcome', ar ? 'أهلاً {الاسم}، صرت عضواً في {المنشأة}! بطاقتك: {الرابط}' : 'Welcome {name}, your card: {link}'],
             ['upgrade', ar ? 'تهنئة ترقية العضوية' : 'Tier upgrade', ar ? 'مبروك {الاسم}! ترقّيت إلى {العضوية} في {المنشأة}' : 'Congrats {name}! You reached {tier}'],
             ['birthday', ar ? 'تهنئة عيد الميلاد' : 'Birthday greeting', ar ? 'كل عام وأنت بخير {الاسم}! {المنشأة} تهنّئك' : 'Happy birthday {name}!'],
-            ['offers', ar ? 'نشر عرض جديد' : 'New offer', ar ? '{الاسم}، عرض جديد في {المنشأة}: {الصنف} — الكود {الكود}' : 'New offer at {venue}: {item} — code {code}'],
+            ['offers', ar ? 'نشر عرض جديد' : 'New offer', ar ? '{الاسم}، عرض جديد في {المنشأة}: {الصنف}، الكود {الكود}' : 'New offer at {venue}: {item}, code {code}'],
             ['featured', ar ? 'تمييز صنف' : 'Item starred', ar ? '{المنشأة} اختارت لك: {الصنف}' : '{venue} picked for you: {item}'],
             ['newItems', ar ? 'أصناف جديدة' : 'New items', ar ? 'جديدنا في {المنشأة}: {الصنف}' : 'New at {venue}: {item}'],
           ].map(([k, label, ph]) => (
@@ -483,7 +483,7 @@ export default function Campaigns() {
             <details>
               <summary className="small bold" style={{ cursor: 'pointer' }}>{ar ? 'اختبار A/B (نسخة ثانية اختيارية)' : 'A/B test (optional variant B)'}</summary>
               <textarea className="textarea" rows={3} style={{ marginTop: 8 }} value={form.textB} onChange={(e) => setForm({ ...form, textB: e.target.value })}
-                placeholder={ar ? 'النسخة B — تُرسل لنصف الجمهور لقياس الأفضل' : 'Variant B — sent to half the audience'} />
+                placeholder={ar ? 'النسخة B، تُرسل لنصف الجمهور لقياس الأفضل' : 'Variant B, sent to half the audience'} />
             </details>
 
             <div className="field">

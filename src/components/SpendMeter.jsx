@@ -22,14 +22,14 @@ const n = (v) => (Number(v) || 0).toLocaleString('en-US')
 
 const REASON = {
   ar: {
-    cap: 'بلغت السقف الشهري — اشترِ رصيداً إضافياً أو انتظر تجدّد الشهر.',
-    daily: 'بلغت السقف اليومي — يتجدّد غداً.',
+    cap: 'بلغت السقف الشهري. اشترِ رصيداً إضافياً أو انتظر تجدّد الشهر.',
+    daily: 'بلغت السقف اليومي، ويتجدّد غداً.',
     burst: 'إرسال كثيف في وقت قصير أوقف الباقي مؤقتاً.',
     killed: 'موقوف مؤقتاً من إدارة المنصة.',
   },
   en: {
-    cap: 'Monthly ceiling reached — buy a top-up or wait for next month.',
-    daily: 'Daily ceiling reached — resets tomorrow.',
+    cap: 'Monthly ceiling reached. Buy a top-up or wait for next month.',
+    daily: 'Daily ceiling reached, and it resets tomorrow.',
     burst: 'Too many at once; the rest were held back.',
     killed: 'Paused by the platform.',
   },
@@ -113,14 +113,14 @@ export default function SpendMeter({ tenantId, tenant, ar = true, compact = fals
               {extra > 0 && (
                 <span className="xs" style={{ color: 'var(--brand)' }}>
                   {ar
-                    ? `يشمل ${n(extra)} ${c.unit} من رصيد مشترى — يُخصم مع الاستخدام`
-                    : `Includes ${n(extra)} purchased ${c.unit} — drawn down as you use them`}
+                    ? `يشمل ${n(extra)} ${c.unit} من رصيد مشترى، يُخصم مع الاستخدام`
+                    : `Includes ${n(extra)} purchased ${c.unit}, drawn down as you use them`}
                 </span>
               )}
 
               {blocked > 0 && (
                 <div className="xs" style={{ color: 'var(--danger)' }}>
-                  {ar ? `لم يُنفَّذ ${n(blocked)} — ` : `${n(blocked)} not delivered — `}
+                  {ar ? `لم يُنفَّذ ${n(blocked)}: ` : `${n(blocked)} not delivered: `}
                   {(REASON[ar ? 'ar' : 'en'][reason]) || (ar ? 'تم بلوغ الحد.' : 'Limit reached.')}
                 </div>
               )}
@@ -129,7 +129,7 @@ export default function SpendMeter({ tenantId, tenant, ar = true, compact = fals
 
               {lockedByPlan ? (
                 <span className="xs faint">
-                  {ar ? 'متاح في الباقة المتكاملة — رقِّ اشتراكك لتفعيله.' : 'Available on the Enterprise plan.'}
+                  {ar ? 'متاح في الباقة المتكاملة، رقِّ اشتراكك لتفعيله.' : 'Available on the Enterprise plan. Upgrade to switch it on.'}
                 </span>
               ) : packs.length > 0 && (
                 <div className="stack" style={{ gap: 6 }}>

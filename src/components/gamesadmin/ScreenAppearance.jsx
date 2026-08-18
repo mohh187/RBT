@@ -376,8 +376,8 @@ export default function ScreenAppearance({ ar, tenantId, tenant, canEdit, onSave
           <div className="sfx-card">
             <p className="sfx-hint">
               {ar
-                ? 'أنت تشاهد المظهر الحالي فقط — تعديله يحتاج صلاحية الإعدادات.'
-                : 'You are viewing the current look only — editing needs the settings permission.'}
+                ? 'أنت تشاهد المظهر الحالي فقط. تعديله يحتاج صلاحية الإعدادات.'
+                : 'You are viewing the current look only. Editing needs the settings permission.'}
             </p>
           </div>
         )}
@@ -593,8 +593,8 @@ export default function ScreenAppearance({ ar, tenantId, tenant, canEdit, onSave
         <ScreenPreview fx={fx} venue={venue} ar={ar} />
         <p className="sfx-hint">
           {ar
-            ? 'معاينة بمقياس 16:9 مطابقة لتلفزيون 1920×1080. الطاولات واللوحة نموذجية — المباراة الحقيقية تحل محلها على الجدار.'
-            : 'A 16:9 preview matching a 1920x1080 TV. The tables and board are samples — the real live match replaces them on the wall.'}
+            ? 'معاينة بمقياس 16:9 مطابقة لتلفزيون 1920×1080. الطاولات واللوحة نموذجية، والمباراة الحقيقية تحل محلها على الجدار.'
+            : 'A 16:9 preview matching a 1920x1080 TV. The tables and board are samples, and the real live match replaces them on the wall.'}
         </p>
       </div>
 

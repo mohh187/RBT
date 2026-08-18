@@ -2,6 +2,7 @@ import { useMemo, useState } from 'react'
 import { Price } from '../Riyal.jsx'
 import Icon from '../Icon.jsx'
 import { ACCOUNTS, fmtDateTime, downloadCsv } from '../../lib/accounting.js'
+import { arPlural } from '../../lib/forecast.js'
 
 const TYPE_LABELS = {
   sale: { ar: 'مبيعات', en: 'Sale' },
@@ -42,7 +43,7 @@ export default function LedgerTable({ ledger = [], ar = true, lang = 'ar', curre
   const totals = useMemo(() => rows.reduce((s, e) => ({ debit: s.debit + (e.debit || 0), credit: s.credit + (e.credit || 0) }), { debit: 0, credit: 0 }), [rows])
 
   const visible = rows.slice(0, shown)
-  const M = ({ v }) => (showMoney ? <Price value={v} currency={currency} lang={lang} /> : <span className="faint">—</span>)
+  const M = ({ v }) => (showMoney ? <Price value={v} currency={currency} lang={lang} /> : <span className="faint">-</span>)
 
   const exportCsv = () => {
     downloadCsv('journal.csv', rows.map((e) => ({
@@ -103,15 +104,15 @@ export default function LedgerTable({ ledger = [], ar = true, lang = 'ar', curre
                   <tr key={e.id}>
                     <td className="acc-num acc-nowrap">{fmtDateTime(e.date, ar)}</td>
                     <td><span className="acc-acc-tag" data-cat={e.category}>{ar ? e.accountAr : e.accountEn}</span></td>
-                    <td className="acc-note-cell">{e.note || '—'}</td>
-                    <td className="acc-ta-end acc-num">{e.debit ? <M v={e.debit} /> : <span className="faint">—</span>}</td>
-                    <td className="acc-ta-end acc-num">{e.credit ? <M v={e.credit} /> : <span className="faint">—</span>}</td>
+                    <td className="acc-note-cell">{e.note || '-'}</td>
+                    <td className="acc-ta-end acc-num">{e.debit ? <M v={e.debit} /> : <span className="faint">-</span>}</td>
+                    <td className="acc-ta-end acc-num">{e.credit ? <M v={e.credit} /> : <span className="faint">-</span>}</td>
                   </tr>
                 ))}
               </tbody>
               <tfoot>
                 <tr>
-                  <td colSpan={3}>{ar ? `الإجمالي (${rows.length} قيد)` : `Total (${rows.length} entries)`}</td>
+                  <td colSpan={3}>{ar ? `الإجمالي (${arPlural(rows.length, { one: 'قيد', two: 'قيدان', few: 'قيود', many: 'قيداً' })})` : `Total (${rows.length} entries)`}</td>
                   <td className="acc-ta-end acc-num"><M v={totals.debit} /></td>
                   <td className="acc-ta-end acc-num"><M v={totals.credit} /></td>
                 </tr>

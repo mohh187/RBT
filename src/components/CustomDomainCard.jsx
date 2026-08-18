@@ -30,7 +30,7 @@ export default function CustomDomainCard({ tenant, tenantId }) {
     setBusy(true)
     try {
       await requestDomain(h, { tenantId, slug, type })
-      toast.success(ar ? 'تم إرسال الطلب — نفعّله بعد جاهزية DNS' : 'Requested — we activate it once DNS is ready')
+      toast.success(ar ? 'وصلنا طلبك. نفعّل النطاق فور جاهزية إعدادات DNS.' : 'Request received. We activate the domain once its DNS settings are ready.')
       setHost('')
     } catch (e) {
       const m = e?.message
@@ -64,7 +64,7 @@ export default function CustomDomainCard({ tenant, tenantId }) {
       {suggestedSub && (
         <div className="row-between" style={{ gap: 8, flexWrap: 'wrap', background: 'var(--surface-2)', border: '1px solid var(--border)', borderRadius: 10, padding: 10 }}>
           <div className="stack" style={{ gap: 2 }}>
-            <span className="xs faint bold">{ar ? 'نطاقك الفرعي التلقائي — جاهز الآن' : 'Your automatic subdomain — live now'}</span>
+            <span className="xs faint bold">{ar ? 'نطاقك الفرعي التلقائي جاهز الآن' : 'Your automatic subdomain is live now'}</span>
             <a href={`https://${suggestedSub}`} target="_blank" rel="noreferrer" className="small bold" dir="ltr">{suggestedSub}</a>
           </div>
           <div className="row" style={{ gap: 6 }}>
@@ -102,7 +102,7 @@ export default function CustomDomainCard({ tenant, tenantId }) {
                         <div dir="ltr" style={{ fontFamily: 'monospace', background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: 8, padding: '6px 10px', marginTop: 4, wordBreak: 'break-all' }}>{d.id} &nbsp;CNAME&nbsp; {DOMAIN_CNAME_TARGET}</div>
                       </div>
                     )}
-                    {d.status !== 'active' && d.type === 'subdomain' && <span className="xs faint">{ar ? 'لا حاجة لإعداد — نجهّزه ونفعّله قريباً.' : 'No setup needed — we configure and activate it.'}</span>}
+                    {d.status !== 'active' && d.type === 'subdomain' && <span className="xs faint">{ar ? 'لا يحتاج أي إعداد منك. نجهّزه ونفعّله قريباً.' : 'No setup needed on your side. We configure and activate it.'}</span>}
                     <div className="row" style={{ gap: 6, flexWrap: 'wrap', alignItems: 'center' }}>
                       {d.type !== 'subdomain' && <button className="btn btn-sm btn-outline" onClick={() => verify(d.id)} disabled={chk?.loading}><Icon name="check" size={14} /> {chk?.loading ? (ar ? 'يفحص…' : 'Checking…') : (ar ? 'فحص DNS' : 'Verify DNS')}</button>}
                       {chk && !chk.loading && <span className="xs row" style={{ gap: 4, color: chk.ok ? 'var(--success)' : 'var(--danger)' }}>{chk.ok && <Icon name="check" size={12} />}{chk.ok ? (ar ? 'موجّه بشكل صحيح' : 'Pointing correctly') : (ar ? 'غير موجّه بعد' : 'Not pointing yet')}</span>}

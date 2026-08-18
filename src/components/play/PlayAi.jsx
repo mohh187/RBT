@@ -12,6 +12,7 @@
 import { useRef, useState } from 'react'
 import Icon from '../Icon.jsx'
 import { fmtNum } from '../../lib/format.js'
+import { arPlural } from '../../lib/forecast.js'
 import { aiQuick, aiConfigured } from '../../lib/aiBridge.js'
 import { buildPlayPrompt, parsePlayReply, THIN_PLAYS } from './engine.jsx'
 import { SegmentCard } from './PlaySegments.jsx'
@@ -60,7 +61,7 @@ export default function PlayAi({
     } catch (e) {
       setMessages((m) => [...m, {
         role: 'error',
-        text: (ar ? 'تعذّر الوصول إلى المساعد: ' : 'Assistant unavailable: ') + (e && e.message ? e.message : String(e)),
+        text: ar ? 'ما وصلنا للمساعد الآن. تأكد من الاتصال وأعد السؤال بعد لحظات.' : 'Could not reach the assistant. Check your connection and ask again in a moment.',
       }])
     } finally {
       setBusy(false)
@@ -106,8 +107,8 @@ export default function PlayAi({
           <div className="gp-warn">
             <Icon name="warning" size={15} />
             <span>{disabledReason || (ar
-              ? 'المساعد الذكي غير مُهيَّأ في هذه البيئة — الاستنتاجات أعلاه والشرائح تعمل بدونه تماماً.'
-              : 'AI unavailable — findings and segments work without it.')}</span>
+              ? 'المساعد الذكي غير متاح الآن. الاستنتاجات أعلاه والشرائح تعمل من دونه تماماً.'
+              : 'The assistant is unavailable right now. The findings above and the segments work without it.')}</span>
           </div>
         )}
         {!blocked && samplePlays === 0 && (
@@ -120,8 +121,8 @@ export default function PlayAi({
           <div className="gp-warn">
             <Icon name="warning" size={15} />
             <span>{ar
-              ? `الفترة تحوي ${fmtNum(samplePlays)} محاولة فقط. اللقطة مُعلَّمة thinSample، والنموذج مُلزَم بقول «العينة غير كافية» بدل بناء خطة على أرقام هشّة.`
-              : `Only ${fmtNum(samplePlays)} plays — the snapshot is flagged thin.`}</span>
+              ? `الفترة تحوي ${arPlural(samplePlays, { one: 'محاولة', two: 'محاولتين', few: 'محاولات', many: 'محاولة' })} فقط. اللقطة مُعلَّمة كعينة صغيرة، والذكاء مُلزَم بقول «العينة غير كافية» بدل بناء خطة على أرقام هشّة.`
+              : `Only ${fmtNum(samplePlays)} plays, so the snapshot is flagged as a thin sample.`}</span>
           </div>
         )}
 

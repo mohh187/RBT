@@ -133,7 +133,7 @@ export default function Landing() {
           underlined by the brand gradient — the one element on the page that
           could not belong to any other company. */}
       <header className="rl-nav">
-        <Link to="/" className="rl-plate" aria-label="RBT 360 — الصفحة الرئيسية"><BrandMark size={28} /></Link>
+        <Link to="/" className="rl-plate" aria-label="RBT 360، الصفحة الرئيسية"><BrandMark size={28} /></Link>
         <nav className="links" aria-label="أقسام الصفحة">
           {navLinks.map(([href, label]) => <a key={href} href={href}>{label}</a>)}
         </nav>
@@ -570,7 +570,7 @@ function FooterSec({ c }) {
             <strong>{PLATFORM_SELLER.legalNameAr}</strong>
             <bdi className="lx-legal-en">{PLATFORM_SELLER.legalNameEn}</bdi>
           </div>
-          <div><span>العلامة</span> RBT 360 — نشاط مسجّل تحت السجل أدناه</div>
+          <div><span>العلامة</span> RBT 360، نشاط مسجّل تحت السجل أدناه</div>
           <div><span>العنوان</span> {SELLER_ADDRESS_AR}</div>
           <div>
             <span>السجل التجاري</span> <bdi className="num">{PLATFORM_SELLER.crNumber}</bdi>

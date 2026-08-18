@@ -86,7 +86,7 @@ export default function PayReturn() {
           {ok ? (ar ? 'تم الدفع بنجاح' : 'Payment successful') : pending ? (ar ? 'قيد التأكيد' : 'Confirming…') : (ar ? 'لم يكتمل الدفع' : 'Payment not completed')}
         </strong>
         <p className="muted small">
-          {ok ? (ar ? 'شكراً لك، تم استلام دفعتك.' : 'Thank you — your payment was received.')
+          {ok ? (ar ? 'شكراً لك، تم استلام دفعتك.' : 'Thank you, your payment was received.')
             : pending ? (ar ? 'سنؤكّد دفعتك خلال لحظات؛ يمكنك متابعة طلبك.' : 'We will confirm your payment shortly; you can track your order.')
               : (ar ? 'لم تُخصم أي مبالغ. يمكنك المحاولة مرة أخرى.' : 'No charge was made. You can try again.')}
         </p>

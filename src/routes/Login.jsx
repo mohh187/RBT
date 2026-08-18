@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { Link, useNavigate, Navigate } from 'react-router-dom'
+import { Link, useNavigate, useLocation, Navigate } from 'react-router-dom'
 import { sendPasswordResetEmail } from 'firebase/auth'
 import { auth } from '../lib/firebase.js'
 import { useAuth } from '../lib/auth.jsx'
@@ -30,7 +30,7 @@ export function LoginForm({ onDone }) {
     if (!em) { setErr(ar ? 'اكتب بريدك الإلكتروني أولاً ثم اضغط «نسيت كلمة المرور».' : 'Type your email first, then tap “Forgot password”.'); return }
     try {
       await sendPasswordResetEmail(auth, em)
-      setResetMsg(ar ? `أرسلنا رابط استعادة كلمة المرور إلى ${em} — تحقق من بريدك.` : `Password reset link sent to ${em} — check your inbox.`)
+      setResetMsg(ar ? `أرسلنا رابط استعادة كلمة المرور إلى ${em}. تحقّق من بريدك.` : `Password reset link sent to ${em}. Check your inbox.`)
     } catch (e2) { setErr(authErrorMessage(e2, lang)) }
   }
 
@@ -78,13 +78,17 @@ export default function Login() {
   const { user, tenantId, loading, isPlatformAdmin } = useAuth()
   const navigate = useNavigate()
   const deviceVenue = getDeviceVenue()
+  // RequireAuth parks the page the staffer actually asked for in state.from,
+  // and nothing read it: a shared /cashier link opened while signed out landed
+  // on /admin and bounced from there. Both exits below honour it now.
+  const to = useLocation().state?.from || '/admin'
 
   // While the auth context resolves (refresh / just-signed-in) show a spinner —
   // never the login form for someone already signed in, and never a premature
   // bounce to onboarding before the profile (tenantId) is known.
   if (loading) return <FullSpinner />
   // Platform admins without a venue go to the platform console, not onboarding.
-  if (user) return <Navigate to={tenantId ? '/admin' : isPlatformAdmin ? '/platform' : '/onboarding'} replace />
+  if (user) return <Navigate to={tenantId ? to : isPlatformAdmin ? '/platform' : '/onboarding'} replace />
 
   return (
     <AuthShell
@@ -92,11 +96,11 @@ export default function Login() {
       subtitle={ar ? 'سجّل الدخول لإدارة منشأتك' : 'Sign in to manage your venue'}
       foot={<>{t('noAccount')} <Link to="/signup">{t('signup')}</Link></>}
     >
-      <LoginForm onDone={() => navigate('/admin')} />
+      <LoginForm onDone={() => navigate(to)} />
       {/* a tablet this venue already uses signs staff in by PIN — one tap away */}
       {deviceVenue?.pinLock?.enabled && (
         <Link to="/lock" className="btn btn-outline btn-block" style={{ marginTop: 10, minHeight: 44, fontWeight: 700 }}>
-          <Icon name="key" size={16} /> {ar ? `الدخول برمز PIN — ${deviceVenue.name || ''}` : `PIN sign-in — ${deviceVenue.name || ''}`}
+          <Icon name="key" size={16} /> {ar ? `الدخول برمز PIN · ${deviceVenue.name || ''}` : `PIN sign-in · ${deviceVenue.name || ''}`}
         </Link>
       )}
     </AuthShell>

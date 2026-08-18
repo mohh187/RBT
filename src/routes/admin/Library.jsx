@@ -298,7 +298,7 @@ export default function Library() {
     const k = kindOf(f)
     const limit = LIB_LIMITS_MB[k]
     if (f.size > limit * 1024 * 1024) {
-      throw new Error(ar ? `الملف كبير جداً (${fmtMB(f.size)}) — الحد الأقصى ${limit}MB` : `File too large (${fmtMB(f.size)}) — max ${limit}MB`)
+      throw new Error(ar ? `الملف كبير جداً (${fmtMB(f.size)})، الحد الأقصى ${limit}MB` : `File too large (${fmtMB(f.size)}), max ${limit}MB`)
     }
     const meta = { name: f.name || '', size: f.size || 0 }
     const fire = (detailEv) => { try { window.dispatchEvent(new CustomEvent('ml:upload', { detail: detailEv })) } catch (_) { /* ignore */ } }
@@ -358,7 +358,7 @@ export default function Library() {
     try {
       await patchMedia(m.id, { trashed: true, trashedAt: serverTimestamp() })
       if (detailId === m.id) setDetailId(null)
-    } catch (_) { toast.error(ar ? 'تعذّر النقل إلى السلة — تعديل الوسائط للمدير فقط' : 'Trash failed — media edits are manager-only') }
+    } catch (_) { toast.error(ar ? 'تعذّر النقل إلى السلة، تعديل الوسائط للمدير فقط' : 'Trash failed, media edits are manager-only') }
   }
   const removeOne = async (m) => {
     if (!window.confirm(ar ? 'نقل إلى سلة المحذوفات؟ (يمكن استعادته لاحقاً، ولا يُحذف من الأماكن المستخدَم فيها)' : 'Move to trash? (restorable later; stays where already used)')) return
@@ -375,7 +375,7 @@ export default function Library() {
   }
   const toggleFav = async (m) => {
     try { await patchMedia(m.id, { fav: !m.fav }) }
-    catch (_) { toast.error(ar ? 'تعذّر الحفظ — تعديل الوسائط للمدير فقط' : 'Save failed — media edits are manager-only') }
+    catch (_) { toast.error(ar ? 'تعذّر الحفظ، تعديل الوسائط للمدير فقط' : 'Save failed, media edits are manager-only') }
   }
   const copyUrl = async (m) => {
     try { await navigator.clipboard.writeText(m.url); toast.success(ar ? 'تم نسخ الرابط' : 'Link copied') } catch (_) { toast.error(ar ? 'تعذّر النسخ' : 'Copy failed') }
@@ -437,7 +437,7 @@ export default function Library() {
     if (detailId && selected.has(detailId)) setDetailId(null)
     setSelected(new Set())
     if (n) toast.success(ar ? `نُقل ${n} إلى سلة المحذوفات` : `Moved ${n} to trash`)
-    else toast.error(ar ? 'تعذّر النقل إلى السلة — تعديل الوسائط للمدير فقط' : 'Trash failed — media edits are manager-only')
+    else toast.error(ar ? 'تعذّر النقل إلى السلة، تعديل الوسائط للمدير فقط' : 'Trash failed, media edits are manager-only')
   }
 
   // ---- «فحص التكرارات»: identical size + near-identical normalized name (no model) ----
@@ -451,7 +451,7 @@ export default function Library() {
       groups[key].push(m.id)
     }
     const found = Object.values(groups).filter((g) => g.length >= 2)
-    if (!found.length) { setDupGroups(null); toast.success(ar ? 'لا تكرارات — كل الملفات فريدة' : 'No duplicates — every file is unique') }
+    if (!found.length) { setDupGroups(null); toast.success(ar ? 'لا تكرارات، كل الملفات فريدة' : 'No duplicates, every file is unique') }
     else setDupGroups(found)
   }
 
@@ -467,7 +467,7 @@ export default function Library() {
       }
       toast.success(ar ? 'صُدّرت 3 مقاسات وحُفظت كعناصر جديدة في المكتبة' : 'Exported 3 sizes as new library items')
     } catch (_) {
-      toast.error(ar ? 'تعذّر التصدير — فعّل CORS للتخزين أو ارفع الصورة من جهازك' : 'Export failed — enable storage CORS or re-upload the image from your device')
+      toast.error(ar ? 'تعذّر التصدير، فعّل CORS للتخزين أو ارفع الصورة من جهازك' : 'Export failed, enable storage CORS or re-upload the image from your device')
     } finally { setSizesBusy(false) }
   }
 
@@ -486,7 +486,7 @@ export default function Library() {
         const to = proposeFolder(m, names)
         return to && to !== (m.folder || '') ? { id: m.id, name: m.name || m.kind || 'file', from: m.folder || '', to, on: true } : null
       }).filter(Boolean)
-      if (!rows.length) toast.success(ar ? 'كل شيء منظّم — لا اقتراحات جديدة' : 'All organized — nothing to propose')
+      if (!rows.length) toast.success(ar ? 'كل شيء منظّم، لا اقتراحات جديدة' : 'All organized, nothing to propose')
       else setOrgRows(rows)
     } finally { setOrgBusy(false) }
   }
@@ -537,7 +537,7 @@ export default function Library() {
       const blob = await generatePostImage({ itemImageUrls: [m.url], stylePrompt, venueName: tenant?.name || '', tenant, imitate: true })
       await uploadDirect(new File([blob], `${baseName(m)}-ai-${Date.now()}.png`, { type: blob.type || 'image/png' }), m.folder || '')
       setEditOpen(false); setEditText('')
-      toast.success(ar ? 'حُفظت النسخة الجديدة في المكتبة — الأصل كما هو' : 'New version saved — original untouched')
+      toast.success(ar ? 'حُفظت النسخة الجديدة في المكتبة، الأصل كما هو' : 'New version saved, original untouched')
     } catch (e) { toast.error(String(e?.message || e)) } finally { setBusyId('') }
   }
   const bgCut = async (m) => {
@@ -548,7 +548,7 @@ export default function Library() {
       await uploadDirect(f, m.folder || '')
       toast.success(ar ? 'حُفظت نسخة PNG بلا خلفية' : 'Transparent PNG saved')
     } catch (_) {
-      toast.error(ar ? 'تعذّرت إزالة الخلفية — إن كان الرابط محجوباً (CORS) حمّل الصورة ثم ارفعها من جهازك' : 'Background removal failed — if the URL is CORS-blocked, download then re-upload the image')
+      toast.error(ar ? 'تعذّرت إزالة الخلفية، إن كان الرابط محجوباً (CORS) حمّل الصورة ثم ارفعها من جهازك' : 'Background removal failed. If the URL is CORS-blocked, download then re-upload the image')
     } finally { setBusyId('') }
   }
 
@@ -649,8 +649,8 @@ export default function Library() {
             </button>
             <p className="xs faint" style={{ margin: 0 }}>
               {ar
-                ? 'المرجع المرفوع مباشرة هو الأوثق — مراجع روابط المكتبة قد تُتجاهل بصمت إذا لم تُضبط CORS للحاوية، فيخرج الناتج من الوصف وحده. الناتج يُحفظ في المجلد المفتوح حالياً.'
-                : 'Directly-uploaded references are the most reliable — library-URL refs may be silently skipped until bucket CORS is configured. Results are saved into the currently open folder.'}
+                ? 'المرجع المرفوع مباشرة هو الأوثق. مراجع روابط المكتبة قد تُتجاهل بصمت إذا لم تُضبط CORS للحاوية، فيخرج الناتج من الوصف وحده. الناتج يُحفظ في المجلد المفتوح حالياً.'
+                : 'Directly-uploaded references are the most reliable, library-URL refs may be silently skipped until bucket CORS is configured. Results are saved into the currently open folder.'}
             </p>
           </>
         )}
@@ -745,7 +745,7 @@ export default function Library() {
             <button className="icon-btn" onClick={() => setDupGroups(null)} title={ar ? 'إغلاق' : 'Close'}><Icon name="close" size={14} /></button>
           </div>
           {dupLive.length === 0 ? (
-            <p className="xs faint" style={{ margin: 0 }}>{ar ? 'عولجت كل التكرارات — أعد الفحص متى شئت.' : 'All duplicates handled — rescan any time.'}</p>
+            <p className="xs faint" style={{ margin: 0 }}>{ar ? 'عولجت كل التكرارات، أعد الفحص متى شئت.' : 'All duplicates handled, rescan any time.'}</p>
           ) : dupLive.map((g) => (
             <div key={g[0].id} className="lib-dup-group">
               <span className="xs faint num" style={{ flexBasis: '100%' }}>{fmtMB(g[0].size)} · {g.length} {ar ? 'نسخ متطابقة الحجم' : 'same-size copies'}</span>
@@ -771,7 +771,7 @@ export default function Library() {
         <div className="card card-pad row" style={{ gap: 8, alignItems: 'center', flexWrap: 'wrap', borderColor: 'var(--brand)' }}>
           <Icon name="image" size={16} className="faint" />
           <span className="small grow" style={{ minWidth: 160 }}>
-            {ar ? 'اضغط على الصور في الشبكة لاختيارها كمراجع (حتى صورتين) — يظهر وسم «مرجع» على المختار.' : 'Tap images in the grid to pick up to 2 references.'}
+            {ar ? 'اضغط على الصور في الشبكة لاختيارها كمراجع (حتى صورتين)، يظهر وسم «مرجع» على المختار.' : 'Tap images in the grid to pick up to 2 references.'}
           </span>
           <button className="btn btn-sm btn-primary" onClick={() => setRefPick(false)}>{ar ? `تم (${libRefs.length})` : `Done (${libRefs.length})`}</button>
         </div>
@@ -841,7 +841,7 @@ export default function Library() {
                   <Icon name="scan" size={14} /> {ar ? 'إزالة الخلفية' : 'Remove background'}
                 </button>
                 <button className="btn btn-sm btn-outline" disabled={!!busyId || sizesBusy} onClick={() => exportSizes(detail)}
-                  title={ar ? 'قصّ مركزي إلى 1:1 و9:16 و4:5 — تُحفظ كعناصر جديدة' : 'Center-crop to 1:1, 9:16 and 4:5 — saved as new items'}>
+                  title={ar ? 'قصّ مركزي إلى 1:1 و9:16 و4:5، تُحفظ كعناصر جديدة' : 'Center-crop to 1:1, 9:16 and 4:5, saved as new items'}>
                   <Icon name="layers" size={14} /> {sizesBusy ? (ar ? 'يصدّر…' : 'Exporting…') : (ar ? 'تصدير مقاسات' : 'Export sizes')}
                 </button>
               </div>
@@ -866,8 +866,8 @@ export default function Library() {
             {detail.kind === 'image' && (
               <p className="xs faint" style={{ margin: 0 }}>
                 {ar
-                  ? 'نتائج الذكاء تُحفظ كنسخة جديدة — الأصل لا يُمس. إن خرج الناتج مختلفاً عن الصورة فغالباً حُجب رابطها (CORS): حمّلها ثم ارفعها كمرجع مباشر في الاستوديو.'
-                  : 'AI results are saved as a NEW copy — the original is untouched. If the output ignores this image, its URL was likely CORS-blocked: download it, then upload it as a direct reference in the studio.'}
+                  ? 'نتائج الذكاء تُحفظ كنسخة جديدة، الأصل لا يُمس. إن خرج الناتج مختلفاً عن الصورة فغالباً حُجب رابطها (CORS): حمّلها ثم ارفعها كمرجع مباشر في الاستوديو.'
+                  : 'AI results are saved as a NEW copy. The original is untouched. If the output ignores this image, its URL was likely CORS-blocked: download it, then upload it as a direct reference in the studio.'}
               </p>
             )}
           </div>
@@ -909,7 +909,7 @@ export default function Library() {
         )
       ) : live.length === 0 ? (
         <Empty icon="image" title={ar ? 'المكتبة فارغة' : 'Library is empty'}
-          hint={ar ? 'أي ملف يُرفع في النظام يُحفظ هنا تلقائياً — أو ارفع ملفات الآن، أو ولّد صورة من الاستوديو أعلاه.' : 'Every upload in the system lands here automatically — or upload now, or generate from the studio above.'} />
+          hint={ar ? 'أي ملف يُرفع في النظام يُحفظ هنا تلقائياً. أو ارفع ملفات الآن، أو ولّد صورة من الاستوديو أعلاه.' : 'Every upload in the system lands here automatically. Or upload now, or generate from the studio above.'} />
       ) : shown.length === 0 ? (
         <p className="muted small" style={{ textAlign: 'center', padding: 20 }}>{ar ? 'لا نتائج مطابقة للبحث أو الفلاتر.' : 'Nothing matches the current filters.'}</p>
       ) : (

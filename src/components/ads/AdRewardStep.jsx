@@ -114,7 +114,7 @@ export default function AdRewardStep({ ad, onChange, lang = 'ar' }) {
             {preview
               ? (ar ? `سيقرأ الضيف: ${preview}` : `The guest reads: ${preview}`)
               : (ar
-                ? 'المكافأة ناقصة الإعداد، ولن تُعرض على الضيف إطلاقاً — أكمل القيمة أو الوصف.'
+                ? 'المكافأة ناقصة الإعداد ولن تظهر للضيف. أكمل القيمة أو الوصف.'
                 : 'The reward is incomplete and will not be shown to guests.')}
           </span>
         </div>

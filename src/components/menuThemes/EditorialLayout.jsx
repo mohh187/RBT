@@ -1471,7 +1471,7 @@ export default function EditorialLayout({ tenant = null, cats, itemsByCat, visib
 
   const catName = (id) => {
     const c = (cats || []).find((x) => x.id === id)
-    return c ? pickLang(c, 'name', lang) : (lang === 'ar' ? 'القائمة' : 'Menu')
+    return c ? pickLang(c, 'name', lang) : (lang === 'ar' ? 'المنيو' : 'Menu')
   }
   // THE WHOLE MENU in category order, kept whether or not a chip has filtered
   // the stage: the progress read-out below counts against this full list
@@ -2543,8 +2543,8 @@ export function EditorialItemStage({ item, tenant = null, currency, onClose, onA
           {arPhase !== 'unsupported' && arPhase !== 'error' && (
             <p className="edt-ar-hint">
               {ar
-                ? 'حرّك بإصبعك لتدويره — وزر AR داخل العارض يضعه على طاولتك إن دعم جهازك ذلك.'
-                : 'Drag to rotate — the AR button inside places it on your table where the device supports it.'}
+                ? 'حرّك بإصبعك لتدويره، وزر AR داخل العارض يضعه على طاولتك إن كان جهازك يدعم ذلك.'
+                : 'Drag to rotate. The AR button inside places it on your table if your device supports it.'}
             </p>
           )}
         </div>

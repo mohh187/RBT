@@ -14,7 +14,7 @@ function stageOf(status, ar) {
   switch (status) {
     case 'awaiting_payment': return { key: 'pay', text: ar ? 'بانتظار إتمام الدفع' : 'Waiting for payment', icon: 'card' }
     case 'pending': return { key: 'new', text: ar ? 'وصل طلبك إلى المطبخ' : 'Your order reached the kitchen', icon: 'receipt' }
-    case 'accepted': return { key: 'ok', text: ar ? 'قُبل الطلب — سيبدأ التحضير' : 'Accepted — prep starts now', icon: 'check' }
+    case 'accepted': return { key: 'ok', text: ar ? 'قُبل طلبك ويبدأ التحضير الآن' : 'Accepted. Prep starts now', icon: 'check' }
     case 'preparing': return { key: 'cook', text: ar ? 'يُحضّر الآن…' : 'Cooking now…', icon: 'kitchen' }
     case 'ready': return { key: 'ready', text: ar ? 'طلبك جاهز!' : 'Your order is ready!', icon: 'bellRing' }
     case 'served': return { key: 'done', text: ar ? 'بالهناء والشفاء' : 'Enjoy your meal', icon: 'ok' }
@@ -65,8 +65,8 @@ export default function KitchenTwin({ open, onClose, tenantId, orderId, lang = '
           <p>{ar ? 'لا يمكن عرض حالة هذا الطلب الآن.' : 'This order status is unavailable right now.'}</p>
           <p className="tl-note">
             {everGot
-              ? (ar ? 'أُغلق الطلب أو حُذف من النظام.' : 'The order was closed or removed.')
-              : (ar ? 'قد يكون الطلب قديماً أو الاتصال منقطعاً — تحقق من الإنترنت وأعد المحاولة.' : 'The order may be old, or you are offline — check your connection and retry.')}
+              ? (ar ? 'هذا الطلب لم يعد موجوداً، ربما أُلغي.' : 'This order is no longer there. It may have been cancelled.')
+              : (ar ? 'قد يكون الطلب قديماً أو الاتصال منقطعاً. تحقق من الإنترنت وأعد المحاولة.' : 'The order may be old, or you may be offline. Check your connection and try again.')}
           </p>
         </div>
       ) : (
@@ -129,8 +129,8 @@ export default function KitchenTwin({ open, onClose, tenantId, orderId, lang = '
 
           <p className="tl-note">
             {ar
-              ? 'تتحدّث هذه الشاشة لحظياً مع شاشة المطبخ — كل سطر يُشطب فور اكتماله.'
-              : 'This mirrors the kitchen screen live — each line is struck the moment it is done.'}
+              ? 'تتحدّث هذه الشاشة لحظياً مع شاشة المطبخ، ويُشطب كل سطر فور اكتماله.'
+              : 'This mirrors the kitchen screen live. Each line is struck the moment it is done.'}
           </p>
         </div>
       )}

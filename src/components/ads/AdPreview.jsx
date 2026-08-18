@@ -41,8 +41,8 @@ export default function AdPreview({ ad, lang = 'ar' }) {
       </div>
       <p className="ads-preview-note">
         {ar
-          ? `${labelOf(AD_KINDS, ad.kind)} — ${labelOf(AD_SHAPES, ad.shape)}. هذه هي نفس الواجهة التي يراها الضيف تماماً.`
-          : `${ad.kind} — ${ad.shape}. This is the exact surface the guest sees.`}
+          ? `${labelOf(AD_KINDS, ad.kind)} · ${labelOf(AD_SHAPES, ad.shape)}. هذه هي نفس الواجهة التي يراها الضيف تماماً.`
+          : `${ad.kind} · ${ad.shape}. This is the exact surface the guest sees.`}
       </p>
     </div>
   )

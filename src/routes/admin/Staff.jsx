@@ -133,7 +133,7 @@ export default function Staff({ staffFocus, onFocusHandled }) {
                     <span className="small row" style={{ gap: 4 }}><Icon name="check" size={14} className="faint" /> {lang === 'ar' ? 'قدّم' : 'Served'}: <strong>{r.served}</strong></span>
                     <span className="small row" style={{ gap: 4 }}><Icon name="customers" size={14} className="faint" /> {lang === 'ar' ? 'عملاء' : 'Guests'}: <strong>{r.custCount}</strong></span>
                     <span className="grow" />
-                    <span className="price small">{showMoney ? <Price value={r.revenue} currency={currency} lang={lang} /> : <span className="faint">—</span>}</span>
+                    <span className="price small">{showMoney ? <Price value={r.revenue} currency={currency} lang={lang} /> : <span className="faint">·</span>}</span>
                   </div>
                 </div>
               )
@@ -163,8 +163,8 @@ export default function Staff({ staffFocus, onFocusHandled }) {
         )}
         <p className="xs faint">
           {lang === 'ar'
-            ? 'الموظف المدعوّ ينضم لمنشأتك تلقائياً عند تسجيل الدخول بنفس البريد — ولا يرى أو يصل إلا بيانات منشأتك.'
-            : 'Invited staff auto-join your venue on first login — and can only ever see/act on your venue’s data.'}
+            ? 'الموظف المدعوّ ينضم لمنشأتك تلقائياً عند تسجيل الدخول بنفس البريد، ولا يرى أو يصل إلا بيانات منشأتك.'
+            : 'Invited staff auto-join your venue on first login, and can only ever see/act on your venue’s data.'}
         </p>
       </div>
 

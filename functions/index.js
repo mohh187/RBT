@@ -39,15 +39,24 @@ async function multicastChunked(docs, message) {
 // docs with no uid receive only UNFILTERED pushes — initPush re-saves the uid
 // on every login, so that gap closes by itself.
 const PUSH_ROLE_CAPS = require('./staffSecurity')._ROLE_CAPS || null
+// The customer document id, computed exactly as the browser computes it. The
+// checks below used the RAW digits, so for a phone typed as 05xxxxxxxx they
+// looked up customers/05xxxxxxxx while the record lives at customers/9665xxxxxxxx
+// — the member was never found, their discount and their free drink measured
+// zero, and an honest order was auto-cancelled for "not matching".
+const { phoneId } = require('./orderEffects.js')
 async function pushToStaff(db, tid, notification, data, opts = {}) {
   const snap = await db.collection(`tenants/${tid}/pushTokens`).get()
   if (!snap.docs.length) return
+  // opts.cap takes one cap or several: a new order concerns take_orders AND
+  // kitchen, and the kitchen role holds only the latter. ANY match qualifies.
+  const wantCaps = opts.cap ? (Array.isArray(opts.cap) ? opts.cap : [opts.cap]) : []
   let docs = snap.docs
-  if (opts.cap || opts.managersOnly) {
+  if (wantCaps.length || opts.managersOnly) {
     try {
       const staffSnap = await db.collection(`tenants/${tid}/staff`).get()
       let roleCaps = null
-      if (opts.cap && !opts.managersOnly) {
+      if (wantCaps.length && !opts.managersOnly) {
         try { const t = await db.doc(`tenants/${tid}`).get(); roleCaps = t.exists ? (t.data() || {}).roleCaps : null } catch (_) { /* defaults */ }
       }
       const allowed = new Set()
@@ -60,7 +69,7 @@ async function pushToStaff(db, tid, notification, data, opts = {}) {
         const caps = Array.isArray(s.caps) ? s.caps
           : (roleCaps && Array.isArray(roleCaps[s.role])) ? roleCaps[s.role]
             : (PUSH_ROLE_CAPS && PUSH_ROLE_CAPS[s.role]) || []
-        if (caps.includes(opts.cap)) allowed.add(d.id)
+        if (wantCaps.some((c) => caps.includes(c))) allowed.add(d.id)
       })
       docs = snap.docs.filter((d) => {
         const uid = (d.data() || {}).uid
@@ -77,8 +86,20 @@ async function pushToStaff(db, tid, notification, data, opts = {}) {
       // push carries the guest's name and booking (PII), manage_inventory
       // carries stock detail — those must never land on a cleaner's lock
       // screen because a staff read blinked.
-      docs = (!opts.managersOnly && opts.cap === 'take_orders') ? snap.docs : []
+      docs = (!opts.managersOnly && wantCaps.includes('take_orders')) ? snap.docs : []
     }
+  } else {
+    // AN UNFILTERED PUSH IS STILL NOT A PUSH TO EVERYONE. Platform broadcasts
+    // pass no opts, so they used to skip this block entirely and multicast to
+    // every stored token — a staffer deactivated months ago kept getting them.
+    // Only the active check applies here (there is no cap to test); tokens with
+    // no uid stay, per the legacy note above.
+    try {
+      const staffSnap = await db.collection(`tenants/${tid}/staff`).get()
+      const off = new Set()
+      staffSnap.docs.forEach((d) => { if ((d.data() || {}).active === false) off.add(d.id) })
+      if (off.size) docs = snap.docs.filter((d) => !off.has((d.data() || {}).uid))
+    } catch (_) { /* an unfiltered push carries nothing sensitive — send on a read error */ }
   }
   if (!docs.length) return
   await multicastChunked(docs, {
@@ -86,6 +107,12 @@ async function pushToStaff(db, tid, notification, data, opts = {}) {
     webpush: { fcmOptions: { link: (data && data.url) || '/admin' }, notification: { icon: (data && data.icon) || '/brand/favicon.png' } },
   })
 }
+// Shared with platformExtensions.settleFromPayment, which announces an online
+// order after it settles (this file returns before the push for a held order).
+// Required lazily on that side, so there is no import cycle, and there is ONE
+// implementation so the recipient filter can never drift. Underscored like
+// _ROLE_CAPS: an export that is a helper, not a deployed function.
+exports._pushToStaff = pushToStaff
 
 // ---- offer evaluation (ported from src/lib/offers.js) — used to validate
 // diner-supplied discounts server-side so an order can't be discounted to free. ----
@@ -209,7 +236,12 @@ exports.onNewOrder = onDocumentCreated('tenants/{tid}/orders/{oid}', async (even
     let unitPrice = Number(item.price) || 0
     if (line.variantKey) {
       const variant = (item.variants || []).find((v) => v.key === line.variantKey)
-      if (variant) unitPrice = Number(variant.price) || 0
+      // A variant saved as a pure CHOICE (no price of its own) costs the item's
+      // price, not zero. Reading it as zero made the whole line free in
+      // expectedMinTotal, which is the only server-side price check there is —
+      // a hand-crafted order totalling 0 walked straight through it.
+      const vp = Number(variant && variant.price)
+      if (variant) unitPrice = (Number.isFinite(vp) && vp > 0) ? vp : (Number(item.price) || 0)
     }
 
     let modsPrice = 0
@@ -220,8 +252,13 @@ exports.onNewOrder = onDocumentCreated('tenants/{tid}/orders/{oid}', async (even
     const qty = line.qty || 1
     const effUnit = unitPrice + modsPrice
     expectedSubtotal += effUnit * qty
-    serverCart.push({ itemId: line.itemId, categoryId: item.categoryId, unitPrice: effUnit, qty, countsForLoyalty: !!item.countsForLoyalty })
-    if (item.countsForLoyalty) { drinkUnits += qty; if (effUnit < cheapestDrink) cheapestDrink = effUnit }
+    // OPT-OUT, NOT OPT-IN — every client reads this field as `!== false`, and
+    // items created by the AI assistant carry no such field at all. Reading it
+    // as `!!` here made loyaltyMax 0 for a genuine redemption, so the total
+    // mismatched and an honest guest's order was auto-cancelled in front of them.
+    const countsForLoyalty = item.countsForLoyalty !== false
+    serverCart.push({ itemId: line.itemId, categoryId: item.categoryId, unitPrice: effUnit, qty, countsForLoyalty })
+    if (countsForLoyalty) { drinkUnits += qty; if (effUnit < cheapestDrink) cheapestDrink = effUnit }
   }
   if (!isFinite(cheapestDrink)) cheapestDrink = 0
 
@@ -252,7 +289,7 @@ exports.onNewOrder = onDocumentCreated('tenants/{tid}/orders/{oid}', async (even
   // Fallback: membership recognized by PHONE (cashier orders and phone-recognized
   // menu members carry no card token) — validate against the customer record.
   if (!memberMax && (Number(order.memberDiscount) || 0) > 0) {
-    const digits = String(order.customerPhone || '').replace(/[^0-9]/g, '')
+    const digits = phoneId(order.customerPhone)
     if (digits) {
       try {
         const custSnap = await db.doc(`tenants/${tid}/customers/${digits}`).get()
@@ -264,7 +301,7 @@ exports.onNewOrder = onDocumentCreated('tenants/{tid}/orders/{oid}', async (even
   // Loyalty redemption — one free drink, and only if the customer actually has rewards.
   let loyaltyMax = 0
   if (order.loyaltyRedeemed && cheapestDrink > 0) {
-    const digits = String(order.customerPhone || '').replace(/[^0-9]/g, '')
+    const digits = phoneId(order.customerPhone)
     if (digits) {
       try {
         const custSnap = await db.doc(`tenants/${tid}/customers/${digits}`).get()
@@ -360,12 +397,40 @@ exports.onNewOrder = onDocumentCreated('tenants/{tid}/orders/{oid}', async (even
   const table = order.tableLabel || (order.orderType === 'takeaway' ? 'سفري' : 'طلب')
 
   // THE LINK CARRIES THE ORDER (?order=<id> opens the detail sheet directly).
-  // Routed through pushToStaff with cap take_orders: the kitchen and the floor
-  // get it; the marketing hire's phone does not.
+  // Routed through pushToStaff on take_orders OR kitchen: the floor and the
+  // kitchen get it; the marketing hire's phone does not. The kitchen role holds
+  // ONLY 'kitchen' (ROLE_CAPS), so on take_orders alone a sleeping kitchen
+  // tablet never learned a ticket had arrived. Adding take_orders to that role
+  // instead would have handed it order-write rights through the caps mirror.
   const deep = `/cashier?order=${event.params.oid}`
   await pushToStaff(db, tid,
     { title: 'طلب جديد', body: `${table} ${code} · ${order.total || 0}` },
     { url: deep, tag: 'order' },
+    { cap: ['take_orders', 'kitchen'] },
+  ).catch(() => {})
+})
+
+// THE BELL RANG ONLY INSIDE OPEN TABS.
+//
+// A waiter call was a pure client affair: watchOpenWaiterCalls lit up whatever
+// screen happened to be awake. On a quiet evening with every tablet locked, the
+// guest tapped and reached nobody. This is the same announcement as a new order,
+// on the same channel, so the floor is woken by a call as it is by a ticket.
+// The intent labels mirror src/lib/waiterCalls.js — kept short deliberately,
+// a lock screen shows one line.
+const CALL_LABEL_AR = { water: 'ماء', bill: 'الحساب', cutlery: 'أدوات', clean: 'تنظيف', call: 'نداء', arrived: 'وصل الضيف' }
+exports.onWaiterCall = onDocumentCreated('tenants/{tid}/waiterCalls/{cid}', async (event) => {
+  const c = event.data && event.data.data()
+  if (!c || c.status !== 'open') return
+  const db = getFirestore()
+  const typed = String(c.reason || '').trim()
+  const what = (typed && typed !== 'call' && typed !== 'arrived')
+    ? typed
+    : (CALL_LABEL_AR[c.reason === 'arrived' ? 'arrived' : c.intent] || CALL_LABEL_AR.call)
+  const where = c.tableLabel || (c.orderCode ? `#${c.orderCode}` : '')
+  await pushToStaff(db, event.params.tid,
+    { title: 'نداء من طاولة', body: where ? `${what} · ${where}` : what },
+    { url: '/cashier', tag: 'call' },
     { cap: 'take_orders' },
   ).catch(() => {})
 })
@@ -478,7 +543,7 @@ exports.geminiProxy = onCall(async (request) => {
       tx.set(rlRef, { minute, count: count + 1 }, { merge: true })
       return false
     }).catch(() => false)
-    if (over) throw new HttpsError('resource-exhausted', 'AI rate limit reached — try again in a minute.')
+    if (over) throw new HttpsError('resource-exhausted', 'AI rate limit reached. Try again in a minute.')
 
     // The burst wall above only stops a fast client; it does not stop a steady
     // one from spending all month. The assistant's daily/monthly limit was
@@ -492,9 +557,9 @@ exports.geminiProxy = onCall(async (request) => {
     if (spend.granted < 1 && spend.reason !== 'error-open') {
       const why = {
         cap: 'انتهى رصيدك الشهري من الذكاء الاصطناعي. يمكنك شراء رصيد إضافي أو ترقية باقتك.',
-        daily: 'بلغت حدّك اليومي من طلبات الذكاء الاصطناعي — يتجدّد غداً.',
-        burst: 'طلبات كثيرة في وقت قصير — انتظر دقيقة.',
-        platformBurst: 'الذكاء الاصطناعي مزدحم على المنصة الآن — أعد المحاولة بعد لحظات.',
+        daily: 'بلغت حدّك اليومي من طلبات الذكاء الاصطناعي، ويتجدّد غداً.',
+        burst: 'طلبات كثيرة في وقت قصير. انتظر دقيقة ثم أعد المحاولة.',
+        platformBurst: 'الذكاء الاصطناعي مزدحم على المنصة الآن. أعد المحاولة بعد لحظات.',
         killed: 'الذكاء الاصطناعي موقوف مؤقتاً من المنصة.',
         suspended: 'الاشتراك موقوف.',
         disabled: 'الذكاء الاصطناعي غير مفعّل لهذه المنشأة.',
@@ -1084,12 +1149,12 @@ exports.subscriptionSweep = onSchedule({ schedule: '0 3 * * *', timeZone: 'Asia/
     if (!exp || exp > now || d.planStatus === 'expired') return
     await t.ref.update({ planStatus: 'expired' }).catch(() => {})
     await pushToStaff(db, t.id,
-      { title: 'انتهى اشتراك المنشأة', body: 'انتهت صلاحية الباقة — يرجى التجديد للاستمرار بكامل المزايا.' },
+      { title: 'انتهى اشتراك المنشأة', body: 'انتهت صلاحية الباقة. جدّدها ليعود كل شيء للعمل.' },
       { url: '/admin/support', tag: 'subscription' },
       { managersOnly: true }, // billing is the owner's problem, not the floor's
     ).catch(() => {})
     await pushToPlatform(db,
-      { title: 'اشتراك منتهي', body: `${d.name || t.id} — انتهت صلاحية الباقة` },
+      { title: 'اشتراك منتهي', body: `انتهت صلاحية باقة ${d.name || t.id}` },
       { url: `/platform/venues/${t.id}`, tag: 'subscription' },
     ).catch(() => {})
   })

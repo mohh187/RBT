@@ -4,6 +4,7 @@
     "ignore": ["firebase.json", "**/.*", "**/node_modules/**"],
     "rewrites": [
       { "source": "/m/**", "function": { "functionId": "venueShell", "region": "us-central1" } },
+      { "source": "/t/**", "function": { "functionId": "venueShell", "region": "us-central1" } },
       { "source": "/app/**", "function": { "functionId": "venueShell", "region": "us-central1" } },
       { "source": "/join/**", "function": { "functionId": "venueShell", "region": "us-central1" } },
       { "source": "**", "destination": "/index.html" }
@@ -21,6 +22,11 @@
       {
         "//": "Venue surfaces are rendered by the venueShell function (per-venue title/og/manifest). Re-assert their CDN caching so the catch-all above does not force every menu open through a function invocation. The function itself re-fetches the live shell every 5 min, so it cannot go stale the way a browser-cached shell can.",
         "source": "/m/**",
+        "headers": [{ "key": "Cache-Control", "value": "public, max-age=0, s-maxage=300, stale-while-revalidate=86400" }]
+      },
+      {
+        "//": "The table sticker path (/t/:slug/:token) is the same scan-to-first-paint load as /m/**, so it gets the same CDN policy and the same per-venue shell.",
+        "source": "/t/**",
         "headers": [{ "key": "Cache-Control", "value": "public, max-age=0, s-maxage=300, stale-while-revalidate=86400" }]
       },
       {

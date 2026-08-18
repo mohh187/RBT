@@ -125,15 +125,15 @@ const EL_GROUPS = [
 const freeImgError = (raw, code = '') => {
   const s = String(raw || '')
   const c = String(code || '')
-  if (/(unauthenticated|permission-denied)/i.test(c)) return 'توليد الصور متاح للمالك والمدير فقط، وبعد نشر الدوال السحابية — سجّل الدخول بحساب المالك أو المدير.'
-  if (/(403|PERMISSION_DENIED|API key not valid|API_KEY_INVALID|expired)/i.test(s)) return 'مفتاح توليد الصور المحلي مرفوض (403) — تحقق من VITE_GEMINI_API_KEY أو جرّب من النسخة المنشورة.'
-  if (/(429|quota|exhausted|RESOURCE_EXHAUSTED|rate.?limit)/i.test(s)) return 'استُهلكت حصة توليد الصور مؤقتاً — انتظر دقيقة ثم أعد المحاولة.'
-  if (/(503|500|502|overload|unavailable|deadline|timeout|network|failed to fetch)/i.test(s)) return 'تعذر الوصول للخادم أو النموذج مزدحم — تحقق من اتصالك وأعد المحاولة.'
-  if (/(404|not.?found|NOT_FOUND|unsupported|is not supported)/i.test(s)) return 'نموذج توليد الصور غير متاح حالياً على هذا المفتاح — جرّب لاحقاً.'
-  return 'تعذر توليد الصورة: ' + s.slice(0, 140)
+  if (/(unauthenticated|permission-denied)/i.test(c)) return 'توليد الصور متاح لحساب المالك أو المدير فقط. سجّل الدخول بأحدهما ثم أعد المحاولة.'
+  if (/(403|PERMISSION_DENIED|API key not valid|API_KEY_INVALID|expired)/i.test(s)) return 'خدمة توليد الصور غير متاحة من هذا الجهاز الآن. جرّب من الموقع المنشور، أو راجع مدير النظام.'
+  if (/(429|quota|exhausted|RESOURCE_EXHAUSTED|rate.?limit)/i.test(s)) return 'استهلكت حصة توليد الصور الآن. انتظر دقيقة ثم أعد المحاولة.'
+  if (/(503|500|502|overload|unavailable|deadline|timeout|network|failed to fetch)/i.test(s)) return 'الخدمة مزدحمة أو الاتصال ضعيف. تحقق من اتصالك وأعد المحاولة بعد قليل.'
+  if (/(404|not.?found|NOT_FOUND|unsupported|is not supported)/i.test(s)) return 'خدمة توليد الصور غير متاحة حالياً، جرّب لاحقاً.'
+  return 'ما تم توليد الصورة، أعد المحاولة أو عدّل الوصف.'
 }
 async function generateFreeImage(desc, venueName) {
-  if (!firebaseReady) throw new Error('الذكاء غير مهيأ — أكمل إعداد Firebase أولاً.')
+  if (!firebaseReady) throw new Error('المساعد الذكي غير جاهز بعد، أكمل إعداد النظام أولاً.')
   const prompt = [
     `Professional digital-signage marketing visual for the cafe/restaurant "${venueName || 'a specialty cafe'}".`,
     `Scene description: ${desc}.`,
@@ -157,7 +157,7 @@ async function generateFreeImage(desc, venueName) {
     json = await r.json()
   }
   const img = json?.candidates?.[0]?.content?.parts?.find((p) => p.inlineData?.data)
-  if (!img) throw new Error('لم يُرجع النموذج صورة — أعد المحاولة أو عدّل الوصف.')
+  if (!img) throw new Error('ما وصلت صورة من الخدمة، أعد المحاولة أو عدّل الوصف.')
   const bin = atob(img.inlineData.data)
   const arr = new Uint8Array(bin.length)
   for (let i = 0; i < bin.length; i++) arr[i] = bin.charCodeAt(i)
@@ -340,7 +340,7 @@ export default function SlideDesigner({ slide: initial, tenantId, lang = 'ar', d
       apply((s) => ({ ...s, layers: (s.layers || []).map((l) => (l.id === id ? { ...l, url, fit: 'contain' } : l)) }))
       toast.success(ar ? 'قُصّت الخلفية' : 'Background removed')
     } catch (_) {
-      toast.error(ar ? 'تعذّر قصّ الخلفية — جرّب صورة أصغر أو أعد المحاولة' : 'Background removal failed — try a smaller image')
+      toast.error(ar ? 'ما تم قصّ الخلفية، جرّب صورة أصغر' : 'The background was not removed, try a smaller image')
     } finally { setCutBusy(false) }
   }
 
@@ -357,7 +357,8 @@ export default function SlideDesigner({ slide: initial, tenantId, lang = 'ar', d
         `حوّل هذا الوصف إلى نص إعلاني عربي: ${desc}`,
         'المطلوب: عنوان قصير جذاب (3 إلى 6 كلمات) وسطر فرعي مكمل (8 إلى 14 كلمة).',
         'أجب بصيغة JSON فقط دون أي شرح أو أسوار كود، بهذا الشكل تماماً: {"headline":"...","sub":"..."}',
-        'ممنوع منعاً باتاً: الرموز التعبيرية بكل أنواعها، والأرقام العربية المشرقية — استخدم الأرقام اللاتينية فقط.',
+        'ممنوع منعاً باتاً: الرموز التعبيرية بكل أنواعها، والأرقام العربية المشرقية. استخدم الأرقام اللاتينية فقط.',
+        'وممنوع كذلك الشرطة الطويلة والشرطة المتوسطة داخل العنوان أو السطر الفرعي. افصل الجمل بنقطة أو فاصلة أو واو.',
       ].join('\n')
       const raw = await aiQuick(prompt)
       let headline = ''
@@ -386,7 +387,7 @@ export default function SlideDesigner({ slide: initial, tenantId, lang = 'ar', d
       })
       toast.success(ar ? 'أُدرج النص في الشريحة' : 'Text inserted')
     } catch (_) {
-      toast.error(ar ? 'تعذّر توليد النص — أعد المحاولة' : 'Text generation failed — try again')
+      toast.error(ar ? 'ما تم توليد النص، أعد المحاولة' : 'The text was not generated, please try again')
     } finally { setAiTextBusy(false) }
   }
 
@@ -446,7 +447,7 @@ export default function SlideDesigner({ slide: initial, tenantId, lang = 'ar', d
             style={{ position: 'relative', width: '100%', aspectRatio: '16 / 9', borderRadius: 14, overflow: 'hidden', border: '1px solid var(--border)', boxShadow: '0 8px 30px rgba(0,0,0,.18)' }}>
             <DesignSlideView slide={slide} data={data} selIdx={selIdx} onLayerDown={onLayerDown} onHandleDown={onHandleDown} />
           </div>
-          <p className="xs faint" style={{ margin: 0, textAlign: 'center' }}>{ar ? 'اسحب العناصر للتحريك، والمقبض السماوي للتحجيم — الأسهم للدقة (Shift أسرع)' : 'Drag to move, cyan handle to resize — arrows nudge (Shift = faster)'}</p>
+          <p className="xs faint" style={{ margin: 0, textAlign: 'center' }}>{ar ? 'اسحب العناصر للتحريك، والمقبض السماوي للتحجيم، والأسهم للضبط الدقيق (Shift أسرع)' : 'Drag to move, cyan handle to resize, arrow keys to nudge (Shift = faster)'}</p>
 
           {/* add layers + panels + duration */}
           <div style={fieldRow}>
@@ -484,7 +485,7 @@ export default function SlideDesigner({ slide: initial, tenantId, lang = 'ar', d
                   </button>
                 ))}
               </div>
-              <p className="xs faint" style={{ margin: 0 }}>{ar ? 'كل عنصر يُدرج كطبقات عادية — حرّكها وعدّل ألوانها كأي طبقة' : 'Every element inserts as normal layers — drag and restyle freely'}</p>
+              <p className="xs faint" style={{ margin: 0 }}>{ar ? 'كل عنصر يُدرج كطبقات عادية، حرّكها وعدّل ألوانها كأي طبقة' : 'Every element inserts as normal layers, so drag and restyle them freely'}</p>
             </div>
           )}
 
@@ -492,7 +493,7 @@ export default function SlideDesigner({ slide: initial, tenantId, lang = 'ar', d
           {panel === 'ai' && (
             <div className="card card-pad sd2-panel">
               <strong className="small"><Icon name="sparkles" size={14} style={{ verticalAlign: 'middle', color: 'var(--brand)' }} /> {ar ? 'مساعد الشريحة' : 'Slide assistant'}</strong>
-              <label className="xs faint">{ar ? 'صف الإعلان وسيُكتب لك عنوان وسطر فرعي جاهزان' : 'Describe the ad — get a headline + subline'}</label>
+              <label className="xs faint">{ar ? 'صف الإعلان وسيُكتب لك عنوان وسطر فرعي جاهزان' : 'Describe the ad and get a headline with a subline'}</label>
               <textarea className="input" rows={2} value={aiText} onChange={(e) => setAiText(e.target.value)} style={{ resize: 'vertical', minHeight: 44 }}
                 placeholder={ar ? 'مثال: عرض نهاية الأسبوع على القهوة المختصة بخصم 20%' : 'e.g. weekend specialty-coffee offer, 20% off'} />
               <div style={fieldRow}>
@@ -502,7 +503,7 @@ export default function SlideDesigner({ slide: initial, tenantId, lang = 'ar', d
                 <span className="xs faint">{ar ? 'التوليد مرة أخرى يحدّث نفس الطبقتين' : 'Re-running updates the same two layers'}</span>
               </div>
               <div className="sd2-sep" />
-              <label className="xs faint">{ar ? 'صف مشهداً لتوليد صورة بالذكاء — واختيارياً اختر صنفاً بصورة كمرجع للمنتج' : 'Describe a scene to generate an image — optionally pick a menu item photo as product reference'}</label>
+              <label className="xs faint">{ar ? 'صف مشهداً لتوليد صورة بالذكاء، ولك أن تختار صنفاً بصورة ليكون مرجعاً للمنتج' : 'Describe a scene to generate an image, and optionally pick a menu item photo as the product reference'}</label>
               <textarea className="input" rows={2} value={aiImg} onChange={(e) => setAiImg(e.target.value)} style={{ resize: 'vertical', minHeight: 44 }}
                 placeholder={ar ? 'مثال: كوب قهوة مثلجة على طاولة رخامية بإضاءة ذهبية دافئة' : 'e.g. iced coffee on a marble table, warm golden light'} />
               <div style={fieldRow}>
@@ -522,7 +523,7 @@ export default function SlideDesigner({ slide: initial, tenantId, lang = 'ar', d
                   <Icon name="layers" size={13} /> {aiImgBusy === 'layer' ? (ar ? 'يولّد…' : 'Generating…') : (ar ? 'توليد كعنصر' : 'Generate as layer')}
                 </button>
               </div>
-              <p className="xs faint" style={{ margin: 0 }}>{ar ? 'قد يستغرق التوليد حتى 30 ثانية — عند فشل النموذج لا تُدرج أي صورة بديلة.' : 'Generation can take up to 30 seconds — on model failure nothing fake is inserted.'}</p>
+              <p className="xs faint" style={{ margin: 0 }}>{ar ? 'قد يستغرق التوليد حتى 30 ثانية. وإذا لم تنجح المحاولة فلن تُدرج أي صورة بديلة.' : 'Generation can take up to 30 seconds. If it does not work, no stand-in image is inserted.'}</p>
             </div>
           )}
 

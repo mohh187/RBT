@@ -47,7 +47,7 @@ export default function Roles() {
   return (
     <div className="page stack">
       <h2 className="page-title row" style={{ gap: 8 }}><Icon name="staff" size={22} /> {ar ? 'الأدوار والصلاحيات' : 'Roles & permissions'}</h2>
-      <p className="muted small">{ar ? 'حدّد ما يستطيع كل دور رؤيته وفعله — يتحكّم بالصفحات والمميزات الظاهرة له. (المالك والمدير: كل الصلاحيات.)' : 'Choose what each role can see & do — controls their visible pages and features. (Owner & manager: all.)'}</p>
+      <p className="muted small">{ar ? 'حدّد ما يستطيع كل دور رؤيته وفعله، يتحكّم بالصفحات والمميزات الظاهرة له. (المالك والمدير: كل الصلاحيات.)' : 'Choose what each role can see & do, controls their visible pages and features. (Owner & manager: all.)'}</p>
 
       {/* Every role was expanded at once: ~200 identical 31px rows, 8.8 screens
           tall, with the only save button at the very bottom — changing one

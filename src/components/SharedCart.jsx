@@ -99,7 +99,7 @@ export default function SharedCart({ open, onClose, tenantId, table, currency = 
     } catch (e) {
       toast.error(e?.message === 'not-your-line'
         ? (ar ? 'يمكنك حذف أصنافك أنت فقط' : 'You can only remove your own items')
-        : (ar ? 'تعذّر الحذف — تحقق من الاتصال' : 'Could not remove — check your connection'))
+        : (ar ? 'ما تم الحذف، تحقق من الاتصال وأعد المحاولة' : 'The item was not removed. Check your connection and try again'))
     } finally { setBusyLine('') }
   }
 
@@ -110,7 +110,7 @@ export default function SharedCart({ open, onClose, tenantId, table, currency = 
     } catch (e) {
       toast.error(e?.message === 'not-your-line'
         ? (ar ? 'يمكنك تعديل أصنافك أنت فقط' : 'You can only edit your own items')
-        : (ar ? 'تعذّر التعديل — تحقق من الاتصال' : 'Could not update — check your connection'))
+        : (ar ? 'ما تم التعديل، تحقق من الاتصال وأعد المحاولة' : 'The change was not saved. Check your connection and try again'))
     } finally { setBusyLine('') }
   }
 
@@ -123,7 +123,7 @@ export default function SharedCart({ open, onClose, tenantId, table, currency = 
       // Only clear the table basket once the order truly exists.
       if (res !== false) await markOrdered(tenantId, sessionId, res?.id || res || '')
     } catch (_) {
-      toast.error(ar ? 'تعذّر إرسال طلب الطاولة — لم يُرسل شيء، أعد المحاولة' : 'Could not send the table order — nothing was sent, retry')
+      toast.error(ar ? 'ما وصل طلب الطاولة، ولم يُرسل منه شيء. أعد المحاولة' : 'The table order did not go through, and nothing was sent. Please try again')
     } finally { setPlacing(false) }
   }
 
@@ -140,8 +140,8 @@ export default function SharedCart({ open, onClose, tenantId, table, currency = 
           <h3 className="tl-join-title">{ar ? 'اطلبوا معاً من طاولة واحدة' : 'Order together from one table'}</h3>
           <p className="tl-join-sub">
             {ar
-              ? 'اكتب اسمك لينضم جهازك إلى سلة الطاولة — سيرى الجميع ما أضفته، ويُحسب نصيب كل شخص تلقائياً.'
-              : 'Enter your name to join the table basket — everyone sees what you add and each share is computed automatically.'}
+              ? 'اكتب اسمك لينضم جهازك إلى سلة الطاولة. سيرى الجميع ما أضفته، ويُحسب نصيب كل شخص تلقائياً.'
+              : 'Enter your name to join the table basket. Everyone sees what you add, and each share is worked out automatically.'}
           </p>
           <input
             className="input tl-join-input"
@@ -200,7 +200,6 @@ export default function SharedCart({ open, onClose, tenantId, table, currency = 
             {err?.code === 'permission-denied'
               ? (ar ? 'الطلب الجماعي غير مفعّل لهذه المنشأة، أو انتهت صلاحية الجلسة.' : 'Shared ordering is not enabled here, or the session expired.')
               : (ar ? 'تحقق من الإنترنت ثم أعد فتح النافذة.' : 'Check your connection and reopen this sheet.')}
-            {err?.code ? ` (${err.code})` : ''}
           </p>
         </div>
       ) : session === undefined ? (
@@ -224,8 +223,8 @@ export default function SharedCart({ open, onClose, tenantId, table, currency = 
           {groups.length <= 1 && (
             <p className="tl-note tl-alone">
               {ar
-                ? 'أنت الوحيد على الطاولة الآن — اطلب من بقية الجالسين مسح نفس رمز الطاولة لينضموا.'
-                : 'You are the only one here — ask the others to scan the same table QR to join.'}
+                ? 'أنت الوحيد على الطاولة الآن. اطلب من بقية الجالسين مسح رمز الطاولة نفسه لينضموا.'
+                : 'You are the only one here so far. Ask the others to scan the same table QR to join.'}
             </p>
           )}
 
@@ -290,7 +289,7 @@ export default function SharedCart({ open, onClose, tenantId, table, currency = 
           )}
 
           {session.status === 'ordered' && lines.length === 0 && (
-            <p className="tl-note tl-sent">{ar ? 'أُرسلت جولة سابقة إلى المطبخ — يمكنكم إضافة جولة جديدة الآن.' : 'A previous round was sent to the kitchen — you can start a new round.'}</p>
+            <p className="tl-note tl-sent">{ar ? 'أُرسلت جولة سابقة إلى المطبخ، ويمكنكم بدء جولة جديدة الآن.' : 'A previous round already went to the kitchen, and you can start a new one now.'}</p>
           )}
         </div>
       )}

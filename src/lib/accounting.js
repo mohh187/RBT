@@ -84,15 +84,15 @@ const round2 = (n) => Math.round((num(n) + Number.EPSILON) * 100) / 100
 
 // Arabic date with LATIN digits (hard rule: never Arabic-Indic numerals).
 export function fmtDate(ms, ar = true) {
-  if (!ms) return '—'
+  if (!ms) return '·'
   const d = new Date(ms)
-  if (isNaN(d)) return '—'
+  if (isNaN(d)) return '·'
   return d.toLocaleDateString(ar ? 'ar-SA-u-nu-latn' : 'en-GB', { year: 'numeric', month: '2-digit', day: '2-digit' })
 }
 export function fmtDateTime(ms, ar = true) {
-  if (!ms) return '—'
+  if (!ms) return '·'
   const d = new Date(ms)
-  if (isNaN(d)) return '—'
+  if (isNaN(d)) return '·'
   return `${fmtDate(ms, ar)} ${d.toLocaleTimeString(ar ? 'ar-SA-u-nu-latn' : 'en-GB', { hour: '2-digit', minute: '2-digit', hour12: false })}`
 }
 // Day key (local) — used for daily buckets and bookkeeping-gap detection.
@@ -135,7 +135,10 @@ export const METHOD_LABELS = {
 // their own copy of the old test — that is how the three of them stayed wrong
 // together. They now import this one.
 export const isSettled = (o) => !!o && (['paid', 'refunded'].includes(o.status) || o.paidOnline === true)
-export const refundOf = (o) => (o?.status === 'refunded' ? num(o?.refund?.amount) : 0)
+// refundTotal is the running figure written by refundOrder; the status test is
+// the fallback for orders refunded before that field existed. A PARTIAL refund
+// leaves the status 'paid', so the status alone can no longer be trusted here.
+export const refundOf = (o) => num(o?.refundTotal) || (o?.status === 'refunded' ? num(o?.refund?.amount) : 0)
 // The moment the money landed — paidAt when known, else creation time.
 export const settledAt = (o) => toMs(o?.paidAtMs) || toMs(o?.paidAt) || toMs(o?.createdAt)
 // Every manager-applied reduction stored on an order.
@@ -305,31 +308,37 @@ export function buildLedger({
     if (o.paymentBreakdown && typeof o.paymentBreakdown === 'object') {
       Object.entries(o.paymentBreakdown).forEach(([m, a]) => { if (num(a)) parts.push([m, num(a)]) })
     }
+    // A split-payment breakdown is entered against the FULL amount collected,
+    // tip included (PaymentSheet's `due` = total + tip), so its legs already
+    // carry the tip. The single-method fallback below carries `kept` only.
+    const tipInLegs = parts.length > 0
     if (!parts.length) parts.push([o.paidOnline ? 'online' : (o.paymentMethod || 'cash'), kept])
     // Split payments are recorded gross; the refund reduces the largest leg so
     // the debits still tie to the retained amount.
     const partsSum = parts.reduce((s, [, a]) => s + a, 0)
-    if (refund > 0 && partsSum > kept && parts.length) {
+    const legsTarget = kept + (tipInLegs ? tip : 0)
+    if (refund > 0 && partsSum > legsTarget && parts.length) {
       parts.sort((a, b) => b[1] - a[1])
-      parts[0][1] = round2(parts[0][1] - (partsSum - kept))
+      parts[0][1] = round2(parts[0][1] - (partsSum - legsTarget))
     }
-    // Tips ride along with the payment they were added to (first leg).
+    // Tips ride along with the payment they were added to (first leg) — but only
+    // when the legs don't already include it, or the journal debits the tip twice.
     parts.forEach(([m, amt], i) => {
-      const val = round2(amt + (i === 0 ? tip : 0))
+      const val = round2(amt + (i === 0 && !tipInLegs ? tip : 0))
       if (!val) return
       push({ date, type: 'sale', account: cashAccountFor(m), debit: val, credit: 0, ref, refType: 'order', note, method: methodBucket(m), counter: ACCOUNTS.sales.code })
     })
 
-    if (disc || refund) push({ date, type: 'sale', account: ACCOUNTS.discounts.code, debit: round2(disc + refund), credit: 0, ref, refType: 'order', note: refund ? `${note} — مسترد` : `${note} — خصم` })
+    if (disc || refund) push({ date, type: 'sale', account: ACCOUNTS.discounts.code, debit: round2(disc + refund), credit: 0, ref, refType: 'order', note: refund ? `${note} · مسترد` : `${note} · خصم` })
     push({ date, type: 'sale', account: ACCOUNTS.sales.code, debit: 0, credit: round2(netSales + disc + refund), ref, refType: 'order', note })
-    if (vat) push({ date, type: 'sale', account: ACCOUNTS.vatPayable.code, debit: 0, credit: vat, ref, refType: 'order', note: `${note} — ضريبة مخرجات` })
-    if (tip) push({ date, type: 'sale', account: ACCOUNTS.tipsPayable.code, debit: 0, credit: tip, ref, refType: 'order', note: `${note} — إكرامية` })
+    if (vat) push({ date, type: 'sale', account: ACCOUNTS.vatPayable.code, debit: 0, credit: vat, ref, refType: 'order', note: `${note} · ضريبة مخرجات` })
+    if (tip) push({ date, type: 'sale', account: ACCOUNTS.tipsPayable.code, debit: 0, credit: tip, ref, refType: 'order', note: `${note} · إكرامية` })
 
     // ---- 2. COGS from the order's recipes --------------------------------
     const { cogs } = orderCogs(o, itemsById, costMap)
     if (cogs > 0) {
       push({ date, type: 'cogs', account: ACCOUNTS.cogs.code, debit: cogs, credit: 0, ref, refType: 'order', note: `تكلفة ${note}` })
-      push({ date, type: 'cogs', account: ACCOUNTS.inventory.code, debit: 0, credit: cogs, ref, refType: 'order', note: `صرف مخزون — ${note}` })
+      push({ date, type: 'cogs', account: ACCOUNTS.inventory.code, debit: 0, credit: cogs, ref, refType: 'order', note: `صرف مخزون · ${note}` })
     }
   })
 
@@ -348,7 +357,7 @@ export function buildLedger({
     const note = [x.category, x.supplier, x.note].filter(Boolean).join(' · ') || 'مصروف'
     const payAcc = cashAccountFor(x.paidBy || x.method || 'cash')
     push({ date, type: 'expense', account, debit: netCost, credit: 0, ref, refType: 'expense', note })
-    if (inputVat) push({ date, type: 'expense', account: ACCOUNTS.vatInput.code, debit: inputVat, credit: 0, ref, refType: 'expense', note: `${note} — ضريبة مدخلات` })
+    if (inputVat) push({ date, type: 'expense', account: ACCOUNTS.vatInput.code, debit: inputVat, credit: 0, ref, refType: 'expense', note: `${note} · ضريبة مدخلات` })
     push({ date, type: 'expense', account: payAcc, debit: 0, credit: gross, ref, refType: 'expense', note, method: methodBucket(x.paidBy || x.method || 'cash'), counter: account })
   })
 
@@ -363,7 +372,7 @@ export function buildLedger({
     const ref = p.id || p.code || 'po'
     const note = `أمر شراء ${p.code || ''}${p.supplierName ? ` · ${p.supplierName}` : ''}`.trim()
     push({ date, type: 'purchase', account: ACCOUNTS.inventory.code, debit: netCost, credit: 0, ref, refType: 'purchaseOrder', note })
-    if (inputVat) push({ date, type: 'purchase', account: ACCOUNTS.vatInput.code, debit: inputVat, credit: 0, ref, refType: 'purchaseOrder', note: `${note} — ضريبة مدخلات` })
+    if (inputVat) push({ date, type: 'purchase', account: ACCOUNTS.vatInput.code, debit: inputVat, credit: 0, ref, refType: 'purchaseOrder', note: `${note} · ضريبة مدخلات` })
     push({ date, type: 'purchase', account: ACCOUNTS.bank.code, debit: 0, credit: total, ref, refType: 'purchaseOrder', note, method: 'transfer', counter: ACCOUNTS.inventory.code })
   })
 
@@ -551,7 +560,7 @@ export function vatReturn(ledger = [], rate = 15) {
 export function inventoryValuation(materials = []) {
   const rows = (materials || []).map((m) => ({
     id: m.id,
-    nameAr: m.nameAr || m.name || '—',
+    nameAr: m.nameAr || m.name || 'بلا اسم',
     nameEn: m.nameEn || '',
     unit: m.baseUnit || m.unit || '',
     qty: round2(num(m.stockQty)),
@@ -610,7 +619,7 @@ export function cogsRatioByItem({ orders = [], items = [], materials = [] } = {}
     const margin = costed ? round2(price - cost) : null
     return {
       id: it.id,
-      nameAr: it.nameAr || it.name || '—',
+      nameAr: it.nameAr || it.name || 'بلا اسم',
       nameEn: it.nameEn || '',
       price,
       cost: costed ? cost : null,
@@ -676,7 +685,7 @@ export function anomalies({
         add({
           kind: 'expense-spike', severity: 'high', account: acc,
           titleAr: `ارتفاع حاد في «${accountAr(acc)}»`,
-          detailAr: `صرفت ${amt} في هذه الفترة مقابل متوسط ${avg} في الفترات الثلاث السابقة — أي أكثر من الضعف.`,
+          detailAr: `صرفت ${amt} في هذه الفترة مقابل متوسط ${avg} في الفترات الثلاث السابقة، أي أكثر من الضعف.`,
           numbers: { current: amt, average3: avg, ratio: round2(amt / avg) },
         })
       }
@@ -690,7 +699,7 @@ export function anomalies({
       add({
         kind: 'discount-ratio', severity: pct > discountThresholdPct * 2 ? 'high' : 'medium',
         titleAr: 'نسبة الخصومات والمردودات مرتفعة',
-        detailAr: `الخصومات والمردودات ${pct}% من إجمالي المبيعات (${pnl.discounts} من ${pnl.revenueGross}) — الحد المرجعي ${discountThresholdPct}%.`,
+        detailAr: `الخصومات والمردودات ${pct}% من إجمالي المبيعات (${pnl.discounts} من ${pnl.revenueGross}). الحد المرجعي ${discountThresholdPct}%.`,
         numbers: { discounts: pnl.discounts, revenueGross: pnl.revenueGross, pct },
       })
     }
@@ -701,7 +710,7 @@ export function anomalies({
   ;(orders || []).forEach((o) => {
     const isVoid = o.status === 'refunded' || o.status === 'cancelled' || num(o.compDiscount) > 0
     if (!isVoid) return
-    const k = o.servedByName || o.cancelledBy || o.compByName || '—'
+    const k = o.servedByName || o.cancelledBy || o.compByName || 'غير محدد'
     if (!byStaff[k]) byStaff[k] = { count: 0, amount: 0 }
     byStaff[k].count += 1
     byStaff[k].amount = round2(byStaff[k].amount + refundOf(o) + num(o.compDiscount))
@@ -727,7 +736,7 @@ export function anomalies({
     add({
       kind: 'below-cost', severity: 'high', itemId: r.id,
       titleAr: `«${r.nameAr}» يُباع بخسارة`,
-      detailAr: `سعر البيع ${r.price} وتكلفة الوصفة ${r.cost} — خسارة ${round2(r.cost - r.price)} لكل وحدة، وبِيع ${r.qtySold} وحدة في الفترة.`,
+      detailAr: `سعر البيع ${r.price} وتكلفة الوصفة ${r.cost}، أي خسارة ${round2(r.cost - r.price)} لكل وحدة، وبِيع ${r.qtySold} وحدة في الفترة.`,
       numbers: { price: r.price, cost: r.cost, lossPerUnit: round2(r.cost - r.price), qtySold: r.qtySold },
     })
   })
@@ -738,7 +747,7 @@ export function anomalies({
     add({
       kind: 'drawer-variance', severity: Math.abs(s.variance) >= 50 ? 'high' : 'low', sessionId: s.id,
       titleAr: s.variance < 0 ? 'عجز في درج النقد' : 'زيادة في درج النقد',
-      detailAr: `وردية ${s.by || ''} بتاريخ ${fmtDate(s.openedAt)}: المتوقع ${s.expected} والمعدود ${s.counted} — الفرق ${s.variance}.`,
+      detailAr: `وردية ${s.by || ''} بتاريخ ${fmtDate(s.openedAt)}: المتوقع ${s.expected} والمعدود ${s.counted}، والفرق ${s.variance}.`,
       numbers: { expected: s.expected, counted: s.counted, variance: s.variance, by: s.by },
     })
   })
@@ -753,7 +762,7 @@ export function anomalies({
     add({
       kind: 'bookkeeping-gap', severity: 'medium',
       titleAr: 'أيام فيها مبيعات بلا أي مصروف مسجّل',
-      detailAr: `${gapDays.length} يوماً من أصل ${revDays.size} يوم بيع لم يُسجَّل فيها أي مصروف — الأرجح أن المصروفات غير مُدخلة، ما يجعل صافي الربح أعلى من الحقيقة.`,
+      detailAr: `${gapDays.length} يوماً من أصل ${revDays.size} يوم بيع لم يُسجَّل فيها أي مصروف. الأرجح أن المصروفات غير مُدخلة، ما يجعل صافي الربح أعلى من الحقيقة.`,
       numbers: { gapDays: gapDays.length, revenueDays: revDays.size, days: gapDays.slice(0, 10) },
     })
   }
@@ -763,7 +772,7 @@ export function anomalies({
     add({
       kind: 'vat-no-taxnumber', severity: 'high',
       titleAr: 'ضريبة محصّلة بدون رقم ضريبي مسجّل',
-      detailAr: `حُصّلت ضريبة قدرها ${pnl.vat} خلال الفترة، لكن لا يوجد رقم تسجيل ضريبي في إعدادات المنشأة — الفاتورة الضريبية غير مكتملة نظاماً.`,
+      detailAr: `حُصّلت ضريبة قدرها ${pnl.vat} خلال الفترة، لكن لا يوجد رقم تسجيل ضريبي في إعدادات المنشأة، والفاتورة الضريبية بدونه غير مكتملة نظاماً.`,
       numbers: { vat: pnl.vat },
     })
   }
@@ -772,7 +781,7 @@ export function anomalies({
   if (pnl.revenueNet > 0 && pnl.cogs === 0 && margins.costedCount === 0 && (items || []).length > 0) {
     add({
       kind: 'no-recipes', severity: 'medium',
-      titleAr: 'لا توجد وصفات مسعّرة — تكلفة البضاعة صفر',
+      titleAr: 'لا توجد وصفات مسعّرة، فتكلفة البضاعة صفر',
       detailAr: `لم تُربط أي وصفة بمواد خام، لذلك تكلفة البضاعة المباعة تظهر صفراً وهامش الربح الإجمالي غير واقعي. اربط الوصفات من شاشة المخزون.`,
       numbers: { itemsTotal: (items || []).length, costedItems: margins.costedCount },
     })

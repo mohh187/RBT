@@ -62,7 +62,7 @@ export default function ChoosePlan() {
       const msg = String(e?.message || e)
       const technical = /internal|moyasar|not.?found|not configured|MOYASAR/i.test(msg)
       toast.error(technical
-        ? (ar ? 'الدفع الإلكتروني غير جاهز بعد — ابدأ بالتجربة المجانية 14 يوماً وسنفعّل الدفع قريباً' : 'Checkout is not ready yet — start the 14-day free trial')
+        ? (ar ? 'الدفع الإلكتروني غير جاهز بعد، ابدأ بالتجربة المجانية 14 يوماً وسنفعّل الدفع قريباً' : 'Checkout is not ready yet, start the 14-day free trial')
         : msg)
       setBusy('')
     }
@@ -75,7 +75,7 @@ export default function ChoosePlan() {
           <BrandMark size={30} />
           <h1 className="cpl-h">{ar ? 'اختر باقة منشأتك' : 'Choose your plan'}</h1>
           <p className="cpl-sub">
-            {tenant?.name ? `${tenant.name} — ` : ''}{ar ? 'ابدأ تجربة مجانية كاملة المزايا 14 يوماً، أو اشترك الآن وتُفعَّل باقتك لحظة الدفع.' : 'Start a full 14-day trial, or subscribe now.'}
+            {tenant?.name ? `${tenant.name}, ` : ''}{ar ? 'ابدأ تجربة مجانية كاملة المزايا 14 يوماً، أو اشترك الآن وتُفعَّل باقتك لحظة الدفع.' : 'Start a full 14-day trial, or subscribe now.'}
           </p>
           <div className="cpl-cycle" role="group" aria-label={ar ? 'دورة الدفع' : 'Billing cycle'}>
             <button className={!yearly ? 'on' : ''} aria-pressed={!yearly} onClick={() => setYearly(false)}>{ar ? 'شهري' : 'Monthly'}</button>

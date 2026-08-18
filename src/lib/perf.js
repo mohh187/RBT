@@ -55,9 +55,9 @@ export function scoreStaff(members, orders, reviews, { period = 'today', target 
     const level = LEVELS.find((l) => progress >= l.min) || LEVELS[2]
     let insight = ''
     if (s.served > 0 && avgRating > 0 && avgRating < 3.5) insight = ar ? 'يحتاج تدريب خدمة عملاء' : 'Needs customer-service coaching'
-    else if (progress >= 1.4) insight = ar ? 'يتجاوز هدفه بكثير — فكّر برفع هدفه' : 'Far exceeds — consider raising the target'
-    else if (progress >= 1) insight = ar ? 'حقّق هدف وظيفته — يستحق مكافأة' : 'Hit role target — reward-worthy'
-    else if ((targetMetrics || target) && progress > 0 && progress < 0.4) insight = ar ? 'أقل من هدفه — راجع الهدف أو ادعمه' : 'Below target — review or support'
+    else if (progress >= 1.4) insight = ar ? 'يتجاوز هدفه بكثير، فكّر برفع الهدف' : 'Far exceeds — consider raising the target'
+    else if (progress >= 1) insight = ar ? 'حقّق هدف وظيفته ويستحق مكافأة' : 'Hit role target — reward-worthy'
+    else if ((targetMetrics || target) && progress > 0 && progress < 0.4) insight = ar ? 'أقل من هدفه، راجع الهدف أو ادعمه' : 'Below target — review or support'
     return { ...mem, ...s, custCount, avgRating, points, progress, level, insight, targetMetrics }
   }).sort((a, b) => b.points - a.points)
 }

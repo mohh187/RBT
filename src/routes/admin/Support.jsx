@@ -59,7 +59,7 @@ export default function Support() {
       createdBy: user?.uid, createdByName: profile?.displayName || user?.email || '',
     })
     setIssueTitle(''); setIssueBody(''); setPriority('normal')
-    toast.success(ar ? 'تم إرسال التذكرة — سنتابعها معك' : 'Ticket sent')
+    toast.success(ar ? 'تم إرسال التذكرة، سنتابعها معك' : 'Ticket sent')
   }
 
   return (
@@ -84,7 +84,7 @@ export default function Support() {
           tenantName={tenant?.name || ''}
           commands={commands}
           placeholder={ar ? 'اكتب رسالتك…' : 'Type a message…'}
-          emptyHint={ar ? 'اكتب رسالتك — يصلنا إشعار فوري وسنرد عليك هنا' : 'Write a message — we get notified instantly'}
+          emptyHint={ar ? 'اكتب رسالتك، يصلنا إشعار فوري وسنرد عليك هنا' : 'Write a message, we get notified instantly'}
         />
       </div>
 

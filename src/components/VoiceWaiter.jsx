@@ -58,13 +58,13 @@ const COPY = {
     unavailable: 'هذا الصنف غير متوفر حالياً',
     openItem: 'اختر الإضافات',
     unsupportedTitle: 'التعرف على الصوت غير مدعوم في هذا المتصفح',
-    unsupportedHint: 'جرّب Chrome أو Safari — أو اكتب طلبك في الحقل بالأسفل وسأبحث لك عنه.',
-    multiTitle: 'فهمت طلبك — أكّده',
+    unsupportedHint: 'جرّب Chrome أو Safari، أو اكتب طلبك في الحقل بالأسفل وسأبحث لك عنه.',
+    multiTitle: 'هذا ما فهمته، أكّده',
     addAll: 'أضف الكل',
-    needsTag: 'يحتاج اختيارات — سيُفتح',
-    fallingBack: 'الخدمة الذكية غير متاحة الآن — سأستخدم التعرف السريع.',
-    cloudFailed: 'تعذر فهم التسجيل — أعد المحاولة أو اكتب طلبك.',
-    quotaMsg: 'خدمة الصوت الذكية مشغولة مؤقتاً — جرّب بعد قليل أو اكتب طلبك.',
+    needsTag: 'يحتاج اختيارات، سيُفتح',
+    fallingBack: 'الخدمة الذكية غير متاحة الآن، وسأستخدم التعرف السريع.',
+    cloudFailed: 'ما فهمت التسجيل، أعد المحاولة أو اكتب طلبك.',
+    quotaMsg: 'خدمة الصوت مشغولة الآن، جرّب بعد قليل أو اكتب طلبك.',
   },
   en: {
     title: 'Voice waiter',
@@ -83,13 +83,13 @@ const COPY = {
     unavailable: 'This item is currently unavailable',
     openItem: 'Choose options',
     unsupportedTitle: 'Speech recognition is not supported in this browser',
-    unsupportedHint: 'Try Chrome or Safari — or type your order below and I will look it up.',
-    multiTitle: 'Here is what I got — confirm it',
+    unsupportedHint: 'Try Chrome or Safari, or type your order below and I will look it up.',
+    multiTitle: 'Here is what I got, please confirm it',
     addAll: 'Add all',
-    needsTag: 'Needs choices — will open',
-    fallingBack: 'Smart voice is unavailable right now — using quick recognition.',
-    cloudFailed: 'Could not understand the recording — try again or type your order.',
-    quotaMsg: 'The smart voice service is busy — try again shortly or type your order.',
+    needsTag: 'Needs choices, will open',
+    fallingBack: 'Smart voice is unavailable right now, so I am using quick recognition.',
+    cloudFailed: 'I could not make out the recording. Try again or type your order.',
+    quotaMsg: 'The voice service is busy right now. Try again shortly or type your order.',
   },
 }
 
@@ -220,8 +220,8 @@ export default function VoiceWaiter({ open, onClose, items = [], allItems = null
       setPick({ item, variant: null, qty })
       setPhase('needs')
       const msg = lang === 'en'
-        ? `${name} needs a few choices — I am opening it so you can pick them.`
-        : `${name} يحتاج اختيارات — سأفتحه لك لتختار بنفسك.`
+        ? `${name} needs a few choices, so I am opening it for you to pick them.`
+        : `${name} يحتاج اختيارات، سأفتحه لك لتختار بنفسك.`
       announce(msg)
       // Open the real item sheet so required groups are respected, never guessed.
       if (openTimer.current) clearTimeout(openTimer.current)

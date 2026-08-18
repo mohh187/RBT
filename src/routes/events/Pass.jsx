@@ -122,7 +122,7 @@ export default function Pass() {
               </div>
             )}
             {!isTicket && doc.status === 'requested' && doc.depositStatus !== 'pending' && (
-              <p className="small muted text-center">{lang === 'ar' ? 'بانتظار تأكيد الكافيه — ستتحدث البطاقة تلقائياً.' : 'Awaiting confirmation — this updates automatically.'}</p>
+              <p className="small muted text-center">{lang === 'ar' ? 'بانتظار تأكيد الكافيه، ستتحدث البطاقة تلقائياً.' : 'Awaiting confirmation, this updates automatically.'}</p>
             )}
             {!isTicket && doc.status === 'declined' && (
               <p className="small text-center" style={{ color: 'var(--danger)' }}>{lang === 'ar' ? 'عذراً، تعذّر تأكيد الحجز.' : 'Sorry, the booking could not be confirmed.'}</p>

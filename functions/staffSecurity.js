@@ -7,7 +7,7 @@
 //    offline and stamp actions in their name. PINs now live in
 //    tenants/{tid}/staffPins/{uid} (client read/write DENIED by rules),
 //    hashed with scrypt + a per-record random salt, verified only through
-//    the verifyStaffPin callable, which also rate-limits attempts.
+//    the pinSignIn callable, which also rate-limits attempts.
 //
 // 2) Legacy migration: migrateStaffPins moves any old staff-doc pinHash into
 //    staffPins immediately (keeping the legacy digest until the staffer's
@@ -121,22 +121,14 @@ async function verifyPinCore(tenantId, staffId, pin, { count = true } = {}) {
   return { ok: false, locked: r.locked, waitMs: r.locked ? LOCK_MS : 0 }
 }
 
-// ---------------------------------------------------------------------------
-// verifyStaffPin({ tenantId, staffId, pin }) → { ok, locked?, waitMs? }
-// Caller: any signed-in member of the tenant (the shared device's session).
-// LEGACY overlay-unlock path — kept one release for stale clients; new clients
-// use pinSignIn below, which actually switches the session.
-// ---------------------------------------------------------------------------
-exports.verifyStaffPin = onCall({ region: 'us-central1' }, async (request) => {
-  const uid = request.auth && request.auth.uid
-  if (!uid) throw new HttpsError('unauthenticated', 'sign in first')
-  const { tenantId, staffId, pin } = request.data || {}
-  if (!tenantId || !staffId || !/^\d{4}$/.test(String(pin || ''))) {
-    throw new HttpsError('invalid-argument', 'tenantId, staffId and a 4-digit pin are required')
-  }
-  if (!(await memberOf(uid, tenantId))) throw new HttpsError('permission-denied', 'not a member of this venue')
-  return verifyPinCore(tenantId, staffId, pin, { count: true })
-})
+// verifyStaffPin USED TO LIVE HERE, AND IT WAS AN ORACLE.
+//
+// It let any signed-in member test one staffer's PIN as often as they liked:
+// the only brake was that staffer's own fail counter, and the tenant-wide
+// freeze that pinSignIn charges below did not apply. Parallel calls against a
+// single colleague's 4-digit PIN were therefore unbounded in a way the login
+// path deliberately is not. It existed only as a bridge for clients older than
+// pinSignIn; that release has long shipped, so the whole callable is gone.
 
 // ---------------------------------------------------------------------------
 // PIN-only sign-in: the PIN itself identifies the staffer and opens THEIR real
@@ -514,12 +506,12 @@ exports.updateStaffCredentials = onCall({ region: 'us-central1' }, async (reques
     const callerDoc = await db().doc(`users/${callerUid}`).get().catch(() => null)
     const callerEmail = callerDoc && callerDoc.exists ? (callerDoc.data() || {}).email || callerUid : callerUid
     const what = [
-      email ? `البريد: ${oldEmail || '—'} ← ${email}` : '',
+      email ? `البريد: ${oldEmail || 'بدون'} ← ${email}` : '',
       password ? 'كلمة المرور: غُيّرت' : '',
     ].filter(Boolean).join(' · ')
     await db().collection('platformActivity').add({
       tenantId, tenantName, kind: 'settings', severity: 'high',
-      title: 'تغيير بيانات دخول', body: `${what} — للموظف ${target.displayName || staffId} بواسطة ${callerEmail}${isPlatform ? ' (منصة)' : ''}`,
+      title: 'تغيير بيانات دخول', body: `${what} للموظف ${target.displayName || staffId} بواسطة ${callerEmail}${isPlatform ? ' (منصة)' : ''}`,
       at: FieldValue.serverTimestamp(),
     }).catch(() => {})
     const { sendEmail } = require('./messaging')
@@ -528,8 +520,8 @@ exports.updateStaffCredentials = onCall({ region: 'us-central1' }, async (reques
     await sendEmail({
       meter: 'platform',
       to: centralTo,
-      subject: `تغيير بيانات دخول — ${tenantName || tenantId}`,
-      html: `<p>منشأة: <b>${tenantName || tenantId}</b></p><p>${what}</p><p>الموظف: ${target.displayName || ''} (${staffId})</p><p>بواسطة: ${callerEmail}${isPlatform ? ' — مشرف منصة' : ''}</p>`,
+      subject: `تغيير بيانات دخول في ${tenantName || tenantId}`,
+      html: `<p>منشأة: <b>${tenantName || tenantId}</b></p><p>${what}</p><p>الموظف: ${target.displayName || ''} (${staffId})</p><p>بواسطة: ${callerEmail}${isPlatform ? ' (مشرف منصة)' : ''}</p>`,
     }).catch(() => {})
   } catch (_) { /* the change itself already succeeded */ }
 

@@ -172,8 +172,8 @@ export default function TableArScene({ open, onClose, lines = [], lang = 'ar' })
           {hidden > 0 && (
             <p className="tl-note">
               {ar
-                ? `عُرضت ${MAX_MODELS} أطباق فقط للحفاظ على سرعة الجهاز — و${hidden} أخرى لها مجسمات يمكن عرضها منفردة.`
-                : `Only ${MAX_MODELS} dishes are shown to keep the device fast — ${hidden} more have models you can view individually.`}
+                ? `عُرضت ${MAX_MODELS} أطباق فقط للحفاظ على سرعة الجهاز. البقية عددها ${hidden}، ولها مجسمات يمكنك عرضها منفردة.`
+                : `Only ${MAX_MODELS} dishes are shown to keep the device fast. ${hidden} more can be opened one at a time.`}
             </p>
           )}
 
@@ -181,8 +181,8 @@ export default function TableArScene({ open, onClose, lines = [], lang = 'ar' })
             <Icon name="warning" size={13} />
             <span>
               {ar
-                ? 'العرض المشترك على نفس الطاولة بين عدة أجهزة غير مدعوم في المتصفح — كل جهاز يعرض الطبق على طاولته.'
-                : 'Sharing one anchored AR table across devices is not supported in the browser — each phone places the dish on its own table.'}
+                ? 'المتصفح لا يجمع عدة أجهزة على طاولة واحدة، فكل جهاز يعرض الطبق على طاولته.'
+                : 'The browser cannot anchor one shared table across devices, so each phone places the dish on its own table.'}
             </span>
           </p>
         </div>
@@ -221,8 +221,8 @@ export default function TableArScene({ open, onClose, lines = [], lang = 'ar' })
                   ? 'تعذر بدء الواقع المعزز على هذا الجهاز: على أندرويد ثبّت «Google Play Services for AR» وافتح الرابط في Chrome نفسه، وعلى آيفون افتح في Safari.'
                   : 'AR could not start: on Android install "Google Play Services for AR" and open in Chrome itself; on iPhone use Safari.')
                 : (ar
-                  ? 'وجّه الكاميرا إلى طاولتك — سيقف الطبق عليها بحجمه الحقيقي.'
-                  : 'Point the camera at your table — the dish stands on it at real size.')}
+                  ? 'وجّه الكاميرا إلى طاولتك، وسيقف الطبق عليها بحجمه الحقيقي.'
+                  : 'Point the camera at your table, and the dish stands on it at real size.')}
             </p>
           </div>
         </div>

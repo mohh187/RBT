@@ -6,6 +6,7 @@
 //   • the AI snapshot is built from the SAME functions that render the tables,
 //     so the "الأرقام المستخدمة" block can never disagree with the screen.
 import { tagRule, derivePlayerTags } from '../../lib/gameMemory.js'
+import { arPlural } from '../../lib/forecast.js'
 
 const num = (v, f = 0) => {
   const n = Number(v)
@@ -14,9 +15,9 @@ const num = (v, f = 0) => {
 const round2 = (n) => Math.round(n * 100) / 100
 const pct = (a, b) => (b > 0 ? Math.round((a / b) * 100) : 0)
 
-export const dayStamp = (ms) => (ms ? new Date(num(ms)).toLocaleDateString('en-CA') : '—')
-export const clockOf = (ms) => (ms ? new Date(num(ms)).toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' }) : '—')
-export const dateTime = (ms) => (ms ? `${dayStamp(ms)} ${clockOf(ms)}` : '—')
+export const dayStamp = (ms) => (ms ? new Date(num(ms)).toLocaleDateString('en-CA') : '·')
+export const clockOf = (ms) => (ms ? new Date(num(ms)).toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' }) : '·')
+export const dateTime = (ms) => (ms ? `${dayStamp(ms)} ${clockOf(ms)}` : '·')
 
 // Sample-size floors. Below these a figure is LABELLED thin everywhere it
 // appears — on screen and inside the AI snapshot. It is never hidden and never
@@ -303,13 +304,13 @@ export function buildSegments(players = [], customers = []) {
     {
       id: 'competitive',
       ar: 'منافسون: أعادوا اللعبة 3 مرات فأكثر',
-      why: 'لعب الضيف لعبة واحدة بعينها 3 مرات أو أكثر — إعادة المحاولة سلوك تنافسي مقيس، لا تخمين.',
+      why: 'لعب الضيف لعبة واحدة بعينها 3 مرات أو أكثر. إعادة المحاولة سلوك تنافسي مقيس، لا تخمين.',
       test: (p) => Object.values(p.byGame || {}).some((g) => num(g.plays) >= 3),
     },
     {
       id: 'unfinished',
       ar: 'توقفوا في المنتصف',
-      why: 'للضيف محاولة واحدة على الأقل تجاوزت المرحلة الأولى ولم تُكمَل — أي بدأ فعلاً ثم انسحب.',
+      why: 'للضيف محاولة واحدة على الأقل تجاوزت المرحلة الأولى ولم تُكمَل، أي أنه بدأ فعلاً ثم انسحب.',
       test: (p) => (p.plays || []).some((x) => x.completed !== true && num(x.stage) > 0),
     },
     {
@@ -321,13 +322,13 @@ export function buildSegments(players = [], customers = []) {
     {
       id: 'quiz-weak',
       ar: 'يحتاجون تلميحات',
-      why: `أجاب ${THIN_ANSWERS} سؤالاً فأكثر بنسبة صحة 40% فما دون — فرصة لمحتوى تعريفي بالقائمة.`,
+      why: `أجاب ${THIN_ANSWERS} سؤالاً فأكثر بنسبة صحة 40% فما دون، وهذه فرصة لمحتوى يعرّف بالقائمة.`,
       test: (p) => num(p.knowledge && p.knowledge.answered) >= THIN_ANSWERS && p.accuracy != null && num(p.accuracy) <= 0.4,
     },
     {
       id: 'returning',
       ar: 'عائدون',
-      why: 'بين أول وآخر لعبة للضيف 7 أيام أو أكثر، وله 3 محاولات فأكثر — أي عاد للمكان فعلياً.',
+      why: 'بين أول وآخر لعبة للضيف 7 أيام أو أكثر، وله 3 محاولات فأكثر، أي أنه عاد للمكان فعلاً.',
       test: (p) => num(p.totalPlays) >= 3 && num(p.lastAt) - num(p.firstAt) >= 7 * DAY,
     },
     {
@@ -385,7 +386,7 @@ export function ruleFindings({ over, games = [], quiz, hard = [], segments = [],
     out.push({
       key: 'low-completion', tone: 'bad', sample: over.plays,
       title: 'أغلب الضيوف لا يُنهون اللعبة',
-      body: `أُنهيت ${over.completedPlays} محاولة من ${over.plays}، أي ${pct(over.completedPlays, over.plays)}%. اللعبة إما طويلة أو صعبة أو غير واضحة البداية.`,
+      body: `أُنهيت ${arPlural(over.completedPlays, { one: 'محاولة', two: 'محاولتان', few: 'محاولات', many: 'محاولة' })} من ${over.plays}، أي ${pct(over.completedPlays, over.plays)}%. اللعبة إما طويلة أو صعبة أو غير واضحة البداية.`,
     })
   }
 
@@ -394,7 +395,7 @@ export function ruleFindings({ over, games = [], quiz, hard = [], segments = [],
     out.push({
       key: `weak-${weakGame.gameId}`, tone: 'bad', sample: weakGame.plays,
       title: `«${weakGame.gameAr}» تُترك قبل نهايتها`,
-      body: `${pct(weakGame.completed, weakGame.plays)}% فقط من ${weakGame.plays} محاولة وصلت للنهاية. راجع صعوبتها أو طولها قبل الترويج لها.`,
+      body: `${pct(weakGame.completed, weakGame.plays)}% فقط من ${arPlural(weakGame.plays, { one: 'محاولة', two: 'محاولتان', few: 'محاولات', many: 'محاولة' })} وصلت للنهاية. راجع صعوبتها أو طولها قبل الترويج لها.`,
     })
   }
 
@@ -403,7 +404,7 @@ export function ruleFindings({ over, games = [], quiz, hard = [], segments = [],
     out.push({
       key: 'top-game', tone: 'good', sample: topGame.plays,
       title: `«${topGame.gameAr}» هي الأكثر لعباً`,
-      body: `${topGame.plays} محاولة من ${topGame.players} لاعباً. هي المرشّحة لأي مسابقة أو جائزة داخل المكان.`,
+      body: `${arPlural(topGame.plays, { one: 'محاولة', two: 'محاولتان', few: 'محاولات', many: 'محاولة' })} من ${arPlural(topGame.players, { one: 'لاعب', two: 'لاعبان', few: 'لاعبين', many: 'لاعباً' })}. هي المرشّحة لأي مسابقة أو جائزة داخل المكان.`,
     })
   }
 
@@ -413,7 +414,7 @@ export function ruleFindings({ over, games = [], quiz, hard = [], segments = [],
       out.push({
         key: `weak-cat-${worst.cat}`, tone: 'warn', sample: worst.answered,
         title: `ضعف واضح في «${worst.cat}»`,
-        body: `${worst.correct} إجابة صحيحة من ${worst.answered}، أي ${pct(worst.correct, worst.answered)}%. إن كان التصنيف عن قائمتك، فالضيوف لا يعرفونها كما تظن.`,
+        body: `${arPlural(worst.correct, { one: 'إجابة صحيحة', two: 'إجابتان صحيحتان', few: 'إجابات صحيحة', many: 'إجابة صحيحة' })} من ${worst.answered}، أي ${pct(worst.correct, worst.answered)}%. إن كان التصنيف عن قائمتك، فالضيوف لا يعرفونها كما تظن.`,
       })
     }
   }
@@ -423,7 +424,7 @@ export function ruleFindings({ over, games = [], quiz, hard = [], segments = [],
     out.push({
       key: 'hardest-q', tone: 'neutral', sample: h.asked,
       title: 'أصعب سؤال فعلياً',
-      body: `«${h.q}» أُخطئ فيه ${h.missed} مرة من ${h.asked} محاولة (${pct(h.missed, h.asked)}%).`,
+      body: `«${h.q}» أُخطئ فيه ${arPlural(h.missed, { one: 'مرة', two: 'مرتين', few: 'مرات', many: 'مرة' })} من ${arPlural(h.asked, { one: 'محاولة', two: 'محاولتان', few: 'محاولات', many: 'محاولة' })} (${pct(h.missed, h.asked)}%).`,
     })
   }
 
@@ -432,7 +433,7 @@ export function ruleFindings({ over, games = [], quiz, hard = [], segments = [],
     out.push({
       key: 'anon', tone: 'warn', sample: over.players,
       title: 'أغلب اللاعبين مجهولون',
-      body: `${anon} لاعباً من ${over.players} بلا رقم جوال، أي ${pct(anon, over.players)}%. هؤلاء لا يمكن مراسلتهم مهما كانت نتائجهم — اطلب الاسم أو الرقم قبل عرض النتيجة.`,
+      body: `${arPlural(anon, { one: 'لاعب', two: 'لاعبان', few: 'لاعبين', many: 'لاعباً' })} من ${over.players} بلا رقم جوال، أي ${pct(anon, over.players)}%. هؤلاء لا يمكن مراسلتهم مهما كانت نتائجهم. اطلب الاسم أو الرقم قبل عرض النتيجة.`,
     })
   }
 
@@ -441,7 +442,7 @@ export function ruleFindings({ over, games = [], quiz, hard = [], segments = [],
     out.push({
       key: 'curious', tone: 'good', sample: curious.playerCount,
       title: 'فضوليون لم يطلبوا بعد',
-      body: `${curious.playerCount} ضيفاً أنهوا اختبار الشخصية ولا طلب لهم، منهم ${curious.phones.length} يمكن مراسلتهم فعلاً.`,
+      body: `${arPlural(curious.playerCount, { one: 'ضيف', two: 'ضيفان', few: 'ضيوف', many: 'ضيفاً' })} أنهوا اختبار الشخصية ولا طلب لهم، منهم ${curious.phones.length} يمكن مراسلتهم فعلاً.`,
     })
   }
 
@@ -450,7 +451,7 @@ export function ruleFindings({ over, games = [], quiz, hard = [], segments = [],
     out.push({
       key: 'repeat', tone: repeat / over.players >= 0.3 ? 'good' : 'neutral', sample: over.players,
       title: 'نسبة من عاد للعب مرة ثانية',
-      body: `${repeat} لاعباً من ${over.players} لعبوا أكثر من مرة، أي ${pct(repeat, over.players)}%.`,
+      body: `${arPlural(repeat, { one: 'لاعب', two: 'لاعبان', few: 'لاعبين', many: 'لاعباً' })} من ${over.players} لعبوا أكثر من مرة، أي ${pct(repeat, over.players)}%.`,
     })
   }
 

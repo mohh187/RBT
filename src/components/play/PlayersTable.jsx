@@ -5,6 +5,7 @@
 import { useMemo, useState } from 'react'
 import Icon from '../Icon.jsx'
 import { fmtNum } from '../../lib/format.js'
+import { arPlural } from '../../lib/forecast.js'
 import { tagLabel } from '../../lib/gameMemory.js'
 import { dateTime, playerLabel, shortDevice, maskPhone, tagRule } from './engine.jsx'
 
@@ -37,7 +38,7 @@ export default function PlayersTable({ players = [], ar = true, onOpen }) {
       <span className="gp-card-t"><Icon name="customers" size={17} /> {ar ? 'اللاعبون' : 'Players'}</span>
       <p className="gp-hint">
         {ar
-          ? 'كل صف جهاز واحد. من ترك رقم جوال يظهر باسمه أو رقمه ويمكن مراسلته؛ ومن لم يترك شيئاً يظهر «مجهول» مع معرّف جهازه — يُحتسب في الأرقام ولا يمكن الوصول إليه. اضغط أي صف لفتح ملفه الكامل.'
+          ? 'كل صف جهاز واحد. من ترك رقم جوال يظهر باسمه أو رقمه ويمكن مراسلته، ومن لم يترك شيئاً يظهر «مجهول» مع معرّف جهازه، فيُحتسب في الأرقام ولا يمكن الوصول إليه. اضغط أي صف لفتح ملفه الكامل.'
           : 'One row per device. Click a row for the full profile.'}
       </p>
 
@@ -99,7 +100,7 @@ export default function PlayersTable({ players = [], ar = true, onOpen }) {
                   <td className="gp-num">{fmtNum(p.gamesTried)}</td>
                   <td className="gp-num">{fmtNum(p.bestScore)}</td>
                   <td className="gp-num">
-                    {p.accuracy == null ? '—' : `${fmtNum(Math.round(p.accuracy * 100))}%`}
+                    {p.accuracy == null ? '-' : `${fmtNum(Math.round(p.accuracy * 100))}%`}
                     {p.knowledge && p.knowledge.answered > 0 && (
                       <span className="gp-of"> ({fmtNum(p.knowledge.answered)})</span>
                     )}
@@ -114,7 +115,7 @@ export default function PlayersTable({ players = [], ar = true, onOpen }) {
                         >{tagLabel(t, ar)}</span>
                       ))}
                       {(p.tags || []).length > 3 && <span className="gp-tag gp-num">+{fmtNum(p.tags.length - 3)}</span>}
-                      {!(p.tags || []).length && <span className="gp-of">—</span>}
+                      {!(p.tags || []).length && <span className="gp-of">-</span>}
                     </span>
                   </td>
                   <td className="gp-num">{dateTime(p.lastAt)}</td>
@@ -125,7 +126,7 @@ export default function PlayersTable({ players = [], ar = true, onOpen }) {
         </div>
       )}
       <p className="gp-hint gp-num">
-        {ar ? `معروض ${fmtNum(rows.length)} من ${fmtNum(players.length)} لاعباً` : `${fmtNum(rows.length)} of ${fmtNum(players.length)}`}
+        {ar ? `معروض ${fmtNum(rows.length)} من ${arPlural(players.length, { one: 'لاعب', two: 'لاعبين', few: 'لاعبين', many: 'لاعباً' })}` : `${fmtNum(rows.length)} of ${fmtNum(players.length)}`}
       </p>
     </div>
   )

@@ -148,7 +148,7 @@ export default function Behavior({ onCreateCampaign, onCreateContent }) {
     [sessions, steps, drops, itemRows, cohortList, searches],
   )
 
-  const periodLabel = `${dayStamp(fromMs)} — ${dayStamp(toMs)}`
+  const periodLabel = `${dayStamp(fromMs)}, ${dayStamp(toMs)}`
 
   // The snapshot is the ONLY thing the model ever sees. It is built from the
   // same computed figures rendered on the other tabs — never from raw documents.
@@ -185,7 +185,7 @@ export default function Behavior({ onCreateCampaign, onCreateContent }) {
           {periodKey === 'custom' && (
             <div className="bhv-period-custom">
               <input className="input" type="date" value={custom.from} onChange={(e) => setCustom((c) => ({ ...c, from: e.target.value }))} />
-              <span className="bhv-period-label">—</span>
+              <span className="bhv-period-label">·</span>
               <input className="input" type="date" value={custom.to} onChange={(e) => setCustom((c) => ({ ...c, to: e.target.value }))} />
             </div>
           )}
@@ -213,7 +213,7 @@ export default function Behavior({ onCreateCampaign, onCreateContent }) {
               <span className="bhv-card-t"><Icon name="eye" size={17} /> {ar ? 'لم تُسجَّل أي جلسة بعد' : 'No sessions recorded yet'}</span>
               <p className="bhv-hint">
                 {ar
-                  ? 'هذه الشاشة تقرأ جلسات تصفّح حقيقية من منيو المنشأة. ما دام لم يتصفّح أحد المنيو بعد تفعيل التتبّع، ستبقى كل التبويبات فارغة — وهذا صحيح وليس عطلاً.'
+                  ? 'هذه الشاشة تقرأ جلسات تصفّح حقيقية من منيو المنشأة. ما دام لم يتصفّح أحد المنيو بعد تفعيل التتبّع، ستبقى كل التبويبات فارغة، وهذا صحيح وليس عطلاً.'
                   : 'This page reads real browsing sessions. Nothing here is broken; there is simply no data yet.'}
               </p>
               <ul className="bhv-list">
@@ -237,7 +237,7 @@ export default function Behavior({ onCreateCampaign, onCreateContent }) {
               <Icon name="warning" size={15} />
               <span>
                 {ar
-                  ? `الفترة تحوي جلسات أكثر من الحد المقروء (${fmtNum(MAX_SESSIONS)} جلسة، الأحدث أولاً). كل الأرقام هنا محسوبة على هذه العيّنة فقط — ضيّق الفترة لقراءة أدق.`
+                  ? `الفترة تحوي جلسات أكثر من الحد المقروء (${fmtNum(MAX_SESSIONS)} جلسة، الأحدث أولاً). كل الأرقام هنا محسوبة على هذه العيّنة فقط، ضيّق الفترة لقراءة أدق.`
                   : `Capped at the newest ${fmtNum(MAX_SESSIONS)} sessions. Narrow the period for a complete read.`}
               </span>
             </div>
@@ -246,7 +246,7 @@ export default function Behavior({ onCreateCampaign, onCreateContent }) {
           {sharedOff && sessions.length > 0 && (
             <div className="bhv-warn">
               <Icon name="warning" size={15} />
-              <span>{ar ? 'محرّك التحليل المشترك غير متاح — تعمل هذه الشاشة بحساباتها الداخلية، والأرقام صحيحة لكن قد تختلف تسمياتها عن باقي النظام.' : 'Shared analysis engine unavailable; using the built-in calculations.'}</span>
+              <span>{ar ? 'محرّك التحليل المشترك غير متاح. تعمل هذه الشاشة بحساباتها الداخلية، والأرقام صحيحة لكن قد تختلف تسمياتها عن باقي النظام.' : 'Shared analysis engine unavailable; using the built-in calculations.'}</span>
             </div>
           )}
 
@@ -280,7 +280,7 @@ export default function Behavior({ onCreateCampaign, onCreateContent }) {
               guard={AI_PLANNER_GUARD_AR}
               ar={ar}
               allowed={aiAllowed}
-              disabledReason={aiAllowed ? '' : (ar ? 'لا تملك صلاحية استخدام المساعد الذكي — الاستنتاجات وبناء الجمهور أدناه تعمل بدونه.' : 'You lack the assistant capability.')}
+              disabledReason={aiAllowed ? '' : (ar ? 'لا تملك صلاحية استخدام المساعد الذكي، الاستنتاجات وبناء الجمهور أدناه تعمل بدونه.' : 'You lack the assistant capability.')}
               periodLabel={periodLabel}
               onCreateCampaign={onCreateCampaign}
               onCreateContent={onCreateContent}

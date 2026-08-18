@@ -172,7 +172,7 @@ export default function HangingChallenge({
               </div>
               <div className="sp-bar">
                 <span className="sp-big">{fmtNum(c.score)}</span>
-                <span>{pick(lang, 'نقطة — اكسرها', 'points — beat it')}</span>
+                <span>{pick(lang, 'نقطة، اكسرها', 'points, beat it')}</span>
               </div>
               {/* Guest text. Sanitized twice, rendered as a text node. */}
               {c.message ? <p className="sp-msg">{c.message}</p> : null}
@@ -185,13 +185,13 @@ export default function HangingChallenge({
                   {c.beatenAtCap
                     ? pick(
                       lang,
-                      `كسرها ${fmtNum(c.beatenCount)} فأكثر — أعلى ما سُجّل ${fmtNum(c.beatenBest)}.`,
-                      `Beaten ${fmtNum(c.beatenCount)}+ times — best recorded ${fmtNum(c.beatenBest)}.`,
+                      `كسرها ${fmtNum(c.beatenCount)} فأكثر، وأعلى ما سُجّل ${fmtNum(c.beatenBest)}.`,
+                      `Beaten ${fmtNum(c.beatenCount)}+ times, best recorded ${fmtNum(c.beatenBest)}.`,
                     )
                     : pick(
                       lang,
-                      `كسرها ${fmtNum(c.beatenCount)} حتى الآن — أعلاهم ${fmtNum(c.beatenBest)}.`,
-                      `Beaten ${fmtNum(c.beatenCount)} times — best ${fmtNum(c.beatenBest)}.`,
+                      `كسرها ${fmtNum(c.beatenCount)} حتى الآن، وأعلاهم ${fmtNum(c.beatenBest)}.`,
+                      `Beaten ${fmtNum(c.beatenCount)} times, best ${fmtNum(c.beatenBest)}.`,
                     )}
                 </p>
               ) : null}
@@ -226,8 +226,8 @@ export default function HangingChallenge({
         <p className="sp-note">
           {pick(
             lang,
-            'نعرض أحدث التحديات فقط — قد تكون هناك تحديات أقدم لا تظهر هنا.',
-            'Showing the most recent challenges only — older ones may not appear here.',
+            'نعرض أحدث التحديات فقط، وقد تكون هناك تحديات أقدم لا تظهر هنا.',
+            'Showing the most recent challenges only, so older ones may not appear here.',
           )}
         </p>
       ) : null}

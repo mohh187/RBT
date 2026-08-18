@@ -146,7 +146,7 @@ export default function CompareItems({ open, onClose, items = [], preselected = 
             <b>{r.count} {ar ? 'أحجام' : 'sizes'}</b>
             <span className="cmp-range">
               <Price value={r.min} currency={currency} lang={lang} />
-              {r.max !== r.min ? <> <em>—</em> <Price value={r.max} currency={currency} lang={lang} /></> : null}
+              {r.max !== r.min ? <> <em>{ar ? 'إلى' : 'to'}</em> <Price value={r.max} currency={currency} lang={lang} /></> : null}
             </span>
           </span>
         )
@@ -295,7 +295,7 @@ export default function CompareItems({ open, onClose, items = [], preselected = 
                       const node = row.cell(it)
                       return (
                         <div className={`cmp-c ${st.winner === i ? 'is-win' : ''}`} key={it.id}>
-                          {node || <span className="cmp-dash">—</span>}
+                          {node || <span className="cmp-dash">{ar ? 'لا يوجد' : 'None'}</span>}
                           {st.winner === i && row.chip ? <span className="cmp-chip">{row.chip}</span> : null}
                         </div>
                       )

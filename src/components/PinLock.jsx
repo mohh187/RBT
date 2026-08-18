@@ -6,6 +6,7 @@ import { staffHasPin, isUnlocked, clearUnlocked, getPinActor, rememberRoster, ge
 import { useAuth } from '../lib/auth.jsx'
 import { useToast } from './Toast.jsx'
 import Icon from './Icon.jsx'
+import { arPlural } from '../lib/forecast.js'
 
 // Full-screen PIN gate for shared devices — PIN-ONLY entry: the code itself
 // identifies the staffer (unique per venue, enforced server-side) and opens
@@ -36,7 +37,7 @@ function LockClock({ st = {} }) {
   return (
     <div className="pinlock-clock">
       <span className="pinlock-time num" dir="ltr" data-font={st.clockFont || 'default'} data-size={st.clockSize || 'md'}>{time}</span>
-      <span className="xs faint">{now.toLocaleDateString('ar-SA-u-nu-latn', { weekday: 'long', day: 'numeric', month: 'long' })} · {greet}</span>
+      <span className="xs faint">{now.toLocaleDateString('ar-SA-u-nu-latn-ca-gregory', { weekday: 'long', day: 'numeric', month: 'long' })} · {greet}</span>
     </div>
   )
 }
@@ -146,19 +147,19 @@ export default function PinLock({ tenant, tenantId, demo = false, standalone = f
     } else if (res.inactive) {
       // CORRECT pin, suspended account — not a wrong-PIN attempt, so it must not
       // increment the attempts-remaining counter or wear the error shake.
-      toast.error('هذا الحساب موقوف — راجع الإدارة')
+      toast.error('حسابك موقوف حالياً. راجع الإدارة لتفعيله')
       setPin('')
     } else if (res.config) {
       // server can't mint the session token (missing IAM role) — NOT a wrong PIN.
-      toast.error('الدخول بالرمز غير مُفعّل على الخادم بعد — راجع الدعم')
+      toast.error('الدخول بالرمز غير مفعّل بعد. راجع الدعم لتفعيله')
       setPin('')
     } else if (res.swapFailed) {
       // CORRECT pin — the token was minted but the local session swap failed
       // (network blip mid-swap). Not a wrong-PIN attempt: no counter, no shake.
-      toast.error('تعذّر فتح الجلسة — أعد المحاولة')
+      toast.error('رمزك صحيح لكن الجلسة ما فتحت. أدخل رمزك مرة ثانية')
       setPin('')
     } else {
-      if (res.error) toast.error('تعذّر التحقق — تأكد من الاتصال بالإنترنت')
+      if (res.error) toast.error('ما قدرنا نتحقق من الرمز. تأكد من اتصال الإنترنت وحاول مرة ثانية')
       fails.current = res.locked ? 5 : fails.current + 1
       setErr(true)
       vibrate([60, 40, 60])
@@ -247,15 +248,15 @@ export default function PinLock({ tenant, tenantId, demo = false, standalone = f
         <strong style={{ fontSize: 'var(--fs-lg)' }}>{tenant?.name || ''}</strong>
         {amb ? (
           <>
-            <p className="small" style={{ margin: 0 }}>الرمز مشترك بين أكثر من موظف — اختر اسمك</p>
-            <p className="xs faint" style={{ margin: 0 }}>يُنصح بتغيير أحد الرمزين من الإعدادات — الرموز أصبحت فريدة لكل موظف</p>
+            <p className="small" style={{ margin: 0 }}>رمزك يطابق رمز موظف آخر. اختر اسمك الآن</p>
+            <p className="xs faint" style={{ margin: 0 }}>ثم غيّر رمزك من الإعدادات ليكون خاصاً بك</p>
             <div className="pinlock-staff">
               {amb.matches.map((m) => (
                 <button key={m.uid} className="pinlock-person" onClick={() => chooseAmb(m.uid)}>
                   <span className="pinlock-avatar" style={{ background: `hsl(${hueOf(m.name)} 55% 45% / .22)`, color: `hsl(${hueOf(m.name)} 60% 38%)` }}>
                     {(m.name || '?').slice(0, 1)}
                   </span>
-                  <span className="small bold">{m.name || '—'}</span>
+                  <span className="small bold">{m.name || 'موظف'}</span>
                 </button>
               ))}
             </div>
@@ -281,8 +282,8 @@ export default function PinLock({ tenant, tenantId, demo = false, standalone = f
               ))}
             </div>
             {ok && <p className="xs" style={{ color: 'var(--success)', margin: 0, fontWeight: 800, display: 'inline-flex', alignItems: 'center', gap: 4 }}><Icon name="check" size={13} /> أهلاً {okName}</p>}
-            {!ok && fails.current >= 2 && !err && <p className="xs faint" style={{ margin: 0 }}>متبقٍ {Math.max(0, 5 - fails.current)} محاولات قبل الإيقاف المؤقت</p>}
-            {fails.current >= 5 && err && <p className="xs" style={{ color: 'var(--danger)', margin: 0 }}>محاولات كثيرة — انتظر قليلاً</p>}
+            {!ok && fails.current >= 2 && !err && <p className="xs faint" style={{ margin: 0 }}>بقي لك {arPlural(Math.max(0, 5 - fails.current), { one: 'محاولة', two: 'محاولتان', few: 'محاولات', many: 'محاولة' })} قبل الإيقاف المؤقت</p>}
+            {fails.current >= 5 && err && <p className="xs" style={{ color: 'var(--danger)', margin: 0 }}>محاولات كثيرة. انتظر قليلاً ثم جرّب من جديد</p>}
             {/* the team strip — who can unlock here (informational; PIN is the identity) */}
             {ordered.length > 0 && (
               <div className="pinlock-staff pinlock-staff-strip">
@@ -291,7 +292,7 @@ export default function PinLock({ tenant, tenantId, demo = false, standalone = f
                     <span className="pinlock-avatar" style={s.photoUrl ? undefined : { background: `hsl(${hueOf(s.name)} 55% 45% / .22)`, color: `hsl(${hueOf(s.name)} 60% 38%)` }}>
                       {s.photoUrl ? <img src={s.photoUrl} alt="" /> : (s.name || '?').slice(0, 1)}
                     </span>
-                    <span className="xs bold">{s.name || s.displayName || '—'}</span>
+                    <span className="xs bold">{s.name || s.displayName || 'موظف'}</span>
                     {s.role && <span className="xs faint">{ROLE_AR[s.role] || s.role}</span>}
                   </span>
                 ))}

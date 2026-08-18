@@ -199,7 +199,7 @@ export default function StaffPortal() {
         const mins = Math.round(elapsed / 60000)
         const hh = Math.floor(mins / 60), mm = mins % 60
         const dur = hh > 0 ? (ar ? `${hh}س ${mm}د` : `${hh}h ${mm}m`) : (ar ? `${mm}د` : `${mm}m`)
-        toast.error(ar ? `تجاوزت وقت «${availLabel(myStatus)}» المسموح (${statusLimitMin}د) — أنت منذ ${dur}` : `Over the allowed "${availLabel(myStatus)}" time (${statusLimitMin}m) — ${dur} elapsed`)
+        toast.error(ar ? `تجاوزت وقت «${availLabel(myStatus)}» المسموح (${statusLimitMin}د)، أنت منذ ${dur}` : `Over the allowed "${availLabel(myStatus)}" time (${statusLimitMin}m), ${dur} elapsed`)
         alertParty({ title: ar ? 'تجاوزت الوقت المسموح' : 'Over the limit', body: ar ? `وضع ${availLabel(myStatus)} منذ ${dur}` : `${availLabel(myStatus)} for ${dur}`, tag: 'overstay' })
       }
     }
@@ -436,7 +436,7 @@ export default function StaffPortal() {
               <div className="grow">
                 <div className="bold">{clockedIn ? (ar ? 'أنت في الدوام' : 'On shift') : (ar ? 'خارج الدوام' : 'Off shift')}</div>
                 <div className="xs faint">
-                  {me?.shiftStart && <span dir="ltr">{me.shiftStart}{me.shiftEnd ? `–${me.shiftEnd}` : ''} · </span>}
+                  {me?.shiftStart && <span dir="ltr">{me.shiftStart}{me.shiftEnd ? `, ${me.shiftEnd}` : ''} · </span>}
                   {ar ? `اليوم ${hrsToday.toFixed(1)} س` : `${hrsToday.toFixed(1)}h today`}
                   {clockedIn && shiftRemainMin > 0 && <span> · {ar ? `يتبقّى ${Math.floor(shiftRemainMin / 60)}:${String(shiftRemainMin % 60).padStart(2, '0')}` : `${Math.floor(shiftRemainMin / 60)}:${String(shiftRemainMin % 60).padStart(2, '0')} left`}</span>}
                 </div>
@@ -571,7 +571,7 @@ export default function StaffPortal() {
                     </span>
                   ))}
                 </div>
-              ) : <div className="xs faint">{ar ? 'لا إنجازات بعد — ابدأ بتقديم الطلبات!' : 'No badges yet — start serving!'}</div>}
+              ) : <div className="xs faint">{ar ? 'لا إنجازات بعد، ابدأ بتقديم الطلبات!' : 'No badges yet, start serving!'}</div>}
               {nextBadge && (
                 <div className="stack" style={{ gap: 4, borderTop: '1px solid var(--border)', paddingTop: 8 }}>
                   <div className="row-between xs"><span className="faint">{ar ? 'التالي' : 'Next'}: {nextBadge.label}</span><span className="faint">{Math.round(nextBadge.progress * 100)}%</span></div>
@@ -654,7 +654,7 @@ export default function StaffPortal() {
                     {o.acceptedByName && <div className="xs" style={{ color: 'var(--brand)' }}><Icon name="user" size={12} /> {o.servedByName || o.acceptedByName}</div>}
                     <div className="row-between">
                       <span className="price bold"><Price value={o.total} currency={currency} lang={lang} /></span>
-                      {NEXT[o.status] && <button className="btn btn-sm btn-primary" onClick={(e) => { e.stopPropagation(); advance(o) }}>{{ accepted: ar ? 'قبول' : 'Accept', preparing: ar ? 'تحضير' : 'Prepare', ready: ar ? 'جاهز' : 'Ready', served: ar ? 'تقديم' : 'Serve' }[NEXT[o.status]]}</button>}
+                      {NEXT[o.status] && <button className="btn btn-sm btn-primary" onClick={(e) => { e.stopPropagation(); advance(o) }}>{{ accepted: ar ? 'قبول' : 'Accept', preparing: ar ? 'تحضير' : 'Prepare', ready: ar ? 'جاهز' : 'Ready', served: ar ? 'تم التقديم' : 'Served' }[NEXT[o.status]]}</button>}
                     </div>
                   </div>
                 ))}
@@ -866,7 +866,7 @@ export default function StaffPortal() {
             <label>{ar ? 'اليوم الذي أريد تبديله' : 'Day to swap'}</label>
             <select className="select" value={swap.date} onChange={(e) => setSwap((v) => ({ ...v, date: e.target.value }))}>
               <option value="">{ar ? 'اختر اليوم' : 'Pick a day'}</option>
-              {upcomingWorkDays.map((s) => <option key={s.iso} value={s.iso}>{s.d.toLocaleDateString(ar ? 'ar-SA-u-nu-latn' : 'en-US', { weekday: 'long', day: 'numeric', month: 'short' })}{s.start ? ` · ${s.start}–${s.end}` : ''}</option>)}
+              {upcomingWorkDays.map((s) => <option key={s.iso} value={s.iso}>{s.d.toLocaleDateString(ar ? 'ar-SA-u-nu-latn' : 'en-US', { weekday: 'long', day: 'numeric', month: 'short' })}{s.start ? ` · ${s.start}, ${s.end}` : ''}</option>)}
             </select>
           </div>
           <div className="field">

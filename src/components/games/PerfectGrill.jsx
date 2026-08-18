@@ -660,7 +660,7 @@ export default function PerfectGrill({
               <span className="gmpg-bar"><i /></span>
             </div>
             <h3 className="gmx-title">الشواية المثالية</h3>
-            <p className="gmx-line">المؤشر يتحرك نحو خط الاحتراق — اضغط على القطعة عندما يصل إلى المنطقة الخضراء لتقلبها. مبكراً تخرج نيئة، ومتأخراً تحترق. كل مرحلة أسرع، ونطاقها أضيق.</p>
+            <p className="gmx-line">المؤشر يتحرك نحو خط الاحتراق، فاضغط على القطعة عندما يصل إلى المنطقة الخضراء لتقلبها. مبكراً تخرج نيئة، ومتأخراً تحترق. كل مرحلة أسرع، ونطاقها أضيق.</p>
             {saved ? (
               <div className="gmx-actions">
                 <button type="button" className="gmx-btn" onClick={() => restart({ stage: Number(saved.stage), score: Number(saved.score) || 0 })}>

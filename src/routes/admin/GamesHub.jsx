@@ -74,7 +74,7 @@ export default function GamesHub() {
   const { from, to } = useMemo(() => periodRange(periodKey, custom), [periodKey, custom])
   const fromMs = from.getTime()
   const toMs = to.getTime()
-  const periodLabel = `${dayStamp(fromMs)} — ${dayStamp(toMs)}`
+  const periodLabel = `${dayStamp(fromMs)}, ${dayStamp(toMs)}`
 
   useEffect(() => {
     if (!tenantId || !canView) return undefined
@@ -260,7 +260,7 @@ export default function GamesHub() {
           <Icon name="warning" size={15} />
           <span>
             {err === 'not-configured'
-              ? (ar ? 'الاتصال بقاعدة البيانات غير مُهيَّأ في هذه البيئة، فلا أرقام تُعرض. إعدادات الألعاب نفسها تبقى قابلة للتحرير.' : 'Database not configured — no figures. Settings still editable.')
+              ? (ar ? 'الاتصال بقاعدة البيانات غير مُهيَّأ في هذه البيئة، فلا أرقام تُعرض. إعدادات الألعاب نفسها تبقى قابلة للتحرير.' : 'Database not configured, no figures. Settings still editable.')
               : `${ar ? 'تعذّرت قراءة بيانات الألعاب: ' : 'Could not read play data: '}${err}`}
           </span>
         </div>
@@ -287,7 +287,7 @@ export default function GamesHub() {
           <span>
             {plays.length === 0
               ? (ar
-                ? `قُرئت ${fmtInt(read.scanned)} جولة ثم توقف المسح عند سقف الأمان (${fmtInt(read.cap)} جولة) قبل أن يستوفي هذه الفترة${oldestRead ? `، وأقدم جولة قرأناها بتاريخ ${oldestRead}` : ''}. الأصفار المعروضة أدناه تعني «لم تُقرأ»، لا «لم تُلعب» — لا تُبنَ عليها قرارات إخفاء ألعاب. اختر فترة أقصر ليكتمل المسح.`
+                ? `قُرئت ${fmtInt(read.scanned)} جولة ثم توقف المسح عند سقف الأمان (${fmtInt(read.cap)} جولة) قبل أن يستوفي هذه الفترة${oldestRead ? `، وأقدم جولة قرأناها بتاريخ ${oldestRead}` : ''}. الأصفار المعروضة أدناه تعني «لم تُقرأ»، لا «لم تُلعب»، لا تُبنَ عليها قرارات إخفاء ألعاب. اختر فترة أقصر ليكتمل المسح.`
                 : `Read ${read.scanned} plays, then stopped at the safety ceiling (${read.cap}) before finishing this period${oldestRead ? `; the oldest play read is dated ${oldestRead}` : ''}. The zeros below mean "not read", not "not played". Pick a shorter period so the scan can finish.`)
               : (ar
                 ? `قُرئت ${fmtInt(read.scanned)} جولة ثم توقف المسح عند سقف الأمان (${fmtInt(read.cap)} جولة) دون أن يستوفي هذه الفترة${oldestRead ? ` — أقدم جولة قرأناها بتاريخ ${oldestRead}` : ''}. كل رقم أدناه حدّ أدنى لا حصيلة نهائية. اختر فترة أقصر ليكتمل المسح.`
@@ -343,7 +343,7 @@ export default function GamesHub() {
 
       <p className="ga-hint ga-foot">
         {ar
-          ? 'للتحليل الأعمق للسلوك (الشرائح، دقة الأسئلة، بناء الحملات) افتح «نشاط الألعاب والتحليل» — هذه الصفحة لا تكرّره.'
+          ? 'للتحليل الأعمق للسلوك (الشرائح، دقة الأسئلة، بناء الحملات) افتح «نشاط الألعاب والتحليل»، هذه الصفحة لا تكرّره.'
           : 'Deeper behavioural analysis lives in the play activity page; this page does not duplicate it.'}
         {' '}
         <Link className="ga-link" to="/admin/guest-play">{ar ? 'فتح نشاط الألعاب والتحليل' : 'Open play activity'}</Link>

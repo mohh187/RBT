@@ -119,7 +119,7 @@ export default function Finance() {
               <Icon name="warning" size={15} />
               <span>
                 بيانات ناقصة في هذه الفترة: {nInt(ledger.missing.length)} بند.
-                {ledger.missing.some((m) => m.kind === 'spendRollup') ? ' منها شهور بلا تجميع إنفاق — تكلفتها غير محتسبة، ولم تُعامَل صفراً.' : ''}
+                {ledger.missing.some((m) => m.kind === 'spendRollup') ? ' منها شهور بلا تجميع إنفاق. تكلفتها غير محتسبة، ولم تُعامَل صفراً.' : ''}
                 {ledger.missing.some((m) => m.kind === 'legacyInvoice') ? ' ومنها فواتير قديمة قُسّمت على أساس أن مبلغها شامل الضريبة.' : ''}
               </span>
             </div>
@@ -162,7 +162,7 @@ function Dash({ pnl, mrr, ageing }) {
       </div>
       <div className="card card-pad">
         <span className="xs faint">
-          رسوم بوابة الدفع محسوبة من نسب العقد لا من تقرير المزوّد — موسومة «مشتقة».
+          رسوم بوابة الدفع محسوبة من نسب العقد لا من تقرير المزوّد، وهي موسومة «مشتقة».
           وتكلفة القنوات مقدّرة من أسعار الوحدة ولم تُطابَق بفاتورة مزوّد بعد.
         </span>
       </div>
@@ -176,17 +176,17 @@ function Pnl({ pnl, basis }) {
     ['إيرادات حزم الرصيد', pnl.byRevenue.packRevenue],
     ['إيرادات التأسيس', pnl.byRevenue.setupRevenue],
     ['مردودات وإشعارات دائنة', pnl.byRevenue.refunds],
-    ['— إجمالي الإيراد', pnl.revenue, 'sum'],
+    ['إجمالي الإيراد', pnl.revenue, 'sum'],
     ['تكلفة الرسائل', -pnl.cogs.cogsMessaging],
     ['تكلفة الذكاء الاصطناعي', -pnl.cogs.cogsAi],
-    ['— مجمل الربح', pnl.grossProfit, 'sum'],
+    ['مجمل الربح', pnl.grossProfit, 'sum'],
     ['رسوم بوابة الدفع (مشتقة)', -pnl.gatewayFees],
-    ['— صافي الربح', pnl.netProfit, 'total'],
+    ['صافي الربح', pnl.netProfit, 'total'],
   ]
   return (
     <div className="card card-pad stack" style={{ gap: 8 }}>
       <div className="row-between">
-        <strong className="small">قائمة الدخل — {basis === 'cash' ? 'أساس نقدي' : 'أساس الاستحقاق'}</strong>
+        <strong className="small">قائمة الدخل: {basis === 'cash' ? 'أساس نقدي' : 'أساس الاستحقاق'}</strong>
         <button className="btn btn-sm btn-outline" onClick={() => downloadCsv('platform-pnl.csv', toCsv(rows.map(([k, v]) => ({ البند: k, المبلغ: v }))))}>
           <Icon name="download" size={13} /> تصدير
         </button>
@@ -213,7 +213,7 @@ function Margins({ rows }) {
   return (
     <div className="card card-pad stack" style={{ gap: 10 }}>
       <div className="row-between">
-        <strong className="small">هامش كل منشأة — الأقل أولاً</strong>
+        <strong className="small">هامش كل منشأة: الأقل أولاً</strong>
         <button className="btn btn-sm btn-outline" onClick={() => downloadCsv('platform-margins.csv', toCsv(rows))}>
           <Icon name="download" size={13} /> تصدير
         </button>
@@ -287,7 +287,7 @@ function Aging({ data }) {
 function Vat({ data }) {
   return (
     <div className="card card-pad stack" style={{ gap: 10 }}>
-      <strong className="small">الإقرار الضريبي — الفترة المختارة</strong>
+      <strong className="small">الإقرار الضريبي للفترة المختارة</strong>
       <div className="row" style={{ gap: 10, flexWrap: 'wrap' }}>
         <Stat label="المبيعات الخاضعة" value={n2(data.sales)} />
         <Stat label="ضريبة المخرجات" value={n2(data.outputVat)} />
@@ -295,7 +295,7 @@ function Vat({ data }) {
         <Stat label="المستحق للهيئة" value={n2(data.netDue)} tone={data.netDue > 0 ? '' : 'bad'} />
       </div>
       <span className="xs faint">
-        ضريبة المدخلات هنا من رسوم بوابة الدفع فقط — بقية المزوّدين يفوترون من خارج المملكة فلا مدخلات قابلة للخصم منهم.
+        ضريبة المدخلات هنا من رسوم بوابة الدفع فقط. بقية المزوّدين يفوترون من خارج المملكة فلا مدخلات قابلة للخصم منهم.
         الإقرار ربع سنوي، ويستحق آخر الشهر التالي لنهاية الربع.
       </span>
     </div>

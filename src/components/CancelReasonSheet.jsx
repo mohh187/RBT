@@ -19,7 +19,7 @@ export default function CancelReasonSheet({ open, onClose, lang = 'ar', onConfir
   const confirm = () => {
     const r = REASONS.find((x) => x.id === sel)
     const label = r ? (ar ? r.ar : r.en) : ''
-    const reason = `${label}${note ? ` — ${note}` : ''}`.trim()
+    const reason = `${label}${note ? `: ${note}` : ''}`.trim()
     onConfirm?.({ reason, noShow: !!r?.noShow })
     onClose?.()
   }

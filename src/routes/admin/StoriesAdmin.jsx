@@ -289,7 +289,7 @@ export default function StoriesAdmin() {
             )}
             {!draft.isVideo && (
               <div className="row" style={{ gap: 6 }}>
-                <input className="input input-sm grow" placeholder={ar ? 'عدّل الصورة: مثال — اجعل الخلفية رخامية' : 'Edit image: e.g. make the background marble'}
+                <input className="input input-sm grow" placeholder={ar ? 'عدّل الصورة: مثال، اجعل الخلفية رخامية' : 'Edit image: e.g. make the background marble'}
                   value={aiEdit} onChange={(e) => setAiEdit(e.target.value)} disabled={aiBusy === 'edit'}
                   onKeyDown={(e) => { if (e.key === 'Enter') runAiEdit() }} />
                 <button className="btn btn-sm btn-primary" style={{ flex: 'none' }} disabled={busy || !!aiBusy || !aiEdit.trim()} onClick={runAiEdit}>
@@ -423,7 +423,7 @@ export default function StoriesAdmin() {
               <button className="btn btn-sm btn-primary grow" disabled={!!aiBusy || busy} onClick={aiImage}>{aiBusy === 'image' ? (ar ? 'جارٍ التوليد…' : 'Generating…') : (ar ? 'توليد الصورة' : 'Generate image')}</button>
               <button className="btn btn-sm btn-outline grow" disabled={!!aiBusy || busy} onClick={aiText}>{aiBusy === 'text' ? (ar ? 'جارٍ الكتابة…' : 'Writing…') : (ar ? 'اكتب نصاً' : 'Write caption')}</button>
             </div>
-            <p className="xs faint" style={{ margin: 0 }}>{ar ? 'الصورة الناتجة تدخل نفس مسار المعاينة والنشر اليدوي — لا يُنشر شيء تلقائياً.' : 'The result feeds the normal preview — nothing publishes automatically.'}</p>
+            <p className="xs faint" style={{ margin: 0 }}>{ar ? 'الصورة الناتجة تدخل نفس مسار المعاينة والنشر اليدوي، لا يُنشر شيء تلقائياً.' : 'The result feeds the normal preview, nothing publishes automatically.'}</p>
           </div>
         )}
         <div className="row" style={{ gap: 8, flexWrap: 'wrap' }}>

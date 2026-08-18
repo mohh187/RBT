@@ -113,11 +113,12 @@ export default function AdCanvas({ ad, onChange, tenant, tenantId, items = [], l
         'السطر الثاني: جملة توضيحية واحدة لا تتجاوز خمس عشرة كلمة.',
         'السطر الثالث: نص زر الإجراء، كلمتان أو ثلاث على الأكثر.',
         'لا تعد بأي خصم أو هدية أو نقاط لم تُذكر لك صراحة.',
-        'ممنوع منعاً باتاً: الرموز التعبيرية، والأرقام العربية المشرقية — الأرقام اللاتينية فقط.',
+        'ممنوع منعاً باتاً: الرموز التعبيرية، والأرقام العربية المشرقية. استخدم الأرقام اللاتينية فقط.',
+        'وممنوع كذلك الشرطة الطويلة والشرطة المتوسطة داخل النص. افصل الجمل بنقطة أو فاصلة أو واو.',
       ].filter(Boolean).join('\n')
       const out = await aiQuick(prompt, { logAs: { tid: tenantId, kind: 'text', section: 'ads-studio' } })
       const lines = clean(out).split('\n').map((l) => l.replace(/^[-*\d.\s]+/, '').trim()).filter(Boolean)
-      if (!lines.length) throw new Error(ar ? 'لم يصل رد من الذكاء — أعد المحاولة.' : 'No reply from the model.')
+      if (!lines.length) throw new Error(ar ? 'ما وصل رد من الذكاء. أعد المحاولة بعد لحظات.' : 'No reply came back. Try again in a moment.')
       top({
         headline: lines[0]?.slice(0, 120) || ad.headline,
         body: lines[1]?.slice(0, 400) || ad.body,
@@ -285,7 +286,7 @@ export default function AdCanvas({ ad, onChange, tenant, tenantId, items = [], l
           <Icon name="warning" size={16} />
           <span>
             {ar
-              ? `تباين النص مع الخلفية ${num(Math.round(textRatio * 10) / 10)}:1 فقط — النص سيكون صعب القراءة. اختر لوناً أفتح أو أغمق.`
+              ? `تباين النص مع الخلفية ${num(Math.round(textRatio * 10) / 10)}:1 فقط، وقراءته ستكون صعبة. اختر لون نص أفتح أو أغمق.`
               : `Text contrast is only ${Math.round(textRatio * 10) / 10}:1.`}
           </span>
         </div>

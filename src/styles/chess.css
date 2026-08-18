@@ -83,7 +83,7 @@
   user-select: none;
   -webkit-user-select: none;
   -webkit-tap-highlight-color: transparent;
-  touch-action: manipulation;
+  touch-action: pan-x pan-y;
 }
 
 .chs-root[data-turn='180'] {
@@ -258,7 +258,7 @@
     inset 0 0 clamp(8px, 2.4cqmin, 40px) rgba(0, 0, 0, 0.34);
   transform: rotate(var(--chs-turnv));
   transition: transform 520ms var(--chs-ease) 130ms;
-  touch-action: manipulation;
+  touch-action: pan-x pan-y;
 }
 
 /* ---------- one square ---------- */

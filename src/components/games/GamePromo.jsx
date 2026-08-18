@@ -870,7 +870,7 @@ const TXT = {
   ar: {
     kicker: 'ركن الألعاب',
     title: 'العب وأنت تنتظر',
-    sub: 'ألعاب قصيرة صُنعت لهذا المكان — دقيقة واحدة تكفي لجولة كاملة.',
+    sub: 'ألعاب قصيرة صُنعت لهذا المكان، ودقيقة واحدة تكفي لجولة كاملة.',
     f1: 'أربع مجموعات',
     f1d: 'تسلية وسرعة، ذكاء وألغاز، معرفة وثقافة، واكتشف شخصيتك.',
     f2: 'نتائجك محفوظة',
@@ -878,7 +878,7 @@ const TXT = {
     f3: 'لوحة صدارة شهرية',
     f3d: 'نافس بقية ضيوف المكان على المركز الأول كل شهر.',
     rewards: 'جوائز حقيقية من المكان',
-    rewardsHow: 'عند تحقيق الشرط يظهر لك رمز — أظهره للكاشير قبل الدفع.',
+    rewardsHow: 'عند تحقيق الشرط يظهر لك رمز، أظهره للكاشير قبل الدفع.',
     cta: 'تصفّح الألعاب',
     // Arabic tamyeez: 3-10 take the plural («ألعاب»), 11 and above take the
     // SINGULAR accusative («لعبة»). The venue has 23 games, so the old
@@ -890,7 +890,7 @@ const TXT = {
   en: {
     kicker: 'Games Corner',
     title: 'Play while you wait',
-    sub: 'Short games made for this venue — one minute is a full round.',
+    sub: 'Short games made for this venue. One minute is a full round.',
     f1: 'Four collections',
     f1d: 'Arcade, puzzles, knowledge, and personality.',
     f2: 'Your progress is kept',
@@ -898,7 +898,7 @@ const TXT = {
     f3: 'Monthly leaderboard',
     f3d: 'Compete with the venue’s other guests every month.',
     rewards: 'Real rewards from this venue',
-    rewardsHow: 'Meet the condition and a code appears — show it to the cashier.',
+    rewardsHow: 'Meet the condition and a code appears. Show it to the cashier.',
     cta: 'Browse the games',
     count: (c) => `${c} games available`,
     countOne: '1 game available',

@@ -87,9 +87,9 @@ export default function ModelStudio({ open, onClose, tenantId, item, onChange })
 
   const regen = async () => {
     if (busy) return
-    if (!item.imageUrl) { toast.error(ar ? 'لا توجد صورة للصنف — أضف صورة أولاً' : 'Add a photo to the item first'); return }
-    const modeAr = `${picked.length ? `من ${picked.length + 1} لقطات` : 'من صورة واحدة'} — ${realism ? 'وضع الواقعية' : 'وضع التنعيم المنمق'}`
-    const modeEn = `${picked.length ? `from ${picked.length + 1} shots` : 'from one photo'} — ${realism ? 'realism mode' : 'stylized smooth mode'}`
+    if (!item.imageUrl) { toast.error(ar ? 'هذا الصنف بلا صورة. أضف صورة أولاً ثم أعد المحاولة.' : 'Add a photo to the item first, then try again.'); return }
+    const modeAr = `${picked.length ? `من ${picked.length + 1} لقطات` : 'من صورة واحدة'}، ${realism ? 'وضع الواقعية' : 'وضع التنعيم المنمق'}`
+    const modeEn = `${picked.length ? `from ${picked.length + 1} shots` : 'from one photo'}, ${realism ? 'realism mode' : 'stylized smooth mode'}`
     if (!window.confirm(ar
       ? `إعادة التوليد (${modeAr}) ستستبدل المجسم الحالي، وقد تستغرق من 1 إلى 8 دقائق. متابعة؟`
       : `Regenerating (${modeEn}) replaces the current model and can take 1-8 minutes. Continue?`)) return
@@ -130,12 +130,12 @@ export default function ModelStudio({ open, onClose, tenantId, item, onChange })
   return (
     <Sheet
       open onClose={onClose} full
-      title={(ar ? 'استوديو المجسم — ' : 'Model studio — ') + (ar ? (item.nameAr || item.nameEn || '') : (item.nameEn || item.nameAr || ''))}
+      title={(ar ? 'استوديو المجسم: ' : 'Model studio: ') + (ar ? (item.nameAr || item.nameEn || '') : (item.nameEn || item.nameAr || ''))}
     >
       <div className="ms-grid">
         <div className="ms-stage" style={{ position: 'relative' }}>
           {mv === 'loading' && <div className="center" style={{ minHeight: 280 }}><Spinner /></div>}
-          {mv === 'error' && <p className="small" style={{ padding: 24, textAlign: 'center' }}>{ar ? 'تعذر تحميل عارض المجسمات — تحقق من اتصالك ثم أعد المحاولة.' : 'Could not load the 3D viewer — check your connection.'}</p>}
+          {mv === 'error' && <p className="small" style={{ padding: 24, textAlign: 'center' }}>{ar ? 'تعذّر تحميل عارض المجسمات. تحقق من اتصالك ثم أعد المحاولة.' : 'Could not load the 3D viewer. Check your connection and try again.'}</p>}
           {mv === 'ready' && hasModel && (
             <model-viewer
               ref={bindViewer}
@@ -161,7 +161,7 @@ export default function ModelStudio({ open, onClose, tenantId, item, onChange })
               <div className="card card-pad stack text-center" style={{ gap: 6, minWidth: 180 }}>
                 <Spinner />
                 <strong className="small">{ar ? `يحمّل المجسم… ${loadPct}%` : `Loading model… ${loadPct}%`}</strong>
-                <p className="xs faint" style={{ margin: 0 }}>{ar ? 'المجسمات الواقعية كبيرة الحجم — أول تحميل يأخذ لحظات' : 'Realistic models are large — first load takes a moment'}</p>
+                <p className="xs faint" style={{ margin: 0 }}>{ar ? 'المجسمات الواقعية كبيرة الحجم، وأول تحميل يأخذ لحظات' : 'Realistic models are large, so the first load takes a moment'}</p>
               </div>
             </div>
           )}
@@ -171,7 +171,7 @@ export default function ModelStudio({ open, onClose, tenantId, item, onChange })
                 <Icon name="warning" size={26} style={{ color: 'var(--danger)', marginInline: 'auto' }} />
                 <strong className="small">{ar ? 'تعذر تحميل ملف المجسم' : 'The model file failed to load'}</strong>
                 <p className="xs faint" style={{ margin: 0, lineHeight: 1.7 }}>
-                  {ar ? 'أعد المحاولة بزر «إعادة الكاميرا». إن استمر الخطأ فالملف تالف أو محجوب (CORS على حاوية التخزين) — أعد التوليد أو ارفع ملفاً بديلاً.' : 'Retry via camera reset. If it persists the file is corrupt or blocked (storage CORS) — regenerate or upload a replacement.'}
+                  {ar ? 'أعد المحاولة بزر «إعادة الكاميرا». وإن استمر الخطأ فالملف تالف أو غير متاح، فأعد توليده أو ارفع ملفاً بديلاً.' : 'Try the camera reset button. If it keeps failing, the file is damaged or unavailable, so regenerate it or upload a replacement.'}
                 </p>
                 <a className="btn btn-sm btn-outline" href={glb || usdz} target="_blank" rel="noreferrer" style={{ marginInline: 'auto' }}>{ar ? 'افتح رابط الملف للفحص' : 'Open the file URL'}</a>
               </div>
@@ -183,7 +183,7 @@ export default function ModelStudio({ open, onClose, tenantId, item, onChange })
                 <Icon name="shapes" size={30} className="faint" style={{ marginInline: 'auto' }} />
                 <strong className="small">{ar ? 'لا يوجد مجسم لهذا الصنف بعد' : 'No model for this item yet'}</strong>
                 <p className="xs faint" style={{ margin: 0, lineHeight: 1.7 }}>
-                  {ar ? 'ولّد مجسماً واقعياً من صورة الصنف بالأزرار المجاورة، أو ارفع ملف GLB جاهزاً — وسيظهر هنا فوراً.' : 'Generate a realistic model from the item photo, or upload a GLB — it appears here instantly.'}
+                  {ar ? 'ولّد مجسماً واقعياً من صورة الصنف بالأزرار المجاورة، أو ارفع ملف GLB جاهزاً، وسيظهر هنا فوراً.' : 'Generate a realistic model from the item photo, or upload a GLB, and it appears here instantly.'}
                 </p>
               </div>
             </div>
@@ -216,7 +216,7 @@ export default function ModelStudio({ open, onClose, tenantId, item, onChange })
           <p className="xs faint" style={{ margin: 0 }}>
             {ar
               ? 'زر AR داخل العارض يعمل من الجوال، أما العرض على الطاولة فيفتحه العميل من المنيو مباشرة عبر «اعرضه على طاولتك».'
-              : 'The AR button works on mobile — on-table AR opens from the customer menu itself.'}
+              : 'The AR button works on mobile. On-table AR opens from the customer menu itself.'}
           </p>
 
           {(item.images || []).filter((u) => u && u !== item.imageUrl).length > 0 && (
@@ -225,7 +225,7 @@ export default function ModelStudio({ open, onClose, tenantId, item, onChange })
               <p className="xs faint" style={{ margin: 0, lineHeight: 1.7 }}>
                 {ar
                   ? 'اختر لقطات لنفس الطبق بنفس التقديم من زوايا مختلفة فقط. لقطات بطبق أو تقديم مختلف تشوه المجسم بدل أن تحسنه.'
-                  : 'Pick only shots of the SAME plating from other angles — different platings distort the model.'}
+                  : 'Pick only shots of the same plating from other angles. A different plating distorts the model instead of improving it.'}
               </p>
               {/* thumbnails WRAP, never scroll (hard rule) */}
               <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
@@ -279,8 +279,8 @@ export default function ModelStudio({ open, onClose, tenantId, item, onChange })
 
           <p className="xs faint" style={{ margin: 0 }}>
             {ar
-              ? 'التحرير الدقيق للشبكة غير متاح — يمكنك إعادة التوليد أو رفع نموذج معدل.'
-              : 'Fine mesh editing is not available — regenerate, or upload an edited model.'}
+              ? 'التحرير الدقيق للشبكة غير متاح هنا. يمكنك إعادة التوليد أو رفع نموذج معدّل.'
+              : 'Fine mesh editing is not available here. Regenerate the model, or upload an edited one.'}
           </p>
         </div>
       </div>

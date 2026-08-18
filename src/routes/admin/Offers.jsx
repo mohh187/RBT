@@ -143,7 +143,7 @@ export default function Offers() {
   const fmtWindow = (o) => {
     const parts = []
     if (o.scope === 'item' && o.itemId) { const it = items.find((x) => x.id === o.itemId); if (it) parts.push(pickLang(it, 'name', lang)) }
-    if (o.startTime && o.endTime) parts.push(`${o.startTime}–${o.endTime}`)
+    if (o.startTime && o.endTime) parts.push(`${o.startTime}, ${o.endTime}`)
     if (o.daysOfWeek?.length) parts.push(o.daysOfWeek.map((d) => DAYS[lang][d]).join('، '))
     if (o.endsAt) parts.push(`${lang === 'ar' ? 'حتى' : 'until'} ${new Date(Number(o.endsAt)).toLocaleDateString(lang === 'ar' ? 'ar-EG-u-nu-latn' : 'en-US')}`)
     if (o.code) parts.push(o.code)

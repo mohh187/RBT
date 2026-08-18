@@ -120,8 +120,8 @@ const SECTIONS = [
   {
     id: 'receipt', icon: 'receipt', caps: [CAP.MANAGE_SETTINGS],
     ar: 'تصميم الفاتورة', en: 'Receipt designer',
-    arSub: 'ترويسة الإيصال الحراري وتذييله وما يُطبع فيه من شعار وضريبة ورمز QR — بمعاينة مطابقة للورق.',
-    enSub: 'Thermal receipt header and footer and what it prints — logo, VAT, QR — with a paper-accurate preview.',
+    arSub: 'ترويسة الإيصال الحراري وتذييله وما يُطبع فيه من شعار وضريبة ورمز QR، بمعاينة مطابقة للورق.',
+    enSub: 'The thermal receipt header and footer, and what prints on them (logo, VAT, QR), with a paper-accurate preview.',
   },
   {
     id: 'connect', icon: 'share', save: true, caps: [CAP.MANAGE_SETTINGS, CAP.MANAGE_INTEGRATIONS],
@@ -220,7 +220,7 @@ const TABLE_SLIDERS = [
   ['dim', 'تعتيم كامل فوق السطح', 'Flat darkening over the surface', 'pct'],
   // renamed «علوي» once the bottom edge got its own dial — the pair must name
   // their edges or the two melts read as one broken slider.
-  ['melt', 'ذوبان علوي — السطح خلف النص', 'Top melt behind the text', 'pct'],
+  ['melt', 'ذوبان علوي: السطح خلف النص', 'Top melt behind the text', 'pct'],
   ['meltBottom', 'ذوبان الحافة السفلية', 'Bottom-edge melt', 'pct'],
   ['veil', 'حجاب القراءة (لوح فوق السطح لوضوح النص)', 'Reading veil over the surface', 'pct'],
   ['contact', 'ظل التماس تحت الطبق', 'Contact shadow under the plate', 'pct'],
@@ -361,9 +361,9 @@ function StageOrderRow({ id, label, active, tuned, onPick, ar }) {
 const CROP_KINDS = {
   logo: { aspect: 1, shape: 'round', output: { width: 512, height: 512 }, ar: 'قص الشعار', en: 'Crop logo', hintAr: 'المقاس المناسب 512 × 512', hintEn: 'Recommended 512 x 512' },
   cover: { aspect: 2.5, shape: 'rect', output: { width: 1500, height: 600 }, ar: 'قص الغلاف', en: 'Crop cover', hintAr: 'المقاس المناسب 1500 × 600', hintEn: 'Recommended 1500 x 600' },
-  wall: { shape: 'rect', ar: 'قص صورة الجدار', en: 'Crop the wall image', hintAr: 'صورة جدار غرفتك — اختر النسبة «حر» لأي مقاس', hintEn: 'A photo of your own room — pick the “Free” ratio for any size' },
-  decor: { shape: 'rect', ar: 'قص قطعة الزينة', en: 'Crop the decoration', hintAr: 'اقتطع الفانوس وحده وتخلّص من الفراغ حوله — اختر النسبة «حر»', hintEn: 'Trim to the object itself and drop the empty margin — pick the “Free” ratio' },
-  table: { shape: 'rect', ar: 'قص صورة الطاولة', en: 'Crop the table photo', hintAr: 'صورة سطح طاولتك الحقيقية — اختر النسبة «حر» لأي مقاس', hintEn: 'A photo of your real tabletop — pick the “Free” ratio for any size' },
+  wall: { shape: 'rect', ar: 'قص صورة الجدار', en: 'Crop the wall image', hintAr: 'صورة جدار غرفتك، اختر النسبة «حر» لأي مقاس', hintEn: 'A photo of your own room, pick the “Free” ratio for any size' },
+  decor: { shape: 'rect', ar: 'قص قطعة الزينة', en: 'Crop the decoration', hintAr: 'اقتطع الفانوس وحده وتخلّص من الفراغ حوله، اختر النسبة «حر»', hintEn: 'Trim to the object itself and drop the empty margin, pick the “Free” ratio' },
+  table: { shape: 'rect', ar: 'قص صورة الطاولة', en: 'Crop the table photo', hintAr: 'صورة سطح طاولتك الحقيقية، اختر النسبة «حر» لأي مقاس', hintEn: 'A photo of your real tabletop, pick the “Free” ratio for any size' },
   tabletop: { aspect: 9 / 16, shape: 'rect', output: { width: 900, height: 1600 }, ar: 'قص الطاولة الكاملة', en: 'Crop the full table', hintAr: 'صورة طولية: السطح بمنظوره في الأعلى ثم واجهة الطاولة تحته حتى أسفل الصورة', hintEn: 'Portrait: the surface in perspective on top, the table front below it to the bottom' },
 }
 
@@ -649,17 +649,17 @@ const SEARCH_INDEX = [
   { keys: ['البانر', 'بانر', 'banner'], tab: 'studio', aSec: 'media', ar: 'البانر العلوي', en: 'Top banner' },
   { keys: ['الفيديو', 'فيديو', 'خلفية', 'العلامة المائية', 'مائية', 'video', 'watermark', 'gradient'], tab: 'studio', aSec: 'media', ar: 'خلفيات المنيو والفيديو', en: 'Menu backgrounds & video' },
   { keys: ['الطوب', 'طوب', 'الجدار', 'جدار', 'الحائط', 'حائط', 'اللحام', 'لحام', 'المونة', 'مونة', 'حجر', 'بلاستر', 'خشب', 'brick', 'wall', 'mortar', 'grout', 'stone', 'plaster', 'wood'], tab: 'studio', aSec: 'room', at: 'set-menuwall', ar: 'جدار المنيو (الطوب والخلفية)', en: 'Menu wall (brick & backdrop)' },
-  { keys: ['الهيدر العلوي', 'هيدر بصورة', 'صورة الهيدر', 'عناصر الهيدر', 'شريط علوي', 'custom header', 'header image'], tab: 'studio', aSec: 'room', at: 'set-menuheader', ar: 'الهيدر العلوي — وجهه وعناصره', en: 'Top header — face & elements' },
-  { keys: ['ازرار المنيو', 'أزرار المنيو', 'زر طوب', 'ازرار طوب', 'أزرار طوب', 'كساء الازرار', 'كساء الأزرار', 'button skin', 'brick buttons'], tab: 'studio', aSec: 'room', at: 'set-menubuttons', ar: 'أزرار المنيو — طوب أو صورتك', en: 'Menu buttons — brick or your photo' },
+  { keys: ['الهيدر العلوي', 'هيدر بصورة', 'صورة الهيدر', 'عناصر الهيدر', 'شريط علوي', 'custom header', 'header image'], tab: 'studio', aSec: 'room', at: 'set-menuheader', ar: 'الهيدر العلوي: وجهه وعناصره', en: 'Top header: face & elements' },
+  { keys: ['ازرار المنيو', 'أزرار المنيو', 'زر طوب', 'ازرار طوب', 'أزرار طوب', 'كساء الازرار', 'كساء الأزرار', 'button skin', 'brick buttons'], tab: 'studio', aSec: 'room', at: 'set-menubuttons', ar: 'أزرار المنيو: طوب أو صورتك', en: 'Menu buttons: brick or your photo' },
   { keys: ['هيدر الطوب', 'الهيدر الطوبي', 'شريط الطوب', 'brick header', 'header brick'], tab: 'studio', aSec: 'room', at: 'set-menuheader', ar: 'الهيدر من نفس الطوب', en: 'Brick header' },
   { keys: ['الطاولة', 'طاولة', 'طاولة الصنف', 'سطح الطبق', 'table', 'tabletop', 'dish table'], tab: 'studio', aSec: 'room', at: 'set-menutable', ar: 'طاولة الصنف (تحت الطبق)', en: 'Dish table (under the plate)' },
   { keys: ['الفاصل', 'فاصل', 'الفواصل', 'الفراغ بين الاصناف', 'الفراغ بين الأصناف', 'اتصال', 'متصل', 'بطاقات', 'خط فاصل', 'ارتفاع الصنف', 'seam', 'gap', 'divider', 'cards', 'continuity', 'sections'], tab: 'studio', aSec: 'room', at: 'set-menusections', ar: 'الفاصل بين صنف وصنف', en: 'The join between two dishes' },
   { keys: ['الزينة', 'زينة', 'فانوس', 'فوانيس', 'زخرفة', 'زخارف', 'تعليق', 'معلقات', 'نجفة', 'لوحة', 'نبتة', 'decor', 'decoration', 'lantern', 'ornament', 'hang'], tab: 'studio', aSec: 'room', at: 'set-menudecor', ar: 'زينة الغرفة (فوانيس ومعلّقات)', en: 'Room decoration (lanterns & hung objects)' },
   { keys: ['الظل', 'الظلال', 'ظل', 'ظلال', 'خط داكن', 'الخط الداكن', 'shadow', 'shadows', 'dark line'], tab: 'studio', aSec: 'room', at: 'set-menushadows', ar: 'الظلال والخطوط الداكنة', en: 'Shadows & dark lines' },
-  { keys: ['نصوص النافذة', 'مكان الاسم', 'موضع الاسم', 'ترتيب النصوص', 'محاذاة النصوص', 'stage text', 'item window text', 'name position', 'text order'], tab: 'studio', aSec: 'room', at: 'set-menustage', ar: 'نصوص نافذة الصنف — الموضع والترتيب', en: 'Item-window text layout' },
-  { keys: ['الوان الخطوط', 'ألوان الخطوط', 'لون الخط', 'الفاتح والداكن', 'حبر', 'الحبر', 'ink', 'light mode', 'dark mode'], tab: 'studio', aSec: 'room', at: 'set-menuink', ar: 'ألوان الخطوط — فاتح وداكن', en: 'Menu inks — light & dark' },
+  { keys: ['نصوص النافذة', 'مكان الاسم', 'موضع الاسم', 'ترتيب النصوص', 'محاذاة النصوص', 'stage text', 'item window text', 'name position', 'text order'], tab: 'studio', aSec: 'room', at: 'set-menustage', ar: 'نصوص نافذة الصنف: الموضع والترتيب', en: 'Item-window text layout' },
+  { keys: ['الوان الخطوط', 'ألوان الخطوط', 'لون الخط', 'الفاتح والداكن', 'حبر', 'الحبر', 'ink', 'light mode', 'dark mode'], tab: 'studio', aSec: 'room', at: 'set-menuink', ar: 'ألوان الخطوط: فاتح وداكن', en: 'Menu inks: light & dark' },
   { keys: ['ترتيب العناصر', 'ترتيب الصفحة', 'ترتيب المنيو', 'اسحب', 'reorder', 'home order'], tab: 'studio', aSec: 'room', at: 'set-menuhome', ar: 'ترتيب عناصر صفحة المنيو', en: 'Menu home order' },
-  { keys: ['كساء الكروم', 'ازرار التواصل', 'أزرار التواصل', 'زر اللغة', 'زر الوضع', 'القائمة السفلية', 'زر السلة العائم', 'جرس الاشعارات', 'جرس الإشعارات', 'chrome skin', 'fab'], tab: 'studio', aSec: 'room', at: 'set-menuchrome', ar: 'كساء الكروم — الأزرار والقوائم', en: 'Chrome skin — buttons & bars' },
+  { keys: ['كساء الكروم', 'ازرار التواصل', 'أزرار التواصل', 'زر اللغة', 'زر الوضع', 'القائمة السفلية', 'زر السلة العائم', 'جرس الاشعارات', 'جرس الإشعارات', 'chrome skin', 'fab'], tab: 'studio', aSec: 'room', at: 'set-menuchrome', ar: 'كساء الكروم: الأزرار والقوائم', en: 'Chrome skin: buttons & bars' },
   { keys: ['كساء القوائم', 'القوائم المنبثقة', 'قائمة السلة', 'sheet skin', 'sheets'], tab: 'studio', aSec: 'room', at: 'set-menusheets', ar: 'كساء القوائم المنبثقة', en: 'Sheet skin' },
   { keys: ['خلفيات الصفحات', 'خلفية الصفحات', 'خلفية صفحة', 'page background', 'subpages'], tab: 'studio', aSec: 'room', at: 'set-menupages', ar: 'خلفيات باقي الصفحات', en: 'Subpage backgrounds' },
   { keys: ['الاندماج', 'اندماج', 'تدرج', 'fade', 'melt'], tab: 'studio', aSec: 'media', ar: 'اندماج البانر', en: 'Banner melt' },
@@ -1195,7 +1195,7 @@ export default function Settings() {
       await writeWall({ url, pattern: 'image' })
       toast.success(ar ? 'صارت الصورة متصلة بلا فواصل' : 'The photo now tiles seamlessly')
     } catch (_) {
-      toast.error(ar ? 'تعذّرت المعالجة — جرّب رفع الصورة من جديد' : 'Processing failed — try re-uploading the photo')
+      toast.error(ar ? 'تعذّرت المعالجة، جرّب رفع الصورة من جديد' : 'Processing failed, try re-uploading the photo')
     } finally { setWallSeamBusy(false) }
   }
   // The sample dish laid over the live preview is one of the venue's OWN items,
@@ -1264,10 +1264,10 @@ export default function Settings() {
       const url = res?.data?.url
       if (!url) throw new Error('no url')
       await writeTable({ url, kind: 'image' })
-      toast.success(ar ? 'وُلّدت الطاولة ورُكّبت — عدّل جلوس الطبق عليها كما تحب' : 'Table generated and applied — tune the seating as you like')
+      toast.success(ar ? 'وُلّدت الطاولة ورُكّبت، عدّل جلوس الطبق عليها كما تحب' : 'Table generated and applied, tune the seating as you like')
     } catch (err) {
       const msg = err?.message || ''
-      toast.error(msg && !/internal/i.test(msg) ? msg : (ar ? 'تعذّر التوليد — جرّب مرة أخرى' : 'Generation failed — try again'))
+      toast.error(msg && !/internal/i.test(msg) ? msg : (ar ? 'تعذّر التوليد، جرّب مرة أخرى' : 'Generation failed, try again'))
     } finally { setTblAiBusy(false) }
   }
   // «سطح الطبق» بالذكاء: same callable, mode 'top' — a PERSPECTIVE tabletop
@@ -1294,10 +1294,10 @@ export default function Settings() {
       // (surface + front face); topUrl===url switches the menu to the
       // continuous one-piece rendering (.edt-topfull), full screen width.
       await writeTable({ topUrl: url, url, kind: 'image', scale: 1 })
-      toast.success(ar ? 'وُلّدت الطاولة الكاملة ورُكّبت بعرض الشاشة — اضبط ارتفاع السطح وجلوس الطبق' : 'Full table generated and applied edge to edge — tune the surface height and the seating')
+      toast.success(ar ? 'وُلّدت الطاولة الكاملة ورُكّبت بعرض الشاشة، اضبط ارتفاع السطح وجلوس الطبق' : 'Full table generated and applied edge to edge, tune the surface height and the seating')
     } catch (err) {
       const msg = err?.message || ''
-      toast.error(msg && !/internal/i.test(msg) ? msg : (ar ? 'تعذّر التوليد — جرّب مرة أخرى' : 'Generation failed — try again'))
+      toast.error(msg && !/internal/i.test(msg) ? msg : (ar ? 'تعذّر التوليد، جرّب مرة أخرى' : 'Generation failed, try again'))
     } finally { setTblTopBusy(false) }
   }
 
@@ -2085,7 +2085,7 @@ export default function Settings() {
     // Draft, not committed — see the note in the theme loader above. The toast
     // below says "press Save to keep it", which is exactly why the admin
     // chrome must NOT already look as though it had been kept.
-    toast.success(ar ? 'طُبّقت الحزمة — اضغط حفظ لتثبيتها' : 'Bundle applied — press Save to keep it')
+    toast.success(ar ? 'طُبّقت الحزمة، اضغط حفظ لتثبيتها' : 'Bundle applied, press Save to keep it')
   }
 
   // ===== unsaved-changes detector: the menu appearance (skins/colors/media) is
@@ -2217,7 +2217,7 @@ export default function Settings() {
             <p className="xs faint" style={{ margin: 0 }}>
               {ar
                 ? 'تحقّق من الإنترنت وقاعدة البيانات والإشعارات والطباعة وتسجيل هذا الجهاز.'
-                : 'Check internet, database, notifications, printing — and register this device.'}
+                : 'Check internet, database, notifications, printing, and register this device.'}
             </p>
             <button className="btn btn-sm btn-outline" style={{ alignSelf: 'flex-start' }} onClick={() => setDeviceCheckOpen(true)}>
               <Icon name="ok" size={14} /> {ar ? 'فتح الفحص' : 'Open check'}
@@ -2234,8 +2234,8 @@ export default function Settings() {
             <strong className="small"><Icon name="cashier" size={14} style={{ verticalAlign: 'middle' }} /> {ar ? 'تطبيق الفريق على التابلت' : 'Staff app on the tablet'}</strong>
             <p className="xs faint" style={{ margin: 0 }}>
               {ar
-                ? 'افتح هذا الرابط على جهاز التابلت ثم «تثبيت التطبيق» من قائمة كروم: يتثبت بشعار المنشأة واسمها، ويفتح مباشرة على شاشة القفل — بلا صفحة تسويقية أبداً.'
-                : 'Open this link on the tablet, then “Install app” from Chrome’s menu: installs with the venue’s logo and name, opening straight on the PIN lock — never the marketing page.'}
+                ? 'افتح هذا الرابط على جهاز التابلت ثم «تثبيت التطبيق» من قائمة كروم: يتثبت بشعار المنشأة واسمها، ويفتح مباشرة على شاشة القفل، بلا صفحة تسويقية أبداً.'
+                : 'Open this link on the tablet, then “Install app” from Chrome’s menu: installs with the venue’s logo and name, opening straight on the PIN lock, never the marketing page.'}
             </p>
             <div className="row" style={{ gap: 6, alignItems: 'center', flexWrap: 'wrap' }}>
               <code className="xs" dir="ltr" style={{ background: 'var(--surface-2)', padding: '6px 10px', borderRadius: 8, wordBreak: 'break-all' }}>{`${window.location.origin}/app/${tenant.slug}`}</code>
@@ -2244,7 +2244,7 @@ export default function Settings() {
                 // insecure origins/in-app browsers, and a false «تم النسخ» there
                 // sends the owner off with an empty clipboard
                 try { await navigator.clipboard.writeText(`${window.location.origin}/app/${tenant.slug}`); toast.success(ar ? 'تم نسخ الرابط' : 'Link copied') }
-                catch (_) { toast.error(ar ? 'تعذّر النسخ — انسخ الرابط يدوياً' : 'Copy failed — copy the link manually') }
+                catch (_) { toast.error(ar ? 'تعذّر النسخ، انسخ الرابط يدوياً' : 'Copy failed, copy the link manually') }
               }}>
                 <Icon name="copy" size={14} /> {ar ? 'نسخ' : 'Copy'}
               </button>
@@ -2398,7 +2398,7 @@ export default function Settings() {
             <div className="row-between wrap" style={{ gap: 10 }}>
               <div>
                 <span className="small">{ar ? 'الجولات الإرشادية' : 'Guided tours'}</span>
-                <p className="xs faint" style={{ margin: 0 }}>{ar ? 'بطاقات الشرح التي تظهر تلقائياً أول مرة يفتح فيها الموظف كل قسم — الإيقاف يشمل كل الفريق.' : 'First-run walkthrough cards shown once per screen — turning off applies to the whole team.'}</p>
+                <p className="xs faint" style={{ margin: 0 }}>{ar ? 'بطاقات الشرح التي تظهر تلقائياً أول مرة يفتح فيها الموظف كل قسم، الإيقاف يشمل كل الفريق.' : 'First-run walkthrough cards shown once per screen, turning off applies to the whole team.'}</p>
               </div>
               <input type="checkbox" checked={tenant?.toursEnabled !== false} style={{ width: 22, height: 22 }}
                 onChange={async (e) => { try { await saveNow({ toursEnabled: e.target.checked }); updateTenantLocal({ toursEnabled: e.target.checked }); toast.success(t('saved')) } catch (_) { toast.error(t('error')) } }} />
@@ -2425,7 +2425,7 @@ export default function Settings() {
               <Icon name="heart" size={18} style={{ color: 'var(--brand)' }} />
               <strong>{ar ? 'وسائل التواصل الاجتماعي' : 'Social media'}</strong>
             </div>
-            <p className="xs faint" style={{ margin: 0 }}>{ar ? 'تظهر كأيقونات تحت اسم المنشأة في المنيو وفي شاشة التقييم بعد الطلب — يُعرض المُدخل فقط. رابط خرائط جوجل يُستخدم أيضاً لدعوة الزبون للتقييم هناك بعد تقييمه.' : 'Shown as icons under the venue name and on the rating screen — only filled entries appear. The Google Maps link also invites guests to review there.'}</p>
+            <p className="xs faint" style={{ margin: 0 }}>{ar ? 'تظهر كأيقونات تحت اسم المنشأة في المنيو وفي شاشة التقييم بعد الطلب، يُعرض المُدخل فقط. رابط خرائط جوجل يُستخدم أيضاً لدعوة الزبون للتقييم هناك بعد تقييمه.' : 'Shown as icons under the venue name and on the rating screen, only filled entries appear. The Google Maps link also invites guests to review there.'}</p>
             {[
               ['instagram', 'Instagram', ar ? 'اسم المستخدم أو الرابط' : '@handle or URL'],
               ['x', 'X (Twitter)', ar ? 'اسم المستخدم أو الرابط' : '@handle or URL'],
@@ -2466,7 +2466,7 @@ export default function Settings() {
             </div>
             <div className="row-between wrap" style={{ gap: 10 }}>
               <p className="xs faint" style={{ margin: 0, maxWidth: '46ch' }}>
-                {ar ? 'أثناء تحضير الطلب تظهر للضيف دعوة للعب — تجربة انتظار لا يملكها غيرك.' : 'While the kitchen works, guests get an invitation to play — a waiting experience nobody else offers.'}
+                {ar ? 'أثناء تحضير الطلب تظهر للضيف دعوة للعب، تجربة انتظار لا يملكها غيرك.' : 'While the kitchen works, guests get an invitation to play, a waiting experience nobody else offers.'}
               </p>
               <input type="checkbox" checked={waitCfg.enabled} style={{ width: 22, height: 22 }}
                 onChange={(e) => saveWaitGame({ enabled: e.target.checked })} />
@@ -2488,11 +2488,11 @@ export default function Settings() {
                     ))}
                   </div>
                   <span className="xs faint">
-                    {ar ? '«تلقائي» يوزّع ألعابك المفعّلة على الطلبات بالتناوب — واللعبة ثابتة داخل الطلب الواحد.' : '“Auto” rotates your enabled games across orders, and stays fixed within one order.'}
+                    {ar ? '«تلقائي» يوزّع ألعابك المفعّلة على الطلبات بالتناوب، واللعبة ثابتة داخل الطلب الواحد.' : '“Auto” rotates your enabled games across orders, and stays fixed within one order.'}
                   </span>
                 </div>
               ) : (
-                <p className="xs faint" style={{ margin: 0 }}>{ar ? 'لا توجد ألعاب مفعّلة بعد — فعّلها من «مركز الألعاب».' : 'No games enabled yet — turn them on in the games centre.'}</p>
+                <p className="xs faint" style={{ margin: 0 }}>{ar ? 'لا توجد ألعاب مفعّلة بعد، فعّلها من «مركز الألعاب».' : 'No games enabled yet, turn them on in the games centre.'}</p>
               )
             )}
           </div>
@@ -2508,7 +2508,7 @@ export default function Settings() {
               <Icon name="sparkles" size={18} style={{ color: 'var(--brand)' }} />
               <strong>{ar ? 'التجربة التفاعلية للعميل' : 'Interactive guest experience'}</strong>
             </div>
-            <p className="xs faint" style={{ margin: 0 }}>{ar ? 'مزايا تفاعلية داخل المنيو وصفحة الطلب — فعّل ما يناسب منشأتك.' : 'Interactive features inside the menu and order page.'}</p>
+            <p className="xs faint" style={{ margin: 0 }}>{ar ? 'مزايا تفاعلية داخل المنيو وصفحة الطلب، فعّل ما يناسب منشأتك.' : 'Interactive features inside the menu and order page.'}</p>
             {[
               ['voiceWaiterEnabled', ar ? 'النادل الصوتي (اطلب بصوتك)' : 'Voice waiter', ar ? 'يتحدث العميل فيُضاف الصنف لسلته' : 'Speak to order'],
               ['photoOrderEnabled', ar ? 'اطلب بالصورة' : 'Order by photo', ar ? 'يصوّر طبقاً فيجد الذكاء أقرب صنف في منيوك' : 'Photo to nearest menu item'],
@@ -2518,7 +2518,7 @@ export default function Settings() {
               ['sharedCartEnabled', ar ? 'الطلب الجماعي وتقسيم الفاتورة' : 'Shared table order', ar ? 'كل من على الطاولة يضيف من جواله لسلة واحدة' : 'One live basket per table'],
               ['kitchenTwinEnabled', ar ? 'توأم المطبخ (متابعة حية للأصناف)' : 'Kitchen twin', ar ? 'يرى العميل أصنافه تُنجز واحداً واحداً' : 'Live per-item progress'],
               ['leaderboardEnabled', ar ? 'لوحة صدارة اللعبة' : 'Game leaderboard', ar ? 'ترتيب شهري لأفضل اللاعبين' : 'Monthly top players'],
-              ['gamesEnabled', ar ? 'مركز الألعاب' : 'Games centre', ar ? 'ألعاب داخل المنيو تُفتح بتسجيل الاسم والجوال — تعمل حتى بدون طلبات' : 'Games unlocked by name+phone; works without ordering'],
+              ['gamesEnabled', ar ? 'مركز الألعاب' : 'Games centre', ar ? 'ألعاب داخل المنيو تُفتح بتسجيل الاسم والجوال، تعمل حتى بدون طلبات' : 'Games unlocked by name+phone; works without ordering'],
             ].map(([key, label, hint]) => (
               <div key={key} className="row-between wrap" style={{ gap: 10, paddingBlock: 4, borderTop: '1px solid var(--border)' }}>
                 <div>
@@ -2538,7 +2538,7 @@ export default function Settings() {
             <div className="row-between wrap" style={{ gap: 10, paddingBlock: 4, borderTop: '1px solid var(--border)' }}>
               <div>
                 <div className="small bold">{ar ? 'الطلب الصوتي الذكي (سحابي)' : 'Smart cloud voice ordering'}</div>
-                <div className="xs faint">{ar ? 'يرسل التسجيل لذكاء المنصة ليفهم كل اللهجات واللغات ويستخرج الأصناف والكميات — استهلاك سحابي بحصة شهرية، لذا الافتراضي مطفأ.' : 'Sends the recording to the platform AI to parse any dialect/language into items and quantities — metered cloud usage with a monthly quota, so it is off by default.'}</div>
+                <div className="xs faint">{ar ? 'يرسل التسجيل لذكاء المنصة ليفهم كل اللهجات واللغات ويستخرج الأصناف والكميات. استهلاك سحابي بحصة شهرية، لذا الافتراضي مطفأ.' : 'Sends the recording to the platform AI to parse any dialect/language into items and quantities. Metered cloud usage with a monthly quota, so it is off by default.'}</div>
               </div>
               <input type="checkbox" checked={tenant?.voiceAiEnabled === true} style={{ width: 22, height: 22 }}
                 onChange={async (e) => { const on = e.target.checked === true; try { await saveNow({ voiceAiEnabled: on }); updateTenantLocal({ voiceAiEnabled: on }); toast.success(t('saved')) } catch (_) { toast.error(t('error')) } }} />
@@ -2572,7 +2572,7 @@ export default function Settings() {
               <>
                 <div style={{ borderTop: '1px solid var(--border)' }} />
                 <div className="small bold">{ar ? 'محطات التحضير (تصنيف ← محطة)' : 'Prep stations (category → station)'}</div>
-                <p className="xs faint" style={{ margin: 0 }}>{ar ? 'اسم المحطة يظهر على كل سطر في تذكرة المطبخ وفي «حمل الأقسام» — اتركه فارغاً لاستخدام اسم التصنيف.' : 'Shown on every KDS ticket line and in station load — leave empty to use the category name.'}</p>
+                <p className="xs faint" style={{ margin: 0 }}>{ar ? 'اسم المحطة يظهر على كل سطر في تذكرة المطبخ وفي «حمل الأقسام»، اتركه فارغاً لاستخدام اسم التصنيف.' : 'Shown on every KDS ticket line and in station load, leave empty to use the category name.'}</p>
                 {kdsCats.map((c) => (
                   <div key={c.id} className="row" style={{ gap: 10, alignItems: 'center' }}>
                     <span className="small" style={{ minWidth: 120, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{pickLang(c, 'name', lang)}</span>
@@ -2595,7 +2595,7 @@ export default function Settings() {
             <div className="row-between" style={{ alignItems: 'center' }}>
               <div>
                 <div className="small bold">{ar ? 'تفعيل القفل' : 'Enable lock'}</div>
-                <div className="xs faint">{ar ? 'يختار الموظف اسمه ويدخل 4 أرقام لفتح اللوحة والكاشير والمطبخ — واسمه يُسجل على كل طلب.' : 'Staff pick their name + 4-digit PIN; their name is stamped on every order.'}</div>
+                <div className="xs faint">{ar ? 'يختار الموظف اسمه ويدخل 4 أرقام لفتح اللوحة والكاشير والمطبخ، واسمه يُسجل على كل طلب.' : 'Staff pick their name + 4-digit PIN; their name is stamped on every order.'}</div>
               </div>
               <input type="checkbox" checked={!!tenant?.pinLock?.enabled} style={{ width: 22, height: 22 }}
                 onChange={async (e) => {
@@ -2621,7 +2621,7 @@ export default function Settings() {
                 <div className="small bold">{ar ? 'أرقام الموظفين (4 أرقام)' : 'Staff PINs (4 digits)'}</div>
                 {staffList.filter((s) => s.active !== false).map((s) => (
                   <div key={s.uid || s.id} className="row" style={{ gap: 8, alignItems: 'center' }}>
-                    <span className="small grow" style={{ minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{s.name || s.displayName || '—'} {staffHasPin(s) ? <span className="badge badge-success" style={{ padding: '1px 5px' }}><Icon name="check" size={10} /></span> : null}</span>
+                    <span className="small grow" style={{ minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{s.name || s.displayName || (ar ? 'بلا اسم' : 'No name')} {staffHasPin(s) ? <span className="badge badge-success" style={{ padding: '1px 5px' }}><Icon name="check" size={10} /></span> : null}</span>
                     <input className="input input-sm num" dir="ltr" type="password" inputMode="numeric" maxLength={4} placeholder="••••" style={{ width: 86, textAlign: 'center' }}
                       onBlur={async (e) => {
                         const v = e.target.value.replace(/[^0-9]/g, '')
@@ -2635,7 +2635,7 @@ export default function Settings() {
                           toast.success(t('saved'))
                         } catch (err2) {
                           if (String(err2?.message || err2?.code || '').includes('already-exists') || String(err2?.message || '').includes('pin-taken')) {
-                            toast.error(ar ? 'هذا الرمز مستخدم لموظف آخر — اختر رمزاً مختلفاً' : 'This PIN belongs to another staffer — pick a different one')
+                            toast.error(ar ? 'هذا الرمز مستخدم لموظف آخر، اختر رمزاً مختلفاً' : 'This PIN belongs to another staffer, pick a different one')
                           } else toast.error(t('error'))
                         }
                       }} />
@@ -2657,7 +2657,7 @@ export default function Settings() {
               <span className="small bold row" style={{ gap: 6 }}><Icon name="cashier" size={16} /> {ar ? 'تفضيل الوضع الأفقي للكاشير (تابلت)' : 'Prefer landscape for cashier (tablet)'}</span>
               <input type="checkbox" checked={tenant?.cashierLandscape === true} onChange={async (e) => { try { await saveNow({ cashierLandscape: e.target.checked }); updateTenantLocal({ cashierLandscape: e.target.checked }); toast.success(t('saved')) } catch (_) { toast.error(t('error')) } }} style={{ width: 22, height: 22 }} />
             </label>
-            <p className="xs faint" style={{ marginTop: 4 }}>{ar ? 'على التابلت العمودي يعرض الكاشير دعوة للدخول بملء الشاشة والوضع الأفقي (أندرويد/سامسونج) لعرض الكتالوج والفاتورة معاً — وعلى آيفون تلميح لتدوير الجهاز.' : 'On a portrait tablet, the cashier offers fullscreen + landscape lock (Android/Samsung) to show catalog + bill together; iOS shows a rotate hint.'}</p>
+            <p className="xs faint" style={{ marginTop: 4 }}>{ar ? 'على التابلت العمودي يعرض الكاشير دعوة للدخول بملء الشاشة والوضع الأفقي (أندرويد/سامسونج) لعرض الكتالوج والفاتورة معاً، وعلى آيفون تلميح لتدوير الجهاز.' : 'On a portrait tablet, the cashier offers fullscreen + landscape lock (Android/Samsung) to show catalog + bill together; iOS shows a rotate hint.'}</p>
           </div>
           )}
 
@@ -2714,7 +2714,7 @@ export default function Settings() {
                     </div>
                   </div>
                   <StaffPreview which="pinlock" mode={pinDev} />
-                  <p className="xs faint" style={{ margin: 0 }}>{ar ? 'الشاشة الحقيقية نفسها — تتحدث تلقائياً بعد كل تعديل.' : 'The real screen — updates live after every change.'}</p>
+                  <p className="xs faint" style={{ margin: 0 }}>{ar ? 'الشاشة الحقيقية نفسها، تتحدث تلقائياً بعد كل تعديل.' : 'The real screen itself, updated live after every change.'}</p>
                 </>
               ) : aSec === 'staff' ? (
                 <>
@@ -2734,7 +2734,7 @@ export default function Settings() {
                     </div>
                   </div>
                   <StaffPreview which={staffPrev} mode={staffDev} />
-                  <p className="xs faint" style={{ margin: 0 }}>{ar ? 'هذه الشاشة الحقيقية نفسها (نفس آلية معاينة المنيو) — تتحدث تلقائياً بعد كل حفظ.' : 'The real screen itself (same mechanism as the menu preview) — refreshes live after every save.'}</p>
+                  <p className="xs faint" style={{ margin: 0 }}>{ar ? 'هذه الشاشة الحقيقية نفسها (نفس آلية معاينة المنيو)، تتحدث تلقائياً بعد كل حفظ.' : 'The real screen itself (same mechanism as the menu preview), refreshes live after every save.'}</p>
                 </>
               ) : (
                 <>
@@ -2796,7 +2796,7 @@ export default function Settings() {
                     <Icon name="sparkles" size={18} style={{ color: 'var(--brand)' }} />
                     <strong>{ar ? 'ثيم النظام الكامل' : 'System theme'}</strong>
                   </div>
-                  <p className="small faint" style={{ margin: 0 }}>{ar ? 'هوية بصرية كاملة للوحة والكاشير والمطبخ — الألوان والزوايا والأزرار والبطاقات.' : 'A complete visual identity for the staff system.'}</p>
+                  <p className="small faint" style={{ margin: 0 }}>{ar ? 'هوية بصرية كاملة للوحة والكاشير والمطبخ، الألوان والزوايا والأزرار والبطاقات.' : 'A complete visual identity for the staff system.'}</p>
                   <div className="row" style={{ gap: 8, flexWrap: 'wrap' }}>
                     {SYSTEM_THEMES.map((th) => {
                       const active = (tenant?.systemTheme || 'glass') === th.id
@@ -2879,7 +2879,7 @@ export default function Settings() {
                             </label>
                           ))}
                         </div>
-                        <p className="xs faint" style={{ margin: 0 }}>{ar ? 'تلميح: احرص على تباين واضح بين النصوص والخلفية — الحفظ يفعّل الثيم فوراً على كل النظام.' : 'Keep text/background contrast high — saving activates the theme system-wide.'}</p>
+                        <p className="xs faint" style={{ margin: 0 }}>{ar ? 'تلميح: احرص على تباين واضح بين النصوص والخلفية، الحفظ يفعّل الثيم فوراً على كل النظام.' : 'Keep text/background contrast high, saving activates the theme system-wide.'}</p>
                         <div className="row" style={{ gap: 8 }}>
                           <button type="button" className="btn btn-primary btn-sm" onClick={async () => {
                             const payload = { customTheme: { base: custEdit.base, name: (custEdit.name || '').trim() || (ar ? 'ثيمي الخاص' : 'My theme'), tokens: custEdit.tokens }, systemTheme: 'custom', systemThemeBy: {} }
@@ -2923,7 +2923,7 @@ export default function Settings() {
                   <div className="row-between wrap" style={{ gap: 10, alignItems: 'center' }}>
                     <div>
                       <div className="small bold">{ar ? 'خط النظام' : 'System font'}</div>
-                      <div className="xs faint">{ar ? 'يطبق على الإدارة والكاشير والمطبخ كاملة — خط المنيو مستقل في تبويب الألوان والنصوص.' : 'Applies to the whole back-office; the menu font is separate.'}</div>
+                      <div className="xs faint">{ar ? 'يطبق على الإدارة والكاشير والمطبخ كاملة، خط المنيو مستقل في تبويب الألوان والنصوص.' : 'Applies to the whole back-office; the menu font is separate.'}</div>
                     </div>
                     <select className="select" style={{ maxWidth: 180 }} value={tenant?.systemFont || 'tajawal'}
                       onChange={async (e) => {
@@ -2951,7 +2951,7 @@ export default function Settings() {
                   <div className="row-between wrap" style={{ gap: 10, alignItems: 'center' }}>
                     <div>
                       <div className="small bold">{ar ? 'سمة القائمة الجانبية (مستقلة)' : 'Sidebar theme (independent)'}</div>
-                      <div className="xs faint">{ar ? 'شكل روابط وأزرار القائمة وتفاعلها — تُركَّب فوق أي ثيم نظام تختاره. الشعار ثابت أعلى وتسجيل الخروج ثابت أسفل دائماً.' : 'Nav links look & interaction — layered over any system theme.'}</div>
+                      <div className="xs faint">{ar ? 'شكل روابط وأزرار القائمة وتفاعلها، تُركَّب فوق أي ثيم نظام تختاره. الشعار ثابت أعلى وتسجيل الخروج ثابت أسفل دائماً.' : 'Nav links look & interaction, layered over any system theme.'}</div>
                     </div>
                     <select className="select" style={{ maxWidth: 190 }} value={tenant?.sidebarTheme || ''}
                       onChange={async (e) => {
@@ -2988,7 +2988,7 @@ export default function Settings() {
                   <div className="row-between wrap" style={{ gap: 10, alignItems: 'center' }}>
                     <div>
                       <div className="small bold">{ar ? 'جدولة الثيم (نهاري / ليلي)' : 'Theme schedule (day / night)'}</div>
-                      <div className="xs faint">{ar ? 'يتبدل الثيم تلقائياً بحسب الساعة — مثلاً زجاجي نهاراً ونوار في المناوبة الليلية.' : 'Switches automatically by the clock.'}</div>
+                      <div className="xs faint">{ar ? 'يتبدل الثيم تلقائياً بحسب الساعة، مثلاً زجاجي نهاراً ونوار في المناوبة الليلية.' : 'Switches automatically by the clock.'}</div>
                     </div>
                     <input type="checkbox" checked={!!tenant?.themeSchedule?.enabled} style={{ width: 22, height: 22 }}
                       onChange={async (e) => {
@@ -3092,7 +3092,7 @@ export default function Settings() {
                   <div className="row-between wrap" style={{ gap: 10, alignItems: 'center' }}>
                     <div>
                       <div className="small bold">{ar ? 'لون التحديد والتفعيل' : 'Selection color'}</div>
-                      <div className="xs faint">{ar ? 'لون العنصر النشط في القوائم والرقاقات والتبويبات — في كل النظام.' : 'Active pills, chips and tabs across the system.'}</div>
+                      <div className="xs faint">{ar ? 'لون العنصر النشط في القوائم والرقاقات والتبويبات، في كل النظام.' : 'Active pills, chips and tabs across the system.'}</div>
                     </div>
                     <div className="row" style={{ gap: 8, alignItems: 'center' }}>
                       {tenant?.selColor && (
@@ -3108,7 +3108,7 @@ export default function Settings() {
                   <div className="row-between wrap" style={{ gap: 10, alignItems: 'center' }}>
                     <div>
                       <div className="small bold">{ar ? 'نمط الأزرار الرئيسية (كل المنصة)' : 'Primary button style (platform-wide)'}</div>
-                      <div className="xs faint">{ar ? 'متدرج بتوهج قابل للضبط — يشمل أزرار النظام وأزرار المنيو (أضف للسلة وغيرها).' : 'Gradient with tunable glow — system + diner menu CTAs.'}</div>
+                      <div className="xs faint">{ar ? 'متدرج بتوهج قابل للضبط، يشمل أزرار النظام وأزرار المنيو (أضف للسلة وغيرها).' : 'Gradient with tunable glow, system + diner menu CTAs.'}</div>
                     </div>
                     <div className="segmented">
                       {[['', ar ? 'افتراضي' : 'Default'], ['gradient', ar ? 'متدرج متوهج' : 'Gradient glow'], ['ghost', ar ? 'شفاف' : 'Ghost']].map(([v, lbl]) => (
@@ -3186,7 +3186,7 @@ export default function Settings() {
                     <Icon name="image" size={18} style={{ color: 'var(--brand)' }} />
                     <strong>{ar ? 'خلفية النظام الكاملة' : 'System background'}</strong>
                   </div>
-                  <p className="xs faint" style={{ margin: 0 }}>{ar ? 'تظهر خلف كل شاشات النظام (اللوحة والكاشير والمطبخ) — الزجاج ينكسر فوقها. طبقة تعتيم تلقائية تحفظ وضوح النصوص.' : 'Behind every staff screen — the glass refracts over it. An automatic veil keeps text readable.'}</p>
+                  <p className="xs faint" style={{ margin: 0 }}>{ar ? 'تظهر خلف كل شاشات النظام (اللوحة والكاشير والمطبخ)، الزجاج ينكسر فوقها. طبقة تعتيم تلقائية تحفظ وضوح النصوص.' : 'Behind every staff screen, the glass refracts over it. An automatic veil keeps text readable.'}</p>
                   <div className="segmented">
                     {[['mesh', ar ? 'افتراضي' : 'Default'], ['gradient', ar ? 'تدرج' : 'Gradient'], ['image', ar ? 'صورة' : 'Image'], ['video', ar ? 'فيديو' : 'Video']].map(([k, lbl]) => (
                       <button key={k} className={(tenant?.appBg?.kind || 'mesh') === k ? 'active' : ''}
@@ -3267,7 +3267,7 @@ export default function Settings() {
                     <UpgradeNotice feature="systemTemplates" />
                   ) : (
                     <>
-                      <p className="xs faint" style={{ margin: 0 }}>{ar ? 'التخطيط الافتراضي لكل قسم — قوالب الكاشير والمطبخ في تبويب «الكاشير والمطبخ».' : 'Default layout per section — cashier & KDS live in their own sub-tab.'}</p>
+                      <p className="xs faint" style={{ margin: 0 }}>{ar ? 'التخطيط الافتراضي لكل قسم، قوالب الكاشير والمطبخ في تبويب «الكاشير والمطبخ».' : 'Default layout per section, cashier & KDS live in their own sub-tab.'}</p>
                       {Object.entries(SECTION_TEMPLATES).filter(([sec]) => sec !== 'cashier' && sec !== 'kds').map(([sec, def]) => (
                         <TemplateGallery key={sec} sec={sec} def={def} ar={ar} current={sectionTemplate(tenant, sec)}
                           onPick={async (id) => {
@@ -3287,7 +3287,7 @@ export default function Settings() {
                   </div>
                   {/* one-tap bundles: each sets several draft states at once (theme + layout + banner melt) */}
                   <div className="stack" style={{ gap: 6, background: 'var(--brand-soft)', borderRadius: 'var(--r-md)', padding: 10 }}>
-                    <span className="xs bold">{ar ? 'حزم جاهزة بضغطة — ثم عدّل ما تشاء' : 'One-tap bundles — tweak later if needed'}</span>
+                    <span className="xs bold">{ar ? 'حزم جاهزة بضغطة، ثم عدّل ما تشاء' : 'One-tap bundles, tweak later if needed'}</span>
                     <div className="row" style={{ gap: 6, flexWrap: 'wrap' }}>
                       <button type="button" className="btn btn-sm btn-outline" onClick={() => applyBundle('classic', { layout: 'list', fade: 'bottom' })}>
                         <Icon name="coffee" size={14} /> {ar ? 'هادئ كلاسيكي' : 'Calm classic'}
@@ -3368,7 +3368,7 @@ export default function Settings() {
                 <div className="card card-pad stack" style={{ gap: 12 }}>
                   <strong className="small"><Icon name="settings" size={14} style={{ verticalAlign: 'middle' }} /> {ar ? 'تخصيص مكونات المنيو الفنية' : 'Fine-Tune Menu Components'}</strong>
                   <div className="field">
-                    <label>{ar ? 'التخطيط — طريقة عرض المنتجات' : 'Layout — products display'}</label>
+                    <label>{ar ? 'التخطيط: طريقة عرض المنتجات' : 'Layout: products display'}</label>
                     <select className="select" value={ovLayout} onChange={(e) => setOvLayout(e.target.value)}>
                       {LAYOUT_OPTIONS.map((l) => <option key={l} value={l}>{ar ? LAYOUT_LABELS[l] : LAYOUT_LABELS_EN[l]}</option>)}
                     </select>
@@ -3382,7 +3382,7 @@ export default function Settings() {
                       <select className="select" value={tenant?.featuredMode === 'auto' ? 'auto' : 'manual'}
                         onChange={async (e) => { try { await saveNow({ featuredMode: e.target.value }); updateTenantLocal({ featuredMode: e.target.value }); toast.success(t('saved')) } catch (_) { toast.error(t('error')) } }}>
                         <option value="manual">{ar ? 'اختيار يدوي (تحدّده أنت)' : 'Manual (you choose)'}</option>
-                        <option value="auto">{ar ? 'رصد ذكي — الأكثر طلباً تلقائياً' : 'Smart auto — best sellers'}</option>
+                        <option value="auto">{ar ? 'رصد ذكي: الأكثر طلباً تلقائياً' : 'Smart auto: best sellers'}</option>
                       </select>
                     </div>
                     <div className="row" style={{ gap: 8 }}>
@@ -3466,7 +3466,7 @@ export default function Settings() {
                         <select className="select" value={tenant?.menuMode || 'order'}
                           onChange={async (e) => { const v = e.target.value; try { await saveNow({ menuMode: v }); updateTenantLocal({ menuMode: v }); toast.success(t('saved')) } catch (_) { toast.error(t('error')) } }}>
                           <option value="order">{ar ? 'طلبات كاملة (الافتراضي)' : 'Full ordering (default)'}</option>
-                          <option value="browse">{ar ? 'عرض فقط — تصفح وتسجيل بيانات العملاء' : 'Display-only — browse + customer registration'}</option>
+                          <option value="browse">{ar ? 'عرض فقط: تصفح وتسجيل بيانات العملاء' : 'Display-only: browse + customer registration'}</option>
                         </select>
                         {(tenant?.menuMode === 'browse') && <span className="xs faint">{ar ? 'تختفي السلة والطلب بالكامل؛ يظهر شريط «سجّل ليصلك جديدنا» ويُجمَع رقم العميل لإشعارات واتساب. نداء النادل يبقى متاحاً على الطاولات.' : 'Cart & ordering disappear; a “register for updates” strip collects the guest phone for WhatsApp alerts. Waiter call stays available on tables.'}</span>}
                       </div>
@@ -3484,7 +3484,7 @@ export default function Settings() {
                         onChange={async (e) => { try { await saveNow({ ordersPaused: e.target.checked }); updateTenantLocal({ ordersPaused: e.target.checked }); toast.success(e.target.checked ? (ar ? 'أُوقف استقبال الطلبات' : 'Orders paused') : (ar ? 'عاد استقبال الطلبات' : 'Orders resumed')) } catch (_) { toast.error(t('error')) } }} style={{ width: 20, height: 20 }} />
                       <span className="stack" style={{ gap: 2 }}>
                         <span className="small bold" style={tenant?.ordersPaused === true ? { color: 'var(--danger)' } : undefined}>{ar ? 'إيقاف استقبال الطلبات مؤقتاً' : 'Pause new orders'}</span>
-                        <span className="xs faint">{ar ? 'المطبخ مزدحم أو أغلقنا مبكراً؟ يوقف زر الطلب في المنيو فوراً ويرفض أي طلب جديد حتى تعيده — والقائمة تبقى للتصفّح.' : 'Kitchen slammed or closing early? Instantly disables the menu order button and rejects any new order until you resume — the menu stays browsable.'}</span>
+                        <span className="xs faint">{ar ? 'المطبخ مزدحم أو أغلقنا مبكراً؟ يوقف زر الطلب في المنيو فوراً ويرفض أي طلب جديد حتى تعيده، والقائمة تبقى للتصفّح.' : 'Kitchen slammed or closing early? Instantly disables the menu order button and rejects any new order until you resume, the menu stays browsable.'}</span>
                       </span>
                     </label>
 
@@ -3500,7 +3500,7 @@ export default function Settings() {
                         <option value="faint">{ar ? 'باهت وخافت' : 'Faint'}</option>
                         <option value="hidden">{ar ? 'مخفي تماماً (تبقى أسعار الأصناف)' : 'Hidden (line prices stay)'}</option>
                       </select>
-                      <span className="xs faint">{ar ? 'بعض العملاء «يستخسر» المجموع فيصغّر طلبه — إخفاؤه أو تخفيته يرفع متوسط السلة.' : 'Some guests shrink orders when the sum stares at them — hiding/fading it lifts basket size.'}</span>
+                      <span className="xs faint">{ar ? 'بعض العملاء «يستخسر» المجموع فيصغّر طلبه، إخفاؤه أو تخفيته يرفع متوسط السلة.' : 'Some guests shrink orders when the sum stares at them, hiding/fading it lifts basket size.'}</span>
                     </div>
                   </div>
 
@@ -3635,7 +3635,7 @@ export default function Settings() {
 
                 {/* 4. Show/Hide elements checklist */}
                 <div id="set-hidematrix" className="card card-pad stack" style={{ gap: 12 }}>
-                  <strong className="small"><Icon name="eye" size={14} style={{ verticalAlign: 'middle' }} /> {ar ? 'إظهار وإخفاء كل شيء — مصفوفة عناصر المنيو' : 'Show / hide everything — the menu element matrix'}</strong>
+                  <strong className="small"><Icon name="eye" size={14} style={{ verticalAlign: 'middle' }} /> {ar ? 'إظهار وإخفاء كل شيء: مصفوفة عناصر المنيو' : 'Show / hide everything: the menu element matrix'}</strong>
                   <p className="xs faint" style={{ margin: 0 }}>
                     {ar
                       ? 'كل عنصر وزر وميزة في صفحة الزبون من مكان واحد. الأخضر ظاهر، والرمادي مخفي. مجموعات العناصر تُحفظ مع زر «حفظ» أسفل الشاشة، وأزرار «التجارب التفاعلية» تُحفظ فوراً.'
@@ -3695,7 +3695,7 @@ export default function Settings() {
                         )
                       })}
                     </div>
-                    <span className="xs faint">{ar ? 'هذه نفس مفاتيح تبويب «تجربة العميل» — أي تغيير هنا يظهر هناك والعكس.' : 'Same switches as the “Customer experience” tab — a change here shows there and vice versa.'}</span>
+                    <span className="xs faint">{ar ? 'هذه نفس مفاتيح تبويب «تجربة العميل»، أي تغيير هنا يظهر هناك والعكس.' : 'Same switches as the “Customer experience” tab, a change here shows there and vice versa.'}</span>
                   </div>
                 </div>
 
@@ -3793,7 +3793,7 @@ export default function Settings() {
                     desktop mouse makes half the bonds unreachable. */}
                 <div id="set-menuwall" className="card card-pad stack" style={{ gap: 12 }}>
                   <div className="row-between wrap" style={{ gap: 8, alignItems: 'center' }}>
-                    <strong className="small"><Icon name="layers" size={14} style={{ verticalAlign: 'middle' }} /> {ar ? 'جدار المنيو — الطوب والخلفية' : 'Menu wall — brick & backdrop'}</strong>
+                    <strong className="small"><Icon name="layers" size={14} style={{ verticalAlign: 'middle' }} /> {ar ? 'جدار المنيو: الطوب والخلفية' : 'Menu wall: brick & backdrop'}</strong>
                     <button type="button" className="btn-link xs" onClick={resetWall}><Icon name="reload" size={12} /> {ar ? 'إرجاع الافتراضي' : 'Reset to default'}</button>
                   </div>
                   <p className="xs faint" style={{ margin: 0 }}>
@@ -3810,7 +3810,7 @@ export default function Settings() {
                       the colour is not. */}
                   {ovLayout !== 'editorial' && (
                     <p className="xs" style={{ margin: 0, color: 'var(--warning)' }}>
-                      {ar ? 'جدار الغرفة نفسه يظهر في ثيم «المجلة الداكنة» فقط — لكن لون الطين واللحام هنا هو ما يُطلى به شريط التجربة في تخطيطك الحالي، فاختره كما تحب. ' : 'The room wall itself only shows in the “Dark Editorial” theme — but the clay and mortar you pick here are what paint the experience bar on your current layout, so it is still worth choosing. '}
+                      {ar ? 'جدار الغرفة نفسه يظهر في ثيم «المجلة الداكنة» فقط. لكن لون الطين واللحام هنا هو ما يُطلى به شريط التجربة في تخطيطك الحالي، فاختره كما تحب. ' : 'The room wall itself only shows in the “Dark Editorial” theme. But the clay and mortar you pick here are what paint the experience bar on your current layout, so it is still worth choosing. '}
                       <button type="button" className="btn-link" style={{ fontSize: 'inherit', fontWeight: 700 }} onClick={() => setASec('elements')}>{ar ? 'تغيير التخطيط' : 'Change the layout'}</button>
                     </p>
                   )}
@@ -3824,7 +3824,7 @@ export default function Settings() {
                   )}
 
                   <div className="stack" style={{ gap: 6 }}>
-                    <span className="xs faint bold">{ar ? 'شكل رصف الطوب' : 'Bond — how the units are laid'}</span>
+                    <span className="xs faint bold">{ar ? 'شكل رصف الطوب' : 'Bond: how the units are laid'}</span>
                     <div className="mwall-grid">
                       {WALL_PATTERNS.map((p) => {
                         const on = wallCfg.pattern === p.id
@@ -3866,8 +3866,8 @@ export default function Settings() {
                       </div>
                       <span className="xs faint">
                         {ar
-                          ? 'الصورة تغطّي الشاشة كاملة عند الحجم 1.00x وتتكرّر كبلاط عند أي حجم آخر. إن ظهرت خطوط قصّ عند التكرار اضغط «إزالة فواصل التكرار» — نذيب حواف الصورة في بعضها فتتصل بلا خط.'
-                          : 'The photo covers the screen at 1.00x and tiles at any other size. If cut lines show where it repeats, tap “Remove tiling seams” — the edges are melted into each other so the tile joins without a line.'}
+                          ? 'الصورة تغطّي الشاشة كاملة عند الحجم 1.00x وتتكرّر كبلاط عند أي حجم آخر. إن ظهرت خطوط قصّ عند التكرار اضغط «إزالة فواصل التكرار»، نذيب حواف الصورة في بعضها فتتصل بلا خط.'
+                          : 'The photo covers the screen at 1.00x and tiles at any other size. If cut lines show where it repeats, tap “Remove tiling seams”, the edges are melted into each other so the tile joins without a line.'}
                       </span>
                     </div>
                   )}
@@ -3884,8 +3884,8 @@ export default function Settings() {
                       <strong className="xs">{ar ? 'اجعل الهيدر من نفس الطوب' : 'Build the header out of the same brick'}</strong>
                       <span className="xs faint">
                         {ar
-                          ? 'الشريط العلوي للمنيو (اسم المنشأة وأزراره) يُبنى من الجدار نفسه ويأخذ رصفه ولون طينه ولحامه من الاختيارات أعلاه — لا لون منفصل له، ووحدة الطوب فيه أصغر ليبقى الاسم مقروءاً. أطفئه ليعود الهيدر داكناً سادة.'
-                          : 'The menu’s top bar (venue name and its buttons) is built from this same wall and takes its bond, clay and mortar from the choices above — it has no colour of its own, and its brick unit is drawn smaller so the name stays readable. Switch it off and the header goes back to plain dark.'}
+                          ? 'الشريط العلوي للمنيو (اسم المنشأة وأزراره) يُبنى من الجدار نفسه ويأخذ رصفه ولون طينه ولحامه من الاختيارات أعلاه. لا لون منفصل له، ووحدة الطوب فيه أصغر ليبقى الاسم مقروءاً. أطفئه ليعود الهيدر داكناً سادة.'
+                          : 'The menu’s top bar (venue name and its buttons) is built from this same wall and takes its bond, clay and mortar from the choices above. It has no colour of its own, and its brick unit is drawn smaller so the name stays readable. Switch it off and the header goes back to plain dark.'}
                       </span>
                       {wallCfg.pattern === 'none' && (
                         <span className="xs faint">
@@ -3907,8 +3907,8 @@ export default function Settings() {
                       <strong className="xs">{ar ? 'الجدار خلف الصفحة كلها' : 'The wall behind the whole page'}</strong>
                       <span className="xs faint">
                         {ar
-                          ? 'يمتد الجدار نفسه خلف الهيدر والبانر والأصناف المميزة — غرفة واحدة بلا فواصل. تفعيله يضبط ذوبان البانر الشفاف ولوحاً خفيفاً خلف الأصناف المميزة (إن لم تضبطهما من قبل)، وتتحكم فيهما لاحقاً من بطاقتيهما.'
-                          : 'The same wall runs behind the header, the banner and the featured strip — one room, no seams. Enabling it also seeds the transparent banner melt and a soft plaster behind the featured cards (only if you never set them); both stay tunable in their own cards.'}
+                          ? 'يمتد الجدار نفسه خلف الهيدر والبانر والأصناف المميزة. غرفة واحدة بلا فواصل. تفعيله يضبط ذوبان البانر الشفاف ولوحاً خفيفاً خلف الأصناف المميزة (إن لم تضبطهما من قبل)، وتتحكم فيهما لاحقاً من بطاقتيهما.'
+                          : 'The same wall runs behind the header, the banner and the featured strip. One room, no seams. Enabling it also seeds the transparent banner melt and a soft plaster behind the featured cards (only if you never set them); both stay tunable in their own cards.'}
                       </span>
                     </span>
                     <input type="checkbox" checked={wallCfg.room === true} style={{ width: 22, height: 22, flex: 'none' }}
@@ -3927,7 +3927,7 @@ export default function Settings() {
                   </label>
 
                   {wallCfg.pattern === 'none' ? (
-                    <p className="xs faint" style={{ margin: 0 }}>{ar ? 'الجدار مطفأ — يعرض الثيم لوحته الداكنة السادة خلف الأطباق.' : 'The wall is off — the theme shows its plain dark canvas behind the dishes.'}</p>
+                    <p className="xs faint" style={{ margin: 0 }}>{ar ? 'الجدار مطفأ، يعرض الثيم لوحته الداكنة السادة خلف الأطباق.' : 'The wall is off, the theme shows its plain dark canvas behind the dishes.'}</p>
                   ) : (
                     <>
                       {/* A photograph carries its own age; the procedural finish
@@ -3937,7 +3937,7 @@ export default function Settings() {
                           here would be offering a lie. */}
                       {wallCfg.pattern !== 'image' && (
                       <div className="stack" style={{ gap: 6 }}>
-                        <span className="xs faint bold">{ar ? 'حالة السطح (التشطيب)' : 'Finish — the surface condition'}</span>
+                        <span className="xs faint bold">{ar ? 'حالة السطح (التشطيب)' : 'Finish: the surface condition'}</span>
                         <div className="mwall-grid">
                           {WALL_FINISHES.map((f) => {
                             const on = wallCfg.finish === f.id
@@ -4013,7 +4013,7 @@ export default function Settings() {
                       </div>
 
                       <div className="stack" style={{ gap: 6, borderTop: '1px solid var(--border)', paddingTop: 10 }}>
-                        <span className="xs faint bold">{ar ? 'المعاينة الحية — الجدار وطبق فوقه' : 'Live preview — the wall with a dish on it'}</span>
+                        <span className="xs faint bold">{ar ? 'المعاينة الحية: الجدار وطبق فوقه' : 'Live preview: the wall with a dish on it'}</span>
                         <div className="mwall-stage">
                           <span className="mwall-paint" style={wallLive || undefined} data-blur={wallCfg.blur ? 'true' : undefined} aria-hidden="true" />
                           <div className="mwall-dish">
@@ -4037,7 +4037,7 @@ export default function Settings() {
                     into the theme flip (followTheme). */}
                 <div id="set-menuink" className="card card-pad stack" style={{ gap: 12 }}>
                   <div className="row-between wrap" style={{ gap: 8, alignItems: 'center' }}>
-                    <strong className="small"><Icon name="penLine" size={14} style={{ verticalAlign: 'middle' }} /> {ar ? 'ألوان الخطوط — فاتح وداكن' : 'Menu inks — light & dark'}</strong>
+                    <strong className="small"><Icon name="penLine" size={14} style={{ verticalAlign: 'middle' }} /> {ar ? 'ألوان الخطوط: فاتح وداكن' : 'Menu inks: light & dark'}</strong>
                     <button type="button" className="btn-link xs" onClick={resetInk}><Icon name="reload" size={12} /> {ar ? 'إرجاع للثيم' : 'Back to the theme'}</button>
                   </div>
                   <p className="xs faint" style={{ margin: 0 }}>
@@ -4086,8 +4086,8 @@ export default function Settings() {
                     return (
                       <p className="xs" style={{ margin: 0, color: 'var(--warning)' }}>
                         {ar
-                          ? `تباين ضعيف (أقل من 4.5:1) بين لوح القراءة وبين: ${names} — قد لا يُقرأ النص. فتّح أو غمّق اللون.`
-                          : `Weak contrast (below 4.5:1) against the canvas for: ${names} — the text may not read. Lighten or darken the ink.`}
+                          ? `تباين ضعيف (أقل من 4.5:1) بين لوح القراءة وبين: ${names}، قد لا يُقرأ النص. فتّح أو غمّق اللون.`
+                          : `Weak contrast (below 4.5:1) against the canvas for: ${names}, the text may not read. Lighten or darken the ink.`}
                       </p>
                     )
                   })()}
@@ -4116,7 +4116,7 @@ export default function Settings() {
                     theme; the brick mode delegates its colours to the wall. */}
                 <div id="set-menuheader" className="card card-pad stack" style={{ gap: 12 }}>
                   <div className="row-between wrap" style={{ gap: 8, alignItems: 'center' }}>
-                    <strong className="small"><Icon name="layers" size={14} style={{ verticalAlign: 'middle' }} /> {ar ? 'الهيدر العلوي — وجهه وعناصره' : 'Top header — its face and elements'}</strong>
+                    <strong className="small"><Icon name="layers" size={14} style={{ verticalAlign: 'middle' }} /> {ar ? 'الهيدر العلوي: وجهه وعناصره' : 'Top header: its face and elements'}</strong>
                     <button type="button" className="btn-link xs" onClick={resetHeader}><Icon name="reload" size={12} /> {ar ? 'إرجاع الافتراضي' : 'Reset to default'}</button>
                   </div>
                   <p className="xs faint" style={{ margin: 0 }}>
@@ -4169,7 +4169,7 @@ export default function Settings() {
                     </>
                   )}
                   <div className="stack" style={{ gap: 6, borderTop: '1px solid var(--border)', paddingTop: 10 }}>
-                    <span className="xs faint bold">{ar ? 'عناصر الهيدر — أظهر ما تريد فقط' : 'Header elements — keep only what you want'}</span>
+                    <span className="xs faint bold">{ar ? 'عناصر الهيدر: أظهر ما تريد فقط' : 'Header elements: keep only what you want'}</span>
                     <div className="row wrap" style={{ gap: 12 }}>
                       {[['logo', ar ? 'الشعار' : 'Logo'], ['name', ar ? 'اسم المنشأة' : 'Venue name'], ['lang', ar ? 'زر اللغة' : 'Language button'], ['theme', ar ? 'زر الوضع الفاتح/الداكن' : 'Light/dark button']].map(([k, lbl]) => (
                         <label key={k} className="row" style={{ gap: 6, cursor: 'pointer', alignItems: 'center' }}>
@@ -4178,7 +4178,7 @@ export default function Settings() {
                         </label>
                       ))}
                     </div>
-                    <span className="xs faint">{ar ? 'إخفاء زر اللغة أو الوضع يخفيه عن الزبون نهائياً — أبقهما إن كان جمهورك يستعملهما.' : 'Hiding the language or theme button removes it for guests entirely — keep them if your guests use them.'}</span>
+                    <span className="xs faint">{ar ? 'إخفاء زر اللغة أو الوضع يخفيه عن الزبون نهائياً، أبقهما إن كان جمهورك يستعملهما.' : 'Hiding the language or theme button removes it for guests entirely, keep them if your guests use them.'}</span>
                   </div>
                 </div>
 
@@ -4186,13 +4186,13 @@ export default function Settings() {
                     buttons dressed in the venue's wall or its own photo. */}
                 <div id="set-menubuttons" className="card card-pad stack" style={{ gap: 12 }}>
                   <div className="row-between wrap" style={{ gap: 8, alignItems: 'center' }}>
-                    <strong className="small"><Icon name="shapes" size={14} style={{ verticalAlign: 'middle' }} /> {ar ? 'أزرار المنيو — طوب أو صورتك' : 'Menu buttons — brick or your photo'}</strong>
+                    <strong className="small"><Icon name="shapes" size={14} style={{ verticalAlign: 'middle' }} /> {ar ? 'أزرار المنيو: طوب أو صورتك' : 'Menu buttons: brick or your photo'}</strong>
                     <button type="button" className="btn-link xs" onClick={resetButtons}><Icon name="reload" size={12} /> {ar ? 'إرجاع الافتراضي' : 'Reset to default'}</button>
                   </div>
                   <p className="xs faint" style={{ margin: 0 }}>
                     {ar
-                      ? 'شريط التجربة — زرّ الألعاب وإخوته — يلبس ما تختاره هنا في كل التخطيطات: طوب الجدار نفسه بلونه ولحامه، أو صورة من عندك تحت طبقة تعتيم خفيفة ليبقى النص مقروءاً.'
-                      : 'The experience bar — the games button and its siblings — wears what you choose here on every layout: the wall’s own brick, or your own photo under a light veil so the label stays readable.'}
+                      ? 'شريط التجربة (زرّ الألعاب وإخوته) يلبس ما تختاره هنا في كل التخطيطات: طوب الجدار نفسه بلونه ولحامه، أو صورة من عندك تحت طبقة تعتيم خفيفة ليبقى النص مقروءاً.'
+                      : 'The experience bar (the games button and its siblings) wears what you choose here on every layout: the wall’s own brick, or your own photo under a light veil so the label stays readable.'}
                   </p>
                   {/* The old warning said the skin was Dark-Editorial-only. It
                       no longer is: the experience bar wears it on all sixteen
@@ -4271,7 +4271,7 @@ export default function Settings() {
                         </div>
                       </div>
                       {(btnCfg.scope || 'primary') === 'all' && (
-                        <span className="xs faint">{ar ? 'يشمل رقاقات التصنيفات وخيارات المقاسات وأزرار الكمية وزر الإغلاق — المختار يبقى واضحاً بإطار كهرماني.' : 'Covers the category chips, size options, qty steppers and the close button — the selected one keeps an amber ring.'}</span>
+                        <span className="xs faint">{ar ? 'يشمل رقاقات التصنيفات وخيارات المقاسات وأزرار الكمية وزر الإغلاق، المختار يبقى واضحاً بإطار كهرماني.' : 'Covers the category chips, size options, qty steppers and the close button, the selected one keeps an amber ring.'}</span>
                       )}
 
                       {/* the picture INSIDE the face («تكبير وتصغير الصورة داخل
@@ -4341,12 +4341,12 @@ export default function Settings() {
                   </div>
                   <p className="xs faint" style={{ margin: 0 }}>
                     {ar
-                      ? 'اسحب من المقبض لترتيب ما يظهر أعلى المنيو — يعمل مع كل الثيمات ويُحفظ الترتيب فوراً. عين العنصر تخفيه من نفس نظام «إظهار/إخفاء العناصر» وتُحفظ مع زر «حفظ» أسفل الشاشة.'
-                      : 'Drag to order what shows above the dishes — all layouts; the order saves instantly. The eye hides via the same show/hide system and commits with the main Save button.'}
+                      ? 'اسحب من المقبض لترتيب ما يظهر أعلى المنيو، يعمل مع كل الثيمات ويُحفظ الترتيب فوراً. عين العنصر تخفيه من نفس نظام «إظهار/إخفاء العناصر» وتُحفظ مع زر «حفظ» أسفل الشاشة.'
+                      : 'Drag to order what shows above the dishes. Works on every layout, and the order saves instantly. The eye hides via the same show/hide system and commits with the main Save button.'}
                   </p>
                   {ovLayout === 'storefront' && (
                     <p className="xs" style={{ margin: 0, color: 'var(--warning)' }}>
-                      {ar ? 'تخطيط «تطبيق متجر» لا يعرض «العروض» و«الأطباق المميزة» في هذا التدفق — سحبهما لن يغيّر شيئاً فيه.' : 'The storefront layout does not render Promos or Featured in this flow — dragging them changes nothing there.'}
+                      {ar ? 'تخطيط «تطبيق متجر» لا يعرض «العروض» و«الأطباق المميزة» في هذا التدفق، سحبهما لن يغيّر شيئاً فيه.' : 'The storefront layout does not render Promos or Featured in this flow, dragging them changes nothing there.'}
                     </p>
                   )}
                   <DndContext sensors={homeSensors} collisionDetection={closestCenter} onDragEnd={onHomeDragEnd}>
@@ -4365,7 +4365,7 @@ export default function Settings() {
                       </div>
                     </SortableContext>
                   </DndContext>
-                  <span className="xs faint">{ar ? 'إخفاء «البحث» قد يُبقي الصف ظاهراً إذا كان «زر طريقة العرض» ما زال ظاهراً — الصف واحد لكليهما.' : 'Hiding Search may keep the row visible while the view toggle is still shown — they share one row.'}</span>
+                  <span className="xs faint">{ar ? 'إخفاء «البحث» قد يُبقي الصف ظاهراً إذا كان «زر طريقة العرض» ما زال ظاهراً، الصف واحد لكليهما.' : 'Hiding Search may keep the row visible while the view toggle is still shown, they share one row.'}</span>
                 </div>
 
                 {/* 6b5. THE MENU CHROME (tenant.menuChrome) — one identity for
@@ -4374,7 +4374,7 @@ export default function Settings() {
                     own photo / transparent, plus custom icons and fab offsets. */}
                 <div id="set-menuchrome" className="card card-pad stack" style={{ gap: 12 }}>
                   <div className="row-between wrap" style={{ gap: 8, alignItems: 'center' }}>
-                    <strong className="small"><Icon name="shapes" size={14} style={{ verticalAlign: 'middle' }} /> {ar ? 'كساء الكروم — الأزرار والقوائم' : 'Chrome skin — buttons & bars'}</strong>
+                    <strong className="small"><Icon name="shapes" size={14} style={{ verticalAlign: 'middle' }} /> {ar ? 'كساء الكروم: الأزرار والقوائم' : 'Chrome skin: buttons & bars'}</strong>
                     <button type="button" className="btn-link xs" onClick={resetChrome}><Icon name="reload" size={12} /> {ar ? 'إرجاع الافتراضي' : 'Reset to default'}</button>
                   </div>
                   <p className="xs faint" style={{ margin: 0 }}>
@@ -4385,7 +4385,7 @@ export default function Settings() {
                   <input ref={chromeFileRef} type="file" accept="image/*" hidden onChange={onChromeFile} />
                   <label className="row-between" style={{ gap: 10, alignItems: 'flex-start', cursor: 'pointer' }}>
                     <span className="stack" style={{ gap: 2 }}>
-                      <strong className="xs">{ar ? 'اتبع جدار المنيو — كل الأزرار والقوائم من هوية الغرفة' : 'Follow the menu wall — every button and sheet takes the room identity'}</strong>
+                      <strong className="xs">{ar ? 'اتبع جدار المنيو، كل الأزرار والقوائم من هوية الغرفة' : 'Follow the menu wall, every button and sheet takes the room identity'}</strong>
                       <span className="xs faint">{ar ? 'مفتاح واحد: كل عنصر لم تخصّصه يلبس الجدار، وكل صفحة بلا خلفية تأخذ الجدار. التخصيص الفردي أدناه يتقدّم عليه.' : 'One switch: every untouched element wears the wall, every page without a background takes the wall. Per-element choices below override it.'}</span>
                     </span>
                     <input type="checkbox" checked={chromeCfg.follow === true} onChange={(e) => writeChrome({ follow: e.target.checked === true })} style={{ width: 22, height: 22, flex: 'none' }} />
@@ -4502,7 +4502,7 @@ export default function Settings() {
                         )}
                         {chromeElSel === 'social' && (
                           <div className="stack" style={{ gap: 6 }}>
-                            <span className="xs faint bold">{ar ? 'أيقونات المنصات — ارفع بديلاً لأي منصة' : 'Per-platform icons — upload a replacement'}</span>
+                            <span className="xs faint bold">{ar ? 'أيقونات المنصات: ارفع بديلاً لأي منصة' : 'Per-platform icons: upload a replacement'}</span>
                             <div className="row wrap" style={{ gap: 8 }}>
                               {CHROME_SOCIAL_PLATFORMS.map(([pid, plabel]) => {
                                 const cur = (chromeCfg.socialIcons || {})[pid] || ''
@@ -4523,7 +4523,7 @@ export default function Settings() {
                   })()}
                   <span className="xs faint">
                     {ar
-                      ? 'حدود معلومة: أزرار «أضف للسلة» وعناصر التحكم داخل القوائم يكسوها «كساء الأزرار» في ثيم «المجلة الداكنة» فقط؛ أيقونات القائمة السفلية (الرئيسية/الطلبات/العروض…) تبقى المدمجة — الأيقونة المخصصة للسلة والجرس وحدهما؛ و«نفس التصميم فاتحاً وداكناً لكل تخصيص» جولة مستقلة قادمة.'
+                      ? 'حدود معلومة: أزرار «أضف للسلة» وعناصر التحكم داخل القوائم يكسوها «كساء الأزرار» في ثيم «المجلة الداكنة» فقط؛ أيقونات القائمة السفلية (الرئيسية/الطلبات/العروض…) تبقى المدمجة، الأيقونة المخصصة للسلة والجرس وحدهما؛ و«نفس التصميم فاتحاً وداكناً لكل تخصيص» جولة مستقلة قادمة.'
                       : 'Known limits: in-sheet controls and the add-to-cart buttons are skinned by the button-skin card (editorial theme only); bottom-nav item icons stay built-in (custom icons are cart + bell only); and “one design across light & dark” is its own future round.'}
                   </span>
                 </div>
@@ -4647,7 +4647,7 @@ export default function Settings() {
                     is what the contract resolves. */}
                 <div id="set-menusections" className="card card-pad stack" style={{ gap: 12 }}>
                   <div className="row-between wrap" style={{ gap: 8, alignItems: 'center' }}>
-                    <strong className="small"><Icon name="list" size={14} style={{ verticalAlign: 'middle' }} /> {ar ? 'اتصال الأصناف — الفاصل بين طبق وطبق' : 'Dish continuity — the join between two dishes'}</strong>
+                    <strong className="small"><Icon name="list" size={14} style={{ verticalAlign: 'middle' }} /> {ar ? 'اتصال الأصناف: الفاصل بين طبق وطبق' : 'Dish continuity: the join between two dishes'}</strong>
                     <button type="button" className="btn-link xs" onClick={resetSections}><Icon name="reload" size={12} /> {ar ? 'إرجاع الافتراضي' : 'Reset to default'}</button>
                   </div>
                   <p className="xs faint" style={{ margin: 0 }}>
@@ -4688,8 +4688,8 @@ export default function Settings() {
                   {Number(secCfg.fade) > 0.6 && (
                     <p className="xs" style={{ margin: 0, color: 'var(--warning)' }}>
                       {ar
-                        ? '«تعتيم الغرفة خلف النص» مرتفع — هذه هي الطبقة الداكنة التي تراها فوق الأطباق، وليست عطلاً. أنزل المنزلق إن بدت الغرفة معتمة.'
-                        : 'The room-dim behind the text is high — this IS the dark layer you see over the dishes, not a bug. Lower the slider if the room looks murky.'}
+                        ? '«تعتيم الغرفة خلف النص» مرتفع. هذه هي الطبقة الداكنة التي تراها فوق الأطباق، وليست عطلاً. أنزل المنزلق إن بدت الغرفة معتمة.'
+                        : 'The room-dim behind the text is high. This IS the dark layer you see over the dishes, not a bug. Lower the slider if the room looks murky.'}
                     </p>
                   )}
 
@@ -4707,12 +4707,12 @@ export default function Settings() {
                   )}
 
                   <div className="stack" style={{ gap: 6, borderTop: '1px solid var(--border)', paddingTop: 10 }}>
-                    <span className="xs faint bold">{ar ? 'المعاينة الحية — صنفان فوق بعضهما والفاصل بينهما' : 'Live preview — two stacked dishes and the join between them'}</span>
+                    <span className="xs faint bold">{ar ? 'المعاينة الحية: صنفان فوق بعضهما والفاصل بينهما' : 'Live preview: two stacked dishes and the join between them'}</span>
                     <SectionSeamPreview ar={ar} cfg={secCfg} wallLive={wallLive} sample={wallSample} lang={lang} currency={currency} />
                     <span className="xs faint">
                       {ar
-                        ? 'الفاصل في منتصف الإطار عمداً — هو ما تحكم عليه. «متصل بلا فواصل» يعني ألّا يظهر أي شريط بين الطبقين.'
-                        : 'The join sits in the middle of the frame on purpose — it is the thing you are judging. “One continuous room” means no band of any kind appears between the two dishes.'}
+                        ? 'الفاصل في منتصف الإطار عمداً، هو ما تحكم عليه. «متصل بلا فواصل» يعني ألّا يظهر أي شريط بين الطبقين.'
+                        : 'The join sits in the middle of the frame on purpose, it is the thing you are judging. “One continuous room” means no band of any kind appears between the two dishes.'}
                     </span>
                   </div>
                 </div>
@@ -4724,7 +4724,7 @@ export default function Settings() {
                 <div id="set-menutable" className="card card-pad stack" style={{ gap: 12 }}>
                   <div className="row-between" style={{ gap: 10, alignItems: 'flex-start' }}>
                     <div className="stack" style={{ gap: 2 }}>
-                      <strong>{ar ? 'طاولة الصنف — اللوحة تحت الطبق' : 'The dish table — the panel under the plate'}</strong>
+                      <strong>{ar ? 'طاولة الصنف: اللوحة تحت الطبق' : 'The dish table: the panel under the plate'}</strong>
                       <span className="xs faint">
                         {ar
                           ? 'اللوحة التي تحمل اسم الصنف وسعره تُرسم كسطح طاولة يجلس الطبق عليه. تعمل في ثيم «المجلة الداكنة».'
@@ -4769,7 +4769,7 @@ export default function Settings() {
                       the plate itself. Reachable even on kind:'none' — landing a
                       surface auto-opens the material panel. */}
                   <div className="stack" style={{ gap: 8, borderTop: '1px solid var(--border)', paddingTop: 10 }}>
-                    <span className="xs faint bold">{ar ? 'سطح الطبق — طاولة أفقية يجلس عليها الصنف داخل الصورة' : 'Dish surface — a horizontal tabletop the dish sits on inside the photo'}</span>
+                    <span className="xs faint bold">{ar ? 'سطح الطبق: طاولة أفقية يجلس عليها الصنف داخل الصورة' : 'Dish surface: a horizontal tabletop the dish sits on inside the photo'}</span>
                     <div className="row wrap" style={{ gap: 8, alignItems: 'center' }}>
                       <button type="button" className="btn btn-sm" disabled={tblTopBusy} onClick={genTopAi}>
                         {tblTopBusy ? <span className="spinner" /> : <Icon name="sparkles" size={13} />} {ar ? 'ولّد سطح الطبق بالذكاء' : 'Generate the dish surface with AI'}
@@ -4788,14 +4788,14 @@ export default function Settings() {
                     {tblCfg.topUrl ? (
                       <span className="xs faint">
                         {ar
-                          ? 'منزلقات السطح تجدها مع بقية منزلقات الطاولة أدناه، وتتبع «أين تضبط الآن؟» — فيمكنك ضبط سطح نافذة الصنف المفتوح باستقلال. الشفافية والتعتيم والتمويه والصبغة تعمل كلها على السطح الكامل.'
-                          : 'The surface sliders live with the table sliders below and follow the place switcher — the opened-item surface tunes independently. Opacity, darkening, blur and tint act on the whole surface.'}
+                          ? 'منزلقات السطح تجدها مع بقية منزلقات الطاولة أدناه، وتتبع «أين تضبط الآن؟»، فيمكنك ضبط سطح نافذة الصنف المفتوح باستقلال. الشفافية والتعتيم والتمويه والصبغة تعمل كلها على السطح الكامل.'
+                          : 'The surface sliders live with the table sliders below and follow the place switcher. The opened-item surface tunes independently. Opacity, darkening, blur and tint act on the whole surface.'}
                       </span>
                     ) : null}
                   </div>
 
                   {tblCfg.kind === 'none' ? (
-                    <p className="xs faint" style={{ margin: 0 }}>{ar ? 'بدون طاولة — اللوحة تبقى داكنة سادة كما كانت.' : 'No table — the panel stays plain dark as before.'}</p>
+                    <p className="xs faint" style={{ margin: 0 }}>{ar ? 'بدون طاولة، اللوحة تبقى داكنة سادة كما كانت.' : 'No table, the panel stays plain dark as before.'}</p>
                   ) : (
                     <>
                       {tblCfg.kind === 'material' && (
@@ -4881,7 +4881,7 @@ export default function Settings() {
                             <span className="xs faint">
                               {ar
                                 ? 'ظل التماس تحت الطبق يتبع منزلق «ظل التماس». إن غاص الطبق كثيراً قلّل «جلوس الطبق على الطاولة». ولإخفاء الظل أسفل الطاولة صفّر «تعتيم الطاولة نحو الأسفل» أو استخدم «تدرج الاختفاء» لنهاية إبداعية.'
-                                : 'The seat pool follows the contact slider. If the plate digs in, lower the lift. To kill the dark foot, zero the downward darkening — or use the bottom fade-out.'}
+                                : 'The seat pool follows the contact slider. If the plate digs in, lower the lift. To kill the dark foot, zero the downward darkening, or use the bottom fade-out.'}
                             </span>
                           </>
                         ) : null}
@@ -4891,7 +4891,7 @@ export default function Settings() {
                           bolted box («تحكم حر بالطاولة»). Per place, like the
                           sliders above. */}
                       <div className="stack" style={{ gap: 8, borderTop: '1px solid var(--border)', paddingTop: 10 }}>
-                        <span className="xs faint bold">{ar ? 'الموضع والحجم — تحكم حر' : 'Position & size — free control'}</span>
+                        <span className="xs faint bold">{ar ? 'الموضع والحجم: تحكم حر' : 'Position & size: free control'}</span>
                         <div className="row wrap" style={{ gap: 10 }}>
                           {TABLE_FREE_SLIDERS.map(([key, la, le, unit]) => {
                             const R = TABLE_RANGE[key]
@@ -4923,7 +4923,7 @@ export default function Settings() {
                             <input type="checkbox" checked={tblValueAt('extend') === true} onChange={(e3) => writeTableAt({ extend: e3.target.checked === true })} style={{ width: 20, height: 20, flex: 'none' }} />
                             <span className="xs">{ar ? 'مدّ الطاولة حتى أسفل النافذة (تلتحم بشريط الإضافة)' : 'Extend the table to the window bottom (meets the add bar)'}</span>
                           </label>
-                          {[['heroPad', 'المساحة فوق الطبق', 'Space above the dish', 'px'], ['heroMax', 'أقصى ارتفاع لصورة الطبق', 'Dish photo max height', 'dvh'], ['textPad', 'مسافة النص تحت الطبق — كي لا يغطي الطبقُ الاسم', 'Text clearance under the dish', 'px'], ['minBody', 'أدنى ارتفاع للوح النص — شكل ثابت للطاولة في كل الأصناف', 'Minimum panel height — a consistent table on every item', 'dvh']].map(([key, la, le, unit]) => {
+                          {[['heroPad', 'المساحة فوق الطبق', 'Space above the dish', 'px'], ['heroMax', 'أقصى ارتفاع لصورة الطبق', 'Dish photo max height', 'dvh'], ['textPad', 'مسافة النص تحت الطبق، كي لا يغطي الطبقُ الاسم', 'Text clearance under the dish', 'px'], ['minBody', 'أدنى ارتفاع للوح النص: شكل ثابت للطاولة في كل الأصناف', 'Minimum panel height: a consistent table on every item', 'dvh']].map(([key, la, le, unit]) => {
                             const R = TABLE_RANGE[key]
                             const v = Number(tblValueAt(key))
                             const overridden = tblStageOver[key] != null
@@ -4936,8 +4936,8 @@ export default function Settings() {
                           })}
                           <span className="xs faint">
                             {ar
-                              ? 'معاينة البطاقة هنا لا تُظهر مفاتيح النافذة هذه (لا يوجد فيها محاكاة لنافذة الصنف) — احكم عليها من المعاينة الكبيرة أو من المنيو نفسه. «أدنى ارتفاع للوح» يوحّد شكل الطاولة بين صنف بلا خيارات وصنف مليء بها — اضبطه قرب أطول لوح شائع؛ ومع «مدّ الطاولة» يفوز الأطول.'
-                              : 'The small card preview cannot show these window keys (it has no item-window mock) — judge them in the big preview or the live menu. The minimum panel height makes the table read the same on bare and option-rich items — set it near your tallest common panel; with extend on, the taller wins.'}
+                              ? 'معاينة البطاقة هنا لا تُظهر مفاتيح النافذة هذه (لا يوجد فيها محاكاة لنافذة الصنف)، احكم عليها من المعاينة الكبيرة أو من المنيو نفسه. «أدنى ارتفاع للوح» يوحّد شكل الطاولة بين صنف بلا خيارات وصنف مليء بها، اضبطه قرب أطول لوح شائع؛ ومع «مدّ الطاولة» يفوز الأطول.'
+                              : 'The small card preview cannot show these window keys (it has no item-window mock). Judge them in the big preview or the live menu. The minimum panel height makes the table read the same on bare and option-rich items. Set it near your tallest common panel; with extend on, the taller wins.'}
                           </span>
                         </div>
                       )}
@@ -4968,7 +4968,7 @@ export default function Settings() {
                           stage, with one of the venue's real dishes seated on it
                           by the same lift number the menu uses */}
                       <div className="stack" style={{ gap: 6 }}>
-                        <span className="xs faint bold">{ar ? 'المعاينة — الطبق جالس على الطاولة' : 'Preview — the dish seated on the table'}</span>
+                        <span className="xs faint bold">{ar ? 'المعاينة: الطبق جالس على الطاولة' : 'Preview: the dish seated on the table'}</span>
                         <div className="mtbl-stage">
                           {/* the band under the preview dish — an honest
                               approximation (240px stage, 46% panel → the photo
@@ -5012,13 +5012,13 @@ export default function Settings() {
                     defaults are today's exact DOM. */}
                 <div id="set-menustage" className="card card-pad stack" style={{ gap: 12 }}>
                   <div className="row-between wrap" style={{ gap: 8, alignItems: 'center' }}>
-                    <strong className="small"><Icon name="edit" size={14} style={{ verticalAlign: 'middle' }} /> {ar ? 'نصوص الصنف — الموضع والترتيب' : 'Item text — placement & order'}</strong>
+                    <strong className="small"><Icon name="edit" size={14} style={{ verticalAlign: 'middle' }} /> {ar ? 'نصوص الصنف: الموضع والترتيب' : 'Item text: placement & order'}</strong>
                     <button type="button" className="btn-link xs" onClick={resetStage}><Icon name="reload" size={12} /> {ar ? 'إرجاع الافتراضي' : 'Reset to default'}</button>
                   </div>
                   <p className="xs faint" style={{ margin: 0 }}>
                     {ar
-                      ? 'اسحب لترتيب الكتل، واختر كتلة لضبط محاذاتها وإزاحتها — كل شيء يُحفظ فوراً. تخصيصان مستقلان: الصنف في قائمة التصفح، والصنف في النافذة المفتوحة. يعمل على ثيم «المجلة الداكنة».'
-                      : 'Drag to order the blocks; pick one to align and nudge it — saved instantly. Two independent tunings: the item in the browsing list, and in the opened window. Dark-editorial theme.'}
+                      ? 'اسحب لترتيب الكتل، واختر كتلة لضبط محاذاتها وإزاحتها. كل شيء يُحفظ فوراً. تخصيصان مستقلان: الصنف في قائمة التصفح، والصنف في النافذة المفتوحة. يعمل على ثيم «المجلة الداكنة».'
+                      : 'Drag to order the blocks; pick one to align and nudge it. Saved instantly. Two independent tunings: the item in the browsing list, and in the opened window. Dark-editorial theme.'}
                   </p>
                   <div className="row wrap" style={{ gap: 8, alignItems: 'center' }}>
                     <span className="xs faint bold">{ar ? 'أين تضبط الآن؟' : 'Tuning which place?'}</span>
@@ -5061,7 +5061,7 @@ export default function Settings() {
                         ))}
                       </div>
                     )}
-                    {[['dx', 'إزاحة أفقية — موجبها جهة بداية القراءة', 'Inline shift (logical)', '%'], ['dy', 'إزاحة رأسية', 'Vertical shift', 'px']].map(([key, la, le, unit]) => {
+                    {[['dx', 'إزاحة أفقية: موجبها جهة بداية القراءة', 'Inline shift (logical)', '%'], ['dy', 'إزاحة رأسية', 'Vertical shift', 'px']].map(([key, la, le, unit]) => {
                       const R = STAGE_TEXT_RANGE[key]
                       const v = Number((stgAt.blocks || {})[stgBlockId]?.[key] ?? R.dflt)
                       return (
@@ -5073,8 +5073,8 @@ export default function Settings() {
                     })}
                     <span className="xs faint">
                       {ar
-                        ? 'الوصف الموسّط أو المنتهي يتجاهل الإزاحة الأفقية (المحاذاة تملك صندوقه). زر ثلاثي الأبعاد يُضبط موضعه فقط ولا يدخل الترتيب — مكانه تحت الصورة. الإزاحة الرأسية السالبة قد تراكب الكتلة السابقة — وضوح النص مسؤوليتك كما في الذوبان.'
-                        : 'A centred/end-aligned description ignores dx (alignment owns its box). The 3D button is place-only, outside the order. Negative dy may overlap the previous block — readability stays yours, as with the melt.'}
+                        ? 'الوصف الموسّط أو المنتهي يتجاهل الإزاحة الأفقية (المحاذاة تملك صندوقه). زر ثلاثي الأبعاد يُضبط موضعه فقط ولا يدخل الترتيب، مكانه تحت الصورة. الإزاحة الرأسية السالبة قد تراكب الكتلة السابقة، وضوح النص مسؤوليتك كما في الذوبان.'
+                        : 'A centred/end-aligned description ignores dx (alignment owns its box). The 3D button is place-only, outside the order. Negative dy may overlap the previous block. Readability stays yours, as with the melt.'}
                     </span>
                   </div>
                 </div>
@@ -5091,8 +5091,8 @@ export default function Settings() {
                   </div>
                   <p className="xs faint" style={{ margin: 0 }}>
                     {ar
-                      ? 'كل خط داكن وكل ظل في المنيو — صفر يزيله نهائياً، والوضع الحالي هو الافتراضي. «ذوبان أعلى الطاولة» إضافة اختيارية تخص طاولات الصور وحدها.'
-                      : 'Every dark line and cast in the menu — zero removes it outright; the current look is the default. The table-top melt is an opt-in extra for photo tables only.'}
+                      ? 'كل خط داكن وكل ظل في المنيو. صفر يزيله نهائياً، والوضع الحالي هو الافتراضي. «ذوبان أعلى الطاولة» إضافة اختيارية تخص طاولات الصور وحدها.'
+                      : 'Every dark line and cast in the menu. Zero removes it outright, and the current look is the default. The table-top melt is an opt-in extra for photo tables only.'}
                   </p>
                   {ovLayout !== 'editorial' && (
                     <p className="xs" style={{ margin: 0, color: 'var(--warning)' }}>
@@ -5107,8 +5107,8 @@ export default function Settings() {
                   </div>
                   <span className="xs faint">
                     {ar
-                      ? 'زر الإزالة يصفّر كل ما في هذه البطاقة، ومعه المصادر الداكنة الثلاثة بالأسفل (ذوبان قدم الصورة + ظل التماس + تعتيم الأقسام). إزالة «ظلال الأطباق» لا تحذف عمل موظفيك على الأصناف — تُخفّضه فقط، ويعود كاملاً برفع المنزلق. ظل الشريط العلوي الافتراضي ثابت عمداً — يتبع «لون الشريط».'
-                      : 'The kill button zeroes everything on this card plus the three dark sources below (photo-foot melt + contact pool + section dim). Killing the dish shadows never deletes the per-item work — it scales it. The default app-bar shadow is deliberately fixed — it follows the bar-colour preset.'}
+                      ? 'زر الإزالة يصفّر كل ما في هذه البطاقة، ومعه المصادر الداكنة الثلاثة بالأسفل (ذوبان قدم الصورة + ظل التماس + تعتيم الأقسام). إزالة «ظلال الأطباق» لا تحذف عمل موظفيك على الأصناف. تُخفّضه فقط، ويعود كاملاً برفع المنزلق. ظل الشريط العلوي الافتراضي ثابت عمداً، يتبع «لون الشريط».'
+                      : 'The kill button zeroes everything on this card plus the three dark sources below (photo-foot melt + contact pool + section dim). Killing the dish shadows never deletes the per-item work, it scales it. The default app-bar shadow is deliberately fixed, it follows the bar-colour preset.'}
                   </span>
                   <div className="stack" style={{ gap: 8 }}>
                     {SHADOW_SLIDERS.map(([key, la, le]) => {
@@ -5130,7 +5130,7 @@ export default function Settings() {
                       on the same writers their home cards use, so the two
                       surfaces can never disagree. */}
                   <div className="stack" style={{ gap: 8, borderTop: '1px solid var(--border)', paddingTop: 10 }}>
-                    <span className="xs faint bold">{ar ? 'مصادر داكنة أخرى — من بطاقات الجدار والطاولة والأقسام، تُضبط من هنا أيضاً' : 'Other dark sources — wall/table/sections dials, adjustable from here too'}</span>
+                    <span className="xs faint bold">{ar ? 'مصادر داكنة أخرى: من بطاقات الجدار والطاولة والأقسام، تُضبط من هنا أيضاً' : 'Other dark sources: wall/table/sections dials, adjustable from here too'}</span>
                     <div className="field" style={{ gap: 2 }}>
                       <label>{ar ? 'ذوبان أسفل صورة الطبق (الحزام عند قدم الصورة)' : 'Melt under the dish photo (the foot band)'} · <span className="num">{wallSliderText('pct', Number(wallCfg.vignette != null ? wallCfg.vignette : WALL_RANGE.vignette.dflt))}</span></label>
                       <input type="range" min={WALL_RANGE.vignette.min} max={WALL_RANGE.vignette.max} step={WALL_RANGE.vignette.step} value={Number(wallCfg.vignette != null ? wallCfg.vignette : WALL_RANGE.vignette.dflt)} onChange={(e3) => writeWall({ vignette: Number(e3.target.value) }, true)} style={{ width: '100%' }} />
@@ -5282,7 +5282,7 @@ export default function Settings() {
                           <button key={id} className={`chip ${bannerFadeDir === id ? 'active' : ''}`} onClick={() => setBannerFadeDir(id)}>{l}</button>
                         ))}
                       </div>
-                      <span className="xs faint">{ar ? 'التدرّج يذوّب الصورة/الفيديو في خلفية المنيو نفسها فيبدو جزءاً منه لا شريطاً منفصلاً.' : 'The fade dissolves the image/video into the menu background itself — one piece, not a pasted strip.'}</span>
+                      <span className="xs faint">{ar ? 'التدرّج يذوّب الصورة/الفيديو في خلفية المنيو نفسها فيبدو جزءاً منه لا شريطاً منفصلاً.' : 'The fade dissolves the image/video into the menu background itself. One piece, not a pasted strip.'}</span>
                     </div>
                     <div className="field"><label>{ar ? `قوّة الاندماج: ${Math.round(bannerGradient * 100)}%` : `Melt strength: ${Math.round(bannerGradient * 100)}%`}</label><input type="range" min="0" max="1" step="0.05" value={bannerGradient} onChange={(e) => setBannerGradient(Number(e.target.value))} style={{ width: '100%' }} /></div>
                     {/* TRUE-transparency melt (bannerMelt > 0): the media stack
@@ -5303,7 +5303,7 @@ export default function Settings() {
                         <div className="field grow" style={{ minWidth: 150 }}>
                           <label>{ar ? `حجاب نص البانر (وضع الغرفة): ${Math.round(Number(bannerScrim) * 100)}%` : `Hero-text veil (room mode): ${Math.round(Number(bannerScrim) * 100)}%`}</label>
                           <input type="range" min={BANNER_RANGE.scrim.min} max={BANNER_RANGE.scrim.max} step={BANNER_RANGE.scrim.step} value={Number(bannerScrim)} onChange={(e) => setBannerScrim(Number(e.target.value))} style={{ width: '100%' }} />
-                          <span className="xs faint">{ar ? 'القيمة الافتراضية مضبوطة لجدار مصوّر داكن — مع جدار فاتح ارفعها نحو 60% ليبقى النص مقروءاً.' : 'The default suits a dark photo wall — over a light wall raise it toward 60% to keep the text readable.'}</span>
+                          <span className="xs faint">{ar ? 'القيمة الافتراضية مضبوطة لجدار مصوّر داكن، مع جدار فاتح ارفعها نحو 60% ليبقى النص مقروءاً.' : 'The default suits a dark photo wall, over a light wall raise it toward 60% to keep the text readable.'}</span>
                         </div>
                       </div>
                     )}
@@ -5500,7 +5500,7 @@ export default function Settings() {
                 {/* per-scope Liquid overrides: cashier / kitchen can run their own glass values */}
                 <div className="card card-pad stack" style={{ gap: 12 }}>
                   <strong className="small"><Icon name="sparkles" size={14} style={{ verticalAlign: 'middle' }} /> {ar ? 'زجاج مخصص لهذا القسم (اختياري)' : 'Per-section glass (optional)'}</strong>
-                  <p className="xs faint" style={{ margin: 0 }}>{ar ? 'افتراضياً يتبع قيم الزجاج العامة في تبويب «الثيم» — فعّل قيماً خاصة عند الحاجة (مثلاً كاشير أوضح ومطبخ أصفى).' : 'Follows the global glass values by default — enable custom values per screen when needed.'}</p>
+                  <p className="xs faint" style={{ margin: 0 }}>{ar ? 'افتراضياً يتبع قيم الزجاج العامة في تبويب «الثيم»، فعّل قيماً خاصة عند الحاجة (مثلاً كاشير أوضح ومطبخ أصفى).' : 'Follows the global glass values by default, enable custom values per screen when needed.'}</p>
                   {['cashier', 'kds'].map((scope) => {
                     const on = !!tenant?.glassFxBy?.[scope]
                     const cur = { ...(tenant?.glassFx || {}), ...(tenant?.glassFxBy?.[scope] || {}) }
@@ -5543,7 +5543,7 @@ export default function Settings() {
                 {/* Cashier POS backdrop: subtle image/video behind the item grid */}
                 <div className="card card-pad stack" style={{ gap: 12 }}>
                   <strong className="small"><Icon name="cashier" size={14} style={{ verticalAlign: 'middle' }} /> {ar ? 'خلفية شاشة الكاشير (POS)' : 'Cashier screen backdrop'}</strong>
-                  <p className="xs faint" style={{ margin: 0 }}>{ar ? 'صورة أو فيديو هادئ خلف شبكة الأصناف — أبقِ الشفافية منخفضة ليبقى الموظف مركّزاً. تعمل على كل الأجهزة (جوال/تابلت/كمبيوتر).' : 'A calm image or video behind the item grid — keep opacity low for legibility. Works on every device size.'}</p>
+                  <p className="xs faint" style={{ margin: 0 }}>{ar ? 'صورة أو فيديو هادئ خلف شبكة الأصناف، أبقِ الشفافية منخفضة ليبقى الموظف مركّزاً. تعمل على كل الأجهزة (جوال/تابلت/كمبيوتر).' : 'A calm image or video behind the item grid, keep opacity low for legibility. Works on every device size.'}</p>
                   {tenant?.posBg?.url && (
                     <div className="row" style={{ gap: 10, alignItems: 'center' }}>
                       {tenant.posBg.kind === 'video'
@@ -5669,7 +5669,7 @@ export default function Settings() {
                 {designDirty && (
                   <div className="row" style={{ gap: 8, alignItems: 'center', background: 'var(--warning-soft)', color: 'var(--warning)', borderRadius: 'var(--r-md)', padding: '8px 12px', fontWeight: 700, fontSize: 'var(--fs-xs)' }}>
                     <Icon name="warning" size={14} style={{ flex: 'none' }} />
-                    {ar ? 'لديك تغييرات غير محفوظة — المعاينة تعرضها، لكن المنيو الحقيقي لن يتغير حتى تضغط «حفظ».' : 'Unsaved changes — the preview shows them, but the live menu updates only after Save.'}
+                    {ar ? 'لديك تغييرات غير محفوظة. المعاينة تعرضها، لكن المنيو الحقيقي لن يتغير حتى تضغط «حفظ».' : 'Unsaved changes. The preview shows them, but the live menu updates only after Save.'}
                   </div>
                 )}
                 <button className="btn btn-primary btn-block btn-lg" onClick={save} disabled={busy}>{busy ? t('saving') : t('save')}</button>
@@ -5903,19 +5903,19 @@ export default function Settings() {
                       </div>
                       {/* one-tap presets: most venues never need to touch the details below */}
                       <div className="stack" style={{ gap: 6, background: 'var(--brand-soft)', borderRadius: 'var(--r-md)', padding: 10 }}>
-                        <span className="xs bold">{ar ? 'إعداد سريع بضغطة — ثم عدّل ما تشاء' : 'One-tap setup — tweak later if needed'}</span>
+                        <span className="xs bold">{ar ? 'إعداد سريع بضغطة، ثم عدّل ما تشاء' : 'One-tap setup, tweak later if needed'}</span>
                         <div className="row" style={{ gap: 6, flexWrap: 'wrap' }}>
                           <button type="button" className="btn btn-sm btn-outline" onClick={() => {
                             setMemMode('discounts'); setMemTierBy('orders'); setMemMinOrders(5)
                             setMemGoldMinOrders(10); setMemPlatMinOrders(15)
                             setMemSilverPct(5); setMemGoldPct(10); setMemPlatPct(15)
-                            toast.success(ar ? 'جاهز: خصومات 5/10/15% بترقية 5/10/15 طلبات — اضغط حفظ' : 'Ready: 5/10/15% at 5/10/15 orders — press Save')
+                            toast.success(ar ? 'جاهز: خصومات 5/10/15% بترقية 5/10/15 طلبات، اضغط حفظ' : 'Ready: 5/10/15% at 5/10/15 orders, press Save')
                           }}><Icon name="offers" size={14} /> {ar ? 'خصومات تلقائية (موصى به)' : 'Auto discounts (recommended)'}</button>
                           <button type="button" className="btn btn-sm btn-outline" onClick={() => {
                             setMemMode('perks'); setMemTierBy('orders'); setMemMinOrders(5)
                             setMemGoldMinOrders(10); setMemPlatMinOrders(15)
                             setMemPerks({ silver: { offers: true, featured: false, newItems: false }, gold: { offers: true, featured: true, newItems: false }, platinum: { offers: true, featured: true, newItems: true } })
-                            toast.success(ar ? 'جاهز: امتيازات إشعارات بلا خصومات — اضغط حفظ' : 'Ready: notification perks, no discounts — press Save')
+                            toast.success(ar ? 'جاهز: امتيازات إشعارات بلا خصومات، اضغط حفظ' : 'Ready: notification perks, no discounts, press Save')
                           }}><Icon name="bellRing" size={14} /> {ar ? 'امتيازات بلا خصومات' : 'Perks, no discounts'}</button>
                         </div>
                         <span className="xs faint">{ar ? 'الخلاصة الحالية: ' : 'Current summary: '}
@@ -5927,12 +5927,12 @@ export default function Settings() {
 
                       {/* the venue's LOYALTY POLICY — discounts or privileged notifications */}
                       <div className="field">
-                        <label>{ar ? 'نوع الولاء — ماذا يكسب أعضاؤك؟' : 'Loyalty type — what do members get?'}</label>
+                        <label>{ar ? 'نوع الولاء: ماذا يكسب أعضاؤك؟' : 'Loyalty type: what do members get?'}</label>
                         <select className="select" value={memMode} onChange={(e) => setMemMode(e.target.value)}>
-                          <option value="discounts">{ar ? 'ولاء الخصومات — خصم دائم حسب المستوى' : 'Discount loyalty — standing tier discounts'}</option>
-                          <option value="perks">{ar ? 'ولاء الامتيازات — إشعارات حصرية بالجديد (بلا خصومات)' : 'Perks loyalty — exclusive alerts (no discounts)'}</option>
+                          <option value="discounts">{ar ? 'ولاء الخصومات: خصم دائم حسب المستوى' : 'Discount loyalty: standing tier discounts'}</option>
+                          <option value="perks">{ar ? 'ولاء الامتيازات: إشعارات حصرية بالجديد (بلا خصومات)' : 'Perks loyalty: exclusive alerts (no discounts)'}</option>
                         </select>
-                        {memMode === 'perks' && <p className="xs faint" style={{ margin: '4px 0 0' }}>{ar ? 'لا خصومات — أعضاؤك يحصلون على أسبقية المعرفة: إشعارات واتساب تلقائية بالعروض والأصناف المميزة والجديدة حسب مستواهم (المصفوفة أدناه).' : 'No discounts — members get first-to-know privileges: automatic WhatsApp alerts for offers, featured and new items per tier (matrix below).'}</p>}
+                        {memMode === 'perks' && <p className="xs faint" style={{ margin: '4px 0 0' }}>{ar ? 'لا خصومات، أعضاؤك يحصلون على أسبقية المعرفة: إشعارات واتساب تلقائية بالعروض والأصناف المميزة والجديدة حسب مستواهم (المصفوفة أدناه).' : 'No discounts. Members get first-to-know privileges: automatic WhatsApp alerts for offers, featured and new items per tier (matrix below).'}</p>}
                       </div>
                       <div className="field">
                         <label>{ar ? 'ما الذي يرقّي العضو؟' : 'What promotes a member?'}</label>
@@ -5950,7 +5950,7 @@ export default function Settings() {
                       {/* perks matrix — which alerts each tier unlocks (auto-sent by the server) */}
                       {memMode === 'perks' && (
                         <div className="stack" style={{ gap: 6, background: 'var(--surface-2)', borderRadius: 'var(--r-md)', padding: 10 }}>
-                          <span className="xs bold">{ar ? 'امتيازات كل مستوى — تُرسل واتساب تلقائياً + إشعار منيو' : 'Per-tier privileges — auto WhatsApp + menu notice'}</span>
+                          <span className="xs bold">{ar ? 'امتيازات كل مستوى: تُرسل واتساب تلقائياً + إشعار منيو' : 'Per-tier privileges: auto WhatsApp + menu notice'}</span>
                           <div className="row" style={{ gap: 6, alignItems: 'center' }}>
                             <span className="xs faint" style={{ width: 70 }} />
                             <span className="xs faint grow" style={{ textAlign: 'center' }}>{ar ? 'العروض' : 'Offers'}</span>
@@ -5975,10 +5975,10 @@ export default function Settings() {
                         <summary className="small bold" style={{ cursor: 'pointer' }}>{ar ? 'خيارات متقدمة (النقاط والمكافآت)' : 'Advanced (points & bonuses)'}</summary>
                         <div className="stack" style={{ gap: 8, marginTop: 8 }}>
                           <div className="row" style={{ gap: 8, flexWrap: 'wrap' }}>
-                            <div className="field grow" style={{ minWidth: 150 }}><label>{ar ? 'انتهاء النقاط (يوم خمول) — 0=لا' : 'Expire (idle days) — 0=never'}</label><input className="input num" type="number" value={memExpiry} onChange={(e) => setMemExpiry(e.target.value)} /></div>
+                            <div className="field grow" style={{ minWidth: 150 }}><label>{ar ? 'انتهاء النقاط (يوم خمول): 0=لا' : 'Expire (idle days): 0=never'}</label><input className="input num" type="number" value={memExpiry} onChange={(e) => setMemExpiry(e.target.value)} /></div>
                             <div className="field" style={{ width: 100 }}><label>{ar ? 'مضاعف النقاط' : 'Points ×'}</label><input className="input num" type="number" step="0.5" value={memMultiplier} onChange={(e) => setMemMultiplier(e.target.value)} /></div>
                           </div>
-                          <div className="field"><label>{ar ? 'مكافأة عيد الميلاد (نقاط) — مع تهنئة واتساب تلقائية' : 'Birthday bonus (points) — with auto WhatsApp greeting'}</label><input className="input num" type="number" value={memBday} onChange={(e) => setMemBday(e.target.value)} /></div>
+                          <div className="field"><label>{ar ? 'مكافأة عيد الميلاد (نقاط)، مع تهنئة واتساب تلقائية' : 'Birthday bonus (points), with auto WhatsApp greeting'}</label><input className="input num" type="number" value={memBday} onChange={(e) => setMemBday(e.target.value)} /></div>
                         </div>
                       </details>
                       {memMode !== 'perks' && (
@@ -6045,7 +6045,7 @@ export default function Settings() {
                               {ar ? 'إزالة الخلفية' : 'Remove photo'}
                             </button>
                           )}
-                          <span className="xs faint">{ar ? 'التغييرات تُحفظ فوراً وتظهر لكل الأعضاء.' : 'Saved instantly — visible to every member.'}</span>
+                          <span className="xs faint">{ar ? 'التغييرات تُحفظ فوراً وتظهر لكل الأعضاء.' : 'Saved instantly, visible to every member.'}</span>
                         </div>
                       </div>
                     </>
@@ -6076,7 +6076,7 @@ export default function Settings() {
                     ready, paid — plus cancelled and refunded. */}
                 <div className="stack" style={{ gap: 6, marginTop: 6, paddingTop: 10, borderTop: '1px solid var(--border)' }}>
                   <strong className="small">{ar ? 'متى يُرسَل الإشعار؟' : 'Which stages notify?'}</strong>
-                  <p className="xs faint" style={{ margin: 0 }}>{ar ? 'اختر اللحظات التي تستحق رسالة. الواتساب أغلى قناة لديك — مرحلة لا يحتاجها الضيف هي مالٌ يُنفَق على إزعاجه.' : 'Pick the moments worth a message.'}</p>
+                  <p className="xs faint" style={{ margin: 0 }}>{ar ? 'اختر اللحظات التي تستحق رسالة. الواتساب أغلى قناة لديك، مرحلة لا يحتاجها الضيف هي مالٌ يُنفَق على إزعاجه.' : 'Pick the moments worth a message.'}</p>
                   <div className="row xs faint" style={{ gap: 8, paddingInlineStart: 2 }}>
                     <span className="grow" />
                     <span style={{ width: 54, textAlign: 'center' }}>{ar ? 'إيميل' : 'Email'}</span>
@@ -6089,7 +6089,7 @@ export default function Settings() {
                         <span key={chn} style={{ width: 54, textAlign: 'center' }}>
                           <input
                             type="checkbox"
-                            aria-label={`${ar ? s.ar : s.en} — ${chn}`}
+                            aria-label={`${ar ? s.ar : s.en} · ${chn}`}
                             checked={stageOn(notifyStages, s.id, chn)}
                             onChange={(e) => setNotifyStages((prev) => ({
                               ...prev,
@@ -6111,12 +6111,12 @@ export default function Settings() {
                 <div className="row-between wrap" style={{ gap: 10 }}>
                   <div>
                     <div className="small bold row" style={{ gap: 6 }}><Icon name="chartBar" size={16} /> {ar ? 'تتبّع سلوك الزوار' : 'Guest behaviour tracking'}</div>
-                    <div className="xs faint">{ar ? 'يغذّي صفحة «سلوك العملاء» والمخطِّط الذكي — بلا تتبع أي نص يكتبه الزائر عدا البحث' : 'Feeds the behaviour page and AI planner'}</div>
+                    <div className="xs faint">{ar ? 'يغذّي صفحة «سلوك العملاء» والمخطِّط الذكي، بلا تتبع أي نص يكتبه الزائر عدا البحث' : 'Feeds the behaviour page and AI planner'}</div>
                   </div>
                   <input type="checkbox" checked={tenant?.analyticsEnabled !== false} style={{ width: 22, height: 22 }}
                     onChange={async (e) => { try { await saveNow({ analyticsEnabled: e.target.checked }); updateTenantLocal({ analyticsEnabled: e.target.checked }); toast.success(t('saved')) } catch (_) { toast.error(t('error')) } }} />
                 </div>
-                <p className="xs faint" style={{ margin: 0 }}>{ar ? 'يُحفظ فور التبديل — التقارير المبنية عليه تتوقف عن التجميع فور الإيقاف.' : 'Saved on toggle — the reports built on it stop collecting the moment it is off.'}</p>
+                <p className="xs faint" style={{ margin: 0 }}>{ar ? 'يُحفظ فور التبديل، التقارير المبنية عليه تتوقف عن التجميع فور الإيقاف.' : 'Saved on toggle, the reports built on it stop collecting the moment it is off.'}</p>
               </div>
             </div>
           )}
@@ -6222,7 +6222,7 @@ export default function Settings() {
                   <span className="small bold row" style={{ gap: 6 }}><Icon name="wallet" size={16} /> {ar ? 'الدفع الإلكتروني (Moyasar)' : 'Online payment (Moyasar)'}</span>
                   <input type="checkbox" checked={tenant?.onlinePayment?.enabled === true} onChange={async (e) => { const next = { ...(tenant?.onlinePayment || {}), enabled: e.target.checked }; try { await saveNow({ onlinePayment: next }); updateTenantLocal({ onlinePayment: next }); toast.success(t('saved')) } catch (_) { toast.error(t('error')) } }} style={{ width: 22, height: 22 }} />
                 </label>
-                <p className="xs faint" style={{ margin: 0 }}>{ar ? 'يضيف خيار «ادفع أونلاين» (مدى/بطاقة عبر Moyasar) للطلبات في المنيو. يتطلّب حساب Moyasar تاجر مُفعَّل ونشر الدوال.' : 'Adds a “pay online” option (mada/card via Moyasar) to menu orders. Requires an active Moyasar merchant account + deployed functions.'}</p>
+                <p className="xs faint" style={{ margin: 0 }}>{ar ? 'يضيف خيار «الدفع الإلكتروني» (مدى أو بطاقة عبر Moyasar) لطلبات المنيو. يحتاج حساب تاجر مُفعَّل لدى Moyasar، وتفعيلاً من الدعم الفني.' : 'Adds an online payment option (mada or card via Moyasar) to menu orders. Needs an active Moyasar merchant account, and activation by support.'}</p>
                 {tenant?.onlinePayment?.enabled && (
                   <div className="row" style={{ gap: 8, alignItems: 'flex-end', flexWrap: 'wrap', borderTop: '1px solid var(--border)', paddingTop: 10 }}>
                     <div className="field" style={{ width: 190, marginBottom: 0 }}><label>{ar ? 'عربون الحجز (0 = بلا)' : 'Reservation deposit (0 = none)'}</label><input className="input num" type="number" min="0" value={tenant?.reservationDeposit ?? 0} onChange={(e) => { const v = Number(e.target.value) || 0; updateTenantLocal({ reservationDeposit: v }); commitPosBg({ reservationDeposit: v }) }} /></div>
@@ -6367,7 +6367,7 @@ export default function Settings() {
           {secMeta?.instant && (
             <div className="set-instant">
               <Icon name="check" size={14} style={{ flex: 'none' }} />
-              <span>{ar ? 'كل مفتاح في هذا القسم يُحفظ لحظة تغييره — لا حاجة لزر حفظ.' : 'Every switch in this section saves the moment you change it — no Save button needed.'}</span>
+              <span>{ar ? 'كل مفتاح في هذا القسم يُحفظ لحظة تغييره، لا حاجة لزر حفظ.' : 'Every switch in this section saves the moment you change it, no Save button needed.'}</span>
             </div>
           )}
         </div>
@@ -6446,7 +6446,7 @@ function GamePicker({ ar, tenant, saveNow, updateTenantLocal, toast, t }) {
         <span className="xs faint num">{onCount} / {catalog.length}</span>
       </div>
       <p className="xs faint" style={{ margin: 0 }}>
-        {ar ? 'اختر الألعاب التي تظهر لعملائك — يمكن تفعيل أكثر من لعبة، وتُفتح للعميل بعد تسجيل اسمه وجواله فيدخل قاعدة عملائك.' : 'Pick the games guests see; several can run at once.'}
+        {ar ? 'اختر الألعاب التي تظهر لعملائك. يمكن تفعيل أكثر من لعبة، وتُفتح للعميل بعد تسجيل اسمه وجواله فيدخل قاعدة عملائك.' : 'Pick the games guests see; several can run at once.'}
       </p>
       <div className="row scroll-x" style={{ gap: 6 }}>
         {tags.map((tg) => (
@@ -6881,7 +6881,7 @@ function DecorCard({
                 key={d.id}
                 className="mdx-hit" role="button" tabIndex={0}
                 data-sel={d.id === selected ? 'true' : 'false'}
-                aria-label={`${(rows.find((r) => r.id === d.id) || {}).name || (ar ? 'قطعة زينة' : 'Decoration')} — ${decorAnchorLabel(anchor, ar)}`}
+                aria-label={`${(rows.find((r) => r.id === d.id) || {}).name || (ar ? 'قطعة زينة' : 'Decoration')} · ${decorAnchorLabel(anchor, ar)}`}
                 style={{
                   left: `${decorLeftPct(d, rtl)}%`,
                   top: `${decorTopPct(d)}%`,
@@ -6920,13 +6920,13 @@ function DecorCard({
   return (
     <div className="card card-pad stack" style={{ gap: 12 }}>
       <div className="row-between wrap" style={{ gap: 8, alignItems: 'center' }}>
-        <strong className="small"><Icon name="shapes" size={14} style={{ verticalAlign: 'middle' }} /> {ar ? 'زينة الغرفة — علّق أشياءك في المنيو' : 'Room decoration — hang your own objects'}</strong>
+        <strong className="small"><Icon name="shapes" size={14} style={{ verticalAlign: 'middle' }} /> {ar ? 'زينة الغرفة: علّق أشياءك في المنيو' : 'Room decoration: hang your own objects'}</strong>
         <span className="xs faint num">{rows.length}/{DECOR_MAX}</span>
       </div>
       <p className="xs faint" style={{ margin: 0 }}>
         {ar
-          ? 'ارفع صورة الشيء نفسه — فانوس، نبتة، لوحة — بخلفية شفافة (PNG)، ثم اسحبه بإصبعك إلى مكانه. لكل قطعة موضعها وحجمها ودورانها وحركتها ووهجها، وتستطيع تعليق نسخة مقابلة لها في الطرف الآخر بضغطة واحدة. لا رسومات جاهزة هنا: ما ترفعه هو ما يظهر.'
-          : 'Upload the object itself as a transparent PNG — a lantern, a plant, a painting — then drag it into place. Every piece has its own position, size, rotation, motion and glow, and one tap hangs a matching piece at the opposite side. Nothing is drawn for you: what you upload is what appears.'}
+          ? 'ارفع صورة الشيء نفسه (فانوس أو نبتة أو لوحة) بخلفية شفافة (PNG)، ثم اسحبه بإصبعك إلى مكانه. لكل قطعة موضعها وحجمها ودورانها وحركتها ووهجها، وتستطيع تعليق نسخة مقابلة لها في الطرف الآخر بضغطة واحدة. لا رسومات جاهزة هنا: ما ترفعه هو ما يظهر.'
+          : 'Upload the object itself as a transparent PNG (a lantern, a plant, a painting), then drag it into place. Every piece has its own position, size, rotation, motion and glow, and one tap hangs a matching piece at the opposite side. Nothing is drawn for you: what you upload is what appears.'}
       </p>
       {!editorial && (
         <p className="xs" style={{ margin: 0, color: 'var(--warning)' }}>
@@ -6948,12 +6948,12 @@ function DecorCard({
       </div>
       <p className="xs faint" style={{ margin: 0 }}>
         {ar
-          ? 'الصورة تُرفع كما هي بلا إعادة ترميز حتى لا تفقد شفافيتها، وتستطيع قصّها بعد ذلك من زر «قص الصورة» على القطعة المحدّدة. المجسم glb. يظهر هنا حياً كما سيظهر في المنيو تماماً — اسحبه وكبّره ودوّره كأي قطعة.'
-          : 'Images are uploaded untouched so nothing eats the transparency; trim afterwards with “Crop” on the selected piece. A .glb runs live in this preview, exactly as it will in the menu — drag, size and rotate it like any piece.'}
+          ? 'الصورة تُرفع كما هي بلا إعادة ترميز حتى لا تفقد شفافيتها، وتستطيع قصّها بعد ذلك من زر «قص الصورة» على القطعة المحدّدة. المجسم glb. يظهر هنا حياً كما سيظهر في المنيو تماماً، اسحبه وكبّره ودوّره كأي قطعة.'
+          : 'Images are uploaded untouched so nothing eats the transparency; trim afterwards with “Crop” on the selected piece. A .glb runs live in this preview, exactly as it will in the menu. Drag, size and rotate it like any piece.'}
       </p>
 
       <div className="stack" style={{ gap: 6, borderTop: '1px solid var(--border)', paddingTop: 10 }}>
-        <span className="xs faint bold">{ar ? 'المعاينة — اسحب القطعة إلى مكانها' : 'Preview — drag each piece into place'}</span>
+        <span className="xs faint bold">{ar ? 'المعاينة: اسحب القطعة إلى مكانها' : 'Preview: drag each piece into place'}</span>
         <div className="mdx-frame">
           <div className="mdx-screen" onPointerDown={() => setSelected('')}>
             <div className="mdx-head">
@@ -6993,7 +6993,7 @@ function DecorCard({
         {rows.length === 0 ? (
           <p className="xs faint" style={{ margin: 0 }}>
             {ar
-              ? 'لا زينة بعد. ارفع صورة فانوسك مقصوصةً بخلفية شفافة، ضعه في «الهيدر — بداية»، ثم اضغط «علّق نسخة مقابلة» فتصير فانوسين في الهيدر.'
+              ? `لا زينة بعد. ارفع صورة فانوسك مقصوصةً بخلفية شفافة، ضعه في «${decorAnchorLabel('header-start', ar)}»، ثم اضغط «علّق نسخة مقابلة» فتصير فانوسين في الهيدر.`
               : 'Nothing hung yet. Upload your lantern as a transparent cut-out, put it at “Header start”, then tap “Hang a matching piece” to get the pair.'}
           </p>
         ) : (
@@ -7065,7 +7065,7 @@ function DecorControls({ ar, d, onChange, onCrop }) {
       </div>
 
       <div className="field" style={{ marginBottom: 0 }}>
-        <label>{ar ? 'اسم القطعة (لك وحدك — لا يظهر للعميل)' : 'Label (yours only — never shown to a guest)'}</label>
+        <label>{ar ? 'اسم القطعة (لك وحدك، لا يظهر للعميل)' : 'Label (yours only, never shown to a guest)'}</label>
         <input className="input input-sm" value={d.name} maxLength={40} onChange={(e) => onChange({ name: e.target.value }, true)} />
       </div>
 
@@ -7108,7 +7108,7 @@ function DecorControls({ ar, d, onChange, onCrop }) {
       </div>
 
       <div className="stack" style={{ gap: 6 }}>
-        <span className="xs faint bold">{ar ? 'العمق — أين تقف في الغرفة' : 'Depth — where it stands in the room'}</span>
+        <span className="xs faint bold">{ar ? 'العمق: أين تقف في الغرفة' : 'Depth: where it stands in the room'}</span>
         <div className="row wrap" style={{ gap: 6 }}>
           {DECOR_DEPTHS.map((z) => {
             const blocked = d.anchor === 'screen' && z.id === 'back'

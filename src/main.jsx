@@ -113,7 +113,7 @@ function showFsHealCapped() {
   card.innerHTML =
     '<svg width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="#e0a050" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M10.3 3.9 1.8 18.1a2 2 0 0 0 1.7 3h17a2 2 0 0 0 1.7-3L13.7 3.9a2 2 0 0 0-3.4 0Z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>' +
     '<strong style="font-size:17px">تعذّر تشغيل قاعدة البيانات المحلية</strong>' +
-    '<span style="font-size:13.5px;opacity:.8;line-height:1.7">حدث عطل متكرر في التخزين المؤقت على هذا الجهاز. اضغط الزر لمسح البيانات المؤقتة وإعادة التحميل — لن تفقد أي بيانات، فكل شيء محفوظ في الخادم.</span>'
+    '<span style="font-size:13.5px;opacity:.8;line-height:1.7">حدث عطل متكرر في التخزين المؤقت على هذا الجهاز. اضغط الزر لمسح البيانات المؤقتة وإعادة التحميل. لن تفقد أي بيانات، فكل شيء محفوظ في الخادم.</span>'
   const btn = document.createElement('button')
   btn.textContent = 'مسح البيانات المؤقتة وإعادة التحميل'
   btn.style.cssText = 'margin-top:4px;padding:12px 22px;border-radius:12px;border:0;background:#3f6dd8;color:#fff;font:inherit;font-weight:700;font-size:14px;cursor:pointer'

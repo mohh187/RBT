@@ -88,7 +88,7 @@ export default function AuthShell({ title, subtitle, err, foot, children }) {
         <div className="rlauth-show-mid">
           <EcosystemMock L={L} />
           <div className="rlauth-show-copy">
-            <h2 className="rlauth-h">{L('منظومة واحدة تدير كل شيء — من شاشة الكاشير إلى جوال عميلك', "One system running it all — from the cashier's screen to your customer's phone")}</h2>
+            <h2 className="rlauth-h">{L('منظومة واحدة تدير كل شيء، من شاشة الكاشير إلى جوال عميلك', "One system running it all, from the cashier's screen to your customer's phone")}</h2>
             <ul className="rlauth-props">
               {props.map((p) => (<li key={p}><Icon name="check" size={15} className="ic" />{p}</li>))}
             </ul>

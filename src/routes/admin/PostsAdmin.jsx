@@ -72,11 +72,11 @@ export default function PostsAdmin() {
         'أنت كاتب محتوى محترف لمنشآت الضيافة.',
         `اكتب خبراً قصيراً (3 إلى 5 أسطر) لصفحة "${tenant?.name || 'منشأتنا'}" العامة عن: ${aiDesc.trim() || title.trim()}.`,
         'أسلوب عربي راقٍ وواضح يناسب صفحة أخبار المنشأة، دون مبالغة.',
-        'ممنوع منعاً باتاً: الرموز التعبيرية (الإيموجي) بكل أنواعها، والأرقام العربية المشرقية — استخدم الأرقام اللاتينية فقط.',
+        'ممنوع منعاً باتاً: الرموز التعبيرية (الإيموجي) بكل أنواعها، والأرقام العربية المشرقية، استخدم الأرقام اللاتينية فقط.',
         'أجب بنص الخبر فقط دون أي شرح أو مقدمات.',
       ].join('\n')
       const out = cleanCaption(await aiQuick(prompt))
-      if (!out) throw new Error(ar ? 'لم يصل رد من الذكاء — أعد المحاولة.' : 'No AI reply — try again.')
+      if (!out) throw new Error(ar ? 'لم يصل رد من الذكاء، أعد المحاولة.' : 'No AI reply, try again.')
       setBody(out)
     } catch (e) { toast.error(String(e?.message || e)) } finally { setAiBusy('') }
   }
@@ -137,7 +137,7 @@ export default function PostsAdmin() {
               <button className="btn btn-sm btn-primary grow" disabled={!!aiBusy || busy} onClick={aiCover}>{aiBusy === 'image' ? (ar ? 'جارٍ التوليد…' : 'Generating…') : (ar ? 'توليد صورة الغلاف' : 'Generate cover image')}</button>
               <button className="btn btn-sm btn-outline grow" disabled={!!aiBusy || busy} onClick={aiBody}>{aiBusy === 'text' ? (ar ? 'جارٍ الكتابة…' : 'Writing…') : (ar ? 'اكتب الخبر بالذكاء' : 'Write the news with AI')}</button>
             </div>
-            <p className="xs faint" style={{ margin: 0 }}>{ar ? 'النتيجة تعبّئ الحقول فقط — النشر يبقى بيدك.' : 'Results only fill the form — publishing stays manual.'}</p>
+            <p className="xs faint" style={{ margin: 0 }}>{ar ? 'النتيجة تعبّئ الحقول فقط، النشر يبقى بيدك.' : 'Results only fill the form, publishing stays manual.'}</p>
           </div>
         )}
         {media.length > 0 && (

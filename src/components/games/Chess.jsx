@@ -836,6 +836,7 @@ const TXT = {
     white: 'الأبيض',
     black: 'الأسود',
     you: 'أنت',
+    off: 'انقطع',
     waiting: 'بانتظار انضمام الخصم',
     yourTurn: 'دورك',
     theirTurn: 'دور الخصم',
@@ -883,16 +884,16 @@ const TXT = {
     hard: 'صعب',
     lvEasy: 'سهل: يوازن قيمة القطع بعد نقلته فقط ولا يؤمّن قطعه، فيترك أشياء مكشوفة عمداً.',
     lvNormal: 'متوسط: يحسب المادة بعمق نقلة واحدة ويتفادى ترك قطعة مكشوفة. ليس محرك شطرنج.',
-    lvHard: 'صعب: يحسب ردّك أيضاً — نقلتان ببحث ألفا-بيتا والأسر أولاً — ولا يدخل كش مات بنقلة واحدة.',
+    lvHard: 'صعب: يحسب ردّك أيضاً (نقلتان ببحث ألفا-بيتا والأسر أولاً)، ولا يدخل كش مات بنقلة واحدة.',
     // guidance
     gPick: 'اختر قطعة من قطعك لتحريكها.',
     gTarget: 'اختر مربعاً مضيئاً لإتمام النقلة، أو اضغط القطعة مرة أخرى للإلغاء.',
-    gCheck: 'أنت في كش — اللعبة تسمح لك بالنقلات التي تنقذ ملكك فقط.',
-    gWait: 'دور الخصم — انتظر نقلته.',
+    gCheck: 'أنت في كش، فلا تُقبل إلا نقلة تنقذ ملكك.',
+    gWait: 'دور الخصم، انتظر نقلته.',
     gBot: 'الكمبيوتر يفكّر في نقلته.',
     gWaitJoin: 'بانتظار لاعب ثانٍ ليبدأ اللعب.',
-    gSpectate: 'تشاهد المباراة — لا تملك مقعداً فيها.',
-    gOfferIn: 'الخصم يعرض التعادل — اقبل أو ارفض.',
+    gSpectate: 'تشاهد المباراة ولا تملك مقعداً فيها.',
+    gOfferIn: 'الخصم يعرض التعادل، اقبل أو ارفض.',
     gOfferOut: 'أرسلنا عرض التعادل، بانتظار رد الخصم.',
     notYourTurn: 'ليس دورك الآن.',
     whyPinned: 'هذه القطعة مربوطة: تحريكها يكشف ملكك للقطعة المعلّمة.',
@@ -910,6 +911,7 @@ const TXT = {
     white: 'White',
     black: 'Black',
     you: 'You',
+    off: 'Away',
     waiting: 'Waiting for an opponent',
     yourTurn: 'Your turn',
     theirTurn: 'Opponent to move',
@@ -957,15 +959,15 @@ const TXT = {
     hard: 'Hard',
     lvEasy: 'Easy: counts material after its own move only and never defends, so it leaves pieces hanging.',
     lvNormal: 'Normal: one-ply material with a hanging-piece guard. Not a chess engine.',
-    lvHard: 'Hard: also weighs your reply — two plies, alpha-beta, captures first — and will not walk into mate in one.',
+    lvHard: 'Hard: also weighs your reply (two plies, alpha-beta, captures first), and will not walk into mate in one.',
     gPick: 'Pick one of your pieces to move.',
     gTarget: 'Tap a marked square to move, or tap the piece again to cancel.',
-    gCheck: 'You are in check — only moves that save your king are allowed.',
-    gWait: 'Opponent to move — wait for their reply.',
+    gCheck: 'You are in check, so only moves that save your king are allowed.',
+    gWait: 'Opponent to move. Wait for their reply.',
     gBot: 'The computer is thinking.',
     gWaitJoin: 'Waiting for a second player.',
-    gSpectate: 'You are watching this game — you hold no seat.',
-    gOfferIn: 'A draw is offered — accept or decline.',
+    gSpectate: 'You are watching this game and hold no seat.',
+    gOfferIn: 'A draw is offered. Accept or decline.',
     gOfferOut: 'Your draw offer was sent; waiting for a reply.',
     notYourTurn: 'It is not your turn.',
     whyPinned: 'This piece is pinned: moving it exposes your king to the marked piece.',
@@ -1329,7 +1331,7 @@ export default function Chess({
     const why2 = reasonText()
     if (st.result === 'draw') return why2
     const who = st.result === 'w' ? nameFor(0) : nameFor(1)
-    return `${who} ${t.won} — ${why2}`
+    return why2 ? `${who} ${t.won}. ${why2}` : `${who} ${t.won}`
   }
   const overTitle = () => {
     if (st.result === 'draw') return t.drawTitle
@@ -1339,7 +1341,7 @@ export default function Chess({
 
   // ---- the one line that always says what is expected now ------------------
   const guide = (() => {
-    if (st.status !== 'playing') return { text: `${overTitle()} — ${reasonText()}`, tone: 'over' }
+    if (st.status !== 'playing') return { text: reasonText() ? `${overTitle()}. ${reasonText()}` : overTitle(), tone: 'over' }
     // NB: sentences are joined with a full stop, never a middle dot — in an
     // Arabic face a middle dot reads as the Arabic-Indic zero, and this repo
     // ships Latin digits only.
@@ -1356,8 +1358,8 @@ export default function Chess({
     const next = sel !== null ? t.gTarget : t.gPick
     // a claim that just became available is a rule the player cannot see on the
     // board, so the line says it out loud rather than only growing a button
-    if (canClaimThree) return { text: `${t.threeReady} — ${next}`, tone: 'warn' }
-    if (canClaimFifty) return { text: `${t.fiftyReady} — ${next}`, tone: 'warn' }
+    if (canClaimThree) return { text: `${t.threeReady}. ${next}`, tone: 'warn' }
+    if (canClaimFifty) return { text: `${t.fiftyReady}. ${next}`, tone: 'warn' }
     return { text: next, tone: 'live' }
   })()
 
@@ -1385,7 +1387,7 @@ export default function Chess({
           <span className="chs-seat-top">
             <b className="chs-seat-name">{nameFor(s)}</b>
             {seat === s ? <em className="chs-tag">{t.you}</em> : null}
-            {connFor(s) ? null : <em className="chs-tag" data-tone="off">—</em>}
+            {connFor(s) ? null : <em className="chs-tag" data-tone="off">{t.off}</em>}
           </span>
           <span className="chs-tray" aria-hidden="true">
             {taken.map((c, i) => (
@@ -1441,7 +1443,7 @@ export default function Chess({
         data-last={st.lastFrom === idx || st.lastTo === idx ? '1' : '0'}
         data-check={checkSq === idx ? '1' : '0'}
         data-mark={marks.indexOf(idx) >= 0 ? '1' : '0'}
-        aria-label={`${sqName(idx)}${code === '.' ? '' : ` — ${(lang === 'en' ? PIECE_EN : PIECE_AR)[code.toLowerCase()]}`}`}
+        aria-label={`${sqName(idx)}${code === '.' ? '' : ` ${(lang === 'en' ? PIECE_EN : PIECE_AR)[code.toLowerCase()]}`}`}
         onClick={() => clickSquare(idx)}
         disabled={viewer || st.status !== 'playing' || !canAct}
       >

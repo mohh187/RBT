@@ -72,7 +72,7 @@ export default function Reservations() {
                 <span className={`badge ${STATUS_BADGE[r.status] || ''}`}>{statusLabel(r.status)}</span>
               </div>
               <div className="small"><Icon name="calendar" size={14} className="faint" /> {fmtDate(r.dateTime, lang)} · {r.partySize} {lang === 'ar' ? 'أشخاص' : 'guests'}</div>
-              <div className="small"><Icon name="user" size={14} className="faint" /> {r.name || '—'} {r.phone ? <span className="faint" dir="ltr">· {r.phone}</span> : ''}</div>
+              <div className="small"><Icon name="user" size={14} className="faint" /> {r.name || (r.phone ? '' : '·')} {r.phone ? <span className="faint" dir="ltr">{r.name ? '· ' : ''}{r.phone}</span> : ''}</div>
               {r.notes && <div className="xs muted"><Icon name="notepad" size={12} style={{ verticalAlign: 'middle', marginInlineEnd: 4 }} /> {r.notes}</div>}
               <div className="xs faint">{timeAgo(r.createdAt, lang)}</div>
               {r.status === 'requested' && (

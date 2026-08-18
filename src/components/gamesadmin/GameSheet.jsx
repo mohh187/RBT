@@ -3,11 +3,11 @@
 // Everything on this panel is either read straight off the registry entry (the
 // description, the player counts, the category) or counted off gamePlays rows
 // inside the selected period. There is no third source, so nothing here can be
-// a guess: a figure that was never measured renders «—» beside its sample size.
+// a guess: a figure that was never measured renders «·» beside its sample size.
 import Icon from '../Icon.jsx'
 import {
   fmtInt, fmtPct, durText, dateTime, kindLabel, kindOf, recentPlaysFor, THIN_PLAYS,
-  soloNote, opponentKind, opponentLabel,
+  soloNote, opponentKind, opponentLabel, nPlays,
 } from './engine.jsx'
 
 const num = (v, f = 0) => {
@@ -109,7 +109,7 @@ export default function GameSheet({
         {!covered && (
           <p className="ga-hint">
             {ar
-              ? `تنبيه: قراءة الجولات لم تغطِّ هذه الفترة كاملة${oldestRead ? ` — لم تصل إلى ما قبل ${oldestRead}` : ''}. الأرقام أدناه حدّ أدنى، وأي صفر هنا يعني «لم يُقرأ» لا «لم يحدث».`
+              ? `تنبيه: قراءة الجولات لم تغطِّ هذه الفترة كاملة${oldestRead ? `، ولم تصل إلى ما قبل ${oldestRead}` : ''}. الأرقام أدناه حدّ أدنى، وأي صفر هنا يعني «لم يُقرأ» لا «لم يحدث».`
               : `Note: the play read did not cover this whole period${oldestRead ? `; it reached back only to ${oldestRead}` : ''}. Figures below are a floor, and a zero means "not read", not "did not happen".`}
           </p>
         )}
@@ -129,7 +129,7 @@ export default function GameSheet({
               <Figure label={ar ? 'لاعبون مختلفون' : 'Unique players'} value={fmtInt(s.players)} />
               <Figure
                 label={ar ? 'متوسط النقاط' : 'Avg score'}
-                value={s.avgScore == null ? '—' : fmtInt(s.avgScore)}
+                value={s.avgScore == null ? '·' : fmtInt(s.avgScore)}
                 sample={s.avgScoreN ? `${ar ? 'من' : 'of'} ${fmtInt(s.avgScoreN)} ${ar ? 'جولة منتهية' : 'finished'}` : ''}
                 thin={s.avgScoreN > 0 && s.avgScoreN < THIN_PLAYS}
               />
@@ -149,8 +149,8 @@ export default function GameSheet({
             {s.thin && (
               <p className="ga-hint">
                 {ar
-                  ? `أقل من ${fmtInt(THIN_PLAYS)} جولة في هذه الفترة — الأرقام أعلاه صحيحة لكنها لا تكفي لبناء قرار عليها.`
-                  : `Fewer than ${fmtInt(THIN_PLAYS)} plays — accurate, but too few to decide on.`}
+                  ? `أقل من ${fmtInt(THIN_PLAYS)} جولة في هذه الفترة. الأرقام أعلاه صحيحة لكنها لا تكفي لبناء قرار عليها.`
+                  : `Fewer than ${fmtInt(THIN_PLAYS)} plays. Accurate, but too few to decide on.`}
               </p>
             )}
           </>
@@ -160,8 +160,8 @@ export default function GameSheet({
           // bot. So the count is stated and no average is offered at all.
           <p className="ga-hint">
             {ar
-              ? `كل جولات هذه اللعبة في هذه الفترة كانت ضد الكمبيوتر (${fmtInt(s.soloPlays)} جولة)، ولا جولة واحدة أمام أشخاص. لا متوسط ولا نسبة إكمال تُعرض هنا: الرقم كان سيصف الخصم الآلي لا ضيوف المكان.`
-              : `Every round of this game in this period was against the computer (${fmtInt(s.soloPlays)}), none against people. No average is shown — it would describe the bot, not the guests.`}
+              ? `كل جولات هذه اللعبة في هذه الفترة كانت ضد الكمبيوتر (${nPlays(s.soloPlays)})، ولا جولة واحدة أمام أشخاص. لا متوسط ولا نسبة إكمال تُعرض هنا: الرقم كان سيصف الخصم الآلي لا ضيوف المكان.`
+              : `Every round of this game in this period was against the computer (${fmtInt(s.soloPlays)}), none against people. No average is shown, since it would describe the bot, not the guests.`}
           </p>
         ) : (
           <p className="ga-hint">
@@ -203,7 +203,7 @@ export default function GameSheet({
                       </span>
                     </td>
                     <td className="ga-num">{fmtInt(p.score)}</td>
-                    <td className="ga-num">{num(p.durationMs) > 0 ? durText(num(p.durationMs) / 1000) : '—'}</td>
+                    <td className="ga-num">{num(p.durationMs) > 0 ? durText(num(p.durationMs) / 1000) : '·'}</td>
                     <td>
                       {p.completed === true
                         ? <span className="ga-ok"><Icon name="ok" size={14} /></span>
@@ -218,7 +218,7 @@ export default function GameSheet({
           <p className="ga-hint">
             {covered
               ? (ar ? 'لا جولات في هذه الفترة.' : 'No plays in this period.')
-              : (ar ? 'لا جولات مقروءة لهذه الفترة — القراءة لم تصل إليها.' : 'No plays read for this period — the read did not reach it.')}
+              : (ar ? 'لا جولات مقروءة لهذه الفترة، فالسجل لم يبلغ هذا التاريخ.' : 'No plays read for this period. The log does not reach back this far.')}
           </p>
         )}
       </div>

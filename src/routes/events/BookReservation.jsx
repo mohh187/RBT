@@ -38,7 +38,7 @@ export default function BookReservation() {
   const [busy, setBusy] = useState(false)
 
   if (venue.loading) return <FullSpinner />
-  if (venue.notFound || venue.error) return <div className="auth-shell"><Empty icon="search" title={venue.notFound ? (lang === 'ar' ? 'المنشأة غير موجودة' : 'Venue not found') : (lang === 'ar' ? 'تعذّر تحميل الصفحة، حدّث الصفحة' : 'Could not load — please refresh')} /></div>
+  if (venue.notFound || venue.error) return <div className="auth-shell"><Empty icon="search" title={venue.notFound ? (lang === 'ar' ? 'المنشأة غير موجودة' : 'Venue not found') : (lang === 'ar' ? 'تعذّر تحميل الصفحة، حدّث الصفحة' : 'Could not load, please refresh')} /></div>
 
   const deposit = Number(venue.tenant?.reservationDeposit) || 0
   const onlinePay = venue.tenant?.onlinePayment?.enabled === true
@@ -57,7 +57,7 @@ export default function BookReservation() {
       setLocalCustomer({ name: name.trim(), phone: phone.trim() })
       // Deposit + online payment → hosted checkout; the webhook confirms the booking.
       if (needsDeposit) {
-        try { await startPayment('booking', venue.tenantId, res.id); return } catch (_) { toast.error(lang === 'ar' ? 'تعذّر فتح صفحة الدفع — طلبك محفوظ' : 'Could not open payment — request saved') }
+        try { await startPayment('booking', venue.tenantId, res.id); return } catch (_) { toast.error(lang === 'ar' ? 'تعذّر فتح صفحة الدفع، طلبك محفوظ' : 'Could not open payment, request saved') }
       }
       navigate(`/pass/${slug}/reservation/${res.id}`)
     } catch (_) {

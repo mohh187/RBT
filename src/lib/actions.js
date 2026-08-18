@@ -2,7 +2,7 @@
 // Each run() calls the normal db layer, so Firestore rules remain the security backstop.
 // risk: 'safe' (auto) | 'confirm' (ask) | 'danger' (ask, sensitive/irreversible).
 import * as db from './db.js'
-import { isSettled } from './accounting.js'
+import { isSettled, refundOf } from './accounting.js'
 import { db as fsdb } from './firebase.js'
 import { collection, getDocs, query, where } from 'firebase/firestore'
 import { resolveMembershipPolicy, tierForPoints } from './membership.js'
@@ -95,8 +95,8 @@ async function resolveItemStrict(tid, a) {
   if (exact) return { item: exact }
   const partial = items.filter((x) => (x.nameAr || '').toLowerCase().includes(q) || (x.nameEn || '').toLowerCase().includes(q))
   if (partial.length === 1) return { item: partial[0] }
-  if (partial.length > 1) return { candidates: partial.map((x) => x.nameAr || x.nameEn), message: 'أكثر من صنف مطابق — حدد الاسم بدقة' }
-  return { error: 'الصنف غير موجود — استخدم list_items' }
+  if (partial.length > 1) return { candidates: partial.map((x) => x.nameAr || x.nameEn), message: 'أكثر من صنف مطابق، حدد الاسم بدقة' }
+  return { error: 'الصنف غير موجود، استخدم list_items' }
 }
 // Resolve a staffer by (fuzzy) name/email. Never guesses: several matches → candidates.
 async function resolveStaff(tid, ref) {
@@ -106,8 +106,8 @@ async function resolveStaff(tid, ref) {
   const nameOf = (s) => s.name || s.displayName || ''
   const exact = staff.filter((s) => nameOf(s).trim().toLowerCase() === q || String(s.email || '').trim().toLowerCase() === q || s.uid === ref)
   const pool = exact.length ? exact : staff.filter((s) => nameOf(s).toLowerCase().includes(q) || String(s.email || '').toLowerCase().includes(q))
-  if (!pool.length) return { error: 'لا يوجد موظف بهذا الاسم — استخدم list_staff' }
-  if (pool.length > 1) return { candidates: pool.map((s) => ({ name: nameOf(s) || s.email || s.uid, role: roleName(s.role || 'staff', 'ar') })), message: 'أكثر من موظف مطابق — حدد الاسم أو البريد بدقة' }
+  if (!pool.length) return { error: 'لا يوجد موظف بهذا الاسم، استخدم list_staff' }
+  if (pool.length > 1) return { candidates: pool.map((s) => ({ name: nameOf(s) || s.email || s.uid, role: roleName(s.role || 'staff', 'ar') })), message: 'أكثر من موظف مطابق، حدد الاسم أو البريد بدقة' }
   return { staff: pool[0] }
 }
 const staffLabel = (s) => s.name || s.displayName || s.email || s.uid
@@ -144,7 +144,7 @@ export const ACTIONS = [
 
   // ============ READ — sales / reports ============
   { name: 'today_summary', risk: 'safe', description: "Today's orders, revenue, active orders.", parameters: obj({}),
-    run: async (_a, { tid }) => { const o = await db.listOrdersSince(tid, startOfToday()); const set = o.filter((x) => ['paid', 'served', 'refunded'].includes(x.status)); return { orders: o.length, revenue: Math.round(set.reduce((s, x) => s + (x.total || 0) - (x.status === 'refunded' ? (x.refund?.amount || 0) : 0), 0)), active: o.filter((x) => ['pending', 'accepted', 'preparing', 'ready'].includes(x.status)).length } } },
+    run: async (_a, { tid }) => { const o = await db.listOrdersSince(tid, startOfToday()); const set = o.filter((x) => ['paid', 'served', 'refunded'].includes(x.status)); return { orders: o.length, revenue: Math.round(set.reduce((s, x) => s + (x.total || 0) - refundOf(x), 0)), active: o.filter((x) => ['pending', 'accepted', 'preparing', 'ready'].includes(x.status)).length } } },
   { name: 'sales_report', risk: 'safe', description: 'Revenue, order count, avg ticket and payment-method breakdown over the last N days.', parameters: obj({ days: num('days back, default 7') }),
     run: async (a, { tid }) => { const list = (await db.listOrdersSince(tid, daysAgo(Number(a.days) || 7))).filter((o) => o.status !== 'cancelled'); const rev = list.reduce((s, o) => s + (o.total || 0), 0); const byMethod = {}; list.filter(isSettled).forEach((o) => { if (o.paymentBreakdown) Object.entries(o.paymentBreakdown).forEach(([m, v]) => { byMethod[m] = (byMethod[m] || 0) + (Number(v) || 0) }); else { const m = o.paymentMethod || 'cash'; byMethod[m] = (byMethod[m] || 0) + (o.total || 0) } }); return { revenue: Math.round(rev), orders: list.length, avg: list.length ? Math.round(rev / list.length) : 0, byMethod } } },
   { name: 'top_items', risk: 'safe', description: 'Best-selling items over the last N days.', parameters: obj({ days: num('days back'), limit: num('how many') }),
@@ -172,7 +172,7 @@ export const ACTIONS = [
   { name: 'help_guide', risk: 'safe', description: 'Authoritative how-to guide for THIS system (rbt360): where every feature lives and how to use it. Call for ANY "how do I / where is / what does X do" question from the manager or staff, then answer from the returned guide text.', parameters: obj({ query: str('the feature/task being asked about, in Arabic or English') }, ['query']),
     run: async (a) => { const { searchGuide } = await import('./aiGuide.js'); const hits = searchGuide(a.query, 3); return hits.length ? { sections: hits } : { sections: [], note: 'no direct match — answer from your general knowledge of the snapshot and tools, honestly' } },
   },
-  { name: 'explain_page', risk: 'safe', description: 'Detailed step-by-step usage guide for a SPECIFIC admin page (the same manual behind the «دليل الصفحة» button): sections, tabs and exact steps. Call when the user asks how to use a page/section, then teach from the returned steps and OFFER to open the page with open_page.', parameters: obj({ page: str('page name or keyword, Arabic or English — e.g. "المنيو", "الكاشير", "campaigns"') }, ['page']),
+  { name: 'explain_page', risk: 'safe', description: 'Detailed step-by-step usage guide for a SPECIFIC admin page (the same manual behind the «دليل الصفحة» button): sections, tabs and exact steps. Call when the user asks how to use a page/section, then teach from the returned steps and OFFER to open the page with open_page.', parameters: obj({ page: str('page name or keyword, Arabic or English, e.g. "المنيو", "الكاشير", "campaigns"') }, ['page']),
     run: async (a) => { const { findGuides, PAGE_GUIDES } = await import('./pageGuides.js'); const hits = findGuides(a.page, 2); return hits.length ? { guides: hits.map((g) => ({ title: g.title, path: g.path, intro: g.intro, sections: g.sections })) } : { guides: [], availablePages: PAGE_GUIDES.map((g) => ({ title: g.title, path: g.path })) } },
   },
   { name: 'open_page', risk: 'safe', description: 'Navigate the user to a system page RIGHT NOW (in-app, no reload). Use after explaining where something lives, or when the user says "خذني إلى / افتح صفحة …". Path must be one of the known page paths from explain_page.', parameters: obj({ path: str('in-app path, e.g. /admin/menu or /cashier') }, ['path']),
@@ -360,9 +360,9 @@ export const ACTIONS = [
   { name: 'vat_report', risk: 'safe', description: 'VAT collected over the last N days (if VAT enabled).', parameters: obj({ days: num('') }),
     run: async (a, { tid, tenant }) => { if (!tenant?.vatEnabled) return { vatEnabled: false }; const rate = Number(tenant?.vatRate ?? 15) || 15; const list = (await db.listOrdersSince(tid, daysAgo(Number(a.days) || 7))).filter((o) => ['paid', 'served', 'refunded'].includes(o.status)); const gross = list.reduce((s, o) => s + (o.total || 0) - (o.status === 'refunded' ? (o.refund?.amount || 0) : 0), 0); return { gross: Math.round(gross), vat: Math.round((gross - gross / (1 + rate / 100)) * 100) / 100, rate } } },
   { name: 'staff_performance', risk: 'safe', description: 'Orders & revenue per staff (who served) over N days.', parameters: obj({ days: num('') }),
-    run: async (a, { tid }) => { const list = (await db.listOrdersSince(tid, daysAgo(Number(a.days) || 7))).filter((o) => ['served', 'paid'].includes(o.status)); const t = {}; list.forEach((o) => { const k = o.servedByName || '—'; t[k] = t[k] || { orders: 0, rev: 0 }; t[k].orders += 1; t[k].rev += o.total || 0 }); return Object.entries(t).sort((x, y) => y[1].rev - x[1].rev).map(([name, v]) => ({ name, orders: v.orders, revenue: Math.round(v.rev) })) } },
+    run: async (a, { tid }) => { const list = (await db.listOrdersSince(tid, daysAgo(Number(a.days) || 7))).filter((o) => ['served', 'paid'].includes(o.status)); const t = {}; list.forEach((o) => { const k = o.servedByName || 'غير محدد'; t[k] = t[k] || { orders: 0, rev: 0 }; t[k].orders += 1; t[k].rev += o.total || 0 }); return Object.entries(t).sort((x, y) => y[1].rev - x[1].rev).map(([name, v]) => ({ name, orders: v.orders, revenue: Math.round(v.rev) })) } },
   { name: 'tips_report', risk: 'safe', description: 'Tips collected per staff over N days.', parameters: obj({ days: num('') }),
-    run: async (a, { tid }) => { const list = (await db.listOrdersSince(tid, daysAgo(Number(a.days) || 7))); const t = {}; list.forEach((o) => { if (o.tip) { const k = o.servedByName || '—'; t[k] = (t[k] || 0) + (o.tip || 0) } }); return Object.entries(t).sort((x, y) => y[1] - x[1]).map(([name, tips]) => ({ name, tips })) } },
+    run: async (a, { tid }) => { const list = (await db.listOrdersSince(tid, daysAgo(Number(a.days) || 7))); const t = {}; list.forEach((o) => { if (o.tip) { const k = o.servedByName || 'غير محدد'; t[k] = (t[k] || 0) + (o.tip || 0) } }); return Object.entries(t).sort((x, y) => y[1] - x[1]).map(([name, tips]) => ({ name, tips })) } },
   { name: 'list_members', risk: 'safe', description: 'VIP members, optionally filtered by tier.', parameters: obj({ tier: str('silver|gold|platinum') }),
     run: async (a, { tid }) => (await db.listCustomers(tid)).filter((c) => c.membership?.active && (!a.tier || c.membership.tier === a.tier)).map((c) => ({ name: c.name, phone: c.phone, tier: c.membership.tier, points: c.membership.points })) },
   { name: 'points_statement', risk: 'safe', description: 'A customer\'s loyalty points earn/redeem history.', parameters: obj({ phone: str('phone') }, ['phone']),
@@ -485,7 +485,7 @@ export const ACTIONS = [
   { name: 'item_profitability', risk: 'safe', description: 'Recipe items ranked by total profit (margin × qty) over N days.', parameters: obj({ days: num('') }),
     run: async (a, { tid }) => { const [items, mats] = await Promise.all([db.listItems(tid), db.listMaterials(tid)]); const cost = (l) => (l || []).reduce((s, x) => s + ((mats.find((m) => m.id === x.materialId)?.avgCost || 0) * (Number(x.qty) || 0)), 0); const list = (await db.listOrdersSince(tid, daysAgo(Number(a.days) || 30))).filter((o) => o.status !== 'cancelled'); const qty = {}; list.forEach((o) => (o.items || []).forEach((it) => { if (it.itemId) qty[it.itemId] = (qty[it.itemId] || 0) + (it.qty || 1) })); return items.filter((i) => i.stockMode === 'recipe').map((i) => ({ name: i.nameAr, sold: qty[i.id] || 0, profit: Math.round(((i.price || 0) - cost(i.recipe)) * (qty[i.id] || 0)) })).sort((x, y) => y.profit - x.profit) } },
   { name: 'cancellation_report', risk: 'safe', description: 'Cancellation rate and reasons over N days.', parameters: obj({ days: num('') }),
-    run: async (a, { tid }) => { const all = await db.listOrdersSince(tid, daysAgo(Number(a.days) || 30)); const c = all.filter((o) => o.status === 'cancelled'); const reasons = {}; c.forEach((o) => { const r = o.cancelReason || '—'; reasons[r] = (reasons[r] || 0) + 1 }); return { total: all.length, cancelled: c.length, ratePct: all.length ? Math.round((c.length / all.length) * 100) : 0, reasons } } },
+    run: async (a, { tid }) => { const all = await db.listOrdersSince(tid, daysAgo(Number(a.days) || 30)); const c = all.filter((o) => o.status === 'cancelled'); const reasons = {}; c.forEach((o) => { const r = o.cancelReason || 'بدون سبب'; reasons[r] = (reasons[r] || 0) + 1 }); return { total: all.length, cancelled: c.length, ratePct: all.length ? Math.round((c.length / all.length) * 100) : 0, reasons } } },
   { name: 'customer_ltv', risk: 'safe', description: 'Average customer lifetime value + top spenders.', parameters: obj({}),
     run: async (_a, { tid }) => { const cs = await db.listCustomers(tid); const sp = cs.map((c) => c.totalSpent || 0); const avg = sp.length ? sp.reduce((s, v) => s + v, 0) / sp.length : 0; return { customers: cs.length, avgLtv: Math.round(avg), top: cs.sort((x, y) => (y.totalSpent || 0) - (x.totalSpent || 0)).slice(0, 5).map((c) => ({ name: c.name, spent: c.totalSpent || 0 })) } } },
   { name: 'profit_report', risk: 'safe', description: 'Net profit over N days = revenue − COGS (recipes) − refunds − expenses.', parameters: obj({ days: num('') }),
@@ -495,7 +495,7 @@ export const ACTIONS = [
   { name: 'log_expense', risk: 'confirm', description: 'Record an operating expense (rent, salaries, utilities, supplies, other).', parameters: obj({ amount: num('amount'), category: str('category'), note: str('') }, ['amount']),
     run: async (a, { tid, actor }) => { await db.addExpense(tid, { amount: Number(a.amount) || 0, category: a.category || 'other', note: a.note || '', actor }); return { ok: true } } },
   { name: 'refunds_report', risk: 'safe', description: 'Refunds count + total over N days.', parameters: obj({ days: num('') }),
-    run: async (a, { tid }) => { const r = (await db.listOrdersSince(tid, daysAgo(Number(a.days) || 30))).filter((o) => o.status === 'refunded'); return { count: r.length, total: Math.round(r.reduce((s, o) => s + (o.refund?.amount || 0), 0)), items: r.slice(0, 10).map((o) => ({ code: o.code, amount: o.refund?.amount || 0, reason: o.refund?.reason || '' })) } } },
+    run: async (a, { tid }) => { const r = (await db.listOrdersSince(tid, daysAgo(Number(a.days) || 30))).filter((o) => refundOf(o) > 0); return { count: r.length, total: Math.round(r.reduce((s, o) => s + refundOf(o), 0)), items: r.slice(0, 10).map((o) => ({ code: o.code, amount: refundOf(o), reason: o.refund?.reason || '' })) } } },
   { name: 'discounts_report', risk: 'safe', description: 'Discounts/comps total over N days (offer, member, loyalty, comp).', parameters: obj({ days: num('') }),
     run: async (a, { tid }) => { const list = (await db.listOrdersSince(tid, daysAgo(Number(a.days) || 30))).filter((o) => o.status !== 'cancelled'); let off = 0; let mem = 0; let comp = 0; let loy = 0; list.forEach((o) => { off += o.discount || 0; mem += o.memberDiscount || 0; comp += o.compDiscount || 0; loy += o.loyaltyDiscount || 0 }); return { offer: Math.round(off), member: Math.round(mem), comp: Math.round(comp), loyalty: Math.round(loy), total: Math.round(off + mem + comp + loy) } } },
   { name: 'offer_impact', risk: 'safe', description: 'Orders with vs without a discount, and avg ticket of each (last N days).', parameters: obj({ days: num('') }),
@@ -626,7 +626,7 @@ export const ACTIONS = [
       // HARD VALIDATION: an invalid id must FAIL LOUDLY with the valid list —
       // the old version silently "succeeded" and the menu never changed.
       if (a.skinId && !SKIN_IDS.includes(a.skinId)) return { ok: false, error: `skinId "${a.skinId}" غير موجود`, validSkinIds: SKIN_IDS }
-      if (a.font && !FONT_KEYS.includes(a.font)) return { ok: false, error: `font "${a.font}" غير موجود — استخدم المفاتيح الصغيرة`, validFonts: FONT_KEYS }
+      if (a.font && !FONT_KEYS.includes(a.font)) return { ok: false, error: `font "${a.font}" غير موجود، استخدم المفاتيح الصغيرة`, validFonts: FONT_KEYS }
       if (a.menuLayout && !LAYOUT_OPTIONS.includes(a.menuLayout)) return { ok: false, error: `menuLayout "${a.menuLayout}" غير موجود`, validLayouts: LAYOUT_OPTIONS }
       if (a.shape && !SHAPE_OPTIONS.includes(a.shape)) return { ok: false, error: `shape "${a.shape}" غير موجود`, validShapes: SHAPE_OPTIONS }
 
@@ -692,14 +692,14 @@ export const ACTIONS = [
       const file = new File([blob], `ai-${Date.now()}.png`, { type: blob.type || 'image/png' })
       const url = await uploadImage(tid, file, 'library')
       await db.logMedia(tid, { url, kind: 'image', name: file.name, size: file.size, contentType: file.type })
-      return { ok: true, url, note: 'الصورة في المكتبة الآن — استخدمها لأي صنف أو منشور أو خلفية' }
+      return { ok: true, url, note: 'الصورة في المكتبة الآن، استخدمها لأي صنف أو منشور أو خلفية' }
     } },
 
   { name: 'edit_attached_images', risk: 'confirm', description: 'Generate a NEW professional image FROM the photos the user attached to THIS chat message (e.g. a product photo + the venue logo) following their description. Use whenever the user uploads image(s) and asks to design/edit/compose from them. Result is uploaded to the media library; optionally also set it as an item photo by passing itemName.',
     parameters: obj({ description: str('what to create from the attached photos (style, composition, where the logo goes...)'), itemName: str('optional: also set the result as this item\'s photo'), imitate: bool('true when the user wants the attached design REPLICATED exactly with only the described changes') }, ['description']),
     run: async (a, { tid, tenant, attachments }) => {
       const imgs = (attachments || []).filter((x) => x.kind === 'image' && x.data).map((x) => ({ mimeType: x.mime || 'image/jpeg', data: x.data }))
-      if (!imgs.length) return { ok: false, error: 'لا توجد صور مرفقة مع الرسالة — اطلب من المستخدم إرفاق الصور أولاً' }
+      if (!imgs.length) return { ok: false, error: 'لا توجد صور مرفقة مع الرسالة، اطلب من المستخدم إرفاق الصور أولاً' }
       const { generateFromInlineRefs } = await import('./postGen.js')
       const blob = await generateFromInlineRefs({ inlineRefs: imgs, stylePrompt: a.description, venueName: tenant?.name || '', tenant, imitate: !!a.imitate })
       const file = new File([blob], `ai-edit-${Date.now()}.png`, { type: blob.type || 'image/png' })
@@ -711,7 +711,7 @@ export const ACTIONS = [
         if (hit) { await db.saveItem(tid, hit.id, { imageUrl: url }); return { ok: true, url, applied: `الصورة الجديدة على الصنف: ${hit.nameAr || hit.nameEn}` } }
         return { ok: true, url, note: `وُلِّدت وحُفظت في المكتبة، لكن لا صنف باسم "${a.itemName}"` }
       }
-      return { ok: true, url, note: 'الصورة في المكتبة — جاهزة للاستخدام في أي مكان' }
+      return { ok: true, url, note: 'الصورة في المكتبة، جاهزة للاستخدام في أي مكان' }
     } },
 
   { name: 'set_item_image_ai', risk: 'confirm', description: 'Generate a new AI product image for a menu item (using its current photo as reference when available) and set it as the item photo.',
@@ -765,7 +765,7 @@ export const ACTIONS = [
 
   // ============ SIMPLIFICATION — archive, dedupe, templates, domains, permissions, delivery, orientation ============
   { name: 'archive_item', risk: 'confirm', description: 'Archive a menu item: hidden from the menu but kept with all its data (sales history, recipe, photo). Reversible any time via restore_item. Identify by itemName (or itemId).', parameters: obj({ itemName: str('item name'), itemId: str('id (optional)') }),
-    run: async (a, { tid }) => { const r = await resolveItemStrict(tid, a); if (!r.item) return r; await db.saveItem(tid, r.item.id, { archived: true, available: false }); return { ok: true, id: r.item.id, message: `تمت أرشفة «${r.item.nameAr}» — اختفى من المنيو مع بقاء كل بياناته، ويمكن استرجاعه في أي وقت` } } },
+    run: async (a, { tid }) => { const r = await resolveItemStrict(tid, a); if (!r.item) return r; await db.saveItem(tid, r.item.id, { archived: true, available: false }); return { ok: true, id: r.item.id, message: `تمت أرشفة «${r.item.nameAr}». اختفى من المنيو مع بقاء كل بياناته، ويمكن استرجاعه في أي وقت` } } },
   { name: 'restore_item', risk: 'confirm', description: 'Restore an archived menu item back to the live menu (also marks it available). Identify by itemName (or itemId).', parameters: obj({ itemName: str('item name'), itemId: str('id (optional)') }),
     run: async (a, { tid }) => { const r = await resolveItemStrict(tid, a); if (!r.item) return r; await db.saveItem(tid, r.item.id, { archived: false, available: true }); return { ok: true, id: r.item.id, message: `تم استرجاع «${r.item.nameAr}» إلى المنيو وهو متاح الآن` } } },
 
@@ -773,7 +773,7 @@ export const ACTIONS = [
     run: async (a, { tid }) => { await db.mergeCustomers(tid, a.primaryPhone, a.duplicatePhone); return { ok: true, message: `تم تنفيذ الدمج: سجل ${a.duplicatePhone} دُمج في ${a.primaryPhone} وحُذف السجل المكرر. تنبيه: هذا الإجراء نهائي ولا يمكن التراجع عنه.` } } },
 
   { name: 'set_message_template', risk: 'confirm', description: "Set the venue's own wording for one automated WhatsApp message. templateKey: orderStatus (تحديث حالة الطلب) | receipt (الفاتورة) | welcome (ترحيب العضوية) | upgrade (ترقية العضوية) | birthday (عيد الميلاد) | offers (عرض جديد) | featured (تمييز صنف) | newItems (أصناف جديدة). Placeholders usable inside the text: {الاسم} {المنشأة} {الصنف} {الكود} {الطلب} {الحالة} {المبلغ} {الرابط} {العضوية}. Empty text clears the key back to the default wording.", parameters: obj({ templateKey: str('orderStatus|receipt|welcome|upgrade|birthday|offers|featured|newItems'), text: str('template text — empty/omitted to reset to default') }, ['templateKey']),
-    run: async (a, { tid, tenant }) => { if (!MSG_TEMPLATE_KEYS.includes(a.templateKey)) return { error: `مفتاح قالب غير معروف — المفاتيح الصحيحة: ${MSG_TEMPLATE_KEYS.join(', ')}` }; const t = tenant || await db.getTenant(tid); const tpl = { ...(t?.msgTemplates || {}) }; const txt = String(a.text || '').trim(); if (txt) tpl[a.templateKey] = txt; else delete tpl[a.templateKey]; await db.updateTenant(tid, { msgTemplates: tpl }); return { ok: true, message: txt ? `تم حفظ قالب «${a.templateKey}» — سيُستخدم نصك في كل رسالة قادمة من هذا النوع` : `أُعيد قالب «${a.templateKey}» إلى الصياغة الافتراضية` } } },
+    run: async (a, { tid, tenant }) => { if (!MSG_TEMPLATE_KEYS.includes(a.templateKey)) return { error: `مفتاح قالب غير معروف. المفاتيح الصحيحة: ${MSG_TEMPLATE_KEYS.join(', ')}` }; const t = tenant || await db.getTenant(tid); const tpl = { ...(t?.msgTemplates || {}) }; const txt = String(a.text || '').trim(); if (txt) tpl[a.templateKey] = txt; else delete tpl[a.templateKey]; await db.updateTenant(tid, { msgTemplates: tpl }); return { ok: true, message: txt ? `تم حفظ قالب «${a.templateKey}»، وسيُستخدم نصك في كل رسالة قادمة من هذا النوع` : `أُعيد قالب «${a.templateKey}» إلى الصياغة الافتراضية` } } },
 
   { name: 'get_domain_info', risk: 'safe', description: "The venue's web addresses: the automatic platform subdomain (slug.platform), the shared menu link, and every custom-domain request with its status (pending = awaiting DNS + platform activation, active = live) plus the CNAME target to point DNS at.", parameters: obj({}),
     run: async (_a, { tid, tenant }) => {
@@ -797,7 +797,7 @@ export const ACTIONS = [
       const r = await resolveStaff(tid, a.staffName)
       if (!r.staff) return r
       const s = r.staff
-      if (s.role === 'owner' || s.role === 'manager') return { error: 'لا يمكن تعديل صلاحيات المالك أو المدير — صلاحياتهما كاملة دائماً' }
+      if (s.role === 'owner' || s.role === 'manager') return { error: 'لا يمكن تعديل صلاحيات المالك أو المدير، فصلاحياتهما كاملة دائماً' }
       const label = (c) => CAP_LABELS[c]?.ar || c
       if (a.resetToRole) {
         const defs = roleDefaultCaps(s.role || 'staff', t?.roleCaps)
@@ -813,7 +813,7 @@ export const ACTIONS = [
       ;(a.remove || []).forEach((c) => set.delete(c))
       const next = [...set]
       await db.setStaffCaps(tid, s.uid, next, true)
-      return { ok: true, message: `تم تحديث صلاحيات ${staffLabel(s)} (${roleName(s.role || 'staff', 'ar')}) — صلاحياته الآن مخصصة له شخصياً`, caps: next.map(label) }
+      return { ok: true, message: `تم تحديث صلاحيات ${staffLabel(s)} (${roleName(s.role || 'staff', 'ar')})، وصلاحياته الآن مخصصة له شخصياً`, caps: next.map(label) }
     } },
   { name: 'list_staff_permissions', risk: 'safe', description: "Staff permissions overview. Without staffName: every staffer with role + effective caps count. With staffName: that staffer's full capability list (Arabic labels) and whether it's a personal override or the role default.", parameters: obj({ staffName: str('optional: one staffer by name/email') }),
     run: async (a, { tid, tenant }) => {
@@ -830,11 +830,11 @@ export const ACTIONS = [
     } },
 
   { name: 'set_delivery_zones', risk: 'confirm', description: 'Set tiered delivery-fee zones: each zone = maxKm (outer distance) + fee (charged up to that distance). REPLACES the existing zones, sorted by distance. The map in Settings → التوصيل draws them visually.', parameters: obj({ zones: arr(obj({ maxKm: num('zone outer distance in km'), fee: num('delivery fee within this zone') }, ['maxKm', 'fee']), 'zones, e.g. [{maxKm:3,fee:5},{maxKm:7,fee:12}]') }, ['zones']),
-    run: async (a, { tid, tenant }) => { const t = tenant || await db.getTenant(tid); const zones = (a.zones || []).map((z) => ({ maxKm: Number(z.maxKm) || 0, fee: Math.max(0, Number(z.fee) || 0) })).filter((z) => z.maxKm > 0).sort((x, y) => x.maxKm - y.maxKm); if (!zones.length) return { error: 'حدد منطقة واحدة على الأقل بمسافة أكبر من صفر' }; await db.updateTenant(tid, { delivery: { ...(t?.delivery || {}), zones } }); return { ok: true, zones, message: `تم حفظ ${zones.length} من مناطق التوصيل — تظهر بصرياً على الخريطة في الإعدادات > التوصيل` } } },
+    run: async (a, { tid, tenant }) => { const t = tenant || await db.getTenant(tid); const zones = (a.zones || []).map((z) => ({ maxKm: Number(z.maxKm) || 0, fee: Math.max(0, Number(z.fee) || 0) })).filter((z) => z.maxKm > 0).sort((x, y) => x.maxKm - y.maxKm); if (!zones.length) return { error: 'حدد منطقة واحدة على الأقل بمسافة أكبر من صفر' }; await db.updateTenant(tid, { delivery: { ...(t?.delivery || {}), zones } }); return { ok: true, zones, message: `تم حفظ ${zones.length} من مناطق التوصيل، وتظهر على الخريطة في الإعدادات > التوصيل` } } },
   { name: 'set_delivery_range', risk: 'confirm', description: 'Set the maximum delivery radius in km (orders beyond it are refused at checkout). The map in Settings → التوصيل draws the circle visually. Requires the venue location (set_venue_location).', parameters: obj({ radiusKm: num('radius in km — 0 removes the limit') }, ['radiusKm']),
-    run: async (a, { tid, tenant }) => { const t = tenant || await db.getTenant(tid); const radiusKm = Math.max(0, Number(a.radiusKm) || 0); await db.updateTenant(tid, { delivery: { ...(t?.delivery || {}), radiusKm } }); return { ok: true, radiusKm, message: radiusKm ? `نطاق التوصيل الآن ${radiusKm} كم — يظهر كدائرة على الخريطة في الإعدادات > التوصيل` : 'أُزيل حد نطاق التوصيل' } } },
+    run: async (a, { tid, tenant }) => { const t = tenant || await db.getTenant(tid); const radiusKm = Math.max(0, Number(a.radiusKm) || 0); await db.updateTenant(tid, { delivery: { ...(t?.delivery || {}), radiusKm } }); return { ok: true, radiusKm, message: radiusKm ? `نطاق التوصيل الآن ${radiusKm} كم، ويظهر كدائرة على الخريطة في الإعدادات > التوصيل` : 'أُزيل حد نطاق التوصيل' } } },
   { name: 'set_venue_location', risk: 'confirm', description: 'Set the venue GPS coordinates — used by the staff-attendance geofence and by delivery distance/zone fees.', parameters: obj({ lat: num('latitude, -90 to 90'), lng: num('longitude, -180 to 180') }, ['lat', 'lng']),
-    run: async (a, { tid }) => { const lat = Number(a.lat); const lng = Number(a.lng); if (!Number.isFinite(lat) || lat < -90 || lat > 90 || !Number.isFinite(lng) || lng < -180 || lng > 180) return { error: 'إحداثيات غير صحيحة — lat بين -90 و 90، وlng بين -180 و 180' }; await db.updateTenant(tid, { geo: { lat, lng } }); return { ok: true, message: `تم حفظ موقع المنشأة (${lat}, ${lng}) — يُستخدم في التحقق الجغرافي للحضور وحساب مسافة التوصيل` } } },
+    run: async (a, { tid }) => { const lat = Number(a.lat); const lng = Number(a.lng); if (!Number.isFinite(lat) || lat < -90 || lat > 90 || !Number.isFinite(lng) || lng < -180 || lng > 180) return { error: 'إحداثيات غير صحيحة. القيم المقبولة: lat بين -90 و 90، وlng بين -180 و 180' }; await db.updateTenant(tid, { geo: { lat, lng } }); return { ok: true, message: `تم حفظ موقع المنشأة (${lat}, ${lng})، ويُستخدم في التحقق الجغرافي للحضور وحساب مسافة التوصيل` } } },
 
   { name: 'system_overview', risk: 'safe', description: 'One-call Arabic orientation digest of the whole system: the 5 main sections, the «المزيد» groups, global search, help center, and the first 5 things a new venue should do. The digest is written in THIS venue\'s own vocabulary. Call for «كيف أستخدم النظام؟» or any general-orientation question, then answer from it.', parameters: obj({}),
     // The digest speaks the venue's own nouns via lex(): a perfumery reads
@@ -849,11 +849,11 @@ export const ACTIONS = [
       const GUESTS = lex(t, 'guests')
       return { overview: [
         'الأقسام الخمسة الرئيسية (الشريط السفلي / الجانبي):',
-        '1. الرئيسية /admin — لوحة اليوم: المبيعات، الطلبات النشطة، التنبيهات.',
-        '2. الطلبات /admin/orders — استقبال الطلبات ومتابعة حالتها حتى التسليم.',
-        `3. ${MENU} /admin/menu — ${CATS} و${ITEMS} والأسعار والصور والوصفات.`,
-        '4. العمليات /admin/operations — الطاولات ورموز QR والتشغيل اليومي.',
-        '5. الفريق /admin/hr — الموظفون والأدوار والحضور والرواتب.',
+        '1. الرئيسية /admin · لوحة اليوم: المبيعات، الطلبات النشطة، التنبيهات.',
+        '2. الطلبات /admin/orders · استقبال الطلبات ومتابعة حالتها حتى التسليم.',
+        `3. ${MENU} /admin/menu · ${CATS} و${ITEMS} والأسعار والصور والوصفات.`,
+        '4. العمليات /admin/operations · الطاولات ورموز QR والتشغيل اليومي.',
+        '5. الفريق /admin/hr · الموظفون والأدوار والحضور والرواتب.',
         '',
         'زر «المزيد» يجمع الباقي في مجموعات:',
         '- التسويق والعملاء: العملاء، الإعلانات والحملات، العروض والخصومات، استوديو التقييمات، استوديو المنشورات، سجل الرسائل والتحليلات، المكتبة، الاستوري، البروفايل والأخبار.',

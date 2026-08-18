@@ -23,7 +23,7 @@ function PairPanel({ screenId, ar, toast }) {
       {qr && <img src={qr} alt="" style={{ width: 84, height: 84, borderRadius: 8, background: '#fff', padding: 4, flex: 'none' }} />}
       <div className="stack grow" style={{ gap: 4, minWidth: 180 }}>
         <strong className="small">{ar ? 'اربط هذه الشاشة' : 'Pair this screen'}</strong>
-        <span className="xs faint">{ar ? 'امسح الرمز بأي جهاز، أو افتح الرابط مباشرة على التلفزيون — يرتبط تلقائياً بلا إدخال رمز.' : 'Scan the QR or open the link on the TV — it pairs automatically.'}</span>
+        <span className="xs faint">{ar ? 'امسح الرمز بأي جهاز، أو افتح الرابط مباشرة على التلفزيون، يرتبط تلقائياً بلا إدخال رمز.' : 'Scan the QR or open the link on the TV, it pairs automatically.'}</span>
         <span className="xs" dir="ltr" style={{ wordBreak: 'break-all', fontFamily: 'monospace' }}>{link}</span>
       </div>
       <button className="btn btn-sm btn-outline" style={{ flex: 'none' }} onClick={copy}><Icon name="copy" size={14} /> {ar ? 'نسخ الرابط' : 'Copy link'}</button>
@@ -66,7 +66,7 @@ export default function ScreensAdmin() {
     try {
       const code = await createScreen(tenantId, name.trim() || (ar ? 'شاشة العرض' : 'Screen'))
       setName(''); setOpenId(code)
-      toast.success(ar ? `أُنشئت — الرمز: ${code}` : `Created — code: ${code}`)
+      toast.success(ar ? `أُنشئت، الرمز: ${code}` : `Created, code: ${code}`)
     } catch (e) {
       toast.error((e?.code || '').includes('permission') ? (ar ? 'انشر قواعد Firestore أولاً' : 'Deploy Firestore rules first') : t('error'))
     } finally { setBusy(false) }
@@ -145,7 +145,7 @@ export default function ScreensAdmin() {
           layers: [
             T({ type: 'text', x: 8, y: 12, w: 84, h: 16, content: ar ? 'ساعات العمل' : 'Opening hours', fs: 6, color: '#ffffff', weight: 900, align: 'center', shadow: true }),
             T({ type: 'shape', x: 30, y: 30, w: 40, h: 1.2, shape: 'rect', color: brand, opacity: 1, radius: 1 }),
-            T({ type: 'text', x: 14, y: 38, w: 72, h: 40, content: ar ? 'السبت – الخميس: 7ص – 12م\nالجمعة: 2م – 12م' : 'Sat–Thu: 7am – 12am\nFri: 2pm – 12am', fs: 4.2, color: '#dfe6ee', weight: 700, align: 'center', shadow: false }),
+            T({ type: 'text', x: 14, y: 38, w: 72, h: 40, content: ar ? 'السبت، الخميس: 7ص، 12م\nالجمعة: 2م، 12م' : 'Sat, Thu: 7am, 12am\nFri: 2pm, 12am', fs: 4.2, color: '#dfe6ee', weight: 700, align: 'center', shadow: false }),
           ],
         },
       },
@@ -179,7 +179,7 @@ export default function ScreensAdmin() {
           layers: [
             T({ type: 'shape', x: 6, y: 70, w: 88, h: 18, shape: 'rect', color: '#ffffff', opacity: 0.08, radius: 2.4 }),
             T({ type: 'text', x: 8, y: 24, w: 84, h: 24, content: ar ? 'عيد وطني سعيد' : 'Happy National Day', fs: 8.4, color: '#ffffff', weight: 900, align: 'center', shadow: true }),
-            T({ type: 'text', x: 10, y: 52, w: 80, h: 12, content: ar ? 'دام عزّك يا وطن — عروض خاصة باليوم الوطني' : 'Special National Day offers', fs: 3.8, color: '#cfe8dc', weight: 700, align: 'center', shadow: false }),
+            T({ type: 'text', x: 10, y: 52, w: 80, h: 12, content: ar ? 'دام عزّك يا وطن، عروض خاصة باليوم الوطني' : 'Special National Day offers', fs: 3.8, color: '#cfe8dc', weight: 700, align: 'center', shadow: false }),
           ],
         },
       },
@@ -220,7 +220,7 @@ export default function ScreensAdmin() {
       <h2 className="page-title">{ar ? 'شاشات العرض' : 'Display screens'}</h2>
 
       <div className="card card-pad stack" style={{ gap: 8 }}>
-        <p className="xs faint" style={{ margin: 0 }}>{ar ? 'افتح /screen على أي تلفزيون أو جهاز بمتصفح، وأدخل رمز الشاشة — المحتوى يتحدث لحظياً مع كل تعديل هنا.' : 'Open /screen on any TV browser and enter the code — content updates live.'}</p>
+        <p className="xs faint" style={{ margin: 0 }}>{ar ? 'افتح /screen على أي تلفزيون أو جهاز بمتصفح، وأدخل رمز الشاشة، المحتوى يتحدث لحظياً مع كل تعديل هنا.' : 'Open /screen on any TV browser and enter the code, content updates live.'}</p>
         <div className="row" style={{ gap: 8 }}>
           <input className="input grow" placeholder={ar ? 'اسم الشاشة (الصالة، الواجهة…)' : 'Screen name'} value={name} onChange={(e) => setName(e.target.value)} />
           <button className="btn btn-primary" style={{ flex: 'none' }} disabled={busy} onClick={create}><Icon name="add" size={16} /> {ar ? 'إنشاء شاشة' : 'Create'}</button>
@@ -231,10 +231,10 @@ export default function ScreensAdmin() {
           <summary className="small bold" style={{ cursor: 'pointer', listStyle: 'none' }}><Icon name="qr" size={14} style={{ verticalAlign: 'middle' }} /> {ar ? 'طرق ربط الشاشات والأجهزة' : 'Ways to connect screens'}</summary>
           <div className="stack" style={{ gap: 8, marginTop: 8 }}>
             {[
-              [ar ? 'أي تلفزيون ذكي أو جهاز بمتصفح' : 'Any smart TV / browser device', ar ? 'افتح رابط الشاشة المباشر (أو امسح QR من بطاقة الشاشة بالأسفل) — يرتبط تلقائياً ويعمل فوراً.' : 'Open the screen link (or scan its QR) — pairs automatically.'],
-              [ar ? 'أندرويد TV / شاشة إعلانات' : 'Android TV / signage box', ar ? 'ثبّت أي متصفح، افتح الرابط مرة واحدة، وفعّل «ملء الشاشة» من زر المشغل — يعود تلقائياً عند إعادة التشغيل مع صفحة بدء المتصفح.' : 'Install a browser, open the link once, use the player fullscreen button.'],
+              [ar ? 'أي تلفزيون ذكي أو جهاز بمتصفح' : 'Any smart TV / browser device', ar ? 'افتح رابط الشاشة المباشر (أو امسح QR من بطاقة الشاشة بالأسفل)، يرتبط تلقائياً ويعمل فوراً.' : 'Open the screen link (or scan its QR), pairs automatically.'],
+              [ar ? 'أندرويد TV / شاشة إعلانات' : 'Android TV / signage box', ar ? 'ثبّت أي متصفح، افتح الرابط مرة واحدة، وفعّل «ملء الشاشة» من زر المشغل، يعود تلقائياً عند إعادة التشغيل مع صفحة بدء المتصفح.' : 'Install a browser, open the link once, use the player fullscreen button.'],
               [ar ? 'البث من جوالك أو لابتوبك (Chromecast / AirPlay)' : 'Cast from phone/laptop', ar ? 'افتح الرابط في كروم واضغط «إرسال / Cast» لأي شاشة على نفس الشبكة، أو AirPlay من سفاري.' : 'Open in Chrome and Cast, or AirPlay from Safari.'],
-              [ar ? 'عبر شبكة الواي فاي المحلية' : 'Over local Wi-Fi', ar ? 'أي جهاز على شبكتك يفتح الرابط يعمل فوراً — والتحكم (إيقاف/التالي/الموسيقى) يصل من لوحتك خلال ثوانٍ لحظياً. لا حاجة لخادم محلي.' : 'Any device on your network opening the link works instantly; remote control applies within seconds.'],
+              [ar ? 'عبر شبكة الواي فاي المحلية' : 'Over local Wi-Fi', ar ? 'أي جهاز على شبكتك يفتح الرابط يعمل فوراً، والتحكم (إيقاف/التالي/الموسيقى) يصل من لوحتك خلال ثوانٍ لحظياً. لا حاجة لخادم محلي.' : 'Any device on your network opening the link works instantly; remote control applies within seconds.'],
               [ar ? 'وضع الكشك (تشغيل دائم)' : 'Kiosk mode', ar ? 'على أندرويد استخدم تطبيق Kiosk Browser وثبّت الرابط؛ على أجهزة التلفزيون اجعل المتصفح يفتح تلقائياً مع التشغيل.' : 'Use a kiosk browser app with the link as home.'],
             ].map(([h, b], i) => (
               <div key={i} className="row" style={{ gap: 8, alignItems: 'flex-start', padding: '8px 10px', background: 'var(--surface-2)', borderRadius: 10 }}>
@@ -310,7 +310,7 @@ export default function ScreensAdmin() {
               </div>
               <div className="row" style={{ gap: 8, flexWrap: 'wrap', alignItems: 'center', padding: '8px 10px', background: s.alert?.on ? 'color-mix(in srgb, var(--danger) 12%, transparent)' : 'var(--surface-2)', borderRadius: 10 }}>
                 <span className="xs bold" style={{ color: s.alert?.on ? 'var(--danger)' : undefined }}>{ar ? 'رسالة طوارئ (تغطي الشاشة فوراً)' : 'Emergency override'}</span>
-                <input className="input input-sm grow" style={{ minWidth: 160 }} placeholder={ar ? 'مثال: نعتذر — تأخير بسيط في الطلبات' : 'e.g. short delay notice'} defaultValue={s.alert?.text || ''}
+                <input className="input input-sm grow" style={{ minWidth: 160 }} placeholder={ar ? 'مثال: نعتذر، تأخير بسيط في الطلبات' : 'e.g. short delay notice'} defaultValue={s.alert?.text || ''}
                   onBlur={(e) => updateScreen(s.id, { alert: { ...(s.alert || {}), text: e.target.value.trim() } }).catch(() => toast.error(t('error')))} />
                 <button className={`btn btn-sm ${s.alert?.on ? 'btn-primary' : 'btn-outline'}`} style={s.alert?.on ? { background: 'var(--danger)', borderColor: 'var(--danger)' } : undefined}
                   onClick={() => updateScreen(s.id, { alert: { ...(s.alert || {}), on: !s.alert?.on } }).catch(() => toast.error(t('error')))}>
@@ -440,7 +440,7 @@ export default function ScreensAdmin() {
                 <button className="btn btn-sm btn-outline" onClick={() => setDesigner({ screenId: s.id, index: null, slide: newDesignSlide() })}><Icon name="palette" size={14} /> {ar ? 'شريحة تصميم' : 'Design slide'}</button>
                 <button className="btn btn-sm btn-outline" onClick={() => setTplFor(s.id)}><Icon name="sparkles" size={14} /> {ar ? 'قوالب جاهزة' : 'Templates'}</button>
                 <button className="btn btn-sm btn-outline" onClick={() => addSlide(s, { type: 'menu', categoryId: '', duration: 12 })}><Icon name="menu" size={14} /> {ar ? 'شريحة المميزة' : 'Featured slide'}</button>
-                <button className="btn btn-sm btn-outline" title={ar ? 'مواقيت الصلاة لليوم — تُجلب تلقائياً وتُخفى الشريحة إن تعذّر الجلب' : "Today's prayer times (auto-fetched; slide hides on failure)"} onClick={() => addSlide(s, { type: 'prayer', city: 'Riyadh', duration: 12 })}><Icon name="clock" size={14} /> {ar ? 'مواقيت الصلاة' : 'Prayer times'}</button>
+                <button className="btn btn-sm btn-outline" title={ar ? 'مواقيت الصلاة لليوم، تُجلب تلقائياً وتُخفى الشريحة إن تعذّر الجلب' : "Today's prayer times (auto-fetched; slide hides on failure)"} onClick={() => addSlide(s, { type: 'prayer', city: 'Riyadh', duration: 12 })}><Icon name="clock" size={14} /> {ar ? 'مواقيت الصلاة' : 'Prayer times'}</button>
                 {cats.map((c) => (
                   <button key={c.id} className="btn btn-sm btn-outline" onClick={() => addSlide(s, { type: 'menu', categoryId: c.id, duration: 12 })}>+ {pickLang(c, 'name', lang)}</button>
                 ))}
@@ -467,7 +467,7 @@ export default function ScreensAdmin() {
             </button>
           ))}
         </div>
-        <p className="xs faint" style={{ marginTop: 10 }}>{ar ? 'اختر قالباً ثم عدّله في المصمم قبل الحفظ — القوالب الحية تسحب العرض النشط والأسعار تلقائياً.' : 'Pick a template, tweak it in the designer, then save — live templates pull the active offer and prices automatically.'}</p>
+        <p className="xs faint" style={{ marginTop: 10 }}>{ar ? 'اختر قالباً ثم عدّله في المصمم قبل الحفظ، القوالب الحية تسحب العرض النشط والأسعار تلقائياً.' : 'Pick a template, tweak it in the designer, then save, live templates pull the active offer and prices automatically.'}</p>
       </Sheet>
 
       {designer && (
@@ -557,7 +557,7 @@ function MusicManager({ screen: s, tenantId, busy, setBusy, ar, toast }) {
         <button className="btn btn-sm btn-outline" onClick={addP}><Icon name="add" size={13} /> {ar ? 'قائمة جديدة' : 'New playlist'}</button>
       </div>
       {pls.length === 0 && (
-        <p className="xs faint" style={{ margin: 0, lineHeight: 1.6 }}>{ar ? 'أنشئ قائمة (صباحية / مسائية…)، أضف روابط يوتيوب أو ارفع أغانٍ أو مجلداً كاملاً — تعمل بتداخل الدي جي وتُجدول لتشتغل في وقتها.' : 'Create a playlist, add YouTube links or upload songs/a whole folder — DJ crossfade + auto-schedule.'}</p>
+        <p className="xs faint" style={{ margin: 0, lineHeight: 1.6 }}>{ar ? 'أنشئ قائمة (صباحية / مسائية…)، أضف روابط يوتيوب أو ارفع أغانٍ أو مجلداً كاملاً، تعمل بتداخل الدي جي وتُجدول لتشتغل في وقتها.' : 'Create a playlist, add YouTube links or upload songs/a whole folder, DJ crossfade + auto-schedule.'}</p>
       )}
       {pls.map((p) => (
         <div key={p.id} className="card card-pad stack" style={{ gap: 8 }}>
@@ -680,7 +680,7 @@ function SlideSched({ sl, ar, onSave }) {
   }
   return (
     <div className="stack" style={{ gap: 8, padding: '10px 12px', margin: '4px 0 8px', background: 'var(--surface-2)', borderRadius: 10 }}>
-      <strong className="xs">{ar ? 'جدولة الشريحة — تُعرض فقط في:' : 'Slide schedule — show only on:'}</strong>
+      <strong className="xs">{ar ? 'جدولة الشريحة، تُعرض فقط في:' : 'Slide schedule, show only on:'}</strong>
       <div className="row" style={{ gap: 4, flexWrap: 'wrap' }}>
         {DAYS.map((d, di) => (
           <button key={di} className={`btn btn-sm ${days.includes(di) ? 'btn-primary' : 'btn-outline'}`} style={{ padding: '3px 10px' }} onClick={() => toggle(di)}>{d}</button>
@@ -695,7 +695,7 @@ function SlideSched({ sl, ar, onSave }) {
         <button className="btn btn-sm btn-outline" onClick={() => onSave(null)}>{ar ? 'دائماً (مسح)' : 'Always (clear)'}</button>
         <button className="btn btn-sm btn-primary" onClick={save}>{ar ? 'حفظ' : 'Save'}</button>
       </div>
-      <p className="xs faint" style={{ margin: 0 }}>{ar ? 'بلا أيام محددة = كل الأيام؛ بلا وقت = طوال اليوم. يدعم النطاق الليلي (22:00 – 02:00).' : 'No days = every day; no time = all day. Overnight ranges supported.'}</p>
+      <p className="xs faint" style={{ margin: 0 }}>{ar ? 'بلا أيام محددة = كل الأيام؛ بلا وقت = طوال اليوم. يدعم النطاق الليلي (22:00، 02:00).' : 'No days = every day; no time = all day. Overnight ranges supported.'}</p>
     </div>
   )
 }

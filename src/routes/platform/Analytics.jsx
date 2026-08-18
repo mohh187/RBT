@@ -144,7 +144,7 @@ export default function Analytics() {
       <div className="card card-pad stack">
         <strong><Icon name="warning" size={16} /> منشآت خاملة (7+ أيام بلا طلبات)</strong>
         {idle.length === 0 ? (
-          <Empty icon="check" title="كل المنشآت نشطة" hint="تُحسب من التجميع الليلي — تظهر القائمة بعد أول تشغيل" />
+          <Empty icon="check" title="كل المنشآت نشطة" hint="تُحسب من التجميع الليلي، تظهر القائمة بعد أول تشغيل" />
         ) : (
           <div className="divide">
             {idle.map((r) => (

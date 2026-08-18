@@ -46,13 +46,13 @@ const num = (n) => Number(n || 0).toLocaleString('ar-SA-u-nu-latn', { maximumFra
 export const AD_KINDS = [
   { id: 'popup', ar: 'نافذة منبثقة', en: 'Popup', icon: 'layers', hint: 'تطفو فوق القائمة على خلفية معتمة' },
   { id: 'banner', ar: 'شريط إعلاني', en: 'Banner', icon: 'notepad', hint: 'شريط أسفل الشاشة والقائمة تبقى قابلة للتصفح' },
-  { id: 'fullscreen', ar: 'ملء الشاشة', en: 'Fullscreen', icon: 'grid', hint: 'يغطي الشاشة بالكامل — أقوى أثراً وأكثر إزعاجاً' },
+  { id: 'fullscreen', ar: 'ملء الشاشة', en: 'Fullscreen', icon: 'grid', hint: 'يغطي الشاشة بالكامل، أقوى أثراً وأكثر إزعاجاً' },
 ]
 
 // The silhouette of the ad body itself.
 export const AD_SHAPES = [
-  { id: 'card', ar: 'بطاقة', en: 'Card', icon: 'notepad', hint: 'مستطيل بحواف دائرية — الخيار الآمن' },
-  { id: 'circle', ar: 'دائرة', en: 'Circle', icon: 'shapes', hint: 'قرص دائري بالكامل — لافت ومميّز' },
+  { id: 'card', ar: 'بطاقة', en: 'Card', icon: 'notepad', hint: 'مستطيل بحواف دائرية، الخيار الآمن' },
+  { id: 'circle', ar: 'دائرة', en: 'Circle', icon: 'shapes', hint: 'قرص دائري بالكامل، لافت ومميّز' },
   { id: 'sheet', ar: 'لوح سفلي', en: 'Bottom sheet', icon: 'arrowUp', hint: 'يصعد من أسفل الشاشة كورقة' },
   { id: 'wide', ar: 'شريط عريض', en: 'Wide', icon: 'arrowLeftRight', hint: 'صورة عريضة من حافة لحافة' },
 ]
@@ -249,18 +249,18 @@ export function adProblems(raw) {
   const ad = normalizeAd(raw)
   if (!ad) return ['السجل غير صالح.']
   const out = []
-  if (!hasContent(ad)) out.push('لا صورة ولا نص — لن يظهر هذا الإعلان للضيف إطلاقاً.')
+  if (!hasContent(ad)) out.push('لا صورة ولا نص، فلن يظهر هذا الإعلان للضيف إطلاقاً.')
   if (ad.media.type !== 'none' && !ad.media.url) out.push('نوع الوسيط مضبوط على وسيط لكن لا يوجد ملف مرفوع.')
   const t = ad.target
-  if (t.link === 'item' && !t.itemId) out.push('الربط مضبوط على صنف ولم يُختر صنف — زر الإجراء لن ينقل الضيف لأي مكان.')
+  if (t.link === 'item' && !t.itemId) out.push('الربط مضبوط على صنف ولم تختر صنفاً، فزر الإجراء لن ينقل الضيف لأي مكان.')
   if (t.link === 'category' && !t.categoryId) out.push('الربط مضبوط على قسم ولم يُختر قسم.')
   if (t.link === 'offer' && !t.offerId) out.push('الربط مضبوط على عرض ولم يُختر عرض.')
-  if (t.link === 'url' && !safeUrl(t.url)) out.push('الرابط الخارجي فارغ أو غير صالح — يجب أن يبدأ بـ https.')
-  if (ad.ctaLabel.trim() && t.link === 'none') out.push('يوجد زر إجراء بلا وجهة — سيغلق الإعلان فقط.')
-  if (ad.reward.kind === 'points' && ad.reward.value < 1) out.push('مكافأة نقاط بلا قيمة — لن تُعرض على الضيف.')
-  if (ad.reward.kind === 'coupon' && !ad.reward.code && !ad.reward.label) out.push('كوبون بلا رمز ولا وصف — لن يُعرض على الضيف.')
-  if (ad.schedule.from && ad.schedule.to && ad.schedule.from > ad.schedule.to) out.push('تاريخ البداية بعد تاريخ النهاية — لن يظهر في أي يوم.')
-  if (ad.audience.who === 'new' && ad.audience.minVisits > 1) out.push('الجمهور «زائر لأول مرة» مع حد أدنى للزيارات أكبر من واحد — شرطان متناقضان، لن يظهر لأحد.')
+  if (t.link === 'url' && !safeUrl(t.url)) out.push('الرابط الخارجي فارغ أو غير صالح. اكتب رابطاً يبدأ بـ https.')
+  if (ad.ctaLabel.trim() && t.link === 'none') out.push('يوجد زر إجراء بلا وجهة، وسيغلق الإعلان فقط.')
+  if (ad.reward.kind === 'points' && ad.reward.value < 1) out.push('مكافأة نقاط بلا قيمة، ولن تُعرض على الضيف.')
+  if (ad.reward.kind === 'coupon' && !ad.reward.code && !ad.reward.label) out.push('كوبون بلا رمز ولا وصف، ولن يُعرض على الضيف.')
+  if (ad.schedule.from && ad.schedule.to && ad.schedule.from > ad.schedule.to) out.push('تاريخ البداية بعد تاريخ النهاية، فلن يظهر في أي يوم.')
+  if (ad.audience.who === 'new' && ad.audience.minVisits > 1) out.push('الجمهور «زائر لأول مرة» مع حد أدنى للزيارات أكبر من واحد، وهذان شرطان متناقضان لن يظهر معهما لأحد.')
   return out
 }
 
@@ -364,7 +364,7 @@ export async function duplicateAd(tid, ad) {
   delete copy.createdAt
   delete copy.updatedAt
   copy.active = false
-  copy.name = `${src.name || 'إعلان'} — نسخة`
+  copy.name = `${src.name || 'إعلان'} (نسخة)`
   return saveAd(tid, null, copy)
 }
 

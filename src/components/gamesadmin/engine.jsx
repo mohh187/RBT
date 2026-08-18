@@ -4,7 +4,7 @@
 // actually wrote, or a HARD-BOUNDED Firestore read. Two rules hold throughout:
 //
 //   1. Nothing is estimated. A figure that cannot be counted is `null`, and the
-//      UI prints «—» next to the sample size rather than a confident zero.
+//      UI prints «·» next to the sample size rather than a confident zero.
 //   2. Every read carries a limit and a progressive fallback, so a missing
 //      composite index or a strict rule degrades to "fewer rows" — never to a
 //      thrown error and never to a spinner that hangs.
@@ -12,6 +12,7 @@ import { collection, getDocs, query, where, orderBy, limit, startAfter } from 'f
 import { db, firebaseReady } from '../../lib/firebase.js'
 import { GAMES, unseenGames } from '../../lib/games.js'
 import { isSoloPlay } from '../../lib/gameMemory.js'
+import { arPlural } from '../../lib/forecast.js'
 
 // Re-exported so a panel never re-invents "was this against the computer".
 export { isSoloPlay }
@@ -43,16 +44,18 @@ const round2 = (n) => Math.round(n * 100) / 100
 
 // Latin digits, always (hard rule).
 export const fmtInt = (n) => Math.round(num(n)).toLocaleString('ar-SA-u-nu-latn')
-export const fmtPct = (frac) => (frac == null ? '—' : `${Math.round(num(frac) * 100).toLocaleString('ar-SA-u-nu-latn')}٪`)
+// Arabic counted-noun agreement: "5 جولات" but "42 جولة".
+export const nPlays = (n) => arPlural(Math.round(num(n)), { one: 'جولة', two: 'جولتان', few: 'جولات', many: 'جولة' })
+export const fmtPct = (frac) => (frac == null ? '·' : `${Math.round(num(frac) * 100).toLocaleString('ar-SA-u-nu-latn')}٪`)
 
-export const dayStamp = (ms) => (num(ms) ? new Date(num(ms)).toLocaleDateString('en-CA') : '—')
-export const clockOf = (ms) => (num(ms) ? new Date(num(ms)).toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' }) : '—')
-export const dateTime = (ms) => (num(ms) ? `${dayStamp(ms)} ${clockOf(ms)}` : '—')
+export const dayStamp = (ms) => (num(ms) ? new Date(num(ms)).toLocaleDateString('en-CA') : '·')
+export const clockOf = (ms) => (num(ms) ? new Date(num(ms)).toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' }) : '·')
+export const dateTime = (ms) => (num(ms) ? `${dayStamp(ms)} ${clockOf(ms)}` : '·')
 
-// A duration a human reads at a glance. `null` in, «—» out — never "0 ثانية"
+// A duration a human reads at a glance. `null` in, «·» out — never "0 ثانية"
 // standing in for "we never measured it".
 export function durText(seconds) {
-  if (seconds == null) return '—'
+  if (seconds == null) return '·'
   const s = Math.max(0, Math.round(num(seconds)))
   if (s < 60) return `${fmtInt(s)} ثانية`
   const m = Math.floor(s / 60)
@@ -248,7 +251,7 @@ export const opponentLabel = (kind, ar = true) => {
 // The one sentence that explains a solo count, used verbatim wherever one shows.
 export const soloNote = (n, ar = true) => (
   ar
-    ? `${fmtInt(n)} من جولات هذه الفترة كانت ضد الكمبيوتر ولا تدخل في الأرقام أعلاه — الخصم آلة بنمط ثابت، فمتوسّطه ونسبة إكماله لا تصف ضيوف هذا المكان.`
+    ? `${fmtInt(n)} من جولات هذه الفترة كانت ضد الكمبيوتر ولا تدخل في الأرقام أعلاه. الخصم آلة بنمط ثابت، فمتوسّطه ونسبة إكماله لا تصف ضيوف هذا المكان.`
     : `${n} rounds this period were against the computer and are excluded above.`
 )
 

@@ -40,7 +40,7 @@ export default function PublicEvents() {
   const myPasses = useMemo(() => (venue.tenantId ? getMyPasses(venue.tenantId) : []), [venue.tenantId])
 
   if (venue.loading) return <FullSpinner />
-  if (venue.notFound || venue.error) return <div className="auth-shell"><Empty icon="search" title={venue.notFound ? (lang === 'ar' ? 'المنشأة غير موجودة' : 'Venue not found') : (lang === 'ar' ? 'تعذّر تحميل الصفحة، حدّث الصفحة' : 'Could not load — please refresh')} /></div>
+  if (venue.notFound || venue.error) return <div className="auth-shell"><Empty icon="search" title={venue.notFound ? (lang === 'ar' ? 'المنشأة غير موجودة' : 'Venue not found') : (lang === 'ar' ? 'تعذّر تحميل الصفحة، حدّث الصفحة' : 'Could not load, please refresh')} /></div>
   if (venue.tenantId && events === null) return <FullSpinner />
 
   // The room follows in only when configured (menuChrome.pages.events /
@@ -152,7 +152,7 @@ function BookTicketSheet({ event, tenantId, currency, onlinePay, onClose, onBook
       }, { pending: true })
       addMyPass(tenantId, { id: res.id, code: res.code, kind: 'ticket', title: pickLang(event, 'title', lang) })
       setLocalCustomer({ name: name.trim(), phone: phone.trim() })
-      try { await startPayment('ticket', tenantId, res.id); return } catch (_) { toast.error(lang === 'ar' ? 'تعذّر فتح صفحة الدفع — تذكرتك محفوظة' : 'Could not open payment — your ticket is saved'); setBusy(false) }
+      try { await startPayment('ticket', tenantId, res.id); return } catch (_) { toast.error(lang === 'ar' ? 'تعذّر فتح صفحة الدفع، تذكرتك محفوظة' : 'Could not open payment, your ticket is saved'); setBusy(false) }
     } catch (_) {
       toast.error(t('error'))
       setBusy(false)

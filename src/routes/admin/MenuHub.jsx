@@ -18,7 +18,7 @@ export default function MenuHub() {
           to="/admin/assistant"
           className="btn btn-sm btn-outline"
           style={{ display: 'inline-flex', alignItems: 'center', gap: 6, whiteSpace: 'nowrap' }}
-          title={ar ? 'أرفق صورة منيو أو ملف إكسل وسيضيف المساعد الأصناف كاملة' : 'Attach a menu photo/Excel — the assistant imports everything'}
+          title={ar ? 'أرفق صورة منيو أو ملف إكسل وسيضيف المساعد الأصناف كاملة' : 'Attach a menu photo/Excel, the assistant imports everything'}
         >
           <Icon name="sparkles" size={14} />
           <span>{ar ? 'استيراد منيو بالذكاء' : 'AI menu import'}</span>

@@ -904,19 +904,19 @@ export const tableLift = (tb) => (tb ? -tb.lift : 0)
 // `anchor` decides what the piece is fixed to. A header lantern must stay with
 // the header while the menu scrolls under it; a corner pot belongs to the page.
 export const DECOR_ANCHORS = [
-  { id: 'header-start', ar: 'الهيدر — بداية', en: 'Header start' },
-  { id: 'header-end', ar: 'الهيدر — نهاية', en: 'Header end' },
-  { id: 'header-center', ar: 'الهيدر — الوسط', en: 'Header centre' },
-  { id: 'page-top-start', ar: 'أعلى الصفحة — بداية', en: 'Page top start' },
-  { id: 'page-top-end', ar: 'أعلى الصفحة — نهاية', en: 'Page top end' },
-  { id: 'page-bottom-start', ar: 'أسفل الصفحة — بداية', en: 'Page bottom start' },
-  { id: 'page-bottom-end', ar: 'أسفل الصفحة — نهاية', en: 'Page bottom end' },
+  { id: 'header-start', ar: 'الهيدر (بداية)', en: 'Header start' },
+  { id: 'header-end', ar: 'الهيدر (نهاية)', en: 'Header end' },
+  { id: 'header-center', ar: 'الهيدر (الوسط)', en: 'Header centre' },
+  { id: 'page-top-start', ar: 'أعلى الصفحة (بداية)', en: 'Page top start' },
+  { id: 'page-top-end', ar: 'أعلى الصفحة (نهاية)', en: 'Page top end' },
+  { id: 'page-bottom-start', ar: 'أسفل الصفحة (بداية)', en: 'Page bottom start' },
+  { id: 'page-bottom-end', ar: 'أسفل الصفحة (نهاية)', en: 'Page bottom end' },
   // The two the owner actually asked for once the slots proved too coarse:
   // 'page-free' rides WITH the page (x/y are percent of the whole scroll), so a
   // pot can stand beside the third dish and stay there; 'screen' is pinned to
   // the viewport and does not move while the menu scrolls under it.
-  { id: 'page-free', ar: 'حر في الصفحة — يتحرك مع التمرير', en: 'Anywhere on the page' },
-  { id: 'screen', ar: 'ثابت على الشاشة — لا يتحرك', en: 'Pinned to the screen' },
+  { id: 'page-free', ar: 'حر في الصفحة، يتحرك مع التمرير', en: 'Anywhere on the page' },
+  { id: 'screen', ar: 'ثابت على الشاشة، لا يتحرك', en: 'Pinned to the screen' },
 ]
 export const DECOR_ANCHOR_IDS = DECOR_ANCHORS.map((a) => a.id)
 
@@ -925,7 +925,7 @@ export const DECOR_ANCHOR_IDS = DECOR_ANCHORS.map((a) => a.id)
 // floats over the content, 'top' clears even the sticky bars (a lamp hanging
 // over everything). The old `front` field still resolves for saved documents.
 export const DECOR_DEPTHS = [
-  { id: 'back', ar: 'على الخلفية — خلف المحتوى', en: 'On the wall, behind content' },
+  { id: 'back', ar: 'على الخلفية، خلف المحتوى', en: 'On the wall, behind content' },
   { id: 'front', ar: 'أمام المحتوى', en: 'In front of content' },
   { id: 'top', ar: 'فوق كل شيء', en: 'Above everything' },
 ]
@@ -1405,7 +1405,7 @@ export const HOME_BLOCKS = [
   { id: 'hero', ar: 'الترويسة والشعار', en: 'Header & logo' },
   { id: 'stories', ar: 'القصص', en: 'Stories' },
   { id: 'search', ar: 'البحث', en: 'Search' },
-  { id: 'chips', ar: 'أزرار التجارب — الألعاب والصوت والصورة', en: 'Experience buttons' },
+  { id: 'chips', ar: 'أزرار التجارب (الألعاب والصوت والصورة)', en: 'Experience buttons' },
   { id: 'welcome', ar: 'بطاقة الترحيب والولاء', en: 'Welcome & loyalty card' },
   { id: 'promos', ar: 'العروض', en: 'Promos' },
   { id: 'memory', ar: 'ذاكرة المكان', en: 'Venue memory' },

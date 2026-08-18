@@ -198,7 +198,7 @@ export default function Menu3DWorld({ open, onClose, items = [], cats = [], lang
         <div className="m3d-empty">
           <span className="m3d-empty-orb" aria-hidden="true"><Icon name="shapes" size={30} /></span>
           <strong>{ar ? 'جهازك لا يدعم العرض ثلاثي الأبعاد' : "Your device can't show 3D"}</strong>
-          <p>{ar ? 'يمكنك تصفّح صور الأصناف كالمعتاد من القائمة.' : 'You can browse the item photos as usual from the menu.'}</p>
+          <p>{ar ? 'يمكنك تصفّح صور الأصناف كالمعتاد من المنيو.' : 'You can browse the item photos as usual from the menu.'}</p>
         </div>
       ) : mv === 'error' ? (
         <div className="m3d-empty">

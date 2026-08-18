@@ -110,14 +110,14 @@ export default function NotificationSettings({ open, onClose }) {
           <div className="card card-pad stack" style={{ gap: 10, borderColor: 'var(--brand)' }}>
             <strong className="small row" style={{ gap: 6 }}><Icon name="bell" size={15} style={{ color: 'var(--brand)' }} /> {ar ? 'لتفعيل الإشعارات على الآيفون' : 'Enable notifications on iPhone'}</strong>
             <p className="xs faint" style={{ margin: 0, lineHeight: 1.7 }}>
-              {ar ? 'يمنع نظام آبل الإشعارات في المتصفح مباشرة — يجب إضافة التطبيق للشاشة الرئيسية أولاً (مرة واحدة)، وبعدها تظهر نافذة الموافقة تلقائياً.' : 'Apple only allows notifications for an installed app. Add it to the Home Screen once — then the permission prompt appears automatically.'}
+              {ar ? 'لا يسمح نظام آبل بالإشعارات من داخل المتصفح. أضف التطبيق إلى الشاشة الرئيسية مرة واحدة، وبعدها تظهر نافذة الموافقة وحدها.' : 'Apple only allows notifications for an installed app. Add it to the Home Screen once, then the permission prompt appears on its own.'}
             </p>
             <div className="stack" style={{ gap: 8 }}>
               {[
                 [<>{ar ? 'اضغط زر المشاركة' : 'Tap Share'} <Icon name="share" size={15} style={{ verticalAlign: 'middle' }} /> {ar ? 'في شريط سفاري بالأسفل' : 'in the Safari bar'}</>],
                 [<>{ar ? 'اختر «إضافة إلى الشاشة الرئيسية»' : 'Choose “Add to Home Screen”'} <Icon name="addToHome" size={15} style={{ verticalAlign: 'middle' }} /></>],
                 [ar ? 'افتح التطبيق من الأيقونة الجديدة على الشاشة الرئيسية' : 'Open the app from the new Home Screen icon'],
-                [ar ? 'اضغط «تفعيل» هنا — وستظهر نافذة السماح مرة واحدة' : 'Tap “On” here — the allow prompt shows once'],
+                [ar ? 'اضغط «تفعيل» هنا، وستظهر نافذة السماح مرة واحدة' : 'Tap “On” here, then allow the prompt that appears'],
               ].map((row, i) => (
                 <div key={i} className="row" style={{ gap: 10, alignItems: 'flex-start' }}>
                   <span className="num" style={{ flex: 'none', width: 22, height: 22, borderRadius: '50%', background: 'var(--brand)', color: 'var(--on-brand)', display: 'grid', placeItems: 'center', fontSize: 12, fontWeight: 800 }}>{i + 1}</span>
@@ -134,8 +134,8 @@ export default function NotificationSettings({ open, onClose }) {
           <strong className="small row" style={{ gap: 6 }}><Icon name="bell" size={14} /> {ar ? 'إشعارات التطبيق المغلق' : 'Closed-app notifications'}</strong>
           {(() => {
             const rows = [
-              [ar ? 'إذن الإشعارات' : 'Permission', diag.permission === 'granted', diag.permission === 'granted' ? (ar ? 'مسموح' : 'Granted') : diag.permission === 'denied' ? (ar ? 'محظور — فعّله من إعدادات المتصفح' : 'Blocked in browser') : (ar ? 'بانتظار التفعيل' : 'Not set')],
-              [ar ? 'خدمة الدفع (الخادم)' : 'Server push key', diag.vapid, diag.vapid ? (ar ? 'مضبوطة' : 'Configured') : (ar ? 'غير مضبوطة — يلزم مفتاح VAPID' : 'Missing VAPID key')],
+              [ar ? 'إذن الإشعارات' : 'Permission', diag.permission === 'granted', diag.permission === 'granted' ? (ar ? 'مسموح' : 'Granted') : diag.permission === 'denied' ? (ar ? 'محظور، فعّله من إعدادات المتصفح' : 'Blocked, allow it in your browser settings') : (ar ? 'بانتظار التفعيل' : 'Not set')],
+              [ar ? 'خدمة الإشعارات على الخادم' : 'Server notification service', diag.vapid, diag.vapid ? (ar ? 'جاهزة' : 'Ready') : (ar ? 'غير مفعّلة بعد' : 'Not switched on yet')],
               [ar ? 'هذا الجهاز مُسجّل' : 'This device registered', diag.registered, diag.registered ? (ar ? 'مُسجّل للإشعارات' : 'Registered') : (ar ? 'غير مُسجّل بعد' : 'Not yet')],
             ]
             return rows.map(([label, ok, note], i) => (
@@ -150,8 +150,8 @@ export default function NotificationSettings({ open, onClose }) {
           {!diag.vapid && (
             <p className="xs faint" style={{ margin: 0, lineHeight: 1.6 }}>
               {ar
-                ? 'الإشعارات تصل الآن فقط والتطبيق مفتوح. لتصل والمتصفح مغلق يلزم ضبط مفتاح الخادم (VAPID) ونشر الدوال — راجع مدير النظام.'
-                : 'Alerts currently arrive only while the app is open. Closed-app push needs the server VAPID key + deployed functions.'}
+                ? 'الإشعارات تصلك الآن والتطبيق مفتوح فقط. لتصلك والتطبيق مغلق، اطلب من مدير النظام تفعيل خدمة الإشعارات على الخادم.'
+                : 'Alerts reach you only while the app is open. To get them with the app closed, ask your system administrator to switch on the server notification service.'}
             </p>
           )}
         </div>
@@ -168,7 +168,7 @@ export default function NotificationSettings({ open, onClose }) {
                   </span>
                   <span className="bold">{s.name[lang] || s.name.ar}</span>
                 </button>
-                <button className="icon-btn" onClick={() => preview(s.id)} aria-label="play">▶</button>
+                <button className="icon-btn" onClick={() => preview(s.id)} aria-label={ar ? 'استمع' : 'Play'}><Icon name="play" size={14} /></button>
               </div>
             ))}
 
@@ -181,7 +181,7 @@ export default function NotificationSettings({ open, onClose }) {
                   </span>
                   <span className="bold">{t('customSound')}</span>
                 </button>
-                <button className="icon-btn" onClick={() => preview('custom')} aria-label="play">▶</button>
+                <button className="icon-btn" onClick={() => preview('custom')} aria-label={ar ? 'استمع' : 'Play'}><Icon name="play" size={14} /></button>
               </div>
             )}
           </div>

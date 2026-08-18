@@ -14,6 +14,7 @@ import { setPosBusy } from '../lib/alertsBus.js'
 import { useSectionTemplate } from '../lib/useSectionTemplate.js'
 import { systemThemeAttr } from '../lib/systemThemes.js'
 import { basePrice, variantHasOwnPrice } from '../lib/pricing.js'
+import { orderTypeLabel } from '../lib/orderStatus.js'
 
 const lineKey = (item, variant, mods, note) => `${item.id}|${variant?.key || ''}|${(mods || []).map((m) => m.nameAr).join(',')}|${note || ''}`
 
@@ -238,10 +239,12 @@ export default function CashierPOS({ open, onClose, tenantId, tenant, lang = 'ar
   // table-opened POS never TOUCHED the draft (the restore above skipped it),
   // so it must not delete it either: opening the floor plan for table 5 used
   // to silently destroy another staffer's parked takeaway draft.
+  // ...debounced, because name/phone rewrote the whole draft on every character.
   useEffect(() => {
-    if (!open) return
-    if (!cart.length) { if (!initialTable) clearDraft(tenantId); return }
-    saveDraft(tenantId, { cart, orderType, name, phone, partySize, tableId, at: Date.now() })
+    if (!open) return undefined
+    if (!cart.length) { if (!initialTable) clearDraft(tenantId); return undefined }
+    const id = setTimeout(() => saveDraft(tenantId, { cart, orderType, name, phone, partySize, tableId, at: Date.now() }), 300)
+    return () => clearTimeout(id)
   }, [open, tenantId, cart, orderType, name, phone, partySize, tableId]) // eslint-disable-line react-hooks/exhaustive-deps
   // template follows the SAVED choice — resync only when that value itself changes
   // On a phone the compact board is forced regardless of the saved template —
@@ -249,12 +252,16 @@ export default function CashierPOS({ open, onClose, tenantId, tenant, lang = 'ar
   // the choice (and it persists), so nothing re-seeds it here.
   useEffect(() => { if (open && window.matchMedia('(max-width: 640px)').matches) setTpl('compact') }, [open])
 
+  // Debounced: typing a 10-digit number fired one Firestore read per keystroke
+  // from the 8th digit on — three wasted lookups before the real number exists.
   useEffect(() => {
     const digits = phone.replace(/[^0-9]/g, '')
-    if (digits.length < 8 || !tenantId) { setCustomer(null); return }
+    if (digits.length < 8 || !tenantId) { setCustomer(null); return undefined }
     let alive = true
-    getCustomerByPhone(tenantId, digits).then((c) => { if (alive) { setCustomer(c); if (c?.name) setName((n) => n || c.name) } }).catch(() => {})
-    return () => { alive = false }
+    const id = setTimeout(() => {
+      getCustomerByPhone(tenantId, digits).then((c) => { if (alive) { setCustomer(c); if (c?.name) setName((n) => n || c.name) } }).catch(() => {})
+    }, 300)
+    return () => { alive = false; clearTimeout(id) }
   }, [phone, tenantId])
 
   const matStock = useMemo(() => { const m = {}; materials.forEach((x) => { m[x.id] = x.stockQty || 0 }); return m }, [materials])
@@ -403,12 +410,12 @@ export default function CashierPOS({ open, onClose, tenantId, tenant, lang = 'ar
         if (orderType === 'dine_in' && tableId) {
           setTableOccupancy(tenantId, tableId, { state: 'free', since: Date.now(), byName: actorName, byUid: '', orderId: '' }).catch(() => {})
         }
-        toast.error(ar ? 'تعذّر إرسال الطلب — حُفظ في «المعلّقة» لإعادة المحاولة' : 'Send failed — parked in Held, retry from there')
+        toast.error(ar ? 'ما وصل الطلب. حفظناه في «المعلّقة»، أرسله من هناك' : 'The order did not go through. We parked it in Held, send it from there')
       })
       Promise.resolve(settle).catch(() => {
         // create ok, settle failed: order is live but unaccepted — no Held (no dup)
         res.done.then(() => {
-          toast.error(ar ? 'أُنشئ الطلب لكن لم يُقبل تلقائياً — اقبله من اللوحة' : 'Order created but not auto-accepted — accept it from the board')
+          toast.error(ar ? 'الطلب أُنشئ لكنه ما زال بانتظار القبول. اقبله من لوحة الطلبات' : 'The order was created but is still waiting to be accepted. Accept it from the board')
         }).catch(() => { /* create also failed → already parked above */ })
       })
       clearDraft(tenantId)
@@ -420,12 +427,9 @@ export default function CashierPOS({ open, onClose, tenantId, tenant, lang = 'ar
     } finally { setBusy(false) }
   }
 
-  const TYPES = [
-    { id: 'takeaway', ar: 'سفري', en: 'Takeaway' },
-    { id: 'dine_in', ar: 'محلي', en: 'Dine-in' },
-    { id: 'pickup', ar: 'استلام', en: 'Pickup' },
-    { id: 'curbside', ar: 'السيارة', en: 'Curbside' },
-  ]
+  // labels from orderTypeLabel so the POS, the guest menu and the order sheet
+  // all name the same type the same way
+  const TYPES = ['takeaway', 'dine_in', 'pickup', 'curbside']
 
   if (!open) return null
 
@@ -439,11 +443,11 @@ export default function CashierPOS({ open, onClose, tenantId, tenant, lang = 'ar
         <button className="icon-btn" onClick={onClose} aria-label={ar ? 'إغلاق' : 'Close'}><Icon name="close" size={20} /></button>
         <strong style={{ fontSize: 'var(--fs-md)', flex: 'none' }}>{ar ? 'طلب جديد' : 'New order'}</strong>
         <div className="segmented" style={{ marginInlineStart: 'auto' }}>
-          {TYPES.map((ty) => <button key={ty.id} className={orderType === ty.id ? 'active' : ''} onClick={() => setOrderType(ty.id)}>{ar ? ty.ar : ty.en}</button>)}
+          {TYPES.map((ty) => <button key={ty} className={orderType === ty ? 'active' : ''} onClick={() => setOrderType(ty)}>{orderTypeLabel(ty, lang)}</button>)}
         </div>
         <div className="pos-tpl-switch row" style={{ gap: 2, flex: 'none' }}>
           {templateOptions('cashier').map((o) => (
-            <button key={o.id} type="button" className={`icon-btn ${tpl === o.id ? 'active' : ''}`} title={ar ? `${o.ar}${o.hint ? ' — ' + o.hint : ''}` : o.en} onClick={() => setTpl(o.id)}>
+            <button key={o.id} type="button" className={`icon-btn ${tpl === o.id ? 'active' : ''}`} title={ar ? `${o.ar}${o.hint ? ': ' + o.hint : ''}` : o.en} onClick={() => setTpl(o.id)}>
               <Icon name={{ grid: 'grid', compact: 'list', touch: 'store', lite: 'bag' }[o.id] || 'grid'} size={16} />
             </button>
           ))}
@@ -548,7 +552,7 @@ export default function CashierPOS({ open, onClose, tenantId, tenant, lang = 'ar
                 {meta && <span className="badge" style={{ borderColor: meta.color, color: meta.color, background: 'transparent', display: 'inline-flex', alignItems: 'center', gap: 4 }}><Icon name={meta.icon} size={12} /> {ar ? meta.ar : meta.en} · {membership.discountPct}% · {membership.points} {ar ? 'نقطة' : 'pts'}</span>}
                 <span className="xs faint">{customer.totalOrders || 0} {ar ? 'طلب سابق' : 'orders'}</span>
                 {customer.rewards ? <span className="badge badge-gold" style={{ display: 'inline-flex', alignItems: 'center', gap: 4 }}><Icon name="star" size={12} /> {customer.rewards} {ar ? 'مجاني' : 'free'}</span> : null}
-                {customer.flagged && <span className="badge badge-danger" style={{ display: 'inline-flex', alignItems: 'center', gap: 4 }}><Icon name="warning" size={12} /> {ar ? 'موسوم' : 'Tagged'}{customer.flagNote ? ` — ${customer.flagNote}` : ''}</span>}
+                {customer.flagged && <span className="badge badge-danger" style={{ display: 'inline-flex', alignItems: 'center', gap: 4 }}><Icon name="warning" size={12} /> {ar ? 'انتبه لهذا العميل' : 'Careful with this guest'}{customer.flagNote ? `: ${customer.flagNote}` : ''}</span>}
               </div>
             )}
 
@@ -673,7 +677,10 @@ function POSItemSheet({ item, currency, lang, t, onClose, onAdd }) {
 
   const flatMods = groups.flatMap((g, gi) => (selected[gi] || []).map((o) => ({ nameAr: o.nameAr, nameEn: o.nameEn, price: Number(o.price) || 0, recipe: o.recipe || [] })))
   const modSum = flatMods.reduce((s, m) => s + m.price, 0)
-  const unit = (variant ? Number(variant.price) || 0 : Number(item.price) || 0) + modSum
+  // basePrice, not variant.price: a choice-only variant carries no price of its
+  // own, and quoting its bare 0 under-charged the guest at the counter while
+  // addLine (which already uses basePrice) landed the real figure on the ticket.
+  const unit = basePrice(item, variant) + modSum
   const missing = groups.find((g, gi) => {
     const need = Math.max(Number(g.min) || 0, g.required ? 1 : 0)
     return need > 0 && (selected[gi] || []).length < need

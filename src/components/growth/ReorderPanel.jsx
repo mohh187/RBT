@@ -8,6 +8,7 @@ import Icon from '../Icon.jsx'
 import ReorderCard from './ReorderCard.jsx'
 import { GCard, GRefusal, GBasis, GTag, GNumbers } from './parts.jsx'
 import { repeatGuests, GROWTH_THRESHOLDS as TH } from '../../lib/growth.js'
+import { arPlural } from '../../lib/forecast.js'
 
 export default function ReorderPanel({ orders = [], items = [], tenant = null, lang = 'ar', currency = 'SAR' }) {
   const ar = lang !== 'en'
@@ -26,7 +27,7 @@ export default function ReorderPanel({ orders = [], items = [], tenant = null, l
         }} />
         <GBasis>
           {ar
-            ? `«طلب معتاد» = سلة بنفس الأصناف والكميات والأحجام تكررت ${TH.MIN_REPEATS} مرات على الأقل. من لم يتكرر له طلب تظهر له بطاقة «آخر طلب» بصياغة مختلفة، ولا تُسمّى عادةً. الأصناف المحذوفة أو غير المتاحة تُسقط من البطاقة ويُذكر سببها للضيف.`
+            ? `«طلب معتاد» = سلة بنفس الأصناف والكميات والأحجام تكررت ${arPlural(TH.MIN_REPEATS, { one: 'مرة', two: 'مرتين', few: 'مرات', many: 'مرة' })} على الأقل. من لم يتكرر له طلب تظهر له بطاقة «آخر طلب» بصياغة مختلفة، ولا تُسمّى عادةً. الأصناف المحذوفة أو غير المتاحة تُسقط من البطاقة ويُذكر سببها للضيف.`
             : `"Usual" = an identical basket repeated at least ${TH.MIN_REPEATS} times. Guests without a repeat get a differently worded "last order" card.`}
         </GBasis>
       </GCard>
@@ -36,7 +37,7 @@ export default function ReorderPanel({ orders = [], items = [], tenant = null, l
           icon="repeat"
           title={ar ? 'لا يوجد ضيف قابل لإعادة الطلب بعد' : 'No reorderable guest yet'}
           body={ar
-            ? `فُحص ${res.ordersScanned} طلباً تخص ${res.totalGuestsWithPhone} رقماً. لا يوجد ضيف له طلبان صالحان أو أكثر ما زالت أصنافهما متاحة اليوم. البطاقة لن تظهر لأي ضيف حتى يتحقق ذلك.`
+            ? `فُحص ${arPlural(res.ordersScanned, { one: 'طلب', two: 'طلبان', few: 'طلبات', many: 'طلباً' })} تخص ${arPlural(res.totalGuestsWithPhone, { one: 'رقماً', two: 'رقمين', few: 'أرقام', many: 'رقماً' })}. لا يوجد ضيف له طلبان صالحان أو أكثر ما زالت أصنافهما متاحة اليوم. البطاقة لن تظهر لأي ضيف حتى يتحقق ذلك.`
             : `${res.ordersScanned} orders across ${res.totalGuestsWithPhone} phones, none with two or more valid orders whose items are still available.`}
         />
       ) : (
@@ -49,7 +50,7 @@ export default function ReorderPanel({ orders = [], items = [], tenant = null, l
                   <span dir="ltr" style={{ opacity: .6, fontSize: '.8rem', marginInlineStart: 8 }}>{r.phone}</span>
                 </div>
                 <div className="g-basis" style={{ borderInlineStart: 0, paddingInlineStart: 0 }}>
-                  {r.labelAr} · {r.lines} {ar ? 'صنفاً' : 'lines'}
+                  {r.labelAr} · {ar ? arPlural(r.lines, { one: 'صنف', two: 'صنفان', few: 'أصناف', many: 'صنفاً' }) : `${r.lines} lines`}
                   {r.dropped > 0 ? (ar ? ` · أُسقط ${r.dropped}` : ` · ${r.dropped} dropped`) : ''}
                 </div>
               </div>

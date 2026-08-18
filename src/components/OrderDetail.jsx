@@ -4,12 +4,12 @@ import { useAuth } from '../lib/auth.jsx'
 import Sheet from './Sheet.jsx'
 import Icon from './Icon.jsx'
 import { Price } from './Riyal.jsx'
-import { watchOrder, getCustomerByPhone, setCustomerFlag, refundOrder, compOrder, voidOrderItem, setOrderItemQty, setOrderTable, addOrderItems, watchTables, watchItems, watchStaff, assignDelivery, setDeliveryStatus, settleCod, updateOrderStatus } from '../lib/db.js'
+import { watchOrder, getCustomerByPhone, setCustomerFlag, refundOrder, compOrder, voidOrderItem, setOrderItemQty, setOrderTable, addOrderItems, watchTables, watchItems, watchStaff, assignDelivery, setDeliveryStatus, settleCod, updateOrderStatus, claimOrder } from '../lib/db.js'
 
 // THE STATUS LADDER lives in lib/orderStatus.js — the same vocabulary and the
 // same NEXT_STEP the cashier's ticket button walks, so an order advances (and
 // reads) identically no matter which surface the staffer is on.
-import { STATUS_FLOW, NEXT_STEP, statusShort } from '../lib/orderStatus.js'
+import { STATUS_FLOW, NEXT_STEP, statusShort, orderTypeLabel } from '../lib/orderStatus.js'
 import { useToast } from './Toast.jsx'
 import '../styles/order-detail.css'
 
@@ -87,11 +87,11 @@ export default function OrderDetail({ tid, orderId, currency = 'SAR', onClose, s
 
   const statusLabel = (s) => statusShort(lang, s)
   const timelineStatus = o?.status === 'paid' ? 'served' : o?.status
-  const typeLabel = (ty) => ty === 'curbside' ? (ar ? 'استلام بالسيارة' : 'Curbside') : ty === 'delivery' ? (ar ? 'توصيل' : 'Delivery') : ty === 'pickup' ? (ar ? 'استلام' : 'Pickup') : (ar ? 'داخل المقهى' : 'Dine-in')
+  const typeLabel = (ty) => orderTypeLabel(ty, lang)
 
   // Human duration from milliseconds (s / m / h).
   const fmtDur = (ms) => {
-    if (ms == null || ms < 0) return '—'
+    if (ms == null || ms < 0) return ''
     const s = Math.round(ms / 1000)
     if (s < 60) return ar ? `${s} ث` : `${s}s`
     const m = Math.floor(s / 60); const rs = s % 60
@@ -146,14 +146,25 @@ export default function OrderDetail({ tid, orderId, currency = 'SAR', onClose, s
   const advanceStep = () => {
     const n = o && NEXT_STEP[o.status]
     if (!n) return
+    // Acceptance is EXCLUSIVE — it goes through claimOrder's compare-and-set,
+    // never plain updateOrderStatus, or the last tap overwrites the real claimant.
+    if (n.to === 'accepted') {
+      claimOrder(tid, orderId, { name: actor, uid: user?.uid || '' }).then((r) => {
+        if (r?.ok) return
+        if (r?.gone) { toast.error(ar ? 'هذا الطلب لم يعد موجوداً، ربما أُلغي' : 'This order is gone, it may have been cancelled'); return }
+        toast.error(r?.by
+          ? (ar ? `${r.by} استلم الطلب قبلك` : `${r.by} took this order first`)
+          : (ar ? 'تعذّر قبول الطلب، جرّب مرة ثانية' : 'Could not accept the order, try again'))
+      })
+      return
+    }
     const extra = { _actor: actor, _code: o.code || '' }
-    if (n.to === 'accepted') { extra.acceptedByName = actor; extra.acceptedByUid = user?.uid || '' }
     if (n.to === 'served') { extra.servedByName = actor; extra.servedByUid = user?.uid || '' }
     // toast on rejection: offline-queued writes replayed against a terminal
     // order are DENIED by rules — the optimistic card snaps back, and without
     // a toast that read as "the button does nothing"
     updateOrderStatus(tid, orderId, n.to, extra).catch(() => {
-      toast.error(ar ? 'تعذّر تحديث الحالة — تحقق من حالة الطلب' : 'Status update failed — check the order')
+      toast.error(ar ? 'ما تحدّثت الحالة. افتح الطلب من جديد وتأكد من حالته' : 'The status did not change. Reopen the order and check its state')
     })
   }
   const showCollect = !!(o && staffActions && canPay && onCollect && !['paid', 'refunded', 'cancelled'].includes(o.status))
@@ -231,10 +242,10 @@ export default function OrderDetail({ tid, orderId, currency = 'SAR', onClose, s
             {o.customerName && <div className="xs faint"><Icon name="user" size={12} /> {o.customerName}{o.customerPhone ? ` · ${o.customerPhone}` : ''}</div>}
             {(o.servedByName || o.acceptedByName) && <div className="xs" style={{ color: 'var(--brand)' }}><Icon name="staff" size={12} /> {ar ? 'الموظف' : 'Staff'}: {o.servedByName || o.acceptedByName}</div>}
             {o.status === 'paid' && <div className="xs" style={{ color: 'var(--success)' }}><Icon name="wallet" size={12} /> {ar ? 'مدفوع' : 'Paid'}: {payMethodLabel(o.paymentMethod)}{o.tip ? ` · ${ar ? 'إكرامية' : 'tip'} ${o.tip}` : ''}{o.paidByName ? ` · ${o.paidByName}` : ''}</div>}
-            {o.status !== 'paid' && (o.paidOnline || o.paymentStatus === 'paid') && <div className="xs bold" style={{ color: 'var(--success)' }}><Icon name="wallet" size={12} /> {ar ? 'مدفوع أونلاين — لا تُحصّل نقداً' : 'Paid online — do not collect cash'}</div>}
+            {o.status !== 'paid' && (o.paidOnline || o.paymentStatus === 'paid') && <div className="xs bold" style={{ color: 'var(--success)' }}><Icon name="wallet" size={12} /> {ar ? 'مدفوع بالدفع الإلكتروني، لا تُحصّل نقداً' : 'Paid online, do not collect cash'}</div>}
             {/* 0.005 epsilon: float sums (8.2+0.1) sit a hair under total — without it this showed «متبقّي 0.00» forever */}
             {o.status !== 'paid' && !o.paidOnline && o.paymentStatus !== 'paid' && o.amountPaid > 0 && o.amountPaid < (o.total || 0) - 0.005 && <div className="xs" style={{ color: 'var(--gold, #e0a82e)' }}><Icon name="wallet" size={12} /> {ar ? 'مدفوع جزئياً' : 'Partial'}: <Price value={o.amountPaid} currency={currency} lang={lang} /> · {ar ? 'متبقّي' : 'left'} <Price value={(o.total || 0) - (o.amountPaid || 0)} currency={currency} lang={lang} /></div>}
-            {o.refund && <div className="xs" style={{ color: 'var(--danger)' }}><Icon name="repeat" size={12} /> {ar ? 'استرجاع' : 'Refund'}: <Price value={o.refund.amount} currency={currency} lang={lang} />{o.refund.reason ? ` — ${o.refund.reason}` : ''}{o.refund.by ? ` · ${o.refund.by}` : ''}</div>}
+            {o.refund && <div className="xs" style={{ color: 'var(--danger)' }}><Icon name="repeat" size={12} /> {ar ? 'استرجاع' : 'Refund'}: <Price value={o.refund.amount} currency={currency} lang={lang} />{o.refund.reason ? ` · ${o.refund.reason}` : ''}{o.refund.by ? ` · ${o.refund.by}` : ''}</div>}
             {o.cancelReason && <div className="xs" style={{ color: 'var(--danger)' }}><Icon name="close" size={12} /> {ar ? 'سبب الإلغاء' : 'Cancel reason'}: {o.cancelReason}</div>}
           </div>
 
@@ -293,7 +304,7 @@ export default function OrderDetail({ tid, orderId, currency = 'SAR', onClose, s
           {/* staff: rate / flag the customer */}
           {staffActions && o.customerPhone && (
             <div className="card card-pad stack" style={{ gap: 8 }}>
-              {cust?.flagged && <div className="badge badge-danger" style={{ alignSelf: 'flex-start', display: 'inline-flex', alignItems: 'center', gap: 4 }}><Icon name="warning" size={12} /> {ar ? 'عميل موسوم' : 'Tagged customer'}{cust.flagNote ? ` — ${cust.flagNote}` : ''}</div>}
+              {cust?.flagged && <div className="badge badge-danger" style={{ alignSelf: 'flex-start', display: 'inline-flex', alignItems: 'center', gap: 4 }}><Icon name="warning" size={12} /> {ar ? 'انتبه لهذا العميل' : 'Careful with this guest'}{cust.flagNote ? `: ${cust.flagNote}` : ''}</div>}
               <div className="row" style={{ gap: 4, alignItems: 'center' }}>
                 <span className="xs faint">{ar ? 'تقييم الموظف:' : 'Staff rating:'}</span>
                 {[1, 2, 3, 4, 5].map((s) => (
@@ -339,7 +350,7 @@ export default function OrderDetail({ tid, orderId, currency = 'SAR', onClose, s
             )}
             {o.compDiscount > 0 && (
               <div className="od-money-row" style={{ color: 'var(--success)' }}>
-                <span>{ar ? 'مجاملة/خصم' : 'Comp'}{o.compReason ? ` — ${o.compReason}` : ''}{o.compByName ? ` · ${o.compByName}` : ''}</span>
+                <span>{ar ? 'مجاملة/خصم' : 'Comp'}{o.compReason ? ` · ${o.compReason}` : ''}{o.compByName ? ` · ${o.compByName}` : ''}</span>
                 <span className="num">−<Price value={o.compDiscount} currency={currency} lang={lang} /></span>
               </div>
             )}
@@ -392,13 +403,13 @@ export default function OrderDetail({ tid, orderId, currency = 'SAR', onClose, s
                         // paymentMethod, not payMethod: the field every reader uses.
                         if (!['paid', 'refunded', 'cancelled'].includes(o.status)) await updateOrderStatus(tid, orderId, 'paid', { paymentMethod: 'cash', _actor: actor })
                       } catch {
-                        toast.error(ar ? 'تعذّرت التسوية — تحقق من حالة الطلب' : 'Settle failed — check the order status')
+                        toast.error(ar ? 'ما تمّت التسوية. تأكد أن الطلب ما زال مفتوحاً ثم أعد المحاولة' : 'The settlement did not go through. Check that the order is still open and try again')
                       }
                     }}><Icon name="wallet" size={14} /> {ar ? 'تسوية العهدة (نقد)' : 'Settle (cash)'}</button>
                   )}
                 </div>
               )}
-              {drivers.length === 0 && <span className="xs faint">{ar ? 'لا مناديب — أضِف موظفاً بدور «مندوب توصيل» من الفريق.' : 'No drivers yet — add a staff member with the Driver role.'}</span>}
+              {drivers.length === 0 && <span className="xs faint">{ar ? 'لا يوجد مناديب بعد. أضِف موظفاً بدور «مندوب توصيل» من صفحة الفريق.' : 'No drivers yet. Add a staff member with the Driver role.'}</span>}
             </div>
           )}
 

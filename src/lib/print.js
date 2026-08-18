@@ -129,7 +129,7 @@ export async function printReceipt(orders, { tenant, lang = 'ar', title, proform
     ${headerHtml}
     <div class="c">
       ${tenant?.vatNumber && !proforma ? `<div class="muted">${ar ? 'الرقم الضريبي' : 'VAT No'}: ${tenant.vatNumber}</div>` : ''}
-      <div class="muted" style="font-weight:700;margin-top:3px">${proforma ? (ar ? '— حساب مبدئي (غير مدفوع) —' : '— Proforma (unpaid) —') : isTaxInvoice ? (ar ? 'فاتورة ضريبية مبسطة' : 'Simplified Tax Invoice') : ''}</div>
+      <div class="muted" style="font-weight:700;margin-top:3px">${proforma ? (ar ? 'حساب مبدئي (غير مدفوع)' : '— Proforma (unpaid) —') : isTaxInvoice ? (ar ? 'فاتورة ضريبية مبسطة' : 'Simplified Tax Invoice') : ''}</div>
       ${tableLabel ? `<div class="muted">${ar ? 'طاولة' : 'Table'}: ${tableLabel}</div>` : ''}
       <div class="muted">${ar ? 'طلب' : 'Order'}: ${nums}</div>
       ${receiptShowCustomer && list[0]?.customerName ? `<div class="muted">${ar ? 'العميل' : 'Customer'}: ${list[0].customerName}${list[0].customerPhone ? ` · ${list[0].customerPhone}` : ''}</div>` : ''}

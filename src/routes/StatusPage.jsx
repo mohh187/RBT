@@ -105,7 +105,7 @@ export default function StatusPage() {
         )}
 
         <div style={{ textAlign: 'center', marginTop: 32, fontSize: 12, color: '#5a6273' }}>
-          <a href="/" style={{ color: '#8b93a7' }}>RBT 360</a> — منصّة تشغيل المنشآت · <a href="/legal" style={{ color: '#8b93a7' }}>المستندات القانونية</a>
+          <a href="/" style={{ color: '#8b93a7' }}>RBT 360</a> · منصّة تشغيل المنشآت · <a href="/legal" style={{ color: '#8b93a7' }}>المستندات القانونية</a>
         </div>
       </div>
     </div>

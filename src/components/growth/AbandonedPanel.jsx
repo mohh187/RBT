@@ -7,6 +7,7 @@ import { useMemo, useState } from 'react'
 import Icon from '../Icon.jsx'
 import { GCard, GRefusal, GBasis, GTag, GNumbers, GLimits } from './parts.jsx'
 import { abandonedCarts, abandonedCampaignDraft, abandonedMessage, GROWTH_THRESHOLDS as TH } from '../../lib/growth.js'
+import { arPlural } from '../../lib/forecast.js'
 
 const VIA_TAG = { session: 'good', device: 'warn', 'past-order': 'warn' }
 
@@ -57,7 +58,7 @@ export default function AbandonedPanel({
 
         <GBasis>
           {ar
-            ? `النافذة ${res.days} يوماً. ${res.leftBehindNote}. القيمة محسوبة لـ ${res.leftBehindPricedRows} سلة تحمل كل أسطرها سعراً.`
+            ? `النافذة ${arPlural(res.days, { one: 'يوم', two: 'يومان', few: 'أيام', many: 'يوماً' })}. ${res.leftBehindNote}. القيمة محسوبة لـ ${arPlural(res.leftBehindPricedRows, { one: 'سلة', two: 'سلتين', few: 'سلال', many: 'سلة' })} تحمل كل أسطرها سعراً.`
             : `Window ${res.days} days. ${res.leftBehindNote}.`}
         </GBasis>
       </GCard>
@@ -67,8 +68,8 @@ export default function AbandonedPanel({
           icon="warning"
           title={ar ? 'تعذّر تحميل الجلسات' : 'Sessions could not be loaded'}
           body={ar
-            ? 'الأرقام أدناه محسوبة على ما تم تحميله فقط، وقد تكون ناقصة. راجع صلاحيات القراءة لمجموعة الجلسات.'
-            : 'Figures below cover only what loaded and may be incomplete.'}
+            ? 'الأرقام أدناه محسوبة على ما وصل فقط، وقد تكون ناقصة. أعد فتح الصفحة بعد قليل لترى القائمة كاملة.'
+            : 'The figures below cover only what loaded, so they may be incomplete. Reopen the page shortly for the full list.'}
         />
       )}
 
@@ -77,7 +78,7 @@ export default function AbandonedPanel({
           icon="phone"
           title={ar ? 'لا يوجد أحد يمكن مراسلته' : 'Nobody is reachable'}
           body={ar
-            ? `رُصدت ${res.sample.abandonedSessions} جلسة تركت السلة، ولا يحمل أي منها رقماً معروفاً. لن نخترع رقماً، ولا نستطيع اشتقاقه من جهاز لم يعرّف نفسه قط.`
+            ? `رُصدت ${arPlural(res.sample.abandonedSessions, { one: 'جلسة', two: 'جلستان', few: 'جلسات', many: 'جلسة' })} تركت السلة، ولا يحمل أي منها رقماً معروفاً. لن نخترع رقماً، ولا يمكن اشتقاقه من جهاز لم يعرّف نفسه قط.`
             : `${res.sample.abandonedSessions} abandoning sessions, none carrying a known phone. We will not invent one.`}
         />
       ) : (
@@ -87,7 +88,7 @@ export default function AbandonedPanel({
               icon="warning"
               title={ar ? 'العينة صغيرة' : 'Thin sample'}
               body={ar
-                ? `${res.thinNote}. يمكنك مراسلتهم فردياً، لكن لا تقرأ في هذا العدد اتجاهاً — الحد الأدنى للاعتبار حملةً هو ${TH.MIN_ABANDONED}.`
+                ? `${res.thinNote}. يمكنك مراسلتهم فردياً، لكن لا تقرأ في هذا العدد اتجاهاً. الحد الأدنى لاعتباره حملة هو ${TH.MIN_ABANDONED}.`
                 : `${res.thinNote}.`}
             />
           )}
@@ -106,7 +107,7 @@ export default function AbandonedPanel({
                     {r.items.length > 3 ? (ar ? ` و${r.items.length - 3} أخرى` : ` +${r.items.length - 3}`) : ''}
                     {' · '}
                     {r.viaAr}
-                    {r.sessionsAbandoned > 1 ? (ar ? ` · ترك السلة ${r.sessionsAbandoned} مرات` : ` · ${r.sessionsAbandoned} times`) : ''}
+                    {r.sessionsAbandoned > 1 ? (ar ? ` · ترك السلة ${arPlural(r.sessionsAbandoned, { one: 'مرة', two: 'مرتين', few: 'مرات', many: 'مرة' })}` : ` · ${r.sessionsAbandoned} times`) : ''}
                   </div>
                 </div>
                 <GTag kind={VIA_TAG[r.via] || ''}>{r.reachedCheckout ? (ar ? 'وصل للدفع' : 'reached checkout') : (ar ? 'سلة فقط' : 'cart only')}</GTag>

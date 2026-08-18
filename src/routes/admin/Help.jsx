@@ -94,8 +94,8 @@ export default function Help() {
           </strong>
           <p className="muted small" style={{ margin: '4px 0 0' }}>
             {ar
-              ? 'لم تجد جوابك؟ المساعد الذكي يجيب عن أي سؤال — وينفّذ المهام عنك مباشرة'
-              : 'Did not find it? The AI assistant answers anything — and can do the task for you'}
+              ? 'لم تجد جوابك؟ المساعد الذكي يجيب عن أي سؤال، وينفّذ المهام عنك مباشرة'
+              : 'Did not find it? The AI assistant answers anything, and can do the task for you'}
           </p>
         </div>
         <Link to="/admin/assistant" className="btn btn-primary btn-sm" style={{ flex: 'none' }}>
@@ -120,7 +120,7 @@ export default function Help() {
       {/* topics */}
       {topics.length === 0 ? (
         <div className="card card-pad small muted" style={{ textAlign: 'center' }}>
-          {ar ? 'لا نتائج مطابقة — جرّب كلمة أخرى أو اسأل المساعد' : 'No matches — try another word or ask the assistant'}
+          {ar ? 'لا نتائج مطابقة، جرّب كلمة أخرى أو اسأل المساعد' : 'No matches, try another word or ask the assistant'}
         </div>
       ) : (
         <div className="stack" style={{ gap: 'var(--sp-2)' }}>

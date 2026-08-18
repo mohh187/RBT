@@ -49,7 +49,7 @@ const T = {
   invite: { ar: 'ادعُ صديقاً', en: 'Invite a friend' },
   openRooms: { ar: 'غرف مفتوحة على طاولتك', en: 'Open rooms at your table' },
   noOpen: { ar: 'لا توجد غرفة مفتوحة على هذه الطاولة الآن. ابدأ واحدة وادعُ من معك.', en: 'No open room here yet.' },
-  noTable: { ar: 'لم نتعرّف على طاولتك، فلا نستطيع عرض غرف الطاولة. الدعوة بالرابط تعمل دائماً.', en: 'Table unknown — invite by link instead.' },
+  noTable: { ar: 'لم نتعرّف على طاولتك، فلا نستطيع عرض غرف الطاولة. الدعوة بالرابط تعمل دائماً.', en: 'We could not tell which table you are at. Invite by link instead.' },
   creating: { ar: 'نجهّز الغرفة…', en: 'Creating the room…' },
   joining: { ar: 'ندخلك الغرفة…', en: 'Joining…' },
   code: { ar: 'رمز الغرفة', en: 'Room code' },
@@ -64,7 +64,7 @@ const T = {
   host: { ar: 'المضيف', en: 'Host' },
   you: { ar: 'أنت', en: 'You' },
   empty: { ar: 'مقعد شاغر', en: 'Empty seat' },
-  away: { ar: 'انقطع — مقعده محفوظ', en: 'Away — seat kept' },
+  away: { ar: 'انقطع، ومقعده محفوظ', en: 'Away, seat kept' },
   live: { ar: 'متصل', en: 'Live' },
   start: { ar: 'ابدأ الجولة', en: 'Start' },
   waitHost: { ar: 'بانتظار المضيف ليبدأ الجولة', en: 'Waiting for the host' },
@@ -81,8 +81,8 @@ const T = {
   // ---- «العب ضد الكمبيوتر» ----
   soloH: { ar: 'العب ضد الكمبيوتر', en: 'Play the computer' },
   soloWhy: {
-    ar: 'وحدك على الطاولة؟ ابدأ الآن دون انتظار أحد — تلعب على جهازك فقط، بلا غرفة وبلا رابط.',
-    en: 'On your own? Start now without waiting — played on your device alone, no room, no link.',
+    ar: 'وحدك على الطاولة؟ ابدأ الآن دون انتظار أحد. تلعب على جهازك فقط، بلا غرفة وبلا رابط.',
+    en: 'On your own? Start now without waiting. It all runs on your device, with no room and no link.',
   },
   soloCount: { ar: 'عدد الخصوم', en: 'Opponents' },
   soloFixed: {
@@ -100,13 +100,13 @@ const T = {
   // ---- computer seats in a REAL room («أكمل المقاعد بالكمبيوتر») ----
   fillAll: { ar: 'أكمل المقاعد الشاغرة بالكمبيوتر', en: 'Fill the empty seats with the computer' },
   fillNote: {
-    ar: 'الكمبيوتر يلعب من جهاز المضيف — إن انقطع المضيف توقّفت مقاعد الكمبيوتر حتى يعود، وإن انضم صديق قبل البدء أخذ مكان أحدها.',
-    en: 'The computer plays from the host device — if the host drops, computer seats pause until the host is back; a friend joining before the start takes a computer seat.',
+    ar: 'الكمبيوتر يلعب من جهاز المضيف. إن انقطع المضيف توقّفت مقاعد الكمبيوتر حتى يعود، وإن انضم صديق قبل البدء أخذ مكان أحدها.',
+    en: 'The computer plays from the host device. If the host drops, computer seats pause until the host is back; a friend joining before the start takes a computer seat.',
   },
   filling: { ar: 'نجهّز مقاعد الكمبيوتر…', en: 'Seating the computer…' },
   sideQ: { ar: 'الكمبيوتر معنا أم ضدنا؟', en: 'Computer with us, or against us?' },
-  sideFoes: { ar: 'ضدنا — نلعب نحن شريكين', en: 'Against us — we partner up' },
-  sidePartners: { ar: 'معنا — لكلٍّ منا شريك كمبيوتر', en: 'With us — a computer partner each' },
+  sideFoes: { ar: 'ضدنا، ونلعب نحن شريكين', en: 'Against us, we partner up' },
+  sidePartners: { ar: 'معنا، لكلٍّ منا شريك كمبيوتر', en: 'With us, a computer partner each' },
   botTag: { ar: 'آلي', en: 'Bot' },
   botSeatMeta: { ar: 'من جهاز المضيف', en: 'From the host device' },
   botRemove: { ar: 'إزالة هذا المقعد الآلي', en: 'Remove this computer seat' },
@@ -453,7 +453,7 @@ export default function RoomLobby({
 
   const doShare = useCallback(async () => {
     if (!link) return
-    const title = gameName ? `${gameName} — ${tenant?.name || ''}`.trim() : (tenant?.name || 'RBT360')
+    const title = gameName ? [gameName, tenant?.name].filter(Boolean).join(ar ? ' في ' : ' at ') : (tenant?.name || 'RBT360')
     if (navigator.share) {
       try {
         await navigator.share({ title, text: ar ? 'العب معي الآن' : 'Play with me', url: link })
@@ -899,7 +899,7 @@ export default function RoomLobby({
             </div>
             <p className="rm-note">
               {ar
-                ? 'ننشئ غرفة ونعطيك رابطاً ورمزاً — أرسل الرابط أو اقرأ الرمز على من معك.'
+                ? 'ننشئ غرفة ونعطيك رابطاً ورمزاً. أرسل الرابط أو اقرأ الرمز على من معك.'
                 : 'We create a room and give you a link and a code to share.'}
             </p>
             <button

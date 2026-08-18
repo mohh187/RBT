@@ -3,10 +3,11 @@
 // count of rows that exist.
 import Icon from '../Icon.jsx'
 import { fmtNum } from '../../lib/format.js'
+import { arPlural } from '../../lib/forecast.js'
 import { THIN_PLAYS, THIN_ANSWERS, THIN_PLAYERS } from './engine.jsx'
 
 const pctOf = (a, b) => (b > 0 ? Math.round((a / b) * 100) : 0)
-const secText = (s, ar) => (s == null ? '—' : (s >= 60 ? `${fmtNum(Math.floor(s / 60))}:${String(s % 60).padStart(2, '0')}` : `${fmtNum(s)} ${ar ? 'ث' : 's'}`))
+const secText = (s, ar) => (s == null ? '-' : (s >= 60 ? `${fmtNum(Math.floor(s / 60))}:${String(s % 60).padStart(2, '0')}` : `${fmtNum(s)} ${ar ? 'ث' : 's'}`))
 
 function Kpi({ label, value, sub, thin, thinText }) {
   return (
@@ -44,18 +45,18 @@ export default function PlayOverview({ over, games = [], quiz, hard = [], archet
           label={ar ? 'متوسط مدة اللعب' : 'Average duration'}
           value={secText(over.avgDurationSec, ar)}
           sub={ar
-            ? `الوسيط ${secText(over.medianDurationSec, ar)} · من ${fmtNum(over.endedPlays)} محاولة منتهية`
+            ? `الوسيط ${secText(over.medianDurationSec, ar)} · من ${arPlural(over.endedPlays, { one: 'محاولة', two: 'محاولتين', few: 'محاولات', many: 'محاولة' })} منتهية`
             : `median ${secText(over.medianDurationSec, ar)}`}
         />
         <Kpi
           label={ar ? 'نسبة الإكمال' : 'Completion rate'}
-          value={over.completionRate == null ? '—' : `${fmtNum(Math.round(over.completionRate * 100))}%`}
+          value={over.completionRate == null ? '-' : `${fmtNum(Math.round(over.completionRate * 100))}%`}
           sub={ar ? `${fmtNum(over.completedPlays)} من ${fmtNum(over.plays)}` : `${fmtNum(over.completedPlays)} of ${fmtNum(over.plays)}`}
           thin={over.plays < THIN_PLAYS} thinText={thinTxt}
         />
         <Kpi
           label={ar ? 'محاولات لكل لاعب' : 'Plays per player'}
-          value={over.playsPerPlayer == null ? '—' : fmtNum(over.playsPerPlayer)}
+          value={over.playsPerPlayer == null ? '-' : fmtNum(over.playsPerPlayer)}
           sub={ar ? 'كلما ارتفع، زاد التعلّق باللعبة' : 'higher means stickier'}
         />
         <Kpi
@@ -121,7 +122,7 @@ export default function PlayOverview({ over, games = [], quiz, hard = [], archet
                       <td className="gp-num">{fmtNum(g.plays)}</td>
                       <td className="gp-num">{fmtNum(g.players)}</td>
                       <td className="gp-num">
-                        {g.completionRate == null ? '—' : `${fmtNum(Math.round(g.completionRate * 100))}%`}
+                        {g.completionRate == null ? '-' : `${fmtNum(Math.round(g.completionRate * 100))}%`}
                         {g.thin && <> <span className="gp-thin">{thinTxt}</span></>}
                       </td>
                       <td className="gp-num">{secText(g.avgDurationSec, ar)}</td>
@@ -162,7 +163,7 @@ export default function PlayOverview({ over, games = [], quiz, hard = [], archet
               </div>
               <p className="gp-hint gp-num">
                 {ar
-                  ? `الإجمالي: ${fmtNum(quiz.correct)} صحيحة من ${fmtNum(quiz.answered)} — ${fmtNum(pctOf(quiz.correct, quiz.answered))}%`
+                  ? `الإجمالي: ${fmtNum(quiz.correct)} صحيحة من ${fmtNum(quiz.answered)}، أي ${fmtNum(pctOf(quiz.correct, quiz.answered))}%`
                   : `Total: ${fmtNum(quiz.correct)} of ${fmtNum(quiz.answered)}`}
                 {quiz.thin && <> <span className="gp-thin">{thinTxt}</span></>}
               </p>
@@ -180,7 +181,7 @@ export default function PlayOverview({ over, games = [], quiz, hard = [], archet
                       <div className="gp-qrow-q">{h.q}</div>
                       <div className="gp-qrow-a gp-num">
                         {ar
-                          ? `أُخطئ فيه ${fmtNum(h.missed)} من ${fmtNum(h.asked)} محاولة (${fmtNum(Math.round(h.missRate * 100))}%)`
+                          ? `أُخطئ فيه ${fmtNum(h.missed)} من ${arPlural(h.asked, { one: 'محاولة', two: 'محاولتين', few: 'محاولات', many: 'محاولة' })} (${fmtNum(Math.round(h.missRate * 100))}%)`
                           : `${fmtNum(h.missed)} of ${fmtNum(h.asked)} wrong`}
                       </div>
                     </div>
@@ -199,7 +200,7 @@ export default function PlayOverview({ over, games = [], quiz, hard = [], archet
           <p className="gp-hint">
             {ar
               ? 'هذه النتائج مبنية على إجابات اختيارية تركها الضيف بنفسه داخل لعبة في المنيو. هي وصف ذاتي مفيد للتسويق، وليست تشخيصاً نفسياً ولا مقياساً معتمداً.'
-              : 'Self-report answers inside a menu mini-game — useful for marketing, not a psychological assessment.'}
+              : 'Self-report answers from a menu mini-game. Useful for marketing, not a psychological assessment.'}
           </p>
           <div className="gp-bars">
             {archetypes.rows.map((r) => (
@@ -211,7 +212,7 @@ export default function PlayOverview({ over, games = [], quiz, hard = [], archet
             ))}
           </div>
           <span className="gp-of gp-num">
-            {ar ? `من ${fmtNum(archetypes.total)} لاعباً وصلوا إلى نتيجة` : `from ${fmtNum(archetypes.total)} players with a result`}
+            {ar ? `من ${arPlural(archetypes.total, { one: 'لاعب', two: 'لاعبين', few: 'لاعبين', many: 'لاعباً' })} وصلوا إلى نتيجة` : `from ${fmtNum(archetypes.total)} players with a result`}
             {archetypes.thin && <> <span className="gp-thin">{thinTxt}</span></>}
           </span>
         </div>

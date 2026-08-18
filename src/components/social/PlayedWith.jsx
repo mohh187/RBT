@@ -152,8 +152,8 @@ export default function PlayedWith({
       <p className="sp-note">
         {pick(
           lang,
-          'نعرض فقط من شاركك غرفة لعب من قبل، وبالاسم الأول الذي كتبه بنفسه. «هنا الآن» تعني أنه لعب في هذا المكان اليوم — لا أكثر.',
-          'Only people who shared a room with you, under the first name they typed. “Here now” means they played in this venue today — nothing more.',
+          'نعرض فقط من شاركك غرفة لعب من قبل، وبالاسم الأول الذي كتبه بنفسه. و«هنا الآن» تعني أنه لعب في هذا المكان اليوم، لا أكثر.',
+          'Only people who shared a room with you, under the first name they typed. “Here now” just means they played in this venue today.',
         )}
       </p>
 

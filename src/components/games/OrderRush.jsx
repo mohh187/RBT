@@ -45,7 +45,7 @@ const GENERIC = [
 const TXT = {
   ar: {
     title: 'رتب الطلب',
-    how: 'سيظهر طلب الزبون لثوانٍ ثم يختفي. المس الأصناف بنفس الترتيب. كل مرحلة أطول وأسرع وبمشتّتات أكثر — وخطأ واحد يكلّفك تذكرة.',
+    how: 'سيظهر طلب الزبون لثوانٍ ثم يختفي. المس الأصناف بنفس الترتيب. كل مرحلة أطول وأسرع وبمشتّتات أكثر، وخطأ واحد يكلّفك تذكرة.',
     start: 'ابدأ',
     again: 'من جديد',
     resume: 'تابع من المرحلة',
@@ -275,7 +275,7 @@ export default function OrderRush({
         <div className="gb-card">
           <strong className="gb-title">{t.over}</strong>
           <div className="arb-big" style={{ color: brand }}>{fmt(score)}</div>
-          <p className="gb-line">{playerName ? `${playerName} — ` : ''}{t.reached} {fmt(stage)}</p>
+          <p className="gb-line">{playerName ? `${playerName}: ` : ''}{t.reached} {fmt(stage)}</p>
           <p className="gb-line faint">{t.best} {fmt(Math.max(best, score))}</p>
           <div className="arb-actions">
             <button type="button" className="gb-btn" style={{ background: brand }} onClick={() => start(1, 0)}>

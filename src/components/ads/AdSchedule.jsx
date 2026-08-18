@@ -6,6 +6,7 @@
 // wrong and then blame on the product.
 import Icon from '../Icon.jsx'
 import { TRIGGERS, FREQUENCIES } from '../../lib/ads.js'
+import { arPlural } from '../../lib/forecast.js'
 
 const num = (n) => Number(n || 0).toLocaleString('ar-SA-u-nu-latn')
 
@@ -84,7 +85,7 @@ export default function AdSchedule({ ad, onChange, lang = 'ar' }) {
           <Icon name="warning" size={16} />
           <span>
             {ar
-              ? 'نية المغادرة تُقاس بخروج مؤشر الفأرة من أعلى الصفحة — وهذا لا يوجد على الجوال. على الأجهزة اللمسية يظهر الإعلان بعد خمس وعشرين ثانية من البقاء في القائمة بدلاً من ذلك.'
+              ? 'نية المغادرة تُقاس بخروج مؤشر الفأرة من أعلى الصفحة، وهذا لا وجود له على الجوال. على الأجهزة اللمسية يظهر الإعلان بدلاً من ذلك بعد خمس وعشرين ثانية من البقاء في القائمة.'
               : 'Exit intent needs a mouse. On touch devices the ad falls back to a 25 second dwell timer.'}
           </span>
         </div>
@@ -138,7 +139,7 @@ export default function AdSchedule({ ad, onChange, lang = 'ar' }) {
         <span className="ads-hint">
           {(ad.schedule.daysOfWeek || []).length
             ? (ar ? 'يظهر في الأيام المحددة فقط.' : 'Selected days only.')
-            : (ar ? 'لم يُحدد يوم — يظهر كل أيام الأسبوع.' : 'No day selected: every day.')}
+            : (ar ? 'لم تحدد يوماً، فيظهر كل أيام الأسبوع.' : 'No day selected: every day.')}
         </span>
       </div>
 
@@ -167,7 +168,7 @@ export default function AdSchedule({ ad, onChange, lang = 'ar' }) {
       {overnight ? (
         <p className="ads-hint">
           {ar
-            ? 'نافذة تمتد بعد منتصف الليل — سيظهر من وقت البداية حتى وقت النهاية في اليوم التالي.'
+            ? 'النافذة تمتد بعد منتصف الليل، فيظهر من وقت البداية حتى وقت النهاية في اليوم التالي.'
             : 'This window crosses midnight and will run into the next day.'}
         </p>
       ) : null}
@@ -177,7 +178,7 @@ export default function AdSchedule({ ad, onChange, lang = 'ar' }) {
         <h4>{ar ? 'كم مرة يراه الضيف الواحد' : 'Frequency'}</h4>
         <p className="ads-hint">
           {ar
-            ? 'يُحسب في متصفح الضيف نفسه. من يمسح بيانات المتصفح أو يفتح القائمة من جهاز آخر قد يراه من جديد — لا توجد حسابات للضيوف تربط الأمرين.'
+            ? 'يُحسب في متصفح الضيف نفسه. من يمسح بيانات متصفحه أو يفتح القائمة من جهاز آخر قد يراه من جديد، فلا توجد حسابات ضيوف تربط الجهازين.'
             : 'Counted in the guest browser; clearing storage resets it.'}
         </p>
       </div>
@@ -209,7 +210,7 @@ export default function AdSchedule({ ad, onChange, lang = 'ar' }) {
         <span className="ads-hint">
           {ad.frequency.capPerDay > 0
             ? (ar
-              ? `لن يظهر لنفس الضيف أكثر من ${num(ad.frequency.capPerDay)} مرة في اليوم الواحد.`
+              ? `لن يظهر لنفس الضيف أكثر من ${arPlural(ad.frequency.capPerDay, { one: 'مرة', two: 'مرتين', few: 'مرات', many: 'مرة' })} في اليوم الواحد.`
               : `At most ${ad.frequency.capPerDay} times a day per guest.`)
             : (ar ? 'صفر يعني بلا حد يومي إضافي.' : 'Zero means no extra daily cap.')}
         </span>

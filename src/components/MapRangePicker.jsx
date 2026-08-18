@@ -100,7 +100,7 @@ export default function MapRangePicker({
         const idx = i % ZONE_COLOR_VARS.length
         const color = idx === 0 ? brand : ZONE_COLOR_VARS[idx]
         const c = L.circle(ll, { radius: Number(z.maxKm) * 1000, color, fillColor: color, fillOpacity: 0.08, weight: 2 })
-        c.bindTooltip(`حتى ${Number(z.maxKm)} كم — رسوم ${Number(z.fee) || 0}`, { permanent: true, direction: 'top' })
+        c.bindTooltip(`حتى ${Number(z.maxKm)} كم · رسوم ${Number(z.fee) || 0}`, { permanent: true, direction: 'top' })
         c.addTo(map)
         layersRef.current.push(c)
         fitLayerRef.current = c // sorted ascending → last is outermost
@@ -135,7 +135,7 @@ export default function MapRangePicker({
       const map = mapRef.current
       if (map) map.setView([p.lat, p.lng], Math.max(map.getZoom() || 0, 14))
     } catch {
-      setGeoError('تعذر تحديد موقعك — تأكد من تفعيل صلاحية الموقع')
+      setGeoError('تعذّر تحديد موقعك. تأكد من السماح بالوصول إلى الموقع ثم أعد المحاولة')
     }
     setLocating(false)
   }
@@ -242,7 +242,7 @@ export default function MapRangePicker({
       {mode === 'zones' ? (
         <div className="stack" style={{ gap: 8 }}>
           {(zones || []).length === 0 ? (
-            <div className="small faint">لا توجد نطاقات توصيل — الميزة غير مفعلة. أضف نطاقا لتحديد الرسوم حسب المسافة.</div>
+            <div className="small faint">لا توجد نطاقات توصيل، فالميزة غير مفعّلة. أضف نطاقاً لتحديد الرسوم حسب المسافة.</div>
           ) : (
             (zones || []).map((z, i) => (
               <div key={i} className="row" style={{ gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>

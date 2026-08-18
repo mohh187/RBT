@@ -57,7 +57,7 @@ export default function LegalEditor() {
     <div className="page stack" style={{ gap: 'var(--sp-4)' }}>
       <div>
         <h2 className="page-title">المستندات القانونية</h2>
-        <p className="muted small">حرّر وانشر الشروط والخصوصية والاسترجاع والاستخدام المقبول — تظهر مباشرةً على صفحات <Link to="/legal" className="bold">/legal</Link> العامة</p>
+        <p className="muted small">حرّر وانشر الشروط والخصوصية والاسترجاع والاستخدام المقبول، وتظهر مباشرةً على صفحات <Link to="/legal" className="bold">/legal</Link> العامة</p>
       </div>
 
       <div className="card card-pad" style={{ borderColor: 'var(--warning)' }}>

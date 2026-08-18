@@ -389,7 +389,7 @@ export default function LiveMatchScreen({
         venue={venue}
         brand={brand}
         context={context}
-        title={isMatch ? `${nameA} ضد ${nameB}` : `${spectateGameName(gameId)} — تجهيز الطاولة`}
+        title={isMatch ? `${nameA} ضد ${nameB}` : `تجهيز طاولة ${spectateGameName(gameId)}`}
         body="تبدأ الجولة بعد لحظات…"
       />
     )

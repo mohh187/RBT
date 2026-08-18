@@ -87,7 +87,7 @@ export default function Invoice() {
 
         {refunded && rec.refund && (
           <div className="inv-refund">
-            <Icon name="repeat" size={14} /> تم استرجاع <Price value={rec.refund.amount} currency={currency} lang="ar" symbolSize="0.85em" />{rec.refund.reason ? ` — ${rec.refund.reason}` : ''}
+            <Icon name="repeat" size={14} /> تم استرجاع <Price value={rec.refund.amount} currency={currency} lang="ar" symbolSize="0.85em" />{rec.refund.reason ? `, ${rec.refund.reason}` : ''}
           </div>
         )}
 

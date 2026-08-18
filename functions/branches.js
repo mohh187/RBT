@@ -70,7 +70,7 @@ const switchTenant = onCall(async (request) => {
 
   await db.collection('platformActivity').add({
     tenantId: tid, tenantName: ok.tenant.name || '', type: 'branchSwitch', severity: 'info',
-    title: 'تبديل فرع', body: `${(request.auth.token && request.auth.token.email) || uid} انتقل من ${prev || '—'} إلى ${tid}`,
+    title: 'تبديل فرع', body: `${(request.auth.token && request.auth.token.email) || uid} انتقل إلى الفرع ${tid}${prev ? ` قادماً من ${prev}` : ''}`,
     at: FieldValue.serverTimestamp(),
   }).catch(() => {})
 
@@ -91,7 +91,7 @@ const createBranch = onCall(async (request) => {
   const slug = String(d.slug || '').trim().toLowerCase()
   const branchLabel = String(d.branchLabel || '').trim()
   if (!sourceTid || !name || !slug) throw new HttpsError('invalid-argument', 'sourceTenantId + name + slug required')
-  if (!/^[a-z0-9-]{2,40}$/.test(slug)) throw new HttpsError('invalid-argument', 'slug غير صالح')
+  if (!/^[a-z0-9-]{2,40}$/.test(slug)) throw new HttpsError('invalid-argument', 'رابط الفرع يقبل الحروف الإنجليزية الصغيرة والأرقام والشرطة فقط.')
 
   // Owner of the source venue, or a platform admin acting on their behalf.
   const srcSnap = await db.doc(`tenants/${sourceTid}`).get()
@@ -99,11 +99,11 @@ const createBranch = onCall(async (request) => {
   const src = srcSnap.data() || {}
   const adminSnap = await db.doc(`platformAdmins/${uid}`).get().catch(() => null)
   const isAdmin = adminSnap && adminSnap.exists
-  if (src.ownerUid !== uid && !isAdmin) throw new HttpsError('permission-denied', 'المالك فقط')
+  if (src.ownerUid !== uid && !isAdmin) throw new HttpsError('permission-denied', 'إضافة فرع جديد لمالك المنشأة وحده.')
 
   const ownerUid = src.ownerUid
   const slugRef = db.doc(`tenantSlugs/${slug}`)
-  if ((await slugRef.get()).exists) throw new HttpsError('already-exists', 'هذا الرابط محجوز — اختر غيره')
+  if ((await slugRef.get()).exists) throw new HttpsError('already-exists', 'هذا الرابط محجوز، اختر رابطاً آخر.')
 
   // Group: create on first branch, reuse afterwards.
   let gid = src.groupId || null
@@ -123,7 +123,7 @@ const createBranch = onCall(async (request) => {
   const gSnap = await db.doc(`venueGroups/${gid}`).get()
   const g = gSnap.exists ? (gSnap.data() || {}) : {}
   const count = (g.branchIds || []).length
-  if (count >= (Number(g.maxBranches) || 10)) throw new HttpsError('resource-exhausted', 'بلغت الحد الأقصى للفروع — تواصل مع المنصة لرفعه')
+  if (count >= (Number(g.maxBranches) || 10)) throw new HttpsError('resource-exhausted', 'وصلت إلى الحد الأقصى للفروع. تواصل معنا لرفع الحد.')
 
   const tRef = db.collection('tenants').doc()
   await tRef.set({

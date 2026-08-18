@@ -30,7 +30,7 @@ export default function Activity() {
     <div className="page stack" style={{ gap: 'var(--sp-4)' }}>
       <div>
         <h2 className="page-title">سجل النشاط الشامل</h2>
-        <p className="muted small">كل إجراء وتحديث وخطوة تقوم بها أي منشأة — مباشر</p>
+        <p className="muted small">كل إجراء وتحديث وخطوة تقوم بها أي منشأة، مباشرةً</p>
       </div>
 
       <div className="row" style={{ gap: 8, flexWrap: 'wrap' }}>
@@ -53,7 +53,7 @@ export default function Activity() {
       {rows === null ? (
         <Spinner />
       ) : filtered.length === 0 ? (
-        <Empty icon="bell" title="لا نشاط مطابق" hint="غيّر الفلاتر أو انتظر — كل حدث جديد يظهر لحظياً" />
+        <Empty icon="bell" title="لا نشاط مطابق" hint="غيّر الفلاتر أو انتظر، كل حدث جديد يظهر لحظياً" />
       ) : (
         <div className="card card-pad">
           <div className="divide">

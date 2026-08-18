@@ -41,19 +41,19 @@ export default function BookTable() {
     // capacity: don't seat a party the table can't hold
     const seats = Number(tb?.seats) || 0
     if (tb && seats > 0 && Number(party) > seats) {
-      toast.error(lang === 'ar' ? `تتسع هذه الطاولة لـ ${seats} — اختر طاولة أكبر أو قلّل العدد` : `This table seats ${seats} — pick a larger table or reduce the party`)
+      toast.error(lang === 'ar' ? `تتسع هذه الطاولة لـ ${seats}، اختر طاولة أكبر أو قلّل العدد` : `This table seats ${seats}, pick a larger table or reduce the party`)
       return
     }
     setBusy(true)
     try {
       // conflict: same table already reserved for this date+time
       if (tableId && await findReservationConflict(state.tid, { tableId, date, time }).catch(() => false)) {
-        toast.error(lang === 'ar' ? 'هذه الطاولة محجوزة في هذا الوقت — اختر وقتاً أو طاولة أخرى' : 'That table is already booked at this time — pick another time or table')
+        toast.error(lang === 'ar' ? 'هذه الطاولة محجوزة في هذا الوقت، اختر وقتاً أو طاولة أخرى' : 'That table is already booked at this time, pick another time or table')
         setBusy(false); return
       }
       const res = await createReservation(state.tid, { kind: 'table', tableId: tableId || null, tableLabel: tb?.label || '', name: name.trim(), phone: phone.trim(), partySize: Number(party) || 1, date, time })
       setDone(res)
-    } catch (_) { toast.error(lang === 'ar' ? 'تعذّر إرسال الحجز — حاول مرة أخرى' : 'Booking failed — try again') } finally { setBusy(false) }
+    } catch (_) { toast.error(lang === 'ar' ? 'تعذّر إرسال الحجز، حاول مرة أخرى' : 'Booking failed, try again') } finally { setBusy(false) }
   }
 
   if (state.loading) return <FullSpinner />
@@ -62,7 +62,7 @@ export default function BookTable() {
     <div className="container page stack center" style={{ gap: 'var(--sp-3)', textAlign: 'center', paddingTop: 'var(--sp-8)' }}>
       <div className="center" style={{ width: 72, height: 72, borderRadius: '50%', background: 'var(--success-soft)', color: 'var(--success)' }}><Icon name="ok" size={40} /></div>
       <strong style={{ fontSize: 'var(--fs-lg)' }}>{ar ? 'تم استلام طلب الحجز' : 'Booking received'}</strong>
-      <p className="muted small">{ar ? `رقم الحجز ${done.code} — ستتواصل معك المنشأة للتأكيد.` : `Booking ${done.code} — the venue will confirm shortly.`}</p>
+      <p className="muted small">{ar ? `رقم الحجز ${done.code}، ستتواصل معك المنشأة للتأكيد.` : `Booking ${done.code}, the venue will confirm shortly.`}</p>
     </div>
   )
 

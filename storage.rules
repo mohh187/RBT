@@ -30,9 +30,15 @@ service firebase.storage {
     }
 
     // Cross-service Firestore lookups: is the caller staff of this tenant, or a platform admin?
+    // Mirrors isMember() in firestore.rules: a fired or suspended staffer keeps
+    // their password, and this file grants DELETE on every menu photo and video
+    // the venue owns. A missing staff doc stays allowed (bootstrap + venues whose
+    // docs predate the field), hence exists() first and a defaulted read after.
     function isTenantStaff(tid) {
       return request.auth != null
-        && firestore.get(/databases/(default)/documents/users/$(request.auth.uid)).data.tenantId == tid;
+        && firestore.get(/databases/(default)/documents/users/$(request.auth.uid)).data.tenantId == tid
+        && (!firestore.exists(/databases/(default)/documents/tenants/$(tid)/staff/$(request.auth.uid))
+            || firestore.get(/databases/(default)/documents/tenants/$(tid)/staff/$(request.auth.uid)).data.get('active', true) != false);
     }
     function isPlatformAdmin() {
       return request.auth != null
