@@ -20,6 +20,8 @@ import RecipeEditor from '../../components/RecipeEditor.jsx'
 import { Price } from '../../components/Riyal.jsx'
 import Icon from '../../components/Icon.jsx'
 import { ItemSheet } from '../../components/MenuView.jsx'
+import { EditorialItemStage } from '../../components/menuThemes/EditorialLayout.jsx'
+import { applySkin, resolveSkin } from '../../lib/skins.js'
 import ModelStudio from '../../components/ModelStudio.jsx'
 import DishHotspots from '../../components/DishHotspots.jsx'
 import MediaLibrary from '../../components/MediaLibrary.jsx'
@@ -443,6 +445,45 @@ export default function Items() {
     const u2 = watchCategories(tenantId, setCats)
     return () => { u1(); u2() }
   }, [tenantId])
+
+  // ---- item preview: the SAME window a diner opens --------------------------
+  // Layout comes off the MENU surface with the menu's own fallback chain (see
+  // MenuView's itemDetail). Reading tenant.skin.overrides alone was wrong twice:
+  // it misses a venue that themed the menu surface separately, and it has no
+  // fallback, so an editorial venue that never set detailLayout got the plain
+  // sheet here while its guests got the full-screen stage.
+  const menuSkin = resolveSkin(tenant, 'menu')
+  const menuLayout = menuSkin?.layout?.menuLayout || 'list'
+  const previewDetail = menuSkin?.detailLayout
+    || (menuLayout === 'editorial' ? 'editorial' : ['plates', 'gallery', 'spotlight', 'oceanart'].includes(menuLayout) ? 'immersive' : 'sheet')
+  const menuHidden = menuSkin?.hidden || []
+  const previewOnly = () => toast.info(lang === 'ar' ? 'هذه معاينة فقط لعرض الصنف من لوحة الإدارة.' : 'This is a details preview only.')
+
+  // …and the same COLOURS. Both windows portal into <body>, and in the admin
+  // <body> carries the back-office system theme, whose palette (glass is light)
+  // wins over anything the skin writes on <html> — that is what painted the
+  // preview white. So the menu skin goes on while the preview is up and the
+  // admin's own carriers come off, restored to exactly what was there on close,
+  // on unmount and whenever the tenant changes.
+  const previewOpen = !!previewItem
+  useEffect(() => {
+    if (!previewOpen) return undefined
+    const html = document.documentElement
+    const { body } = document
+    const styleKeys = ['--brand-base', '--on-brand', '--accent-base', '--on-accent', '--font-body', '--font-display']
+    const htmlKeys = ['data-shape', 'data-skin', 'data-theme']
+    const bodyKeys = ['data-systheme', 'data-sysvariant', 'data-custheme', 'data-theme']
+    const style0 = styleKeys.map((k) => [k, html.style.getPropertyValue(k)])
+    const html0 = htmlKeys.map((k) => [k, html.getAttribute(k)])
+    const body0 = bodyKeys.map((k) => [k, body.getAttribute(k)])
+    bodyKeys.forEach((k) => body.removeAttribute(k))
+    applySkin(resolveSkin(tenant, 'menu'), { applyMode: true })
+    return () => {
+      style0.forEach(([k, v]) => (v ? html.style.setProperty(k, v) : html.style.removeProperty(k)))
+      html0.forEach(([k, v]) => (v === null ? html.removeAttribute(k) : html.setAttribute(k, v)))
+      body0.forEach(([k, v]) => (v === null ? body.removeAttribute(k) : body.setAttribute(k, v)))
+    }
+  }, [previewOpen, tenant])
 
   // «كم صنفاً عندي؟» — the headline total plus a live count on every category
   // chip, so the owner audits coverage at a glance without opening anything.
@@ -949,17 +990,32 @@ export default function Items() {
         />
       )}
 
-      {previewItem && (
+      {previewItem && (previewDetail === 'editorial' ? (
+        <EditorialItemStage
+          item={previewItem}
+          tenant={tenant}
+          currency={currency}
+          originRect={null}
+          allItems={(items || []).filter((i) => !i.archived && i.active !== false)}
+          hidePrep={menuHidden.includes('prepTime')}
+          hideServes={menuHidden.includes('serves')}
+          onOpenItem={(p) => setPreviewItem(p)}
+          // false = «لم تُضف»: the pairing chips flash a ✓ off a truthy return
+          onQuickAdd={() => { previewOnly(); return false }}
+          onClose={() => setPreviewItem(null)}
+          onAdd={previewOnly}
+        />
+      ) : (
         <ItemSheet
           item={previewItem}
           tenant={tenant}
           currency={currency}
           tenantId={tenantId}
-          detail={tenant?.skin?.overrides?.detailLayout || 'sheet'}
+          detail={previewDetail}
           onClose={() => setPreviewItem(null)}
-          onAdd={() => { toast.info(lang === 'ar' ? 'هذه معاينة فقط لعرض الصنف من لوحة الإدارة.' : 'This is a details preview only.') }}
+          onAdd={previewOnly}
         />
-      )}
+      ))}
     </div>
   )
 }

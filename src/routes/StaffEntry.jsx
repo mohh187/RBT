@@ -26,45 +26,51 @@ import { isPlatformHost, resolveHostVenue } from '../lib/domains.js'
 import { applySkin, resolveSkin } from '../lib/skins.js'
 import { RbtMark } from '../components/BrandMark.jsx'
 
-// The service counter, drawn in white line-work along the foot of the board: a
-// cup, the point-of-sale terminal, a cloche, a receipt, flatware — each standing
-// on one continuous counter edge.
+// THE 360 ORBIT. One closed ring threading the six stations a venue actually
+// runs on: the cup it serves, the till, the kitchen, the guest's phone, the bill,
+// the service bell. A light runs the ring without stopping and each station
+// brightens as it passes, so the loop reads as a single signal going all the way
+// round. RBT 360 drawn rather than asserted, with the venue's own mark sitting at
+// the centre of its own circuit.
 //
-// Composed as a FRIEZE on purpose. A single centred scene cropped to a phone's
-// width showed only severed fragments — a lamp with no ceiling, half a handle —
-// which is exactly the arbitrary look this screen must not have. Evenly spaced
-// objects on a shared baseline read as a complete counter at any crop, and the
-// piece running off the edge implies the counter continues.
+// It replaced a counter frieze because that composition had to be cropped to fit
+// the board and the owner saw severed shapes. A CLOSED ring has no meaningful
+// crop, so this is drawn with `meet`: the whole figure is present at every width
+// and is never sliced.
 //
-// Inline SVG: no request, no bitmap, crisp at every density, and it inherits the
-// board's own colour. (Same approach as the ecosystem drawing on /login.)
-function CounterScene() {
+// GEOMETRY CONTRACT: the ring is rx 228 / ry 88 about (280,130), circumference
+// about 1042 user units. The comet's stroke-dasharray and the distance in the
+// se-orbit-run keyframe are both derived from that number, so changing the
+// ellipse means changing both (see index.css).
+//
+// Inline SVG: no request, no bitmap, crisp at any density, and it takes the
+// board's own colour. Every animation stops under prefers-reduced-motion.
+const ORBIT_NODES = [
+  // 180deg, the cup: what the guest actually came for
+  { k: 'cup', x: 52, y: 130, d: 'M-14 -6 h22 v8 a11 11 0 0 1 -11 11 a11 11 0 0 1 -11 -11 z M8 -2 h5 a6 6 0 0 1 0 12 h-1 M-18 16 h30' },
+  // 240deg, the till
+  { k: 'pos', x: 166, y: 54, d: 'M-15 -16 h30 a4 4 0 0 1 4 4 v13 a4 4 0 0 1 -4 4 h-30 a4 4 0 0 1 -4 -4 v-13 a4 4 0 0 1 4 -4 z M-9 -10 h12 M-9 -4 h16 M0 5 v7 M-11 16 h22 a5 5 0 0 0 -5 -4 h-12 a5 5 0 0 0 -5 4 z' },
+  // 300deg, the kitchen
+  { k: 'kitchen', x: 394, y: 54, d: 'M-14 3 a9 9 0 0 1 4 -16 a10 10 0 0 1 20 0 a9 9 0 0 1 4 16 z M-14 3 h28 v11 h-28 z' },
+  // 0deg, the guest's phone
+  { k: 'phone', x: 508, y: 130, d: 'M-11 -17 h22 a4 4 0 0 1 4 4 v26 a4 4 0 0 1 -4 4 h-22 a4 4 0 0 1 -4 -4 v-26 a4 4 0 0 1 4 -4 z M-4 -13 h8 M-6 12 h12' },
+  // 60deg, the bill
+  { k: 'bill', x: 394, y: 206, d: 'M-11 -16 h22 v30 l-4 -3 -4 3 -3 -3 -4 3 -4 -3 -3 3 z M-5 -8 h11 M-5 -1 h7' },
+  // 120deg, the service bell
+  { k: 'bell', x: 166, y: 206, d: 'M-15 9 a15 15 0 0 1 30 0 z M-19 9 h38 a3 3 0 0 1 0 6 h-38 a3 3 0 0 1 0 -6 z M0 -6 v-7' },
+]
+
+function OrbitScene() {
   return (
-    <svg className="staff-entry-scene" viewBox="0 0 720 190" fill="none" preserveAspectRatio="xMidYMax slice" aria-hidden="true">
-      <g stroke="#fff" strokeWidth="2.6" strokeLinecap="round" strokeLinejoin="round">
-        {/* the counter itself — the line everything shares */}
-        <path d="M0 168 H720" />
-        <path d="M0 182 H720" opacity="0.45" />
-        {/* cup on a saucer */}
-        <path d="M34 118 h48 v18 a24 24 0 0 1 -24 24 a24 24 0 0 1 -24 -24 z" />
-        <path d="M82 126 h10 a12 12 0 0 1 0 24 h-3" />
-        <path d="M22 168 h76" />
-        <path d="M46 106 c7 -9 -7 -16 0 -25 M70 106 c7 -9 -7 -16 0 -25" opacity="0.5" />
-        {/* point of sale */}
-        <rect x="176" y="64" width="88" height="62" rx="8" />
-        <path d="M190 82 h30 M190 96 h44 M190 110 h22" opacity="0.6" />
-        <path d="M220 126 v22" />
-        <path d="M194 168 h52 a9 9 0 0 0 -9 -14 h-34 a9 9 0 0 0 -9 14 z" />
-        {/* cloche */}
-        <path d="M334 168 a46 46 0 0 1 92 0 z" />
-        <path d="M380 122 v-11" />
-        {/* receipt */}
-        <path d="M508 96 h64 v64 l-10 -8 -11 8 -11 -8 -11 8 -11 -8 -10 8 z" />
-        <path d="M521 114 h38 M521 128 h26 M521 142 h32" opacity="0.6" />
-        {/* flatware — runs off the edge, so the counter reads as continuing */}
-        <path d="M682 88 v22 M690 88 v22 M698 88 v22 M682 110 h16 M690 110 v58" />
-        <path d="M722 88 c9 7 9 26 0 28 v52" />
-      </g>
+    <svg className="staff-entry-scene" viewBox="0 0 560 260" fill="none" preserveAspectRatio="xMidYMid meet" aria-hidden="true">
+      <ellipse className="se-orbit" cx="280" cy="130" rx="228" ry="88" />
+      <ellipse className="se-comet" cx="280" cy="130" rx="228" ry="88" />
+      {ORBIT_NODES.map((n, i) => (
+        <g key={n.k} className="se-node" style={{ '--i': i }} transform={`translate(${n.x} ${n.y})`}>
+          <circle className="se-node-halo" r="25" />
+          <path d={n.d} />
+        </g>
+      ))}
     </svg>
   )
 }
@@ -120,7 +126,7 @@ function VenueGate({ onFound }) {
   return (
     <div className="staff-entry staff-entry-gate">
       <div className="staff-entry-board">
-        <CounterScene />
+        <OrbitScene />
         <div className="staff-entry-top">
           <span className="staff-entry-wordmark num" dir="ltr">RBT 360</span>
           <div className="staff-entry-tools">
@@ -251,7 +257,7 @@ export default function StaffEntry() {
   return (
     <div className="staff-entry">
       <div className="staff-entry-board">
-        <CounterScene />
+        <OrbitScene />
         <div className="staff-entry-top">
           <span className="staff-entry-wordmark num" dir="ltr">RBT 360</span>
           <div className="staff-entry-tools">
