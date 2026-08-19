@@ -11,7 +11,7 @@ import PinLock from '../../components/PinLock.jsx'
 import IncomingAlerts from '../../components/IncomingAlerts.jsx'
 import { Price } from '../../components/Riyal.jsx'
 import {
-  updateOrderStatus, watchMyAttendance, watchStaff,
+  updateOrderStatus, watchMyAttendance, watchStaff, watchMyStaffHr,
   watchOrdersSince, watchAllReviews, createLeaveRequest, watchMyLeaves, setStaffMeta,
   watchAnnouncements, startStatusSession, endStatusSession, watchMyShifts, createShiftSwap,
   watchShiftSwaps, setShiftSwapStatus,
@@ -63,6 +63,7 @@ export default function StaffPortal() {
   const [reviews, setReviews] = useState([])
   const [punches, setPunches] = useState([])
   const [members, setMembers] = useState([])
+  const [myHr, setMyHr] = useState(null)
   const [leaves, setLeaves] = useState([])
   const [announcements, setAnnouncements] = useState([])
   const [myShifts, setMyShifts] = useState([])
@@ -100,6 +101,8 @@ export default function StaffPortal() {
   useEffect(() => { if (!tenantId) return; return watchAllReviews(tenantId, setReviews, 200) }, [tenantId])
   useEffect(() => { if (!tenantId || !user) return; return watchMyAttendance(tenantId, user.uid, setPunches, 120) }, [tenantId, user])
   useEffect(() => { if (!tenantId) return; return watchStaff(tenantId, setMembers) }, [tenantId])
+  // own salary/deductions: the directory doc no longer carries them
+  useEffect(() => { if (!tenantId || !user) return; return watchMyStaffHr(tenantId, user.uid, setMyHr) }, [tenantId, user])
   useEffect(() => { if (!tenantId || !user) return; return watchMyLeaves(tenantId, user.uid, setLeaves) }, [tenantId, user])
   useEffect(() => { if (!tenantId) return; return watchAnnouncements(tenantId, setAnnouncements, 10) }, [tenantId])
   useEffect(() => { if (!tenantId || !user) return; return watchMyShifts(tenantId, user.uid, setMyShifts) }, [tenantId, user])
@@ -134,7 +137,9 @@ export default function StaffPortal() {
   }, [monthOrders, user])
   const maxPts = Math.max(1, ...last7.map((d) => d.points))
   const weekServed = monthOrders.filter((o) => o.status !== 'cancelled' && o.servedByUid === user?.uid && (o.createdAt?.toMillis?.() || 0) >= startOf('week').getTime()).length
-  const me = members.find((x) => x.uid === user?.uid) || null
+  // the directory row plus this staffer's OWN private HR doc
+  const meBase = members.find((x) => x.uid === user?.uid) || null
+  const me = meBase ? { ...meBase, ...(myHr || {}) } : null
   const rank = Math.max(1, allRows.findIndex((r) => r.uid === user?.uid) + 1)
   const clockedIn = punches?.[0]?.type === 'in'
   const pendingLeaves = leaves.filter((l) => (l.status || 'pending') === 'pending').length

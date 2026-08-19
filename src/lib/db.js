@@ -1853,9 +1853,79 @@ export async function listStaff(tid) {
 export async function setStaffActive(tid, uid, active) {
   return updateDoc(subDoc(tid, 'staff', uid), { active, updatedAt: serverTimestamp() })
 }
-// Manager-set HR fields on a staff member (salary, hire date, deductions...).
+// ---------- staff HR (salary, deductions, manager rating) ----------
+// THESE LIVE APART FROM THE STAFF DIRECTORY ON PURPOSE.
+// tenants/{tid}/staff/{uid} has to be listable by every colleague: the PIN lock
+// screen renders the roster from it, the driver picker filters it, the schedule
+// and the daily report read it. Firestore rules cannot hide a FIELD inside a
+// document, only the document, so while salary sat on that doc one getDocs from
+// any staff session dumped the whole payroll, the owner's included.
+// So the money moved to tenants/{tid}/staffHr/{uid}, which only a manager, a
+// holder of manage_payroll, or the staffer THEMSELVES may read.
+const HR_KEYS = ['salary', 'deductions', 'managerRating']
+
+// Manager-set fields on a staff member. Splits the write: HR money fields go to
+// the private sibling doc, everything else (hire date, staff id, phone) stays on
+// the directory doc where colleagues legitimately see it.
 export async function setStaffMeta(tid, uid, data) {
-  return updateDoc(subDoc(tid, 'staff', uid), { ...data, updatedAt: serverTimestamp() })
+  const hr = {}
+  const rest = {}
+  Object.entries(data || {}).forEach(([k, v]) => { (HR_KEYS.includes(k) ? hr : rest)[k] = v })
+  const writes = []
+  if (Object.keys(hr).length) writes.push(setDoc(subDoc(tid, 'staffHr', uid), { ...hr, updatedAt: serverTimestamp() }, { merge: true }))
+  if (Object.keys(rest).length) writes.push(updateDoc(subDoc(tid, 'staff', uid), { ...rest, updatedAt: serverTimestamp() }))
+  await Promise.all(writes)
+}
+
+// Managers / payroll: the whole HR set, keyed by uid.
+export function watchStaffHr(tid, cb) {
+  return onSnapshot(sub(tid, 'staffHr'), (s) => {
+    const byUid = {}
+    s.docs.forEach((d) => { byUid[d.id] = { id: d.id, ...d.data() } })
+    cb(byUid)
+  }, () => cb({}))
+}
+// A staffer reading their OWN figures in the portal.
+export function watchMyStaffHr(tid, uid, cb) {
+  if (!tid || !uid) return () => {}
+  return onSnapshot(subDoc(tid, 'staffHr', uid), (d) => cb(d.exists() ? { id: d.id, ...d.data() } : null), () => cb(null))
+}
+// One-shot, for the accounting period build.
+export async function listStaffHr(tid) {
+  try {
+    const s = await getDocs(sub(tid, 'staffHr'))
+    const byUid = {}
+    s.docs.forEach((d) => { byUid[d.id] = { id: d.id, ...d.data() } })
+    return byUid
+  } catch (_) { return {} }
+}
+// Merge helper so every manager surface shows one row per staffer, unchanged.
+export function mergeStaffHr(members = [], hrByUid = {}) {
+  return (members || []).map((m) => {
+    const hr = hrByUid[m.uid || m.id]
+    return hr ? { ...m, ...hr, id: m.id } : m
+  })
+}
+
+// ONE-TIME, IDEMPOTENT MIGRATION. Copies the money fields off every staff doc
+// into its private sibling and clears them from the directory. Safe to re-run:
+// a doc with nothing left to move is skipped, and the copy happens before the
+// delete so a failure mid-way can only leave a duplicate, never a loss.
+export async function migrateStaffHr(tid) {
+  const snap = await getDocs(sub(tid, 'staff'))
+  let moved = 0
+  for (const d of snap.docs) {
+    const data = d.data() || {}
+    const hr = {}
+    HR_KEYS.forEach((k) => { if (data[k] !== undefined) hr[k] = data[k] })
+    if (!Object.keys(hr).length) continue
+    await setDoc(subDoc(tid, 'staffHr', d.id), { ...hr, migratedAt: serverTimestamp() }, { merge: true })
+    const clear = {}
+    Object.keys(hr).forEach((k) => { clear[k] = deleteField() })
+    await updateDoc(subDoc(tid, 'staff', d.id), clear)
+    moved += 1
+  }
+  return { moved }
 }
 
 // ---------- attendance (selfie clock-in/out + time + location) ----------

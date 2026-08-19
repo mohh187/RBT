@@ -45,7 +45,9 @@ await env.withSecurityRulesDisabled(async (ctx) => {
   await setDoc(doc(db, 'users', OTHER), { tenantId: TID, role: 'cashier', email: 'c@x.co' })
   await setDoc(doc(db, 'tenants', TID), { name: 'Venue', ownerUid: OWNER, active: true })
   await setDoc(doc(db, 'tenants', TID, 'staff', WAITER), { name: 'W', role: 'waiter', active: true })
-  await setDoc(doc(db, 'tenants', TID, 'staff', OWNER), { name: 'O', role: 'owner', active: true, salary: 9000 })
+  await setDoc(doc(db, 'tenants', TID, 'staff', OWNER), { name: 'O', role: 'owner', active: true })
+  await setDoc(doc(db, 'tenants', TID, 'staffHr', OWNER), { salary: 9000 })
+  await setDoc(doc(db, 'tenants', TID, 'staffHr', WAITER), { salary: 3000 })
   await setDoc(doc(db, 'tenants', TID, 'staff', OTHER), { name: 'C', role: 'cashier', active: true })
   await setDoc(doc(db, 'tenants', TID, 'orders', 'o1'), { status: 'paid', total: 100, code: 1 })
   await setDoc(doc(db, 'tenants', TID, 'orders', 'o2'), { status: 'pending', total: 60, code: 2 })
@@ -121,6 +123,29 @@ await check('waiter CAN still see flagged guests (cashier blacklist)', assertSuc
 ))
 await check('owner CAN list customers', assertSucceeds(
   getDocs(collection(owner, 'tenants', TID, 'customers')),
+))
+
+console.log('\nB4. PAYROLL LIVES NEXT DOOR')
+await check('waiter reads OWN salary (the portal shows it)', assertSucceeds(
+  getDoc(doc(waiter, 'tenants', TID, 'staffHr', WAITER)),
+))
+await check('waiter CANNOT read the owner’s salary', assertFails(
+  getDoc(doc(waiter, 'tenants', TID, 'staffHr', OWNER)),
+))
+await check('waiter CANNOT list the payroll', assertFails(
+  getDocs(collection(waiter, 'tenants', TID, 'staffHr')),
+))
+await check('waiter CANNOT raise their own salary', assertFails(
+  setDoc(doc(waiter, 'tenants', TID, 'staffHr', WAITER), { salary: 99999 }, { merge: true }),
+))
+await check('owner CAN list the payroll', assertSucceeds(
+  getDocs(collection(owner, 'tenants', TID, 'staffHr')),
+))
+await check('owner CAN set a salary', assertSucceeds(
+  setDoc(doc(owner, 'tenants', TID, 'staffHr', WAITER), { salary: 4000 }, { merge: true }),
+))
+await check('the directory doc still refuses a self-written salary', assertFails(
+  setDoc(doc(waiter, 'tenants', TID, 'staff', WAITER), { salary: 99999 }, { merge: true }),
 ))
 
 console.log('\nC. THE HOLES (each MUST be denied)')

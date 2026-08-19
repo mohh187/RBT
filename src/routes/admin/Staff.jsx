@@ -5,7 +5,7 @@ import { useToast } from '../../components/Toast.jsx'
 import Sheet from '../../components/Sheet.jsx'
 import { Spinner, Empty } from '../../components/ui.jsx'
 import { Price } from '../../components/Riyal.jsx'
-import { watchInvites, createInvite, deleteInvite, watchStaff, watchOrdersSince, watchAllReviews, setStaffMeta } from '../../lib/db.js'
+import { watchInvites, createInvite, deleteInvite, watchStaff, watchStaffHr, mergeStaffHr, migrateStaffHr, watchOrdersSince, watchAllReviews, setStaffMeta } from '../../lib/db.js'
 import { createStaffAccount } from '../../lib/staffAuth.js'
 import { nextStaffId } from '../../lib/format.js'
 import { scoreStaff } from '../../lib/perf.js'
@@ -22,7 +22,9 @@ export default function Staff({ staffFocus, onFocusHandled }) {
   const toast = useToast()
   const currency = tenant?.currency || 'SAR'
   const [invites, setInvites] = useState(null)
-  const [members, setMembers] = useState([])
+  const [baseMembers, setBaseMembers] = useState([])
+  const [hr, setHr] = useState({})
+  const members = useMemo(() => mergeStaffHr(baseMembers, hr), [baseMembers, hr])
   const [orders, setOrders] = useState([])
   const [reviews, setReviews] = useState([])
   const [open, setOpen] = useState(false)
@@ -37,9 +39,28 @@ export default function Staff({ staffFocus, onFocusHandled }) {
   const assigningId = useRef(new Set())
 
   useEffect(() => { if (!tenantId) return; return watchInvites(tenantId, setInvites) }, [tenantId])
-  useEffect(() => { if (!tenantId) return; return watchStaff(tenantId, setMembers) }, [tenantId])
+  // salary/deductions/rating live in the private staffHr sibling now, so the
+  // manager screen stitches them back on and every child below sees one row
+  useEffect(() => { if (!tenantId) return; return watchStaff(tenantId, setBaseMembers) }, [tenantId])
+  useEffect(() => { if (!tenantId) return; return watchStaffHr(tenantId, setHr) }, [tenantId])
   useEffect(() => { if (!tenantId) return; return watchOrdersSince(tenantId, startOfToday(), setOrders) }, [tenantId])
   useEffect(() => { if (!tenantId) return; return watchAllReviews(tenantId, setReviews, 400) }, [tenantId])
+
+  // ONE-TIME PAYROLL MOVE, self-healing like the caps mirror above it.
+  // Salary, deductions and the manager rating used to sit on the staff DIRECTORY
+  // doc, which every colleague must be able to list (the PIN roster reads it),
+  // and Firestore cannot hide a field inside a document. They now live in the
+  // private staffHr sibling. New writes already go there; this sweeps the rows
+  // that predate the change, the first time a manager opens this screen.
+  // Idempotent: it copies before it deletes and skips anyone already moved.
+  const hrMigrated = useRef(false)
+  useEffect(() => {
+    if (!isManager || !tenantId || hrMigrated.current) return
+    const legacy = baseMembers.some((m) => m.salary !== undefined || m.deductions !== undefined || m.managerRating !== undefined)
+    if (!legacy) return
+    hrMigrated.current = true
+    migrateStaffHr(tenantId).catch(() => { hrMigrated.current = false })
+  }, [isManager, tenantId, baseMembers])
 
   // Auto-assign a sequential venue staff ID (e.g. NEE001) to any member missing one.
   useEffect(() => {

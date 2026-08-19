@@ -982,6 +982,21 @@ service cloud.firestore {
 
       // ---- staff directory: managers manage anyone; a staffer self-registers
       // ONLY their own doc within their own tenant (strict isolation). ----
+      // THE MONEY LIVES NEXT DOOR, NOT HERE.
+      // This directory doc must stay listable by every colleague (the PIN lock
+      // roster, the driver picker, the schedule, the daily report all read it),
+      // and rules cannot hide a FIELD inside a document. So while salary and
+      // deductions sat on it, one getDocs from any staff session dumped the
+      // whole payroll, the owner's included. They now live in staffHr below.
+      match /staffHr/{uid} {
+        // a staffer sees their OWN figures (the portal shows «راتبي»), and
+        // payroll holders see everyone's
+        allow read: if isManager(tid)
+          || hasCap(tid, 'manage_payroll')
+          || (isStaff(tid) && request.auth.uid == uid);
+        // writing is manager/payroll only, never the staffer themselves
+        allow write: if isManager(tid) || hasCap(tid, 'manage_payroll');
+      }
       match /staff/{uid} {
         allow read: if isStaff(tid);
         allow create: if isManager(tid)

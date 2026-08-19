@@ -7,7 +7,7 @@ import { Spinner } from '../../components/ui.jsx'
 import Icon from '../../components/Icon.jsx'
 import { CAP } from '../../lib/permissions.js'
 import { planAllows } from '../../lib/plans.js'
-import { listOrdersSince, listExpensesSince, listItems, listMaterials, listStaff } from '../../lib/db.js'
+import { listOrdersSince, listExpensesSince, listItems, listMaterials, listStaff, listStaffHr, mergeStaffHr } from '../../lib/db.js'
 import {
   PERIODS, periodRange, buildLedger, profitAndLoss, cashFlow, vatReturn,
   inventoryValuation, cogsRatioByItem, anomalies, breakEven, dailySeries, aiSnapshot,
@@ -94,17 +94,20 @@ export default function Accounting() {
     const priorFrom = new Date(fromMs - span * 3)
     ;(async () => {
       try {
-        const [orders, expensesAll, items, materials, staff, purchaseOrders, drawerSessions, subscriptions] = await Promise.all([
+        // staffHr carries the salaries now; the directory doc no longer does
+        const [orders, expensesAll, items, materials, staffBase, staffHr, purchaseOrders, drawerSessions, subscriptions] = await Promise.all([
           listOrdersSince(tenantId, from).catch(() => []),
           listExpensesSince(tenantId, priorFrom).catch(() => []),
           listItems(tenantId).catch(() => []),
           listMaterials(tenantId).catch(() => []),
           listStaff(tenantId).catch(() => []),
+          listStaffHr(tenantId),
           fetchPurchaseOrders(tenantId),
           fetchDrawerSessions(tenantId, fromMs),
           fetchSubscriptionInvoices(tenantId),
         ])
         if (!alive) return
+        const staff = mergeStaffHr(staffBase, staffHr)
         const stamp = (x) => toMs(x.at) || toMs(x.createdAt)
         setData({
           orders,
