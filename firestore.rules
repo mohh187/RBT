@@ -77,6 +77,28 @@ service cloud.firestore {
             && ('caps' in get(/databases/$(database)/documents/tenants/$(tid)/staff/$(request.auth.uid)).data)
             && (cap in staffCapsList(tid)));
     }
+    // MONEY NEEDS THE CAP, NOT JUST A BADGE. isStaff alone let a waiter or a
+    // cook refund, void or mark an order paid straight from the SDK: the caps
+    // were enforced in the router only, so the UI hid the buttons while the
+    // database happily took the write.
+    //
+    // The role fallback is load-bearing, not laziness. The caps mirror on the
+    // staff doc is written by healStaffCapsMirrors, which only runs once a
+    // manager opens the admin, so a bare hasCap() would stop the till dead at
+    // every venue that never did. The roles listed are exactly the ones holding
+    // the cap by default in src/lib/permissions.js. Cost of the fallback:
+    // stripping the cap from a cashier in the caps editor is still only enforced
+    // in the UI. Every other role — waiter, barista, kitchen, driver, cleaner,
+    // marketing — is now blocked in the database, which is the hole this closes.
+    function canRefund(tid) {
+      return hasCap(tid, 'refund') || roleIn(tid, ['owner', 'manager', 'supervisor', 'accountant', 'cashier']);
+    }
+    function canCancel(tid) {
+      return hasCap(tid, 'cancel_order') || roleIn(tid, ['owner', 'manager', 'supervisor', 'cashier']);
+    }
+    function canViewCustomers(tid) {
+      return hasCap(tid, 'view_customers') || roleIn(tid, ['owner', 'manager', 'supervisor', 'accountant', 'marketing']);
+    }
     // Platform super-admin (console owner). Membership is the existence of a
     // platformAdmins/{uid} doc — created ONLY via Firebase Console / Admin SDK
     // (client writes are denied below), so it cannot be self-granted.
@@ -439,6 +461,16 @@ service cloud.firestore {
         allow update: if isStaff(tid)
           && (userDoc().role != 'driver'
               || request.resource.data.diff(resource.data).affectedKeys().hasOnly(['delivery', 'updatedAt']))
+          // settling or reversing money needs the cap, not just a staff badge
+          && (!(request.resource.data.status in ['paid', 'refunded'])
+              || request.resource.data.status == resource.data.status
+              || canRefund(tid))
+          && (!request.resource.data.diff(resource.data).affectedKeys()
+                .hasAny(['paymentMethod', 'compDiscount', 'refund', 'refundTotal', 'refunds'])
+              || canRefund(tid))
+          && (request.resource.data.status != 'cancelled'
+              || resource.data.status == 'cancelled'
+              || canCancel(tid))
           // NO RESURRECTION. Order status writes are now latency-compensated
           // updateDoc (not a server transaction), so an OFFLINE device can queue
           // an "advance" against a stale snapshot and, on reconnect, overwrite a
@@ -892,7 +924,16 @@ service cloud.firestore {
       // trusts). Loyalty/stats/membership writes all happen from staff
       // sessions (settle/cancel/refund paths), so they stay staff-only.
       match /customers/{id} {
-        allow read: if isStaff(tid);
+        // GET stays open to staff: the POS resolves ONE customer by phone id at
+        // the counter, and that is not the exposure. LIST is: `read` covered
+        // both, so a cleaner, a cook or a driver could pull the venue's entire
+        // marketing list — every name, phone and loyalty history — in a single
+        // query. The flagged carve-out keeps the cashier board's blacklist
+        // warning working (db.js watchFlaggedCustomers), which every till needs
+        // and which returns only the handful of flagged guests.
+        allow get: if isStaff(tid);
+        allow list: if canViewCustomers(tid)
+          || (isStaff(tid) && resource.data.get('flagged', false) == true);
         // lastOrderAt is in the anonymous allowlist because the Customers
         // screen orders by it and Firestore hides docs missing the ordered
         // field — self-registration stamps it as "last activity" so a new

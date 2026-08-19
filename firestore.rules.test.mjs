@@ -50,12 +50,16 @@ await env.withSecurityRulesDisabled(async (ctx) => {
   await setDoc(doc(db, 'tenants', TID, 'orders', 'o1'), { status: 'paid', total: 100, code: 1 })
   await setDoc(doc(db, 'tenants', TID, 'orders', 'o2'), { status: 'pending', total: 60, code: 2 })
   await setDoc(doc(db, 'tenants', TID, 'customers', '966500000000'), { name: 'G', phone: '0500000000' })
+  await setDoc(doc(db, 'tenants', TID, 'customers', '966511111111'), { name: 'Flagged', flagged: true })
+  await setDoc(doc(db, 'tenants', TID, 'orders', 'o3'), { status: 'accepted', total: 40, code: 3 })
+  await setDoc(doc(db, 'tenants', TID, 'orders', 'o4'), { status: 'accepted', total: 40, code: 4 })
   await setDoc(doc(db, 'screens', 'CODE1'), { tid: TID, name: 'TV' })
   await setDoc(doc(db, 'tenants', TID, 'pushTokens', 'tok1'), { token: 't', uid: WAITER })
 })
 
 const waiter = env.authenticatedContext(WAITER).firestore()
 const owner = env.authenticatedContext(OWNER).firestore()
+const cashier = env.authenticatedContext(OTHER).firestore()
 const anon = env.unauthenticatedContext().firestore()
 
 console.log('\nA. THE PIN SIGN-IN PATH (loadContext, in order)')
@@ -86,6 +90,37 @@ await check('waiter reads ONE customer by phone id (POS lookup)', assertSucceeds
 await check('paired TV reads its own screen by code', assertSucceeds(getDoc(doc(anon, 'screens', 'CODE1'))))
 await check('staff lists screens filtered by tid', assertSucceeds(
   getDocs(query(collection(owner, 'screens'), where('tid', '==', TID))),
+))
+
+console.log('\nB2. MONEY NEEDS THE CAP, NOT JUST A STAFF BADGE')
+await check('cashier CAN settle (role fallback, no caps mirror written)', assertSucceeds(
+  updateDoc(doc(cashier, 'tenants', TID, 'orders', 'o3'), { status: 'paid', paymentMethod: 'cash' }),
+))
+await check('waiter CANNOT mark an order paid', assertFails(
+  updateDoc(doc(waiter, 'tenants', TID, 'orders', 'o4'), { status: 'paid', paymentMethod: 'cash' }),
+))
+await check('waiter CANNOT refund', assertFails(
+  updateDoc(doc(waiter, 'tenants', TID, 'orders', 'o1'), { status: 'refunded', refund: { amount: 100 } }),
+))
+await check('waiter CANNOT cancel', assertFails(
+  updateDoc(doc(waiter, 'tenants', TID, 'orders', 'o4'), { status: 'cancelled' }),
+))
+await check('cashier CAN cancel', assertSucceeds(
+  updateDoc(doc(cashier, 'tenants', TID, 'orders', 'o4'), { status: 'cancelled' }),
+))
+await check('waiter still advances a normal status', assertSucceeds(
+  updateDoc(doc(waiter, 'tenants', TID, 'orders', 'o2'), { status: 'preparing' }),
+))
+
+console.log('\nB3. THE CUSTOMER LIST')
+await check('waiter CANNOT list the whole customer base', assertFails(
+  getDocs(collection(waiter, 'tenants', TID, 'customers')),
+))
+await check('waiter CAN still see flagged guests (cashier blacklist)', assertSucceeds(
+  getDocs(query(collection(waiter, 'tenants', TID, 'customers'), where('flagged', '==', true))),
+))
+await check('owner CAN list customers', assertSucceeds(
+  getDocs(collection(owner, 'tenants', TID, 'customers')),
 ))
 
 console.log('\nC. THE HOLES (each MUST be denied)')
