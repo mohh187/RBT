@@ -1,51 +1,122 @@
 {
   "hosting": {
     "public": "dist",
-    "ignore": ["firebase.json", "**/.*", "**/node_modules/**"],
+    "ignore": [
+      "firebase.json",
+      "**/.*",
+      "**/node_modules/**"
+    ],
     "rewrites": [
-      { "source": "/m/**", "function": { "functionId": "venueShell", "region": "us-central1" } },
-      { "source": "/t/**", "function": { "functionId": "venueShell", "region": "us-central1" } },
-      { "source": "/app/**", "function": { "functionId": "venueShell", "region": "us-central1" } },
-      { "source": "/join/**", "function": { "functionId": "venueShell", "region": "us-central1" } },
-      { "source": "**", "destination": "/index.html" }
+      {
+        "source": "/m/**",
+        "function": {
+          "functionId": "venueShell",
+          "region": "us-central1"
+        }
+      },
+      {
+        "source": "/t/**",
+        "function": {
+          "functionId": "venueShell",
+          "region": "us-central1"
+        }
+      },
+      {
+        "source": "/app/**",
+        "function": {
+          "functionId": "venueShell",
+          "region": "us-central1"
+        }
+      },
+      {
+        "source": "/join/**",
+        "function": {
+          "functionId": "venueShell",
+          "region": "us-central1"
+        }
+      },
+      {
+        "source": "**",
+        "destination": "/index.html"
+      }
     ],
     "headers": [
       {
         "//": "Hosting matches header globs against the REQUEST path, and every SPA URL (/, /login, /platform...) is rewritten to index.html — a '/index.html' rule never fires for them. Start from no-cache for EVERYTHING so no route can serve a stale shell that points at deleted chunk hashes (the white-screen/preloadError failure), then opt the hashed assets back in below. Later matching rules win per header key.",
         "source": "**",
-        "headers": [{ "key": "Cache-Control", "value": "no-cache" }]
+        "headers": [
+          {
+            "key": "Cache-Control",
+            "value": "no-cache"
+          }
+        ]
       },
       {
         "source": "**/*.@(js|css|woff2|png|jpg|jpeg|svg|webp|avif|ico)",
-        "headers": [{ "key": "Cache-Control", "value": "public, max-age=31536000, immutable" }]
+        "headers": [
+          {
+            "key": "Cache-Control",
+            "value": "public, max-age=31536000, immutable"
+          }
+        ]
       },
       {
         "//": "Venue surfaces are rendered by the venueShell function (per-venue title/og/manifest). Re-assert their CDN caching so the catch-all above does not force every menu open through a function invocation. The function itself re-fetches the live shell every 5 min, so it cannot go stale the way a browser-cached shell can.",
         "source": "/m/**",
-        "headers": [{ "key": "Cache-Control", "value": "public, max-age=0, s-maxage=300, stale-while-revalidate=86400" }]
+        "headers": [
+          {
+            "key": "Cache-Control",
+            "value": "public, max-age=0, s-maxage=300, stale-while-revalidate=86400"
+          }
+        ]
       },
       {
         "//": "The table sticker path (/t/:slug/:token) is the same scan-to-first-paint load as /m/**, so it gets the same CDN policy and the same per-venue shell.",
         "source": "/t/**",
-        "headers": [{ "key": "Cache-Control", "value": "public, max-age=0, s-maxage=300, stale-while-revalidate=86400" }]
+        "headers": [
+          {
+            "key": "Cache-Control",
+            "value": "public, max-age=0, s-maxage=300, stale-while-revalidate=86400"
+          }
+        ]
       },
       {
         "source": "/join/**",
-        "headers": [{ "key": "Cache-Control", "value": "public, max-age=0, s-maxage=300, stale-while-revalidate=86400" }]
+        "headers": [
+          {
+            "key": "Cache-Control",
+            "value": "public, max-age=0, s-maxage=300, stale-while-revalidate=86400"
+          }
+        ]
       },
       {
         "//": "Staff-app surfaces (per-venue manifest/icon/shell) — same CDN policy as /m/**. Bare /app (no slug) stays on the SPA catch-all.",
         "source": "/app/**",
-        "headers": [{ "key": "Cache-Control", "value": "public, max-age=0, s-maxage=300, stale-while-revalidate=86400" }]
+        "headers": [
+          {
+            "key": "Cache-Control",
+            "value": "public, max-age=0, s-maxage=300, stale-while-revalidate=86400"
+          }
+        ]
       },
       {
         "//": "Not content-hashed: the service worker must always revalidate, or a bad SW could pin itself for a year. LITERAL source on purpose — an extglob group ('/@(sw.js|...)') did NOT match /sw.js in Hosting and the asset rule above kept winning.",
         "source": "/sw.js",
-        "headers": [{ "key": "Cache-Control", "value": "no-cache" }]
+        "headers": [
+          {
+            "key": "Cache-Control",
+            "value": "no-cache"
+          }
+        ]
       },
       {
         "source": "/manifest.webmanifest",
-        "headers": [{ "key": "Cache-Control", "value": "no-cache" }]
+        "headers": [
+          {
+            "key": "Cache-Control",
+            "value": "no-cache"
+          }
+        ]
       }
     ]
   },
@@ -58,5 +129,13 @@
   },
   "functions": {
     "source": "functions"
+  },
+  "emulators": {
+    "firestore": {
+      "port": 8080
+    },
+    "ui": {
+      "enabled": false
+    }
   }
 }

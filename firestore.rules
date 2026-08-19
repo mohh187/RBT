@@ -27,10 +27,29 @@ service cloud.firestore {
     function userDoc() {
       return get(/databases/$(database)/documents/users/$(request.auth.uid)).data;
     }
+    // A FIRED OR SUSPENDED STAFFER KEEPS THEIR PASSWORD, so membership cannot
+    // rest on the users doc alone. Without this, deactivating someone revoked
+    // NOTHING: they kept every order, the whole customer list, materials, the
+    // staff directory, order writes, and delete rights on every menu photo.
+    //
+    // A MISSING staff doc stays allowed on purpose. It is both the bootstrap
+    // state (the doc is self-registered on first login, and that create is
+    // itself gated by isStaff, so requiring it here would be circular and would
+    // lock out every new owner) and the state of venues whose docs predate the
+    // `active` field. Hence exists() first and .get('active', true) after: a
+    // bare read of a missing field errors, and an error denies.
+    //
+    // Cost: one extra document read per rule evaluation, and it is the SAME
+    // document hasCap already reads, so Firestore counts it once.
+    function staffActive(tid) {
+      return !exists(/databases/$(database)/documents/tenants/$(tid)/staff/$(request.auth.uid))
+        || get(/databases/$(database)/documents/tenants/$(tid)/staff/$(request.auth.uid)).data.get('active', true) != false;
+    }
     function isMember(tid) {
       return isSignedIn()
         && exists(/databases/$(database)/documents/users/$(request.auth.uid))
-        && userDoc().tenantId == tid;
+        && userDoc().tenantId == tid
+        && staffActive(tid);
     }
     function roleIn(tid, roles) {
       return isMember(tid) && (userDoc().role in roles);
