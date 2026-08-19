@@ -202,7 +202,14 @@ service cloud.firestore {
     // ---- digital signage screens: doc id = the pairing code the TV enters.
     //      TVs read anonymously; only staff of the owning venue manage. ----
     match /screens/{code} {
-      allow read: if true;
+      // GET stays public: a paired TV reads its OWN doc by the pairing code, and
+      // it has no session. LIST does not, because `read` covered both and the
+      // doc id IS the pairing code — one unauthenticated getDocs returned every
+      // venue on the platform, its screen names, its playlist, and the code
+      // needed to attach a rogue display. The only listing in the product
+      // already filters by tid (db.js watchScreens), so this costs nothing.
+      allow get: if true;
+      allow list: if isStaff(resource.data.tid) || isPlatformAdmin();
       allow create: if isStaff(request.resource.data.tid);
       // Anonymous paired TVs may write ONLY their health heartbeat (last-seen +
       // which slide is playing) — nothing else on the doc is reachable publicly.
@@ -982,7 +989,15 @@ service cloud.firestore {
       // ---- push tokens (FCM): staff register their device; server reads via Admin SDK ----
       match /pushTokens/{id} {
         allow read: if isStaff(tid);
-        allow write: if isStaff(tid);
+        // A TOKEN DOC MAY ONLY EVER NAME ITS OWN OWNER. `write: if isStaff(tid)`
+        // let any member set `uid` to the owner's and start receiving the
+        // managers-only pushes (the nightly revenue figure, the platform chat),
+        // and it let any member DELETE every token doc in the venue and silence
+        // its notifications with no trace. The client writes uid = the signed-in
+        // user (db.js savePushToken) and deletes only this device's own doc, so
+        // binding both to request.auth.uid changes nothing legitimate.
+        allow create, update: if isStaff(tid) && request.resource.data.uid == request.auth.uid;
+        allow delete: if isStaff(tid) && resource.data.uid == request.auth.uid;
       }
 
       // ---- staff device registry (name + heartbeat) — operational, non-sensitive ----
@@ -1237,7 +1252,18 @@ service cloud.firestore {
     }
     // Consent records — a signed-in party may record consent; platform reads/manages.
     match /platformConsent/{id} {
-      allow create: if isSignedIn();
+      // A bare `isSignedIn()` accepted ANY document of ANY size under ANY id
+      // from any account: unbounded storage griefing, and compliance records
+      // filable in someone else's name. Bound it the way platformErrors already
+      // is — a key allowlist, a size cap, and the record must name its writer.
+      // These are exactly the seven fields lib/legal.js recordLegalConsent
+      // writes, and it always passes the signed-in uid (Onboarding.jsx).
+      allow create: if isSignedIn()
+        && request.resource.data.uid == request.auth.uid
+        && request.resource.data.keys().hasOnly(['tenantId', 'uid', 'byName', 'kind', 'docs', 'version', 'at'])
+        && request.resource.data.byName.size() < 200
+        && request.resource.data.kind.size() < 60
+        && request.resource.data.docs.size() < 40;
       allow read, update, delete: if isPlatformAdmin();
     }
   }
