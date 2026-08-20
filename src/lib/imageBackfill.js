@@ -1,4 +1,4 @@
-import { collection, getDocs, doc, updateDoc, getDoc } from 'firebase/firestore'
+import { collection, getDocs, doc, setDoc, getDoc } from 'firebase/firestore'
 import { db } from './firebase.js'
 import { uploadImage, maxPxFor } from './storage.js'
 import { collectUrls, swapUrls, folderOf } from './imageBackfillCore.js'
@@ -107,8 +107,17 @@ export async function compressMenuImages(tid, onProgress = () => {}) {
       if (next !== v) patch[k] = next
     }
     if (!Object.keys(patch).length) continue
-    await updateDoc(s.ref, patch)
-    docs += 1
+    try {
+      // setDoc/merge rather than updateDoc: updateDoc reads every top-level key
+      // as a FIELD PATH, so a field name containing a dot would silently become
+      // a nested write. merge reaches the same result with no path parsing.
+      await setDoc(s.ref, patch, { merge: true })
+      docs += 1
+    } catch (e) {
+      // The venue document is last and its rules are the strictest. One refused
+      // write must not throw away the item updates that already landed.
+      failed.push(String(e.message || e).slice(0, 60))
+    }
   }
   return { scanned: list.length, compressed: saved, docs, failed }
 }
