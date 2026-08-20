@@ -41,9 +41,43 @@ if (firebaseReady) {
   // preview), and only top-level documents share the persistent multi-tab
   // cache (real multi-tab usage — admin + cashier — is what the manager is
   // actually designed for).
+  // A DINER NEVER GETS THE PERSISTENT CACHE. This is the fix for "the menu
+  // collapses and reloads while scrolling", reported from an iPhone 15, a 12 and
+  // an 11 — all modern, all with memory to spare, which is what ruled memory out
+  // as the cause. What they share is WebKit's IndexedDB, and the persistent cache
+  // is built on it: it takes a lock, elects a leader across tabs, and survives
+  // between visits. Safari evicts that store aggressively, freezes and restores
+  // tabs underneath it, and the SDK answers a store it no longer recognises with
+  // INTERNAL ASSERTION FAILED (ca9/b815), which permanently fails its async
+  // queue. Our own handler in main.jsx then wipes and reloads the page, and that
+  // reload IS the "crash" the guest sees.
+  //
+  // Nothing about a guest needs any of it. They open a menu, read it, order, and
+  // leave; offline persistence across visits buys them nothing, and every live
+  // onSnapshot behaves identically on a memory cache. So the whole failure mode
+  // is removed rather than recovered from: no IndexedDB, no lock, no leader
+  // election, no assertion possible.
+  //
+  // Staff keep the persistent multi-tab cache, which is what it was built for:
+  // a manager with the admin and the till open at once, on a device that stays
+  // signed in, where surviving a dropped connection genuinely matters.
+  const DINER_PATHS = ['/m/', '/t/', '/order/', '/e/', '/book/', '/reserve/', '/pass/', '/mcard/', '/screen', '/join/']
+  let isDiner = false
+  try {
+    const p = typeof location !== 'undefined' ? location.pathname : ''
+    isDiner = DINER_PATHS.some((x) => p === x || p.indexOf(x) === 0)
+    // A venue's own domain serves its menu at the ROOT, so "/" is a diner
+    // surface there and the staff console is not. Treated as a diner unless the
+    // path is one of the app's own entry points.
+    if (!isDiner && p === '/') {
+      const h = (location.hostname || '').toLowerCase()
+      isDiner = !(h.endsWith('web.app') || h.endsWith('firebaseapp.com') || h === 'localhost' || h === 'rbt360sa.com' || h === 'www.rbt360sa.com')
+    }
+  } catch (_) { isDiner = false }
+
   try {
     db = initializeFirestore(app, {
-      localCache: isEmbedded
+      localCache: (isEmbedded || isDiner)
         ? memoryLocalCache()
         : persistentLocalCache({ tabManager: persistentMultipleTabManager() }),
     })
