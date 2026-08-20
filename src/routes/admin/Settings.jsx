@@ -3864,6 +3864,18 @@ export default function Settings() {
                     <div className="stack" style={{ gap: 6 }}>
                       <div className="row wrap" style={{ gap: 8, alignItems: 'center' }}>
                         <button type="button" className="btn btn-sm btn-outline" onClick={() => wallFileRef.current?.click()}><Icon name="upload" size={13} /> {ar ? 'تغيير صورة الجدار' : 'Change the wall image'}</button>
+                        {wallCfg.url ? (
+                          <button
+                            type="button"
+                            className="btn btn-sm btn-outline"
+                            onClick={() => setCropState({ src: wallCfg.url, kind: 'wall' })}
+                            title={ar
+                              ? 'غيّر ألوان الجدار مع الإبقاء على ملمس الطوب واللحام والظلال'
+                              : 'Recolour the wall and keep the brick texture, the mortar and the shadows'}
+                          >
+                            <Icon name="palette" size={13} /> {ar ? 'لوّن الجدار' : 'Recolour the wall'}
+                          </button>
+                        ) : null}
                         <button type="button" className="btn-link xs" onClick={() => setLibPick({ kind: 'image', apply: (url) => writeWall({ url, pattern: 'image' }) })}>{ar ? 'من المكتبة' : 'From library'}</button>
                         <button type="button" className="btn btn-sm btn-outline" disabled={wallSeamBusy || !wallCfg.url} onClick={fixWallSeams}>
                           {wallSeamBusy ? <span className="spinner" /> : <Icon name="sparkles" size={13} />} {ar ? 'إزالة فواصل التكرار' : 'Remove tiling seams'}
@@ -4752,6 +4764,23 @@ export default function Settings() {
                         <input type="file" accept="image/*" hidden onChange={onTableFile} />
                       </label>
                     )}
+                    {/* RECOLOUR an already uploaded or AI generated table. The
+                        cropper takes an existing url as well as a new file, so
+                        this is the same window with the same picker: pick the
+                        colours, and the recoloured copy is written to a NEW path
+                        while the original stays exactly where it was. */}
+                    {tblCfg.kind === 'image' && tblCfg.url ? (
+                      <button
+                        type="button"
+                        className="chip"
+                        onClick={() => setCropState({ src: tblCfg.url, kind: 'table' })}
+                        title={ar
+                          ? 'غيّر ألوان الطاولة مع الإبقاء على كل ملامحها: عروق الخشب والظلال والإضاءة'
+                          : 'Recolour the table and keep every feature: the grain, the shadows, the light'}
+                      >
+                        <Icon name="palette" size={13} /> {ar ? 'لوّن الطاولة' : 'Recolour the table'}
+                      </button>
+                    ) : null}
                   </div>
 
                   {/* AI TABLE — the server photographs a tabletop that matches
@@ -4786,6 +4815,9 @@ export default function Settings() {
                       {tblCfg.topUrl ? (
                         <>
                           <img src={tblCfg.topUrl} alt="" style={{ height: 40, aspectRatio: '8 / 3', objectFit: 'cover', borderRadius: 8, border: '1px solid var(--border)' }} />
+                          <button type="button" className="btn btn-sm btn-outline" onClick={() => setCropState({ src: tblCfg.topUrl, kind: 'tabletop' })}>
+                            <Icon name="palette" size={13} /> {ar ? 'لوّن' : 'Recolour'}
+                          </button>
                           <button type="button" className="btn btn-sm btn-outline" onClick={() => writeTable({ topUrl: '' })}>{ar ? 'إزالة' : 'Remove'}</button>
                         </>
                       ) : null}
