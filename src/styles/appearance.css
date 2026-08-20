@@ -1555,13 +1555,11 @@
   .ilp-drawer { transition: none; }
 }
 
-/* ===== «كما يراه الضيف»: the item-card preview window (ItemPreviewModal) =====
-   A phone frame inside a centred window. The default .sheet is a full-width
-   bottom sheet, which is right for a form on a handset and wrong for a 410px
-   device mock on a 1920px monitor, where the frame ends up marooned in an ocean
-   of empty surface. So on anything wider than a phone this one detaches from
-   the bottom edge and becomes a floating window just wide enough for the mock
-   and its margins. */
+/* ===== the item-card window (ItemPreviewModal) ==============================
+   Two halves: the whole item record on one side, the guest's two views inside a
+   phone frame on the other. The default .sheet is a full-width bottom sheet,
+   which is right for a form on a handset and wrong here, so from tablet width up
+   this one detaches from the bottom edge and becomes a floating window. */
 .itemprev-tabs {
   display: flex;
   gap: 6px;
@@ -1573,21 +1571,175 @@
   justify-content: center;
   /* the frame is a fixed pixel box scaled by transform, and nothing here may
      scroll: the SCALE adapts to the screen instead (fitScale in the component),
-     so the window never grows a scrollbar of its own */
+     so the window never grows a scrollbar around a device mock */
   overflow: hidden;
 }
+/* WHY !important, which is otherwise not this file's habit: at desktop widths
+   index.css turns EVERY .sheet into a centred dialog with
+   `max-width: 600px !important; max-height: 82vh !important`, so a plain width
+   here is simply discarded and this window stayed narrow no matter what it
+   asked for. Same centring mechanism as that rule (inset-inline 0 + auto
+   margins), same weapon, one class more specific so it wins wherever it lands
+   in the cascade. */
 @media (min-width: 560px) {
   .sheet.itemprev {
-    inset-inline: auto;
-    inset-inline-start: 50%;
-    margin-inline-start: calc(min(480px, 94vw) / -2);
-    width: min(480px, 94vw);
-    bottom: max(var(--sp-4), 3dvh);
-    max-height: 94dvh;
+    width: min(600px, 94vw) !important;
+    max-width: min(600px, 94vw) !important;
+    inset-inline: 0 !important;
+    margin-inline: auto !important;
+    bottom: max(var(--sp-4), 3dvh) !important;
+    max-height: 94dvh !important;
     border-radius: var(--r-xl);
     border: 1px solid var(--border);
   }
 }
+@media (min-width: 980px) {
+  .sheet.itemprev {
+    width: min(1080px, 95vw) !important;
+    max-width: min(1080px, 95vw) !important;
+    bottom: 2.5dvh !important;
+    max-height: 95dvh !important;
+  }
+}
+
+/* the two halves. Stacked on a phone (record first: the owner came to READ),
+   side by side once there is room, and only the record scrolls.
+   The preview column is given an explicit band rather than `auto`: the phone
+   mock is a transform-scaled box, so `auto` reads its UNSCALED width and the
+   record ends up squeezed into whatever is left. */
+.ipv-grid { display: grid; gap: var(--sp-4); align-items: start; }
+@media (min-width: 980px) {
+  .ipv-grid {
+    grid-template-columns: minmax(320px, 1fr) minmax(300px, 372px);
+    gap: var(--sp-5);
+  }
+  .ipv-detail {
+    max-height: min(74dvh, 820px);
+    overflow-y: auto;
+    padding-inline-end: var(--sp-2);
+  }
+}
+.ipv-detail { display: flex; flex-direction: column; gap: var(--sp-3); min-width: 0; }
+.ipv-preview { display: flex; flex-direction: column; gap: var(--sp-2); }
+
+/* identity row: photo beside the name, price and state, the way a product
+   record reads. Full width the photo became a banner that pushed the facts
+   below the fold and told the owner nothing extra. */
+.ipv-top { display: flex; gap: var(--sp-3); align-items: flex-start; }
+.ipv-shot { width: 150px; flex: none; }
+.ipv-ident { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: var(--sp-2); }
+@media (min-width: 980px) {
+  .ipv-shot { width: 190px; }
+}
+
+/* the photo: a real button, because it opens the full-size lightbox */
+.ipv-shot-btn {
+  display: block;
+  width: 100%;
+  padding: 0;
+  border: 1px solid var(--border);
+  border-radius: var(--r-lg);
+  overflow: hidden;
+  background: var(--surface-2);
+  cursor: zoom-in;
+  position: relative;
+}
+.ipv-shot-btn img { display: block; width: 100%; aspect-ratio: 1; object-fit: cover; }
+.ipv-thumb-more {
+  width: 44px; height: 44px; flex: none;
+  border: 1px dashed var(--border); border-radius: var(--r-md);
+  display: grid; place-items: center;
+  font-size: var(--fs-xs); color: var(--text-muted);
+}
+.ipv-shot-zoom {
+  position: absolute;
+  inset-block-end: 8px;
+  inset-inline-end: 8px;
+  width: 30px;
+  height: 30px;
+  border-radius: 50%;
+  display: grid;
+  place-items: center;
+  background: color-mix(in srgb, var(--surface) 82%, transparent);
+  border: 1px solid var(--border);
+  backdrop-filter: blur(6px);
+  -webkit-backdrop-filter: blur(6px);
+  color: var(--text);
+}
+.ipv-thumbs { display: flex; gap: 6px; flex-wrap: wrap; padding-top: 6px; }
+.ipv-thumb {
+  width: 44px; height: 44px; padding: 0; flex: none;
+  border: 1px solid var(--border); border-radius: var(--r-md);
+  overflow: hidden; background: var(--surface-2); cursor: zoom-in;
+}
+.ipv-thumb img { width: 100%; height: 100%; object-fit: cover; display: block; }
+
+.ipv-title { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+.ipv-title strong { font-size: var(--fs-xl); line-height: 1.25; }
+.ipv-price { font-size: var(--fs-lg); font-weight: 700; color: var(--brand); }
+.ipv-badges { display: flex; flex-wrap: wrap; gap: 6px; }
+
+/* facts: whatever the item actually has, laid out on one grid so a half-filled
+   dish still reads as a tidy row rather than a ragged list */
+.ipv-facts {
+  display: grid;
+  /* 104px so three fit across the record column at its narrowest and four or
+     more once the window opens up, instead of one tall cell per row */
+  grid-template-columns: repeat(auto-fit, minmax(104px, 1fr));
+  gap: var(--sp-2);
+}
+.ipv-facts:empty { display: none; }
+.ipv-fact {
+  border: 1px solid var(--border);
+  border-radius: var(--r-md);
+  padding: 8px 10px;
+  background: var(--surface-2);
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+.ipv-fact-k { display: inline-flex; align-items: center; gap: 5px; font-size: var(--fs-xs); color: var(--text-muted); }
+.ipv-fact-v { font-size: var(--fs-md); }
+
+.ipv-block { display: flex; flex-direction: column; gap: var(--sp-2); }
+.ipv-block-h {
+  margin: 0;
+  font-size: var(--fs-sm);
+  color: var(--text-muted);
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+.ipv-block-h::after {
+  content: '';
+  flex: 1;
+  height: 1px;
+  background: var(--border);
+}
+.ipv-count {
+  order: 2;
+  font-size: var(--fs-xs);
+  background: var(--surface-2);
+  border: 1px solid var(--border);
+  border-radius: var(--r-pill);
+  padding: 0 7px;
+}
+.ipv-desc { margin: 0; line-height: 1.75; color: var(--text); }
+.ipv-chips { display: flex; flex-wrap: wrap; gap: 6px; }
+.ipv-rows { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 4px; }
+.ipv-rows li {
+  display: flex;
+  justify-content: space-between;
+  gap: var(--sp-3);
+  padding: 7px 10px;
+  border: 1px solid var(--border);
+  border-radius: var(--r-md);
+  background: var(--surface-2);
+}
+.ipv-groups { display: flex; flex-direction: column; gap: var(--sp-3); }
+.ipv-group { display: flex; flex-direction: column; gap: 6px; }
+.ipv-group-h { display: flex; align-items: baseline; gap: 8px; flex-wrap: wrap; }
 
 /* ===== «كما يراه الضيف»: the item-card preview window (ItemPreviewModal) =====
    A phone frame in a centred window. The default .sheet is a full-width bottom

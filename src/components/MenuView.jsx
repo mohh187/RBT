@@ -732,10 +732,26 @@ export default function MenuView({ tenant, tenantId, items, categories, offers =
   useEffect(() => {
     if (!preview || !previewFocus || !previewFocus.itemId || previewFocus.view === 'stage') return undefined
     setViewItem(null); setOpenRect(null)
-    const tm = setTimeout(() => {
-      const el = rootRef.current && rootRef.current.querySelector(`[data-item-id="${previewFocus.itemId}"]`)
-      if (el && el.scrollIntoView) el.scrollIntoView({ block: 'center' })
-    }, 80)
+    // RETRY until the row exists, instead of one shot at 80ms.
+    // The frame announces itself ready the moment PreviewMenu mounts, which is
+    // BEFORE Firestore has delivered the items, so the single attempt queried an
+    // empty list, found nothing, and never looked again: the owner got the TOP
+    // of the menu on first open and the right dish only after switching tabs.
+    // Bounded at ~5s and it returns on the first hit, so it cannot spin. Note
+    // this stays out of the `items` dependency deliberately (see above): a
+    // keystroke in the editor streams a new items array, and re-scrolling on
+    // every one of those is the behaviour the split was written to prevent.
+    let tm = 0
+    let tries = 0
+    const tick = () => {
+      // CSS.escape like the other two call sites in this file: a firestore id is
+      // normally safe, but this selector is the only one that was interpolating raw
+      const el = rootRef.current && rootRef.current.querySelector(`[data-item-id="${CSS.escape(String(previewFocus.itemId))}"]`)
+      if (el && el.scrollIntoView) { el.scrollIntoView({ block: 'center' }); return }
+      tries += 1
+      if (tries < 40) tm = setTimeout(tick, 120)
+    }
+    tm = setTimeout(tick, 80)
     return () => clearTimeout(tm)
   }, [preview, previewFocus?.itemId, previewFocus?.view]) // eslint-disable-line react-hooks/exhaustive-deps
   useEffect(() => {

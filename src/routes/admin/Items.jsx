@@ -55,6 +55,33 @@ import '../../styles/appearance.css'
 // NOTE: none of the composition fields live here. An item nobody has composed
 // must not carry a document full of defaults, so the composer treats an absent
 // key as "default" and only writes what the owner actually moved.
+// How the item list can be ordered. «حسب التصنيف» is the default because a menu
+// is read by section: an owner scanning for a tagine wants every tagine in one
+// place, not scattered through save order. «ترتيبي اليدوي» is kept as its own
+// choice rather than being the default, because it is also the ONLY mode where
+// dragging can persist anything (see `reorderable`).
+const SORTS = [
+  { id: 'category', ar: 'حسب التصنيف', en: 'By category' },
+  { id: 'new', ar: 'المضافة مؤخراً', en: 'Recently added' },
+  { id: 'edited', ar: 'المعدّلة مؤخراً', en: 'Recently edited' },
+  { id: 'name', ar: 'الاسم', en: 'Name' },
+  { id: 'priceUp', ar: 'السعر: من الأقل', en: 'Price: low first' },
+  { id: 'priceDown', ar: 'السعر: من الأعلى', en: 'Price: high first' },
+  { id: 'noPhoto', ar: 'بلا صورة أولاً', en: 'Missing photo first' },
+  { id: 'manual', ar: 'ترتيبي اليدوي', en: 'My manual order' },
+]
+// createdAt / updatedAt are firestore Timestamps, and OLDER items predate both
+// fields entirely. Missing sorts to the far end instead of to «now», which is
+// what a bare `|| 0` on a descending sort would have done.
+const stamp = (v) => {
+  if (!v) return 0
+  if (typeof v.toMillis === 'function') return v.toMillis()
+  if (typeof v.seconds === 'number') return v.seconds * 1000
+  const n = new Date(v).getTime()
+  return Number.isNaN(n) ? 0 : n
+}
+const rank = (map, id) => (map.has(id) ? map.get(id) : Number.MAX_SAFE_INTEGER)
+
 const blank = () => ({
   nameAr: '', nameEn: '', price: '', calories: '', categoryId: '',
   descAr: '', descEn: '', kdsWarning: '', imageUrl: '', images: [], imageStyle: '', hotspots: [], story: null, arStandeeUrl: '', model3dUrl: '', model3dUsdzUrl: '', realHeightCm: '', available: true, availableFrom: '', availableTo: '', countsForLoyalty: true, featured: false, promoNotify: 'default', trackStock: false, stock: '',
@@ -412,6 +439,12 @@ export default function Items() {
   const [cats, setCats] = useState([])
   const [filter, setFilter] = useState('all')
   const [search, setSearch] = useState('')
+  // Remembered per device: an owner who works by «المضافة مؤخراً» should not
+  // have to pick it again every time the page mounts.
+  const [sort, setSort] = useState(() => {
+    try { return localStorage.getItem('ml.items.sort') || 'category' } catch (_) { return 'category' }
+  })
+  useEffect(() => { try { localStorage.setItem('ml.items.sort', sort) } catch (_) { /* private mode */ } }, [sort])
   const [editing, setEditing] = useState(null)
   const [open, setOpen] = useState(false)
   const [previewItem, setPreviewItem] = useState(null)
@@ -482,22 +515,53 @@ export default function Items() {
   // own chip rather than being folded in.
   const soldOutCount = useMemo(() => (items || []).filter((i) => !i.archived && i.available === false).length, [items])
 
+  // Where each category sits in the owner's own category order, so the grouped
+  // sort follows the menu rather than an alphabet.
+  const catRank = useMemo(() => {
+    const m = new Map()
+    ;(cats || []).forEach((c, i) => m.set(c.id, i))
+    return m
+  }, [cats])
+
   const shown = useMemo(() => {
     let list = items || []
     list = filter === 'archived' ? list.filter((i) => i.archived) : list.filter((i) => !i.archived)
     if (filter === 'soldout') list = list.filter((i) => i.available === false)
-    if (filter !== 'all' && filter !== 'archived' && filter !== 'soldout') list = list.filter((i) => i.categoryId === filter)
+    const oneCat = filter !== 'all' && filter !== 'archived' && filter !== 'soldout'
+    if (oneCat) list = list.filter((i) => i.categoryId === filter)
     if (search.trim()) {
       const q = search.trim().toLowerCase()
       list = list.filter((i) => `${i.nameAr} ${i.nameEn}`.toLowerCase().includes(q))
     }
-    return list
-  }, [items, filter, search])
+    if (sort === 'manual') return list
+    // Every sort below is STABLE (guaranteed since ES2019), so items that tie
+    // keep the owner's own drag order rather than shuffling on each render.
+    const arr = [...list]
+    if (sort === 'category') {
+      // The default, and what «الكل» needed: every tagine together, every
+      // tilapia together, in the owner's own category order. A long menu in raw
+      // save order reads as noise, and nobody should switch chips to see one
+      // section whole. An item with NO category sorts last: that is an
+      // oversight, and burying the real menu under it helps nobody.
+      return arr.sort((a, b) => rank(catRank, a.categoryId) - rank(catRank, b.categoryId))
+    }
+    if (sort === 'new') return arr.sort((a, b) => stamp(b.createdAt) - stamp(a.createdAt))
+    if (sort === 'edited') return arr.sort((a, b) => stamp(b.updatedAt) - stamp(a.updatedAt))
+    if (sort === 'name') return arr.sort((a, b) => pickLang(a, 'name', lang).localeCompare(pickLang(b, 'name', lang), lang === 'ar' ? 'ar' : 'en'))
+    if (sort === 'priceUp') return arr.sort((a, b) => (Number(a.price) || 0) - (Number(b.price) || 0))
+    if (sort === 'priceDown') return arr.sort((a, b) => (Number(b.price) || 0) - (Number(a.price) || 0))
+    if (sort === 'noPhoto') return arr.sort((a, b) => (a.imageUrl ? 1 : 0) - (b.imageUrl ? 1 : 0))
+    return arr
+  }, [items, filter, search, sort, catRank, lang])
 
   // Reorder in table view — for the whole menu ('all') OR within one selected
   // category. Not while searching (the visible set isn't the real order then),
   // not in the archive view, and not while bulk-selecting.
-  const reorderable = !search.trim() && filter !== 'archived' && filter !== 'soldout' && !selectMode
+  // …and NOT while a computed sort is on: dragging a row inside a list ordered
+  // by price or by date would write a manual order the view then discards on the
+  // next render, which reads as the drag being ignored. «ترتيبي اليدوي» is the
+  // one mode where a drag means something, so it is the one mode that allows it.
+  const reorderable = !search.trim() && filter !== 'archived' && filter !== 'soldout' && !selectMode && sort === 'manual'
 
   // Reorder a visible list (whole view, one filtered category, or one catalog
   // section) and merge it back into the full items array before persisting.
@@ -812,7 +876,18 @@ export default function Items() {
         </Sheet>
       )}
 
-      <input className="input" placeholder={t('search')} value={search} onChange={(e) => setSearch(e.target.value)} />
+      <div className="row" style={{ gap: 'var(--sp-2)', alignItems: 'center', flexWrap: 'wrap' }}>
+        <input className="input grow" style={{ minWidth: 200 }} placeholder={t('search')} value={search} onChange={(e) => setSearch(e.target.value)} />
+        <select
+          className="input"
+          style={{ width: 'auto', flex: 'none' }}
+          value={sort}
+          onChange={(e) => setSort(e.target.value)}
+          aria-label={lang === 'ar' ? 'ترتيب الأصناف' : 'Sort items'}
+        >
+          {SORTS.map((s) => <option key={s.id} value={s.id}>{lang === 'ar' ? s.ar : s.en}</option>)}
+        </select>
+      </div>
 
       <div className="scroll-x">
         <button className={`chip ${filter === 'all' ? 'active' : ''}`} onClick={() => setFilter('all')}>{t('all')}{Array.isArray(items) ? ` (${items.length})` : ''}</button>
@@ -967,6 +1042,8 @@ export default function Items() {
           item={previewItem}
           slug={tenant?.slug}
           lang={lang}
+          currency={currency}
+          catName={catName}
           onClose={() => setPreviewItem(null)}
           onEdit={openEdit}
         />
