@@ -312,6 +312,30 @@ function AdminHome() {
 // EMAIL entry deliberately keeps funnelling through /admin, which lands
 // operational staff on the PORTAL — that's the asked-for split. This only
 // picks the FIRST screen; everyone can still navigate anywhere their caps allow.
+// THE PIN LANDING, DECIDED OUTSIDE THE SHELL THAT DIES.
+// PinLock cannot navigate after a successful entry: the session swap unmounts
+// the whole admin/cashier shell it lives in before its own code resumes, and a
+// navigate() from an unmounted component is silently dropped. So it leaves a
+// marker instead, and this component — mounted at the App root, so it survives
+// every swap and remount — acts on it the moment auth settles.
+// It is deliberately blind to WHERE the app currently is: the staffer who just
+// entered a PIN belongs on their own screen whatever page the last person left
+// open, which is the whole bug this replaces.
+function PinRedirect() {
+  const { loading } = useAuth()
+  const navigate = useNavigate()
+  const { pathname } = useLocation()
+  useEffect(() => {
+    if (loading) return
+    let flag = null
+    try { flag = sessionStorage.getItem('ml.pin.go') } catch (_) { /* private mode */ }
+    if (!flag) return
+    try { sessionStorage.removeItem('ml.pin.go') } catch (_) { /* ignore */ }
+    if (pathname !== '/go/pin') navigate('/go/pin', { replace: true })
+  }, [loading, pathname, navigate])
+  return null
+}
+
 function PinHome() {
   const { role, tenant, loading } = useAuth()
   if (loading) return <FullSpinner />
@@ -410,6 +434,7 @@ export default function App() {
 
   return (
     <>
+      <PinRedirect />
       <OfflineBanner />
       <UploadProgress />
       <LiquidFilters />

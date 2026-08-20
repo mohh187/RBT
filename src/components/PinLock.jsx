@@ -126,14 +126,25 @@ export default function PinLock({ tenant, tenantId, demo = false, standalone = f
       setOk(true)
       setOkName(res.name || '')
       vibrate(30)
-      // ROLE ROUTING (owner decision 2026-08-18): a real PIN ENTRY — shift
-      // start, or the device handed to a DIFFERENT staffer — goes to that
-      // role's working screen via /go/pin (waiter → tables, cashier → POS,
-      // kitchen → KDS). A same-user idle re-unlock stays where they were.
-      // Navigate NOW, not inside the timeout: a different-user swap remounts
-      // the tree and an unmounted component's deferred navigate is a no-op.
-      const swapped = !!(res.uid && user?.uid && res.uid !== user.uid)
-      if (!demo && !standalone && (swapped || !relock.current)) navigate('/go/pin', { replace: true })
+      // ROLE ROUTING (owner decision 2026-08-18): a real PIN ENTRY, whether a
+      // shift start or the device handed to a DIFFERENT staffer, goes to that
+      // role's own working screen (cashier to the POS, kitchen to the KDS,
+      // everyone else to the portal). A same-user idle resume stays put.
+      //
+      // WHY A FLAG AND NOT navigate().
+      // pinLogin has ALREADY swapped the Firebase session by the time we get
+      // here (it awaits signInWithCustomToken), so onAuthStateChanged has fired,
+      // `loading` is true, RequireAuth is showing its spinner, and the admin
+      // shell — with this very PinLock inside it — is unmounted. navigate() from
+      // an unmounted component does nothing at all, which is exactly why a
+      // waiter who PINned in while the screen sat on /admin STAYED on /admin.
+      // A sessionStorage marker survives that teardown; PinRedirect in App.jsx
+      // reads it once auth settles and sends them to their own screen.
+      // Same-user idle resume sets nothing: that staffer stays where they were.
+      const sameUser = !!(res.uid && user?.uid && res.uid === user.uid)
+      if (!demo && !standalone && !(sameUser && relock.current)) {
+        try { sessionStorage.setItem('ml.pin.go', '1') } catch (_) { /* private mode */ }
+      }
       // Different-user PINs swap the Firebase session (auth.pinLogin) and the
       // whole tree remounts under the loading gate; same-user PINs just lift
       // this overlay. Either way the unlock markers are already stamped.
