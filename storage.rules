@@ -30,9 +30,22 @@ service firebase.storage {
     }
 
     // Cross-service Firestore lookups: is the caller staff of this tenant, or a platform admin?
+    // MIRRORS isMember IN firestore.rules. Closing the suspended-staffer hole on
+    // the database alone left the media wide open: the same fired employee who
+    // could no longer read an order could still DELETE every dish photo, every
+    // logo and every signage video in the venue, because this helper only ever
+    // asked which tenant their users doc names.
+    // A MISSING staff doc stays allowed for the same reason it does there: it is
+    // the first-login bootstrap state and the state of venues predating the
+    // `active` field, and a hard requirement here would lock out new owners.
+    function staffActive(tid) {
+      return !firestore.exists(/databases/(default)/documents/tenants/$(tid)/staff/$(request.auth.uid))
+        || firestore.get(/databases/(default)/documents/tenants/$(tid)/staff/$(request.auth.uid)).data.get('active', true) != false;
+    }
     function isTenantStaff(tid) {
       return request.auth != null
-        && firestore.get(/databases/(default)/documents/users/$(request.auth.uid)).data.tenantId == tid;
+        && firestore.get(/databases/(default)/documents/users/$(request.auth.uid)).data.tenantId == tid
+        && staffActive(tid);
     }
     function isPlatformAdmin() {
       return request.auth != null
