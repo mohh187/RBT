@@ -1323,7 +1323,10 @@ export default function Settings() {
     if (!file) return
     setHdrBusy(true)
     try {
-      const small = await shrinkImage(file, 1600, 0.85)
+      // 1440 not 1600, quality 0.8: the header spans the screen width, and it is
+      // fetched BEFORE the guest sees a single dish, so every kilobyte in it
+      // delays first paint on the highest-traffic screen in the product.
+      const small = await shrinkImage(file, 1200, 0.75)
       const url = await uploadImage(tenantId, small, 'branding')
       await writeHeader({ url, mode: 'image' })
     } catch (_) { toast.error(ar ? 'تعذّر رفع الصورة (فعّل Storage)' : 'Upload failed (enable Storage)') } finally { setHdrBusy(false) }
@@ -1810,7 +1813,9 @@ export default function Settings() {
     if (!file) return
     setUploading(kind)
     try {
-      const small = await shrinkImage(file, kind === 'watermark' ? 600 : 1600, 0.85)
+      // الخلفية زخرفية خلف المحتوى وتُعرض بشفافية، فلا تحتاج دقة الترويسة.
+      // كانت 1600 بجودة 0.85 فتخرج بنحو 468 كيلوبايت وتُحمَّل قبل أول ظهور.
+      const small = await shrinkImage(file, kind === 'watermark' ? 600 : kind === 'banner' ? 1200 : 1080, kind === 'watermark' ? 0.8 : 0.72)
       const url = await uploadImage(tenantId, small, 'branding')
       const patch = kind === 'watermark' ? { watermarkUrl: url } : kind === 'banner' ? { bannerUrl: url } : kind === 'immersive' ? { immersiveBgUrl: url } : { bgImageUrl: url }
       if (kind === 'watermark') setWatermarkUrl(url)
