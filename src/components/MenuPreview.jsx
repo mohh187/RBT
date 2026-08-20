@@ -13,7 +13,11 @@ import { useEffect, useRef } from 'react'
 //   - previewTheme: optional 'light'|'dark' pin for the frame's data-theme. TOP-LEVEL
 //     sibling by contract — never smuggled inside appearance (it is not a tenant field).
 //   Consumers that post only { appearance } (the studio cards) keep working unchanged.
-export default function MenuPreview({ slug, override, mode = 'mobile', draftItem = null, focus = null, previewTheme = null }) {
+//   - scale: optional override for the CSS transform scale. The defaults below
+//     are sized for the editor's narrow side column; a centered modal wants the
+//     frame much bigger, and the INNER viewport must stay 390x844 either way or
+//     the menu would stop laying out like a phone, which is the entire point.
+export default function MenuPreview({ slug, override, mode = 'mobile', draftItem = null, focus = null, previewTheme = null, scale: scaleProp = 0 }) {
   const iframeRef = useRef(null)
   const readyRef = useRef(false)
 
@@ -45,7 +49,7 @@ export default function MenuPreview({ slug, override, mode = 'mobile', draftItem
     // triggering all desktop styling overrides, while fitting perfectly inside the preview column.
     const innerW = 1080
     const innerH = 1100
-    const scale = 0.36
+    const scale = scaleProp || 0.36
     const outerW = innerW * scale
     const outerH = innerH * scale
 
@@ -90,7 +94,7 @@ export default function MenuPreview({ slug, override, mode = 'mobile', draftItem
     // iPad: 768 x 1024, scaled down by 0.47 -> 361 x 481, plus 12px bezel -> 385 x 505
     const innerW = 768
     const innerH = 1024
-    const scale = 0.47
+    const scale = scaleProp || 0.47
     const bezel = 12
     const outerW = (innerW + bezel * 2) * scale
     const outerH = (innerH + bezel * 2) * scale
@@ -136,7 +140,7 @@ export default function MenuPreview({ slug, override, mode = 'mobile', draftItem
   // default: 'mobile' (iPhone 12 Pro: 390 x 844, scaled down by 0.56 -> 218 x 472, plus 10px bezel -> 238 x 492)
   const innerW = 390
   const innerH = 844
-  const scale = 0.56
+  const scale = scaleProp || 0.56
   const bezel = 10
   const outerW = (innerW + bezel * 2) * scale
   const outerH = (innerH + bezel * 2) * scale

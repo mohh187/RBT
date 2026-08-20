@@ -19,9 +19,7 @@ import ImageCropper from '../../components/ImageCropper.jsx'
 import RecipeEditor from '../../components/RecipeEditor.jsx'
 import { Price } from '../../components/Riyal.jsx'
 import Icon from '../../components/Icon.jsx'
-import { ItemSheet } from '../../components/MenuView.jsx'
-import { EditorialItemStage } from '../../components/menuThemes/EditorialLayout.jsx'
-import { applySkin, resolveSkin } from '../../lib/skins.js'
+import ItemPreviewModal from '../../components/ItemPreviewModal.jsx'
 import ModelStudio from '../../components/ModelStudio.jsx'
 import DishHotspots from '../../components/DishHotspots.jsx'
 import MediaLibrary from '../../components/MediaLibrary.jsx'
@@ -446,44 +444,18 @@ export default function Items() {
     return () => { u1(); u2() }
   }, [tenantId])
 
-  // ---- item preview: the SAME window a diner opens --------------------------
-  // Layout comes off the MENU surface with the menu's own fallback chain (see
-  // MenuView's itemDetail). Reading tenant.skin.overrides alone was wrong twice:
-  // it misses a venue that themed the menu surface separately, and it has no
-  // fallback, so an editorial venue that never set detailLayout got the plain
-  // sheet here while its guests got the full-screen stage.
-  const menuSkin = resolveSkin(tenant, 'menu')
-  const menuLayout = menuSkin?.layout?.menuLayout || 'list'
-  const previewDetail = menuSkin?.detailLayout
-    || (menuLayout === 'editorial' ? 'editorial' : ['plates', 'gallery', 'spotlight', 'oceanart'].includes(menuLayout) ? 'immersive' : 'sheet')
-  const menuHidden = menuSkin?.hidden || []
-  const previewOnly = () => toast.info(lang === 'ar' ? 'هذه معاينة فقط لعرض الصنف من لوحة الإدارة.' : 'This is a details preview only.')
-
-  // …and the same COLOURS. Both windows portal into <body>, and in the admin
-  // <body> carries the back-office system theme, whose palette (glass is light)
-  // wins over anything the skin writes on <html> — that is what painted the
-  // preview white. So the menu skin goes on while the preview is up and the
-  // admin's own carriers come off, restored to exactly what was there on close,
-  // on unmount and whenever the tenant changes.
-  const previewOpen = !!previewItem
-  useEffect(() => {
-    if (!previewOpen) return undefined
-    const html = document.documentElement
-    const { body } = document
-    const styleKeys = ['--brand-base', '--on-brand', '--accent-base', '--on-accent', '--font-body', '--font-display']
-    const htmlKeys = ['data-shape', 'data-skin', 'data-theme']
-    const bodyKeys = ['data-systheme', 'data-sysvariant', 'data-custheme', 'data-theme']
-    const style0 = styleKeys.map((k) => [k, html.style.getPropertyValue(k)])
-    const html0 = htmlKeys.map((k) => [k, html.getAttribute(k)])
-    const body0 = bodyKeys.map((k) => [k, body.getAttribute(k)])
-    bodyKeys.forEach((k) => body.removeAttribute(k))
-    applySkin(resolveSkin(tenant, 'menu'), { applyMode: true })
-    return () => {
-      style0.forEach(([k, v]) => (v ? html.style.setProperty(k, v) : html.style.removeProperty(k)))
-      html0.forEach(([k, v]) => (v === null ? html.removeAttribute(k) : html.setAttribute(k, v)))
-      body0.forEach(([k, v]) => (v === null ? body.removeAttribute(k) : body.setAttribute(k, v)))
-    }
-  }, [previewOpen, tenant])
+  // ---- item preview: what the GUEST sees, in a phone -------------------------
+  // Tapping a card opens ItemPreviewModal, which runs the real menu inside an
+  // iframe at a real 390x844 viewport (see the component for why).
+  //
+  // What used to be here instead: EditorialItemStage / ItemSheet rendered
+  // straight into the admin page, plus the layout guesswork to pick between them
+  // and ~20 lines that swapped the menu skin onto <html> and stripped the back
+  // office's own theme carriers off <body> for as long as the preview was up,
+  // because those guest windows portal into the admin's document and the admin
+  // palette was painting them white. None of that is needed once the preview
+  // lives in its own document: it cannot inherit the back office, and it cannot
+  // guess the layout wrong because it does not choose one.
 
   // «كم صنفاً عندي؟» — the headline total plus a live count on every category
   // chip, so the owner audits coverage at a glance without opening anything.
@@ -990,32 +962,15 @@ export default function Items() {
         />
       )}
 
-      {previewItem && (previewDetail === 'editorial' ? (
-        <EditorialItemStage
+      {previewItem && (
+        <ItemPreviewModal
           item={previewItem}
-          tenant={tenant}
-          currency={currency}
-          originRect={null}
-          allItems={(items || []).filter((i) => !i.archived && i.active !== false)}
-          hidePrep={menuHidden.includes('prepTime')}
-          hideServes={menuHidden.includes('serves')}
-          onOpenItem={(p) => setPreviewItem(p)}
-          // false = «لم تُضف»: the pairing chips flash a ✓ off a truthy return
-          onQuickAdd={() => { previewOnly(); return false }}
+          slug={tenant?.slug}
+          lang={lang}
           onClose={() => setPreviewItem(null)}
-          onAdd={previewOnly}
+          onEdit={openEdit}
         />
-      ) : (
-        <ItemSheet
-          item={previewItem}
-          tenant={tenant}
-          currency={currency}
-          tenantId={tenantId}
-          detail={previewDetail}
-          onClose={() => setPreviewItem(null)}
-          onAdd={previewOnly}
-        />
-      ))}
+      )}
     </div>
   )
 }

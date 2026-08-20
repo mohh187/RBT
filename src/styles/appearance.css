@@ -1554,3 +1554,69 @@
 @media (prefers-reduced-motion: reduce) {
   .ilp-drawer { transition: none; }
 }
+
+/* ===== «كما يراه الضيف»: the item-card preview window (ItemPreviewModal) =====
+   A phone frame inside a centred window. The default .sheet is a full-width
+   bottom sheet, which is right for a form on a handset and wrong for a 410px
+   device mock on a 1920px monitor, where the frame ends up marooned in an ocean
+   of empty surface. So on anything wider than a phone this one detaches from
+   the bottom edge and becomes a floating window just wide enough for the mock
+   and its margins. */
+.itemprev-tabs {
+  display: flex;
+  gap: 6px;
+  justify-content: center;
+  padding-bottom: var(--sp-2);
+}
+.itemprev-frame {
+  display: flex;
+  justify-content: center;
+  /* the frame is a fixed pixel box scaled by transform, and nothing here may
+     scroll: the SCALE adapts to the screen instead (fitScale in the component),
+     so the window never grows a scrollbar of its own */
+  overflow: hidden;
+}
+@media (min-width: 560px) {
+  .sheet.itemprev {
+    inset-inline: auto;
+    inset-inline-start: 50%;
+    margin-inline-start: calc(min(480px, 94vw) / -2);
+    width: min(480px, 94vw);
+    bottom: max(var(--sp-4), 3dvh);
+    max-height: 94dvh;
+    border-radius: var(--r-xl);
+    border: 1px solid var(--border);
+  }
+}
+
+/* ===== «كما يراه الضيف»: the item-card preview window (ItemPreviewModal) =====
+   A phone frame in a centred window. The default .sheet is a full-width bottom
+   sheet, which is right for a form on a handset and wrong for a 410px device
+   mock on a 1920px monitor: the frame ended up marooned in an ocean of surface.
+   So on anything wider than a phone this one detaches from the bottom edge and
+   becomes a floating window just wide enough for the mock plus its margins. */
+.itemprev-tabs {
+  display: flex;
+  gap: 6px;
+  justify-content: center;
+  padding-bottom: var(--sp-2);
+}
+.itemprev-frame {
+  display: flex;
+  justify-content: center;
+  /* the frame is a fixed pixel box scaled by transform; nothing here may scroll,
+     the scale is what adapts (see fitScale in ItemPreviewModal) */
+  overflow: hidden;
+}
+@media (min-width: 560px) {
+  .sheet.itemprev {
+    inset-inline: auto;
+    inset-inline-start: 50%;
+    margin-inline-start: calc(min(480px, 94vw) / -2);
+    width: min(480px, 94vw);
+    bottom: max(var(--sp-4), 3dvh);
+    max-height: 94dvh;
+    border-radius: var(--r-xl);
+    border: 1px solid var(--border);
+  }
+}
