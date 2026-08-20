@@ -1777,7 +1777,13 @@ function EdtSection({ it, idx, catLabel, currency, offers, lang, t, onOpen, allI
     const io = new IntersectionObserver((entries) => entries.forEach((e) => setInview(e.isIntersecting)), { threshold: 0.35 })
     // A wide margin so a dish's media is ready ~1.5 screens before it appears
     // and released ~1.5 screens after it leaves — the swap never shows on screen.
-    const nearIo = new IntersectionObserver((entries) => entries.forEach((e) => setNear(e.isIntersecting)), { rootMargin: '150% 0px' })
+    // …but 1.5 screens in EITHER direction is three viewports of dish photos held
+    // at once, and on a phone that is the difference between a menu and a killed
+    // tab. preferLightweight() (deviceCaps.js) is true on every iPhone — it reads
+    // `deviceMemory === 0 && pointer: coarse`, since only Chromium reports memory —
+    // so the band there is one screen each way and the entrance still lands ahead
+    // of a normal scroll. Desktop and Android keep the wide, safe margin.
+    const nearIo = new IntersectionObserver((entries) => entries.forEach((e) => setNear(e.isIntersecting)), { rootMargin: preferLightweight() ? '60% 0px' : '150% 0px' })
     io.observe(el)
     nearIo.observe(el)
     return () => { io.disconnect(); nearIo.disconnect() }
@@ -1947,7 +1953,15 @@ function EdtSection({ it, idx, catLabel, currency, offers, lang, t, onOpen, allI
                 onClick={() => onOpen(p, null)} aria-label={`${lang === 'ar' ? 'اعرض الطبق' : 'View dish'} ${label}`}
               >
                 <span className="edt-lpair-media">
-                  {p.imageUrl ? <img src={p.imageUrl} alt="" loading="lazy" decoding="async" /> : <Icon name="coffee" size={16} />}
+                  {/* GATED ON `near` like every other image in the section, and it is
+                      the one that most needed it: this chip is 34x34 but it points at
+                      the paired dish's FULL photo, and it lives outside the media
+                      block, so it used to mount on section one and never unmount.
+                      A menu whose dishes pair with each other therefore accumulated
+                      one full-size decode per pair for the whole visit. The fallback
+                      is the same fixed 34x34 grid box (index.css .edt-lpair-media),
+                      so nothing moves when it swaps. */}
+                  {near && p.imageUrl ? <img src={p.imageUrl} alt="" loading="lazy" decoding="async" /> : <Icon name="coffee" size={16} />}
                 </span>
                 <span className="edt-lpair-txt">
                   <b>{label}</b>

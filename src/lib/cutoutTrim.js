@@ -95,10 +95,33 @@ export async function anchorCutout(input, { aspect = 4 / 3, anchor = 'bottom', w
       dx = Math.round((W - bw) / 2)
       dy = H - bh // zero pixels under the base — this line IS the fix
     }
+    // Never manufacture a canvas BIGGER than the photograph it came from.
+    // The bottom-seat branch divides the bbox width by a fraction as small as
+    // 0.5, so a dish occupying half its frame yields a canvas twice the source
+    // width: 1600x1200 in, 2166x1625 out. That matters more than it sounds,
+    // because the result is encoded as PNG (below) to keep the transparency,
+    // and PNG has no scaled-decode path — the guest's phone must materialise
+    // every one of those 14 MB to paint a dish 443 px wide. Upscaling invents
+    // no detail either way, so the cap costs nothing visible.
+    let dw = bw
+    let dh = bh
+    const capW = Math.max(w, h)
+    if (W > capW) {
+      const k = capW / W
+      W = Math.round(W * k)
+      H = Math.round(H * k)
+      dw = Math.round(bw * k)
+      dh = Math.round(bh * k)
+      // re-derive the seat from the scaled box rather than scaling the offsets:
+      // rounding twice could leave a 1px gap under the base, and zero pixels
+      // under the base is the whole point of the bottom anchor.
+      dx = Math.round((W - dw) / 2)
+      dy = anchor === 'center' ? Math.round((H - dh) / 2) : H - dh
+    }
     const out = document.createElement('canvas')
     out.width = W
     out.height = H
-    out.getContext('2d').drawImage(src, minX, minY, bw, bh, dx, dy, bw, bh)
+    out.getContext('2d').drawImage(src, minX, minY, bw, bh, dx, dy, dw, dh)
     const blob = await new Promise((resolve, reject) => {
       out.toBlob((b) => (b ? resolve(b) : reject(new Error('encode'))), 'image/png')
     })

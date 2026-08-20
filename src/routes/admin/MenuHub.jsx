@@ -3,6 +3,7 @@ import SectionHub from '../../components/SectionHub.jsx'
 import Icon from '../../components/Icon.jsx'
 import { useI18n } from '../../lib/i18n.jsx'
 import { CAP } from '../../lib/permissions.js'
+import CompressMenuImages from '../../components/CompressMenuImages.jsx'
 import Items from './Items.jsx'
 import Categories from './Categories.jsx'
 import Offers from './Offers.jsx'
@@ -31,6 +32,7 @@ export default function MenuHub() {
           <Icon name="print" size={14} />
           <span>{ar ? 'تصدير PDF للطباعة' : 'Export print PDF'}</span>
         </Link>
+        <CompressMenuImages />
       </div>
       <SectionHub tabs={[
         { id: 'items', icon: 'menu', label: ar ? 'الأصناف' : 'Items', cap: CAP.MANAGE_MENU, render: () => <Items /> },

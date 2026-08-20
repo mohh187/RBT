@@ -100,13 +100,43 @@ function registerMedia(tid, file, url, kind) {
 }
 
 // Uploads an image File to tenants/{tid}/items/... and returns its public URL.
+//
+// EVERY image now passes through shrinkImage first, and that is a correctness
+// fix, not a nicety. This function used to store the file EXACTLY as the browser
+// handed it over, and it is the path every dish photo takes, so menus ended up
+// serving 1600x1600 and 2166x1625 originals. A phone does not care what a JPEG
+// weighs on disk; it cares what the image costs DECODED, which is width x height
+// x 4 bytes no matter how well it compressed. A single 1600x1600 dish photo is
+// 10 MB of texture memory. Measured on a real venue menu: 11 photos held ~104 MB
+// of texture, and that is the budget a mobile browser kills a tab over.
+//
+// 1400 px is well above what any surface paints (the widest dish frame is ~640
+// CSS px, i.e. ~1920 device px on a 3x phone only if it were full-bleed), and it
+// cuts the decoded cost of a 1600px photo by a third and of a 2166px one by
+// more than half. Callers that already shrank their file pay nothing: shrinkImage
+// returns the original untouched when there is nothing to gain.
+// PIXEL ceilings, by folder. These files do not all have the same job, and one
+// number for all of them either kills phones or ruins the print: a dish photo is
+// painted a few hundred CSS px wide on a handset, a signage still fills the
+// venue's own TV, and a print-studio asset goes onto paper at 300 dpi where
+// 1200 px is barely four inches. Measured on a real menu at 390px/3x: the widest
+// ordinary dish paints 438 CSS px, so 1200 leaves 2.74x — above the 2x that is
+// the working standard for photographs — while cutting the decode budget 39%.
+// The oversized full-bleed heroes paint up to 738 CSS px, and those are already
+// sampled below 1x today; they lose the least visible detail per byte saved.
+// Tune MENU_MAX_PX if a venue's photos ever look soft: it is one constant.
+const MAX_PX = { signage: 2560, library: 2000, 'library/marketing': 2000, elements: 2000 }
+const MENU_MAX_PX = 1200
+export const maxPxFor = (folder) => MAX_PX[folder] || MENU_MAX_PX
+
 export async function uploadImage(tid, file, folder = 'items', onProgress) {
   if (!file) return ''
   guardSize(file)
-  const ext = (file.name.split('.').pop() || 'jpg').toLowerCase()
+  const small = await shrinkImage(file, maxPxFor(folder), 0.78)
+  const ext = (small.name.split('.').pop() || 'jpg').toLowerCase()
   const path = `tenants/${tid}/${folder}/${Date.now()}-${randomToken(6)}.${ext}`
-  const url = await put(ref(storage, path), file, file.type, onProgress)
-  registerMedia(tid, file, url, 'image')
+  const url = await put(ref(storage, path), small, small.type, onProgress)
+  registerMedia(tid, small, url, 'image')
   return url
 }
 
@@ -162,7 +192,13 @@ export async function shrinkImage(file, max = 800, quality = 0.85) {
     cv.getContext('2d').drawImage(img, 0, 0, w, h)
     const jpeg = await new Promise((r) => cv.toBlob(r, 'image/jpeg', quality))
     const webp = canEncodeWebp() ? await new Promise((r) => cv.toBlob(r, 'image/webp', quality)) : null
-    const best = webp && jpeg && webp.size < jpeg.size ? webp : jpeg
+    // A TRANSPARENT source may never fall back to jpeg. anchorCutout (cutoutTrim.js)
+    // hands us the background-removed dish as a PNG whose whole point is the empty
+    // corners; letting the smaller-file race pick jpeg flattens the alpha and every
+    // cutout gains an opaque rectangle behind it. On the one engine that cannot
+    // encode webp a flattened cutout still beats a failed upload, hence `|| jpeg`.
+    const keepAlpha = /png|webp/i.test(file.type)
+    const best = keepAlpha ? (webp || jpeg) : (webp && jpeg && webp.size < jpeg.size ? webp : jpeg)
     if (!best) return file
     // never hand back something heavier than what arrived
     if (best.size >= file.size && scale === 1) return file

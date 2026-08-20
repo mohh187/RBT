@@ -91,21 +91,32 @@
       //     the two above for page pinch (user-scalable=no has been ignored
       //     since iOS 10), and any Android case the meta misses.
       //
-      // CAPTURE phase on window, so no component can swallow the event first,
-      // and a two-finger touchmove is cancelled outright, which is the one
-      // check that works on every engine.
+      // CAPTURE phase on window, so no component can swallow the event first.
+      //
+      // WHY THE SECOND FINGER STILL ZOOMED WHILE SCROLLING («عند التمرير يتفعل
+      // التكبير»): the guard used to live on touchmove alone, and once a pan has
+      // been handed to the scrolling machinery every later touchmove arrives with
+      // cancelable === false — on which preventDefault() is a specified silent
+      // no-op. Tested from rest the guard passed; tested mid-scroll it could
+      // never have fired. So the pinch is caught at touchSTART, the moment the
+      // second finger lands and before the gesture is recognised, and every
+      // preventDefault is now guarded by e.cancelable so a dead call is never
+      // mistaken for a working one.
       //
       // The photo lightbox is the single exception the owner asked for, and it
       // no longer needs native zoom: GalleryZoom pinches its own image with
       // pointer events, so nothing here has to let a gesture through.
       (function () {
-        var stop = function (e) { e.preventDefault(); };
+        var stop = function (e) { if (e.cancelable) e.preventDefault(); };
         ['gesturestart', 'gesturechange', 'gestureend'].forEach(function (ev) {
           window.addEventListener(ev, stop, { passive: false, capture: true });
         });
-        window.addEventListener('touchmove', function (e) {
-          if (e.touches && e.touches.length > 1) e.preventDefault();
-        }, { passive: false, capture: true });
+        var multi = function (e) {
+          if (!e.touches || e.touches.length < 2 || !e.cancelable) return;
+          e.preventDefault();
+        };
+        window.addEventListener('touchstart', multi, { passive: false, capture: true });
+        window.addEventListener('touchmove', multi, { passive: false, capture: true });
         // Safari also zooms on a double-tap even with touch-action set; a second
         // tap inside 300 ms is not a legitimate interaction anywhere in this app.
         var lastTap = 0;
