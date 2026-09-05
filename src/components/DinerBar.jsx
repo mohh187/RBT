@@ -16,39 +16,52 @@ export default function DinerBar({ tenant, right }) {
   const { toggleLang, toggleTheme, theme, lang } = useI18n()
   const head = resolveSkin(tenant, 'menu')?.layout?.header || 'classic'
   const hd = resolveMenuHeader(tenant)
+  const langPos = hd.langPos || hd.controlsPos || 'header-end'
+  const themePos = hd.themePos || hd.controlsPos || 'header-end'
   // Over a custom background/banner the header controls need a readable backing.
   const overBg = !!(tenant?.bgImageUrl || tenant?.bgVideoUrl || tenant?.bgGradient || tenant?.bannerUrl)
 
-  // menuChrome reaches the bar here only for its custom uploaded ICONS — the
-  // button FACES ride body-level --mch-* vars stamped by ChromeSkin, and the
-  // .db-lang / .db-theme classes below are the hooks its CSS half targets
-  // (body[data-mch-lang] .icon-btn.db-lang, same in the floating variant).
   const mch = resolveChrome(tenant)
   const langIcon = mch?.elements?.langBtn?.icon || ''
   const themeIcon = mch?.elements?.themeBtn?.icon || ''
 
+  const getBtnStyle = (ox, oy) => (ox || oy ? { transform: `translate(${ox || 0}px, ${oy || 0}px)`, position: 'relative', zIndex: 120 } : undefined)
+
   const langBtn = hd.show.lang
-    ? <button className="icon-btn db-lang" onClick={toggleLang} aria-label="language" style={{ fontWeight: 800, fontSize: 13 }}>{langIcon ? <img className="mch-icon" src={langIcon} alt="" /> : (lang === 'ar' ? 'EN' : 'ع')}</button>
+    ? <button className="icon-btn db-lang" onClick={toggleLang} aria-label="language" style={{ fontWeight: 800, fontSize: 13, ...getBtnStyle(hd.langOffsetX, hd.langOffsetY) }}>{langIcon ? <img className="mch-icon" src={langIcon} alt="" /> : (lang === 'ar' ? 'EN' : 'ع')}</button>
     : null
   const themeBtn = hd.show.theme
-    ? <button className="icon-btn db-theme" onClick={toggleTheme} aria-label="theme">{themeIcon ? <img className="mch-icon" src={themeIcon} alt="" /> : <Icon name={theme === 'dark' ? 'sun' : 'moon'} />}</button>
+    ? <button className="icon-btn db-theme" onClick={toggleTheme} aria-label="theme" style={getBtnStyle(hd.themeOffsetX, hd.themeOffsetY)}>{themeIcon ? <img className="mch-icon" src={themeIcon} alt="" /> : <Icon name={theme === 'dark' ? 'sun' : 'moon'} />}</button>
     : null
+
+  const isLangFloat = langPos.startsWith('float-') || langPos === 'custom' || langPos === 'under-header'
+  const isLangStart = langPos === 'header-start'
+  const isLangEnd = langPos === 'header-end'
+
+  const isThemeFloat = themePos.startsWith('float-') || themePos === 'custom' || themePos === 'under-header'
+  const isThemeStart = themePos === 'header-start'
+  const isThemeEnd = themePos === 'header-end'
 
   // No-header style: drop the bar, keep floating controls so language/theme still work.
   if (head === 'none') {
     return (
-      <div className="db-floating">
-        {right}
-        {langBtn}
-        {themeBtn}
-      </div>
+      <>
+        {right && <div className="db-floating db-float-top-end">{right}</div>}
+        {langBtn && isLangFloat && (
+          <div className={`db-floating-item db-floating db-${langPos}`}>
+            {langBtn}
+          </div>
+        )}
+        {themeBtn && isThemeFloat && (
+          <div className={`db-floating-item db-floating db-${themePos}`}>
+            {themeBtn}
+          </div>
+        )}
+      </>
     )
   }
 
   const img = hd.mode === 'image'
-  // The header shadow dial rides the bar (--hd-sh) because .app-bar-img exists
-  // for every theme; the resolver runs only when the image face is actually on
-  // (dead work on every other header render otherwise).
   const sh = img ? resolveShadows(tenant) : null
   const imgVars = img ? {
     '--hd-img': `url("${hd.url.replace(/["\\]/g, '')}")`,
@@ -59,23 +72,43 @@ export default function DinerBar({ tenant, right }) {
   } : undefined
 
   return (
-    <header className={`app-bar${overBg ? ' app-bar-overbg' : ''}${img ? ' app-bar-img' : ''}`} data-header={head} style={imgVars}>
-      <span className="db-brand">
-        {hd.show.logo ? (
-          tenant?.logoUrl ? (
-            <img src={tenant.logoUrl} alt="" style={{ width: 30, height: 30, borderRadius: '50%', objectFit: 'cover' }} />
-          ) : (
-            <span className="dot" style={{ width: 28, height: 28, borderRadius: 9, background: 'var(--brand)', color: 'var(--on-brand)', display: 'grid', placeItems: 'center' }}>
-              <Icon name="coffee" size={16} />
-            </span>
-          )
-        ) : null}
-        {hd.show.name ? <strong>{tenant?.name || 'RBT360'}</strong> : null}
-      </span>
-      <div className="grow" />
-      {right}
-      {langBtn}
-      {themeBtn}
-    </header>
+    <>
+      <header className={`app-bar${overBg ? ' app-bar-overbg' : ''}${img ? ' app-bar-img' : ''}`} data-header={head} style={imgVars}>
+        {(isLangStart || isThemeStart) && (
+          <div className="row" style={{ gap: 4, marginInlineEnd: 8 }}>
+            {isLangStart && langBtn}
+            {isThemeStart && themeBtn}
+          </div>
+        )}
+        <span className="db-brand">
+          {hd.show.logo ? (
+            tenant?.logoUrl ? (
+              <img src={tenant.logoUrl} alt="" style={{ width: 30, height: 30, borderRadius: '50%', objectFit: 'cover' }} />
+            ) : (
+              <span className="dot" style={{ width: 28, height: 28, borderRadius: 9, background: 'var(--brand)', color: 'var(--on-brand)', display: 'grid', placeItems: 'center' }}>
+                <Icon name="coffee" size={16} />
+              </span>
+            )
+          ) : null}
+          {hd.show.name ? <strong>{tenant?.name || 'RBT360'}</strong> : null}
+        </span>
+        <div className="grow" />
+        {right}
+        {isLangEnd && langBtn}
+        {isThemeEnd && themeBtn}
+      </header>
+
+      {/* Floating buttons rendered with individual positions and offsets */}
+      {isLangFloat && langBtn && (
+        <div className={`db-floating-item db-floating db-${langPos}`}>
+          {langBtn}
+        </div>
+      )}
+      {isThemeFloat && themeBtn && (
+        <div className={`db-floating-item db-floating db-${themePos}`}>
+          {themeBtn}
+        </div>
+      )}
+    </>
   )
 }

@@ -416,20 +416,32 @@ function PlanTab({ tid, tenant, toast, toggleActive, toggling }) {
   const [savingNote, setSavingNote] = useState(false)
   const [savingReason, setSavingReason] = useState(false)
 
-  // Writes send ONLY the changed keys.
+  // Keep local state in sync if tenant document reloads or updates
+  useEffect(() => {
+    setPlan(tenant.plan || 'enterprise')
+    setPlanStatus(tenant.planStatus || 'active')
+    setExpiry(toDateInput(tenant.planExpiresAt))
+    setFeatures(tenant.features || {})
+    setAiDaily(String(Number(tenant.aiLimits?.daily) || 60))
+    setAiMonthly(String(Number(tenant.aiLimits?.monthly) || 900))
+    setAiExtra(String(Number(tenant.aiExtra) || 0))
+    setAr3dCap(String(Number(tenant.ar3dMonthly) || 20))
+    setSuspendText(tenant.suspendReason || '')
+  }, [tenant.plan, tenant.planStatus, tenant.planExpiresAt, tenant.features, tenant.aiLimits?.daily, tenant.aiLimits?.monthly, tenant.aiExtra, tenant.ar3dMonthly, tenant.suspendReason])
+
   const saveSubscription = async () => {
     if (savingSub) return
-    const patch = {}
-    if (plan !== (tenant.plan || 'enterprise')) patch.plan = plan
-    if (planStatus !== (tenant.planStatus || 'active')) patch.planStatus = planStatus
-    if (expiry !== toDateInput(tenant.planExpiresAt)) patch.planExpiresAt = expiry ? new Date(expiry + 'T23:59:59') : null
-    if (!Object.keys(patch).length) { toast.success('لا توجد تغييرات للحفظ'); return }
     setSavingSub(true)
     try {
-      await setTenantPlan(tid, patch)
+      await setTenantPlan(tid, {
+        plan,
+        planStatus,
+        planExpiresAt: expiry ? new Date(expiry + 'T23:59:59') : null,
+      })
       toast.success('تم تحديث الاشتراك')
-    } catch {
-      toast.error('تعذّر الحفظ')
+    } catch (err) {
+      console.error('[VenueDetail] saveSubscription failed:', err)
+      toast.error(err?.message ? `تعذّر الحفظ: ${err.message}` : 'تعذّر الحفظ')
     } finally {
       setSavingSub(false)
     }
@@ -437,25 +449,22 @@ function PlanTab({ tid, tenant, toast, toggleActive, toggling }) {
 
   const saveAi = async () => {
     if (savingAi) return
-    const curD = Number(tenant.aiLimits?.daily) || 60
-    const curM = Number(tenant.aiLimits?.monthly) || 900
-    const curX = Number(tenant.aiExtra) || 0
     const nextD = Math.max(0, Number(aiDaily) || 0)
     const nextM = Math.max(0, Number(aiMonthly) || 0)
     const nextX = Math.max(0, Number(aiExtra) || 0)
-    const curA = Number(tenant.ar3dMonthly) || 20
     const nextA = Math.max(0, Number(ar3dCap) || 0)
-    const patch = {}
-    if (nextD !== curD || nextM !== curM) patch.aiLimits = { daily: nextD, monthly: nextM }
-    if (nextX !== curX) patch.aiExtra = nextX
-    if (nextA !== curA) patch.ar3dMonthly = nextA
-    if (!Object.keys(patch).length) { toast.success('لا توجد تغييرات للحفظ'); return }
+    const patch = {
+      aiLimits: { daily: nextD, monthly: nextM },
+      aiExtra: nextX,
+      ar3dMonthly: nextA,
+    }
     setSavingAi(true)
     try {
       await platformUpdateTenant(tid, patch)
       toast.success('حُدّثت حدود الذكاء')
-    } catch {
-      toast.error('تعذّر الحفظ')
+    } catch (err) {
+      console.error('[VenueDetail] saveAi failed:', err)
+      toast.error(err?.message ? `تعذّر الحفظ: ${err.message}` : 'تعذّر الحفظ')
     } finally {
       setSavingAi(false)
     }

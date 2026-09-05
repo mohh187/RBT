@@ -44,7 +44,7 @@ import {
   DECOR_ANCHORS, DECOR_MOTIONS, DECOR_RANGE, DECOR_DEPTHS, resolveDecor, decorStyle,
   TABLE_KINDS, TABLE_MATERIALS, TABLE_EDGES, TABLE_RANGE, TABLE_STAGE_KEYS, resolveTable,
   STAGE_BLOCKS, STAGE_BLOCK_IDS, LIST_BLOCKS, LIST_BLOCK_IDS, STAGE_ALIGN_IDS, STAGE_TEXT_RANGE, resolveStageBlocks, decorSpinRate,
-  HEADER_MODES, HEADER_RANGE, resolveMenuHeader,
+  HEADER_MODES, HEADER_RANGE, HEADER_CONTROLS_POSITIONS, resolveMenuHeader,
   BUTTON_SKINS, BUTTON_SCOPES, BUTTON_SHAPES, BUTTON_RANGE, resolveButtons,
   SHADOW_RANGE,
   INK_FIELDS,
@@ -138,8 +138,7 @@ const SECTIONS = [
 ]
 // Sections whose cards are rendered from the shared venue-setup column below.
 const SETUP_SECTIONS = ['identity', 'experience', 'ops', 'system']
-// Menu elements the venue can show/hide — [key, ar, en]
-const HIDEABLE = [['offers', 'زر العروض', 'Offers button'], ['events', 'الفعاليات', 'Events'], ['reservations', 'الحجوزات', 'Reservations'], ['promos', 'شريط العروض', 'Promos strip'], ['special', 'الأصناف المميّزة', 'Featured'], ['search', 'البحث', 'Search'], ['viewToggle', 'زر طريقة العرض', 'View toggle'], ['notifications', 'جرس الإشعارات', 'Notifications'], ['social', 'أيقونات التواصل', 'Social icons'], ['stories', 'الاستوري', 'Stories'], ['profile', 'زر البروفايل والأخبار', 'Profile button'], ['covers', 'أغلفة الفئات (واجهة العرض)', 'Category covers (Spotlight)'], ['pairings', 'توصيات «يُطلب معه»', 'Pairings'], ['bottomNav', 'القائمة السفلية كاملة', 'Bottom navigation bar'], ['welcome', 'بطاقة الترحيب والولاء', 'Welcome & loyalty card'], ['prepTime', 'وقت التحضير', 'Prep time'], ['serves', 'عدد الأشخاص (يكفي لـ)', 'Serves count'], ['quickAdd', 'زر الإضافة السريعة للسلة', 'Quick add-to-cart']]
+const HIDEABLE = [['heroBrand', 'الشعار والاسم في المنتصف', 'Center logo & name'], ['sideCats', 'عنوان القسم الجانبي الشفاف (الخلفي)', 'Side category label'], ['offers', 'زر العروض', 'Offers button'], ['events', 'الفعاليات', 'Events'], ['reservations', 'الحجوزات', 'Reservations'], ['promos', 'شريط العروض', 'Promos strip'], ['special', 'الأصناف المميّزة', 'Featured'], ['search', 'البحث', 'Search'], ['viewToggle', 'زر طريقة العرض', 'View toggle'], ['notifications', 'جرس الإشعارات', 'Notifications'], ['social', 'أيقونات التواصل', 'Social icons'], ['stories', 'الاستوري', 'Stories'], ['profile', 'زر البروفايل والأخبار', 'Profile button'], ['covers', 'أغلفة الفئات (واجهة العرض)', 'Category covers (Spotlight)'], ['pairings', 'توصيات «يُطلب معه»', 'Pairings'], ['bottomNav', 'القائمة السفلية كاملة', 'Bottom navigation bar'], ['welcome', 'بطاقة الترحيب والولاء', 'Welcome & loyalty card'], ['prepTime', 'وقت التحضير', 'Prep time'], ['serves', 'عدد الأشخاص (يكفي لـ)', 'Serves count'], ['quickAdd', 'زر الإضافة السريعة للسلة', 'Quick add-to-cart']]
 // Per-element typography control — [key, ar, en, defaultPx]
 const TYPO_ELEMENTS = [['header', 'الهيدر', 'Header', 16], ['hero', 'اسم الكافيه', 'Venue name', 28], ['desc', 'الوصف', 'Description', 14], ['item', 'اسم الصنف', 'Item name', 15], ['price', 'السعر', 'Price', 16]]
 
@@ -203,6 +202,10 @@ const TABLE_DEFAULTS = {
 // elements exist. Defaults mirror resolveMenuHeader()'s fallbacks.
 const HEADER_DEFAULTS = {
   mode: '', url: '', scrim: HEADER_RANGE.scrim.dflt, blur: 0, pos: 'center',
+  controlsPos: 'header-end',
+  langPos: 'header-end', langOffsetX: 0, langOffsetY: 0,
+  themePos: 'header-end', themeOffsetX: 0, themeOffsetY: 0,
+  bellPos: 'float-top-start', bellOffsetX: 0, bellOffsetY: 0,
   logo: true, name: true, lang: true, theme: true,
 }
 // Stored as ONE object at `tenant.menuButtons` — the skin of the menu's action
@@ -291,7 +294,7 @@ const SHADOW_SLIDERS = [
 
 // Home blocks that also exist in the hide matrix — hide and order stay ONE
 // system: the eye flips the SAME ovHidden draft the matrix edits.
-const HOME_HIDEABLE = ['stories', 'search', 'welcome', 'promos', 'special']
+const HOME_HIDEABLE = ['heroBrand', 'stories', 'search', 'welcome', 'promos', 'special']
 
 // Labels for the subpages the chrome card can dress (ids from the contract's
 // CHROME_PAGE_IDS — labels are UI copy, not contract data).
@@ -882,6 +885,8 @@ export default function Settings() {
   // plaster film behind the featured cards (room mode's companion dial)
   const [featuredFilm, setFeaturedFilm] = useState(tenant?.featuredFilm != null ? tenant.featuredFilm : FEATURED_RANGE.film.dflt)
   const [featuredScale, setFeaturedScale] = useState(tenant?.featuredScale != null ? tenant.featuredScale : FEATURED_RANGE.scale.dflt)
+  const [heroOffset, setHeroOffset] = useState(tenant?.heroOffset != null ? tenant.heroOffset : '')
+  const [bannerHeight, setBannerHeight] = useState(tenant?.bannerHeight != null ? tenant.bannerHeight : '')
   // the banner's MOOD — the same filter/blend/tint vocabulary the wall and the
   // dish backdrops already speak (FILTERS / BLEND_MODES from the contract)
   const [bannerFilter, setBannerFilter] = useState(tenant?.bannerFilter || '')
@@ -1731,6 +1736,8 @@ export default function Settings() {
     chromeTheme: tenant?.chromeTheme || 'auto',
     skin: { skinId, overrides: skinOverrides }, themePreset: preset, themeColor: color, themeAccent: accent,
     bannerUrl, bannerVideoUrl, bannerVideoTrim, bannerFadeDir, bannerOpacity: Number(bannerOpacity), bannerPosition, bannerScale: Number(bannerScale), bannerGradient: Number(bannerGradient), bannerStyle,
+    ...(heroOffset !== '' ? { heroOffset: Number(heroOffset) } : { heroOffset: null }),
+    ...(bannerHeight !== '' ? { bannerHeight: Number(bannerHeight) } : { bannerHeight: null }),
     bannerFilter, bannerBlend, bannerTint, bannerTintAmount: Number(bannerTintAmount) || 0,
     bannerMelt: Number(bannerMelt) || 0, bannerMeltLen: Number(bannerMeltLen), bannerScrim: Number(bannerScrim),
     immersiveBgUrl, immersiveBgVideoUrl, immersiveBgVideoTrim, immersiveBgOpacity: Number(immersiveBgOpacity), immersiveBgPosition, immersiveBgScale: Number(immersiveBgScale), immersiveFull,
@@ -1947,6 +1954,7 @@ export default function Settings() {
     if (ct.appearance) {
       setPreset(a.themePreset || 'custom')
       setBannerUrl(a.bannerUrl || ''); setBannerVideoUrl(a.bannerVideoUrl || ''); setBannerVideoTrim(a.bannerVideoTrim || null); setBannerFadeDir(a.bannerFadeDir || 'bottom'); setBannerOpacity(a.bannerOpacity ?? 1); setBannerPosition(a.bannerPosition || 'center'); setBannerScale(a.bannerScale ?? 1); setBannerGradient(a.bannerGradient ?? 0.55); setBannerStyle(a.bannerStyle || 'full')
+      setHeroOffset(a.heroOffset != null ? a.heroOffset : ''); setBannerHeight(a.bannerHeight != null ? a.bannerHeight : '')
       setBannerFilter(a.bannerFilter || ''); setBannerBlend(a.bannerBlend || 'normal'); setBannerTint(a.bannerTint || ''); setBannerTintAmount(a.bannerTintAmount ?? 0)
       setBannerMelt(a.bannerMelt ?? BANNER_RANGE.melt.dflt); setBannerMeltLen(a.bannerMeltLen ?? BANNER_RANGE.meltLen.dflt); setBannerScrim(a.bannerScrim ?? BANNER_RANGE.scrim.dflt); setFeaturedFilm(a.featuredFilm ?? FEATURED_RANGE.film.dflt); setFeaturedScale(a.featuredScale ?? FEATURED_RANGE.scale.dflt)
       setImmersiveBgUrl(a.immersiveBgUrl || ''); setImmersiveBgVideoUrl(a.immersiveBgVideoUrl || ''); setImmersiveBgVideoTrim(a.immersiveBgVideoTrim || null); setImmersiveBgOpacity(a.immersiveBgOpacity ?? 0.5); setImmersiveBgPosition(a.immersiveBgPosition || 'center'); setImmersiveBgScale(a.immersiveBgScale ?? 1); setImmersiveFull(a.immersiveFull === true)
@@ -1989,6 +1997,8 @@ export default function Settings() {
         skin: { skinId, overrides: skinOverrides }, themePreset: preset, themeColor: color, themeAccent: accent,
         logoUrl, coverUrl,
         bannerUrl, bannerVideoUrl, bannerVideoTrim, bannerFadeDir, bannerOpacity: Number(bannerOpacity), bannerPosition, bannerScale: Number(bannerScale), bannerGradient: Number(bannerGradient), bannerStyle,
+        heroOffset: heroOffset === '' ? null : Number(heroOffset),
+        bannerHeight: bannerHeight === '' ? null : Number(bannerHeight),
         bannerFilter, bannerBlend, bannerTint, bannerTintAmount: Number(bannerTintAmount) || 0,
         bannerMelt: Number(bannerMelt) || 0, bannerMeltLen: Number(bannerMeltLen), bannerScrim: Number(bannerScrim), featuredFilm: Number(featuredFilm) || 0, featuredScale: Number(featuredScale) || 1,
         immersiveBgUrl, immersiveBgVideoUrl, immersiveBgVideoTrim, immersiveBgOpacity: Number(immersiveBgOpacity), immersiveBgPosition, immersiveBgScale: Number(immersiveBgScale), immersiveFull,
@@ -3647,7 +3657,7 @@ export default function Settings() {
                       : 'Every element, button and feature of the guest page from one place. Green = shown, grey = hidden. The element groups persist with the Save button below; the interactive experiences save instantly.'}
                   </p>
                   {[
-                    [ar ? 'الواجهة والأدوات' : 'Chrome & tools', ['search', 'viewToggle', 'stories', 'social', 'profile', 'notifications', 'welcome']],
+                    [ar ? 'الواجهة والأدوات' : 'Chrome & tools', ['heroBrand', 'search', 'viewToggle', 'stories', 'social', 'profile', 'notifications', 'welcome']],
                     [ar ? 'الأقسام والمحتوى' : 'Sections & content', ['promos', 'special', 'covers', 'pairings']],
                     [ar ? 'بيانات الصنف' : 'Item facts', ['prepTime', 'serves']],
                     [ar ? 'الطلب والتنقل' : 'Ordering & navigation', ['offers', 'events', 'reservations', 'bottomNav', 'quickAdd']],
@@ -4196,6 +4206,181 @@ export default function Settings() {
                       ))}
                     </div>
                     <span className="xs faint">{ar ? 'إخفاء زر اللغة أو الوضع يخفيه عن الزبون نهائياً، أبقهما إن كان جمهورك يستعملهما.' : 'Hiding the language or theme button removes it for guests entirely, keep them if your guests use them.'}</span>
+                  </div>
+
+                  <div className="stack" style={{ gap: 12, borderTop: '1px solid var(--border)', paddingTop: 12 }}>
+                    <div className="row-between" style={{ alignItems: 'center' }}>
+                      <label className="xs bold">{ar ? 'مواضع وتحريك الأزرار بحرية (اللغة، الثيم، الجرس)' : 'Individual Button Placement & Free Movement'}</label>
+                      <span className="xs faint">{ar ? 'تحريك مستقل وإحداثيات مخصصة' : 'Independent custom coordinates'}</span>
+                    </div>
+
+                    {/* زر اللغة */}
+                    <div className="stack" style={{ gap: 8, padding: 10, borderRadius: 8, background: 'var(--surface-2)', border: '1px solid var(--border)' }}>
+                      <div className="row-between" style={{ alignItems: 'center' }}>
+                        <span className="bold xs">{ar ? 'زر تغيير اللغة (EN / عربي)' : 'Language button'}</span>
+                        {(hdrCfg.langOffsetX || hdrCfg.langOffsetY || (hdrCfg.langPos && hdrCfg.langPos !== 'header-end')) ? (
+                          <button type="button" className="btn btn-sm btn-outline" onClick={() => writeHeader({ langPos: 'header-end', langOffsetX: 0, langOffsetY: 0 })}>
+                            {ar ? 'إعادة ضبط' : 'Reset'}
+                          </button>
+                        ) : null}
+                      </div>
+                      <div className="field">
+                        <label className="xs faint">{ar ? 'الموضع:' : 'Position:'}</label>
+                        <select
+                          className="select"
+                          value={hdrCfg.langPos || hdrCfg.controlsPos || 'header-end'}
+                          onChange={(e) => writeHeader({ langPos: e.target.value })}
+                        >
+                          {HEADER_CONTROLS_POSITIONS.map((p) => (
+                            <option key={p.id} value={p.id}>{ar ? p.ar : p.en}</option>
+                          ))}
+                        </select>
+                      </div>
+                      <div className="row wrap" style={{ gap: 10 }}>
+                        <div className="field grow" style={{ minWidth: 140 }}>
+                          <div className="row-between">
+                            <label className="xs faint">{ar ? 'إزاحة أفقية X:' : 'Horizontal X:'}</label>
+                            <span className="xs num bold">{(hdrCfg.langOffsetX || 0)}px</span>
+                          </div>
+                          <input
+                            type="range"
+                            min="-250"
+                            max="250"
+                            step="2"
+                            value={hdrCfg.langOffsetX || 0}
+                            onChange={(e) => writeHeader({ langOffsetX: Number(e.target.value) }, true)}
+                            style={{ width: '100%' }}
+                          />
+                        </div>
+                        <div className="field grow" style={{ minWidth: 140 }}>
+                          <div className="row-between">
+                            <label className="xs faint">{ar ? 'إزاحة رأسية Y:' : 'Vertical Y:'}</label>
+                            <span className="xs num bold">{(hdrCfg.langOffsetY || 0)}px</span>
+                          </div>
+                          <input
+                            type="range"
+                            min="-250"
+                            max="500"
+                            step="2"
+                            value={hdrCfg.langOffsetY || 0}
+                            onChange={(e) => writeHeader({ langOffsetY: Number(e.target.value) }, true)}
+                            style={{ width: '100%' }}
+                          />
+                        </div>
+                      </div>
+                    </div>
+
+                    {/* زر الثيم / الوضع */}
+                    <div className="stack" style={{ gap: 8, padding: 10, borderRadius: 8, background: 'var(--surface-2)', border: '1px solid var(--border)' }}>
+                      <div className="row-between" style={{ alignItems: 'center' }}>
+                        <span className="bold xs">{ar ? 'زر المظهر والثيم (فاتح / داكن)' : 'Theme toggle button'}</span>
+                        {(hdrCfg.themeOffsetX || hdrCfg.themeOffsetY || (hdrCfg.themePos && hdrCfg.themePos !== 'header-end')) ? (
+                          <button type="button" className="btn btn-sm btn-outline" onClick={() => writeHeader({ themePos: 'header-end', themeOffsetX: 0, themeOffsetY: 0 })}>
+                            {ar ? 'إعادة ضبط' : 'Reset'}
+                          </button>
+                        ) : null}
+                      </div>
+                      <div className="field">
+                        <label className="xs faint">{ar ? 'الموضع:' : 'Position:'}</label>
+                        <select
+                          className="select"
+                          value={hdrCfg.themePos || hdrCfg.controlsPos || 'header-end'}
+                          onChange={(e) => writeHeader({ themePos: e.target.value })}
+                        >
+                          {HEADER_CONTROLS_POSITIONS.map((p) => (
+                            <option key={p.id} value={p.id}>{ar ? p.ar : p.en}</option>
+                          ))}
+                        </select>
+                      </div>
+                      <div className="row wrap" style={{ gap: 10 }}>
+                        <div className="field grow" style={{ minWidth: 140 }}>
+                          <div className="row-between">
+                            <label className="xs faint">{ar ? 'إزاحة أفقية X:' : 'Horizontal X:'}</label>
+                            <span className="xs num bold">{(hdrCfg.themeOffsetX || 0)}px</span>
+                          </div>
+                          <input
+                            type="range"
+                            min="-250"
+                            max="250"
+                            step="2"
+                            value={hdrCfg.themeOffsetX || 0}
+                            onChange={(e) => writeHeader({ themeOffsetX: Number(e.target.value) }, true)}
+                            style={{ width: '100%' }}
+                          />
+                        </div>
+                        <div className="field grow" style={{ minWidth: 140 }}>
+                          <div className="row-between">
+                            <label className="xs faint">{ar ? 'إزاحة رأسية Y:' : 'Vertical Y:'}</label>
+                            <span className="xs num bold">{(hdrCfg.themeOffsetY || 0)}px</span>
+                          </div>
+                          <input
+                            type="range"
+                            min="-250"
+                            max="500"
+                            step="2"
+                            value={hdrCfg.themeOffsetY || 0}
+                            onChange={(e) => writeHeader({ themeOffsetY: Number(e.target.value) }, true)}
+                            style={{ width: '100%' }}
+                          />
+                        </div>
+                      </div>
+                    </div>
+
+                    {/* زر الجرس / الإشعارات */}
+                    <div className="stack" style={{ gap: 8, padding: 10, borderRadius: 8, background: 'var(--surface-2)', border: '1px solid var(--border)' }}>
+                      <div className="row-between" style={{ alignItems: 'center' }}>
+                        <span className="bold xs">{ar ? 'زر جرس الإشعارات' : 'Notifications Bell button'}</span>
+                        {(hdrCfg.bellOffsetX || hdrCfg.bellOffsetY || (hdrCfg.bellPos && hdrCfg.bellPos !== 'float-top-start')) ? (
+                          <button type="button" className="btn btn-sm btn-outline" onClick={() => writeHeader({ bellPos: 'float-top-start', bellOffsetX: 0, bellOffsetY: 0 })}>
+                            {ar ? 'إعادة ضبط' : 'Reset'}
+                          </button>
+                        ) : null}
+                      </div>
+                      <div className="field">
+                        <label className="xs faint">{ar ? 'الموضع:' : 'Position:'}</label>
+                        <select
+                          className="select"
+                          value={hdrCfg.bellPos || 'float-top-start'}
+                          onChange={(e) => writeHeader({ bellPos: e.target.value })}
+                        >
+                          {HEADER_CONTROLS_POSITIONS.map((p) => (
+                            <option key={p.id} value={p.id}>{ar ? p.ar : p.en}</option>
+                          ))}
+                        </select>
+                      </div>
+                      <div className="row wrap" style={{ gap: 10 }}>
+                        <div className="field grow" style={{ minWidth: 140 }}>
+                          <div className="row-between">
+                            <label className="xs faint">{ar ? 'إزاحة أفقية X:' : 'Horizontal X:'}</label>
+                            <span className="xs num bold">{(hdrCfg.bellOffsetX || 0)}px</span>
+                          </div>
+                          <input
+                            type="range"
+                            min="-250"
+                            max="250"
+                            step="2"
+                            value={hdrCfg.bellOffsetX || 0}
+                            onChange={(e) => writeHeader({ bellOffsetX: Number(e.target.value) }, true)}
+                            style={{ width: '100%' }}
+                          />
+                        </div>
+                        <div className="field grow" style={{ minWidth: 140 }}>
+                          <div className="row-between">
+                            <label className="xs faint">{ar ? 'إزاحة رأسية Y:' : 'Vertical Y:'}</label>
+                            <span className="xs num bold">{(hdrCfg.bellOffsetY || 0)}px</span>
+                          </div>
+                          <input
+                            type="range"
+                            min="-250"
+                            max="500"
+                            step="2"
+                            value={hdrCfg.bellOffsetY || 0}
+                            onChange={(e) => writeHeader({ bellOffsetY: Number(e.target.value) }, true)}
+                            style={{ width: '100%' }}
+                          />
+                        </div>
+                      </div>
+                    </div>
                   </div>
                 </div>
 
@@ -5308,6 +5493,65 @@ export default function Settings() {
                       <label>{ar ? 'النمط' : 'Style'}</label>
                       <div className="row" style={{ gap: 6, flexWrap: 'wrap' }}>
                         {BANNER_STYLES.map(([id, a, e]) => <button key={id} className={`chip ${bannerStyle === id ? 'active' : ''}`} onClick={() => setBannerStyle(id)}>{ar ? a : e}</button>)}
+                      </div>
+                    </div>
+                    <div className="field">
+                      <div className="row-between" style={{ gap: 8 }}>
+                        <label>{ar ? 'المسافة بين البانر والعناصر (إزاحة للأسفل)' : 'Spacing below banner (offset elements down)'}</label>
+                        <span className="xs num bold">{heroOffset === '' ? (ar ? 'تلقائي' : 'Auto') : `${heroOffset > 0 ? '+' : ''}${heroOffset}px`}</span>
+                      </div>
+                      <div className="row" style={{ gap: 8, alignItems: 'center' }}>
+                        <input
+                          type="range"
+                          min="-120"
+                          max="250"
+                          step="5"
+                          value={heroOffset === '' ? (ovHidden.includes('heroBrand') ? 16 : (bannerStyle === 'tall' ? -120 : -96)) : Number(heroOffset)}
+                          onChange={(e) => setHeroOffset(Number(e.target.value))}
+                          style={{ width: '100%' }}
+                        />
+                        {heroOffset !== '' && (
+                          <button
+                            type="button"
+                            className="btn btn-sm btn-outline"
+                            style={{ flex: 'none', padding: '4px 8px' }}
+                            onClick={() => setHeroOffset('')}
+                          >
+                            {ar ? 'تلقائي' : 'Auto'}
+                          </button>
+                        )}
+                      </div>
+                      <span className="xs faint">
+                        {ar
+                          ? 'تحكّم في مقدار نزول الأيقونات والبحث وبقية عناصر الصفحة لأسفل حتى لا تغطي على تفاصيل صورة البانر (خصوصاً عند إخفاء الشعار أو وجود نصوص داخل البانر نفسه).'
+                          : 'Control how far down the social icons, search and page elements sit so they don\'t overlap banner artwork.'}
+                      </span>
+                    </div>
+                    <div className="field">
+                      <div className="row-between" style={{ gap: 8 }}>
+                        <label>{ar ? 'ارتفاع البانر' : 'Banner height'}</label>
+                        <span className="xs num bold">{bannerHeight === '' ? (ar ? 'افتراضي النمط' : 'Style default') : `${bannerHeight}px`}</span>
+                      </div>
+                      <div className="row" style={{ gap: 8, alignItems: 'center' }}>
+                        <input
+                          type="range"
+                          min="100"
+                          max="400"
+                          step="10"
+                          value={bannerHeight === '' ? (bannerStyle === 'tall' ? 250 : 190) : Number(bannerHeight)}
+                          onChange={(e) => setBannerHeight(Number(e.target.value))}
+                          style={{ width: '100%' }}
+                        />
+                        {bannerHeight !== '' && (
+                          <button
+                            type="button"
+                            className="btn btn-sm btn-outline"
+                            style={{ flex: 'none', padding: '4px 8px' }}
+                            onClick={() => setBannerHeight('')}
+                          >
+                            {ar ? 'افتراضي' : 'Reset'}
+                          </button>
+                        )}
                       </div>
                     </div>
                     <div className="field"><label>{ar ? `الشفافية: ${Math.round(bannerOpacity * 100)}%` : `Opacity: ${Math.round(bannerOpacity * 100)}%`}</label><input type="range" min="0.2" max="1" step="0.05" value={bannerOpacity} onChange={(e) => setBannerOpacity(Number(e.target.value))} style={{ width: '100%' }} /></div>

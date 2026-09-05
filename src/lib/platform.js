@@ -20,8 +20,10 @@ import {
   onSnapshot,
   serverTimestamp,
   getCountFromServer,
+  Timestamp,
 } from 'firebase/firestore'
 import { db, app, auth, functions } from './firebase.js'
+import { httpsCallable } from 'firebase/functions'
 import { registerSW } from './notify.js'
 
 const list = (s) => s.docs.map((d) => ({ id: d.id, ...d.data() }))
@@ -111,22 +113,84 @@ export function watchTenantDoc(tid, cb) {
 }
 // Full subscription control (plan / status / expiry) — platform-owned fields.
 export async function setTenantPlan(tid, { plan, planStatus, planExpiresAt }) {
+  let expiresIso = null
+  if (planExpiresAt instanceof Date) {
+    expiresIso = isNaN(planExpiresAt.getTime()) ? null : planExpiresAt.toISOString()
+  } else if (typeof planExpiresAt === 'string' && planExpiresAt) {
+    const d = new Date(planExpiresAt.includes('T') ? planExpiresAt : planExpiresAt + 'T23:59:59')
+    expiresIso = isNaN(d.getTime()) ? null : d.toISOString()
+  } else if (planExpiresAt && typeof planExpiresAt.toDate === 'function') {
+    expiresIso = planExpiresAt.toDate().toISOString()
+  }
+
+  // 1. Try server-side Cloud Function first (Admin SDK bypasses client security rules)
+  try {
+    const fn = httpsCallable(functions, 'platformSetTenantPlan')
+    const res = await fn({
+      tid,
+      plan,
+      planStatus,
+      planExpiresAt: expiresIso,
+    })
+    if (res?.data?.ok) return
+  } catch (fnErr) {
+    console.warn('[platform] platformSetTenantPlan callable fallback to direct Firestore:', fnErr?.message)
+  }
+
+  // 2. Direct Firestore fallback
   const patch = { updatedAt: serverTimestamp() }
   if (plan !== undefined) patch.plan = plan
   if (planStatus !== undefined) patch.planStatus = planStatus
-  if (planExpiresAt !== undefined) patch.planExpiresAt = planExpiresAt
-  await updateDoc(doc(db, 'tenants', tid), patch)
+  if (planExpiresAt !== undefined) {
+    if (planExpiresAt === null || planExpiresAt === '') {
+      patch.planExpiresAt = null
+    } else if (planExpiresAt instanceof Date) {
+      patch.planExpiresAt = isNaN(planExpiresAt.getTime()) ? null : Timestamp.fromDate(planExpiresAt)
+    } else if (typeof planExpiresAt === 'string') {
+      const parsed = new Date(planExpiresAt.includes('T') ? planExpiresAt : planExpiresAt + 'T23:59:59')
+      patch.planExpiresAt = isNaN(parsed.getTime()) ? null : Timestamp.fromDate(parsed)
+    } else if (planExpiresAt && typeof planExpiresAt.toDate === 'function') {
+      patch.planExpiresAt = planExpiresAt
+    } else {
+      patch.planExpiresAt = planExpiresAt
+    }
+  }
+  await setDoc(doc(db, 'tenants', tid), patch, { merge: true })
 }
+
 // Suspend / re-activate a venue account.
 export async function setTenantActive(tid, active, reason = '') {
-  await updateDoc(doc(db, 'tenants', tid), {
+  try {
+    const fn = httpsCallable(functions, 'platformUpdateTenantDoc')
+    const res = await fn({
+      tid,
+      patch: {
+        active: !!active,
+        suspendReason: active ? '' : reason,
+      },
+    })
+    if (res?.data?.ok) return
+  } catch (fnErr) {
+    console.warn('[platform] platformUpdateTenantDoc callable fallback to direct Firestore:', fnErr?.message)
+  }
+
+  await setDoc(doc(db, 'tenants', tid), {
     active: !!active,
     suspendReason: active ? '' : reason,
     updatedAt: serverTimestamp(),
-  })
+  }, { merge: true })
 }
+
 export async function platformUpdateTenant(tid, patch) {
-  await updateDoc(doc(db, 'tenants', tid), { ...patch, updatedAt: serverTimestamp() })
+  try {
+    const fn = httpsCallable(functions, 'platformUpdateTenantDoc')
+    const res = await fn({ tid, patch })
+    if (res?.data?.ok) return
+  } catch (fnErr) {
+    console.warn('[platform] platformUpdateTenantDoc callable fallback to direct Firestore:', fnErr?.message)
+  }
+
+  await setDoc(doc(db, 'tenants', tid), { ...patch, updatedAt: serverTimestamp() }, { merge: true })
 }
 // Cheap aggregate counts for the venue 360° view.
 export async function countSub(tid, name, ...clauses) {

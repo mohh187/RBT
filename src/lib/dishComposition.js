@@ -1046,6 +1046,19 @@ export const HEADER_MODES = [
 ]
 export const HEADER_MODE_IDS = HEADER_MODES.map((h) => h.id)
 
+export const HEADER_CONTROLS_POSITIONS = [
+  { id: 'header-end', ar: 'في الهيدر (نهاية الشريط)', en: 'In header (end)' },
+  { id: 'header-start', ar: 'في الهيدر (بداية الشريط)', en: 'In header (start)' },
+  { id: 'under-header', ar: 'أسفل الهيدر مباشرة (في المنيو)', en: 'Below header (in menu)' },
+  { id: 'custom', ar: 'موضع حر مخصص (تحكم كامل بالإحداثيات)', en: 'Free custom position' },
+  { id: 'hero', ar: 'في الترويسة الرئيسية (Hero)', en: 'In hero' },
+  { id: 'float-top-start', ar: 'عائم أعلى اليمين', en: 'Floating top right' },
+  { id: 'float-top-end', ar: 'عائم أعلى اليسار', en: 'Floating top left' },
+  { id: 'float-bottom-start', ar: 'عائم أسفل اليمين', en: 'Floating bottom right' },
+  { id: 'float-bottom-end', ar: 'عائم أسفل اليسار', en: 'Floating bottom left' },
+]
+export const HEADER_CONTROLS_POS_IDS = HEADER_CONTROLS_POSITIONS.map((p) => p.id)
+
 export const HEADER_RANGE = {
   scrim: { min: 0, max: 1, step: 0.05, dflt: 0.55 }, // dark veil so the bar's text survives any photo
   blur: { min: 0, max: 20, step: 0.5, dflt: 0 },
@@ -1062,6 +1075,17 @@ export function resolveMenuHeader(tenant) {
   if (!mode && tenant && tenant.menuWall && tenant.menuWall.header === true) mode = 'brick'
   const url = String(h.url || '')
   if (mode === 'image' && !url) mode = ''
+  const controlsPos = str(h.controlsPos, HEADER_CONTROLS_POS_IDS, 'header-end')
+  const langPos = str(h.langPos || h.controlsPos, HEADER_CONTROLS_POS_IDS, controlsPos || 'header-end')
+  const langOffsetX = num(h.langOffsetX, 0, -1000, 1000)
+  const langOffsetY = num(h.langOffsetY, 0, -1000, 2000)
+  const themePos = str(h.themePos || h.controlsPos, HEADER_CONTROLS_POS_IDS, controlsPos || 'header-end')
+  const themeOffsetX = num(h.themeOffsetX, 0, -1000, 1000)
+  const themeOffsetY = num(h.themeOffsetY, 0, -1000, 2000)
+  const bellPos = str(h.bellPos, HEADER_CONTROLS_POS_IDS, 'float-top-start')
+  const bellOffsetX = num(h.bellOffsetX, 0, -1000, 1000)
+  const bellOffsetY = num(h.bellOffsetY, 0, -1000, 2000)
+
   const R = HEADER_RANGE
   return {
     mode,
@@ -1069,6 +1093,16 @@ export function resolveMenuHeader(tenant) {
     scrim: num(h.scrim, R.scrim.dflt, 0, 1),
     blur: num(h.blur, 0, R.blur.min, R.blur.max),
     pos: String(h.pos || 'center'),
+    controlsPos,
+    langPos,
+    langOffsetX,
+    langOffsetY,
+    themePos,
+    themeOffsetX,
+    themeOffsetY,
+    bellPos,
+    bellOffsetX,
+    bellOffsetY,
     show: {
       logo: h.logo !== false,
       name: h.name !== false,

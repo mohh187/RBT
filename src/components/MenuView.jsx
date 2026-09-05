@@ -22,7 +22,7 @@ import { orderingState, orderingClosedMessage } from '../lib/ordering.js'
 import { alertParty } from '../lib/notify.js'
 import { initTracking, identify, trackItemView, trackItemClose, trackCartAdd, trackSearch, trackCheckout, trackOrdered, trackGame } from '../lib/track.js'
 import ItemFx from './ItemFx.jsx'
-import { RANGE, filterCss, BLEND_IDS, resolveWall, resolveButtons, resolveBanner, resolveFeatured, resolveHomeOrder, resolveChrome, resolveInk, inkModeFor, chromeInkVars, imgTiltBoxStyle } from '../lib/dishComposition.js'
+import { RANGE, filterCss, BLEND_IDS, resolveWall, resolveButtons, resolveBanner, resolveFeatured, resolveHomeOrder, resolveChrome, resolveInk, inkModeFor, chromeInkVars, imgTiltBoxStyle, resolveMenuHeader } from '../lib/dishComposition.js'
 import { useVideoTrim } from '../lib/useVideoTrim.js'
 import { MENU_3D_ENABLED } from '../lib/deviceCaps.js'
 import GamesIcon from './GamesIcon.jsx'
@@ -87,7 +87,7 @@ const resolveItemStyles = (it) => {
 
 // Shared diner menu + cart + checkout (offers + loyalty + modifiers).
 export default function MenuView({ tenant, tenantId, items, categories, offers = [], table, partySize, onPlaced, onCallWaiter, preview = false, previewFocus = null }) {
-  const { t, lang, theme } = useI18n()
+  const { t, lang, theme, toggleLang, toggleTheme } = useI18n()
   const toast = useToast()
   const currency = tenant?.currency || 'SAR'
   // «يجب أن تظهر كل الأشياء مع فتحة المنيو»: warm the room's critical images
@@ -1014,43 +1014,89 @@ export default function MenuView({ tenant, tenantId, items, categories, offers =
   // The painted .menu-hero-fade stays OUTSIDE the wrapper (its card-variant
   // inset is authored against .menu-hero) and is gated OFF while bannerMelt>0.
   const HOME_RENDER = {
-    hero: () => (
-      <div className="menu-hero" data-banner={(tenant?.bannerVideoUrl || tenant?.bannerUrl) ? (tenant?.bannerStyle || 'full') : undefined}>
-        <div className="menu-hero-media" style={meltStyle || undefined} aria-hidden="true">
-          {(tenant?.bannerVideoUrl || tenant?.bannerUrl) ? (
-            <>
-              {(() => {
-                /* the banner's MOOD — the same filter presets, blend modes and
-                   tint every other backdrop already has (bannerFilter/bannerBlend/
-                   bannerTint+bannerTintAmount). filterCss() resolves the preset,
-                   so an unknown id is simply no filter, never a broken string. */
-                const moodFilter = filterCss(tenant?.bannerFilter) || undefined
-                const moodBlend = tenant?.bannerBlend && tenant.bannerBlend !== 'normal' && BLEND_IDS.includes(tenant.bannerBlend) ? tenant.bannerBlend : undefined
-                return tenant?.bannerVideoUrl ? (
-                  /* video banner — same opacity/position/zoom controls as the image */
-                  <video ref={bannerTrimRef} className="menu-hero-cover menu-hero-video" src={tenant.bannerVideoUrl} autoPlay muted loop playsInline preload="auto"
-                    style={{ objectPosition: tenant.bannerPosition || 'center', opacity: tenant.bannerOpacity != null ? Number(tenant.bannerOpacity) : 1, transform: Number(tenant.bannerScale) > 1 ? `scale(${Number(tenant.bannerScale)})` : undefined, transformOrigin: tenant.bannerPosition || 'center', filter: moodFilter, mixBlendMode: moodBlend }} />
-                ) : (
-                  <div className="menu-hero-cover" style={{ backgroundImage: `url(${tenant.bannerUrl})`, backgroundSize: tenant.bannerScale ? `${Number(tenant.bannerScale) * 100}%` : 'cover', backgroundPosition: tenant.bannerPosition || 'center', opacity: tenant.bannerOpacity != null ? Number(tenant.bannerOpacity) : 1, filter: moodFilter, mixBlendMode: moodBlend }} />
-                )
-              })()}
-              {tenant?.bannerTint && Number(tenant.bannerTintAmount) > 0 && (
-                <div className="menu-hero-cover" aria-hidden="true" style={{ background: tenant.bannerTint, opacity: Math.min(1, Number(tenant.bannerTintAmount)), pointerEvents: 'none' }} />
-              )}
-            </>
-          ) : tenant?.coverUrl ? (
-            <div className="menu-hero-cover" style={{ backgroundImage: `url(${tenant.coverUrl})` }} />
-          ) : (
-            <div className="menu-hero-cover menu-hero-grad" />
+    hero: () => {
+      const bannerH = tenant?.bannerHeight ? Number(tenant.bannerHeight) : null
+      const mediaStyle = bannerH
+        ? { height: `${bannerH}px`, ...(meltStyle || {}) }
+        : (meltStyle || undefined)
+      const hasCustomOffset = tenant?.heroOffset != null && tenant.heroOffset !== ''
+      const isBrandHidden = isHidden('heroBrand')
+      const effectiveOffset = hasCustomOffset
+        ? Number(tenant.heroOffset)
+        : (isBrandHidden ? 16 : undefined)
+      const bodyStyle = effectiveOffset != null ? { marginTop: `${effectiveOffset}px` } : undefined
+
+      return (
+        <div className="menu-hero" data-banner={(tenant?.bannerVideoUrl || tenant?.bannerUrl) ? (tenant?.bannerStyle || 'full') : undefined}>
+          <div className="menu-hero-media" style={mediaStyle} aria-hidden="true">
+            {(tenant?.bannerVideoUrl || tenant?.bannerUrl) ? (
+              <>
+                {(() => {
+                  /* the banner's MOOD — the same filter presets, blend modes and
+                     tint every other backdrop already has (bannerFilter/bannerBlend/
+                     bannerTint+bannerTintAmount). filterCss() resolves the preset,
+                     so an unknown id is simply no filter, never a broken string. */
+                  const moodFilter = filterCss(tenant?.bannerFilter) || undefined
+                  const moodBlend = tenant?.bannerBlend && tenant.bannerBlend !== 'normal' && BLEND_IDS.includes(tenant.bannerBlend) ? tenant.bannerBlend : undefined
+                  return tenant?.bannerVideoUrl ? (
+                    /* video banner — same opacity/position/zoom controls as the image */
+                    <video ref={bannerTrimRef} className="menu-hero-cover menu-hero-video" src={tenant.bannerVideoUrl} autoPlay muted loop playsInline preload="auto"
+                      style={{ objectPosition: tenant.bannerPosition || 'center', opacity: tenant.bannerOpacity != null ? Number(tenant.bannerOpacity) : 1, transform: Number(tenant.bannerScale) > 1 ? `scale(${Number(tenant.bannerScale)})` : undefined, transformOrigin: tenant.bannerPosition || 'center', filter: moodFilter, mixBlendMode: moodBlend }} />
+                  ) : (
+                    <div className="menu-hero-cover" style={{ backgroundImage: `url(${tenant.bannerUrl})`, backgroundSize: tenant.bannerScale ? `${Number(tenant.bannerScale) * 100}%` : 'cover', backgroundPosition: tenant.bannerPosition || 'center', opacity: tenant.bannerOpacity != null ? Number(tenant.bannerOpacity) : 1, filter: moodFilter, mixBlendMode: moodBlend }} />
+                  )
+                })()}
+                {tenant?.bannerTint && Number(tenant.bannerTintAmount) > 0 && (
+                  <div className="menu-hero-cover" aria-hidden="true" style={{ background: tenant.bannerTint, opacity: Math.min(1, Number(tenant.bannerTintAmount)), pointerEvents: 'none' }} />
+                )}
+              </>
+            ) : tenant?.coverUrl ? (
+              <div className="menu-hero-cover" style={{ backgroundImage: `url(${tenant.coverUrl})` }} />
+            ) : (
+              <div className="menu-hero-cover menu-hero-grad" />
+            )}
+          </div>
+          {(tenant?.bannerVideoUrl || tenant?.bannerUrl) && banner.melt === 0 && (
+            <div className="menu-hero-fade" data-fade={tenant?.bannerFadeDir || 'bottom'} style={{ opacity: tenant.bannerGradient != null ? Number(tenant.bannerGradient) : 0.55 }} />
           )}
-        </div>
-        {(tenant?.bannerVideoUrl || tenant?.bannerUrl) && banner.melt === 0 && (
-          <div className="menu-hero-fade" data-fade={tenant?.bannerFadeDir || 'bottom'} style={{ opacity: tenant.bannerGradient != null ? Number(tenant.bannerGradient) : 0.55 }} />
-        )}
-        <div className="container menu-hero-body">
-          {tenant?.logoUrl && <img className="menu-hero-logo" src={tenant.logoUrl} alt="" decoding="async" />}
-          <h2 className="menu-hero-title" style={{ marginTop: tenant?.logoUrl ? 4 : 44 }}>{tenant?.name}</h2>
-          {tenant?.descAr && <p className="muted small" style={{ maxWidth: 520 }}>{tenant.descAr}</p>}
+          <div className="container menu-hero-body" style={bodyStyle}>
+          {!isHidden('heroBrand') && (
+            <>
+              {tenant?.logoUrl && <img className="menu-hero-logo" src={tenant.logoUrl} alt="" decoding="async" />}
+              <h2 className="menu-hero-title" style={{ marginTop: tenant?.logoUrl ? 4 : 44 }}>{tenant?.name}</h2>
+              {tenant?.descAr && <p className="muted small" style={{ maxWidth: 520 }}>{tenant.descAr}</p>}
+            </>
+          )}
+          {(() => {
+            const hd = resolveMenuHeader(tenant)
+            const showHeroLang = hd.show.lang && (hd.langPos === 'hero')
+            const showHeroTheme = hd.show.theme && (hd.themePos === 'hero')
+            const showHeroBell = !isHidden('notifications') && (hd.bellPos === 'hero')
+            if (!showHeroLang && !showHeroTheme && !showHeroBell) return null
+            const langIcon = mch?.elements?.langBtn?.icon || ''
+            const themeIcon = mch?.elements?.themeBtn?.icon || ''
+            const bellIcon = mch?.elements?.bellFab?.icon || ''
+            return (
+              <div className="row center" style={{ gap: 8, marginTop: 6 }}>
+                {showHeroLang && (
+                  <button type="button" className="icon-btn db-lang" onClick={toggleLang} aria-label="language" style={{ fontWeight: 800, fontSize: 13, width: 38, height: 38, borderRadius: 'var(--r-pill)', background: 'color-mix(in srgb, var(--surface) 80%, transparent)', backdropFilter: 'blur(8px)', border: '1px solid var(--border-strong)', ...(hd.langOffsetX || hd.langOffsetY ? { transform: `translate(${hd.langOffsetX || 0}px, ${hd.langOffsetY || 0}px)` } : {}) }}>
+                    {langIcon ? <img className="mch-icon" src={langIcon} alt="" /> : (lang === 'ar' ? 'EN' : 'ع')}
+                  </button>
+                )}
+                {showHeroTheme && (
+                  <button type="button" className="icon-btn db-theme" onClick={toggleTheme} aria-label="theme" style={{ width: 38, height: 38, borderRadius: 'var(--r-pill)', background: 'color-mix(in srgb, var(--surface) 80%, transparent)', backdropFilter: 'blur(8px)', border: '1px solid var(--border-strong)', ...(hd.themeOffsetX || hd.themeOffsetY ? { transform: `translate(${hd.themeOffsetX || 0}px, ${hd.themeOffsetY || 0}px)` } : {}) }}>
+                    {themeIcon ? <img className="mch-icon" src={themeIcon} alt="" /> : <Icon name={theme === 'dark' ? 'sun' : 'moon'} />}
+                  </button>
+                )}
+                {showHeroBell && (
+                  <button type="button" className="icon-btn db-bell" onClick={() => setNotifOpen(true)} aria-label={t('notificationsTitle')} style={{ width: 38, height: 38, borderRadius: 'var(--r-pill)', background: 'color-mix(in srgb, var(--surface) 80%, transparent)', backdropFilter: 'blur(8px)', border: '1px solid var(--border-strong)', position: 'relative', ...(hd.bellOffsetX || hd.bellOffsetY ? { transform: `translate(${hd.bellOffsetX || 0}px, ${hd.bellOffsetY || 0}px)` } : {}) }}>
+                    {bellIcon ? <img className="mch-icon" src={bellIcon} alt="" /> : <Icon name="bell" size={18} />}
+                    {unreadCount > 0 && <span className="b" style={{ position: 'absolute', top: -4, right: -4, background: 'var(--brand)', color: 'var(--on-brand)', borderRadius: 999, fontSize: 9, fontWeight: 800, minWidth: 16, height: 16, display: 'grid', placeItems: 'center', padding: '0 3px' }}>{unreadCount}</span>}
+                  </button>
+                )}
+              </div>
+            )
+          })()}
           {!isHidden('social') && <SocialLinks social={tenant?.social} appearance={tenant?.socialStyle} icons={mch?.socialIcons} className="menu-hero-social" />}
           {!isHidden('profile') && tenant?.slug && !preview && (
             <Link to={`/m/${tenant.slug}/about`} className="btn btn-sm btn-outline" style={{ marginTop: 8 }}>
@@ -1059,7 +1105,7 @@ export default function MenuView({ tenant, tenantId, items, categories, offers =
           )}
         </div>
       </div>
-    ),
+    )},
     // stories strip (hidden via appearance "hidden elements"; renders nothing when empty)
     stories: () => (!isHidden('stories') && !preview ? <Stories tenantId={tenantId} lang={lang} /> : null),
     // search + view toggle
@@ -1545,14 +1591,25 @@ export default function MenuView({ tenant, tenantId, items, categories, offers =
         </div>
       </Sheet>
 
-      {/* floating actions: notifications bell on the LEFT — each with a count badge */}
-      {!isHidden('notifications') && (
-        <button className="m-fab m-fab-bell" onClick={() => setNotifOpen(true)} aria-label={t('notificationsTitle')}>
-          {mch?.elements?.bellFab?.icon
-            ? <img className="mch-icon" src={mch.elements.bellFab.icon} alt="" />
-            : <Icon name="bell" size={20} />}{unreadCount > 0 && <span className="b">{unreadCount}</span>}
-        </button>
-      )}
+      {/* floating actions: notifications bell — each with a count badge */}
+      {(() => {
+        const hd = resolveMenuHeader(tenant)
+        const bellPos = hd.bellPos || 'float-top-start'
+        if (isHidden('notifications') || bellPos === 'hero' || bellPos === 'header-start' || bellPos === 'header-end') return null
+        return (
+          <button
+            className={`m-fab m-fab-bell db-${bellPos}`}
+            style={(hd.bellOffsetX || hd.bellOffsetY) ? { transform: `translate(${hd.bellOffsetX || 0}px, ${hd.bellOffsetY || 0}px)` } : undefined}
+            onClick={() => setNotifOpen(true)}
+            aria-label={t('notificationsTitle')}
+          >
+            {mch?.elements?.bellFab?.icon
+              ? <img className="mch-icon" src={mch.elements.bellFab.icon} alt="" />
+              : <Icon name="bell" size={20} />}
+            {unreadCount > 0 && <span className="b">{unreadCount}</span>}
+          </button>
+        )
+      })()}
 
       <MyOrdersSheet open={ordersOpen} onClose={() => setOrdersOpen(false)} refs={myOrderRefs} docs={orderDocs} slug={tenant?.slug} navigate={navigate} />
       <NotificationsSheet open={notifOpen} onClose={() => setNotifOpen(false)} items={notifItems} lastSeen={lastSeen} onMarkRead={markAllRead} slug={tenant?.slug} navigate={navigate} />

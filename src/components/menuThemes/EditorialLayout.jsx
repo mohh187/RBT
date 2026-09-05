@@ -1840,7 +1840,6 @@ function EdtSection({ it, idx, catLabel, currency, offers, lang, t, onOpen, allI
   const listNodes = buildListNodes()
   return (
     <section ref={ref} data-idx={idx} data-item-id={it.id} data-fit={fit || undefined} data-table={secTable ? '1' : undefined} data-top={secTable && secTable.topUrl ? '1' : undefined} data-topfull={isTopFull(secTable) ? '1' : undefined} style={tableTopVars(secTable) || undefined} className={`edt-sec ${inview ? 'in' : ''} ${out ? 'is-out' : ''}`}>
-      <span className="edt-side" aria-hidden="true">{catLabel}</span>
       <div className="edt-photo" data-fit={fit || undefined} data-dp-contact={dpShadow(it)} data-dp-reflect={dpReflect(it)}>
         {/* the surface band stays OUTSIDE the `near` gate: one shared image
             across every section (one decode), and like the glow/vignette it

@@ -40,8 +40,9 @@ function VenueRow({ t, onSaved }) {
       })
       toast.success(`تم تحديث اشتراك «${t.name}»`)
       onSaved?.()
-    } catch {
-      toast.error('تعذّر الحفظ')
+    } catch (err) {
+      console.error('[Subscriptions] save failed:', err)
+      toast.error(err?.message ? `تعذّر الحفظ: ${err.message}` : 'تعذّر الحفظ')
     }
   }
 

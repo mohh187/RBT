@@ -243,6 +243,64 @@ const setPlatformRole = onCall(async (request) => {
 })
 
 // ---------------------------------------------------------------------------
+// 2b) platformSetTenantPlan — platform admin sets plan / status / expiry.
+// ---------------------------------------------------------------------------
+const platformSetTenantPlan = onCall(async (request) => {
+  const db = getFirestore()
+  const callerSnap = await requirePlatformAdmin(db, request.auth)
+  const tid = request.data && request.data.tid
+  if (!tid) throw new HttpsError('invalid-argument', 'tid is required.')
+
+  const patch = { updatedAt: FieldValue.serverTimestamp() }
+  if (request.data.plan !== undefined) patch.plan = request.data.plan
+  if (request.data.planStatus !== undefined) patch.planStatus = request.data.planStatus
+  if (request.data.planExpiresAt !== undefined) {
+    if (request.data.planExpiresAt === null || request.data.planExpiresAt === '') {
+      patch.planExpiresAt = null
+    } else if (typeof request.data.planExpiresAt === 'number') {
+      patch.planExpiresAt = new Date(request.data.planExpiresAt)
+    } else if (typeof request.data.planExpiresAt === 'string') {
+      const parsed = new Date(request.data.planExpiresAt)
+      patch.planExpiresAt = isNaN(parsed.getTime()) ? null : parsed
+    }
+  }
+
+  await db.doc(`tenants/${tid}`).set(patch, { merge: true })
+  await writeAudit(db, {
+    kind: 'tenant',
+    action: 'setTenantPlan',
+    by: request.auth.uid,
+    byEmail: (callerSnap.data() || {}).email || null,
+    tid,
+    patch,
+  })
+  return { ok: true }
+})
+
+// ---------------------------------------------------------------------------
+// 2c) platformUpdateTenantDoc — platform admin updates arbitrary tenant fields.
+// ---------------------------------------------------------------------------
+const platformUpdateTenantDoc = onCall(async (request) => {
+  const db = getFirestore()
+  const callerSnap = await requirePlatformAdmin(db, request.auth)
+  const tid = request.data && request.data.tid
+  const patch = request.data && request.data.patch
+  if (!tid || !patch || typeof patch !== 'object') {
+    throw new HttpsError('invalid-argument', 'tid and patch object are required.')
+  }
+
+  await db.doc(`tenants/${tid}`).set({ ...patch, updatedAt: FieldValue.serverTimestamp() }, { merge: true })
+  await writeAudit(db, {
+    kind: 'tenant',
+    action: 'updateTenant',
+    by: request.auth.uid,
+    byEmail: (callerSnap.data() || {}).email || null,
+    tid,
+  })
+  return { ok: true }
+})
+
+// ---------------------------------------------------------------------------
 // 3) requestVenueExport — build a summary export of one venue and store it in
 // platformExports for download. Caller must be a platform admin.
 // ---------------------------------------------------------------------------
@@ -817,10 +875,11 @@ async function settleFromPayment(db, payment) {
     // second copy of the filter. Required lazily to avoid an import cycle.
     if (held) {
       const { _pushToStaff: pushToStaff } = require('./index.js')
+      const p = L('ar')
       const code = order.code ? `#${order.code}` : ''
       const where = order.tableLabel || (order.orderType === 'takeaway' ? 'سفري' : 'طلب')
       await pushToStaff(db, tid,
-        { title: 'طلب جديد مدفوع', body: `${where} ${code} · ${total}` },
+        { title: p('طلب جديد مدفوع', 'New paid order'), body: `${where} ${code} · ${total}` },
         { url: `/cashier?order=${intent.refId}`, tag: 'order' },
         { cap: ['take_orders', 'kitchen'] },
       ).catch(() => {})
@@ -1698,6 +1757,8 @@ module.exports = {
   orderTotalIsSane,
   generateMonthlyInvoices,
   setPlatformRole,
+  platformSetTenantPlan,
+  platformUpdateTenantDoc,
   startPlanSubscription,
   imageTo3d,
   generateTableImage,

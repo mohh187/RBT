@@ -116,7 +116,7 @@ service cloud.firestore {
     }
     function isPlatformSuper() {
       return isPlatformAdmin()
-        && (!('role' in platformAdminDoc()) || platformAdminDoc().role == 'superAdmin');
+        && (!('role' in platformAdminDoc()) || platformAdminDoc().role == 'superAdmin' || platformAdminDoc().role == 'admin');
     }
 
     // ---- per-user profile ----
@@ -271,7 +271,7 @@ service cloud.firestore {
       // settings-domain cap (appearance / loyalty / campaigns / integrations /
       // settings) may also save — but NEVER roleCaps (self-escalation via the
       // role-defaults mirror) or the messaging quota counters.
-      allow update: if isPlatformSuper()
+      allow update: if isPlatformAdmin()
         || (isManager(tid)
             && !request.resource.data.diff(resource.data).affectedKeys()
                  // msgsSent/msgCapMonthly were listed ONLY on the hasCap branch below,
