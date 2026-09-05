@@ -997,26 +997,54 @@ export default function MenuView({ tenant, tenantId, items, categories, offers =
       {!preview && activeOrder && tenant?.slug && (() => {
         const [stLabel, stIcon] = ORDER_ST[activeOrder.status] || ORDER_ST.pending
         const isReady = activeOrder.status === 'ready'
+        // The venue's waiting game (tenant.waitGame): while the kitchen still
+        // works, offer «العب وأنت تنتظر» right under the banner. ?play=1 makes
+        // the order page open the chosen game directly — through the games
+        // hub's own registration gate, never around it.
+        const waitPlay = !isReady && tenant?.waitGame?.enabled === true
         return (
-          <Link
-            to={`/order/${tenant.slug}/${activeOrder.id}`}
-            className="row-between"
-            style={{
-              gap: 10, padding: '11px 14px', textDecoration: 'none',
-              background: isReady ? 'var(--success)' : 'var(--brand)', color: 'var(--on-brand)',
-              boxShadow: '0 2px 12px rgba(0,0,0,.18)',
-            }}
-          >
-            <span className="row" style={{ gap: 8, alignItems: 'center', minWidth: 0 }}>
-              <Icon name={stIcon} size={17} />
-              <span className="small bold" style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                {lang === 'ar' ? 'طلبك' : 'Your order'} {orderNumber(activeOrder.code)} · {stLabel}
+          <>
+            <Link
+              to={`/order/${tenant.slug}/${activeOrder.id}`}
+              className="row-between"
+              style={{
+                gap: 10, padding: '11px 14px', textDecoration: 'none',
+                background: isReady ? 'var(--success)' : 'var(--brand)', color: 'var(--on-brand)',
+                boxShadow: '0 2px 12px rgba(0,0,0,.18)',
+              }}
+            >
+              <span className="row" style={{ gap: 8, alignItems: 'center', minWidth: 0 }}>
+                <Icon name={stIcon} size={17} />
+                <span className="small bold" style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                  {lang === 'ar' ? 'طلبك' : 'Your order'} {orderNumber(activeOrder.code)} · {stLabel}
+                </span>
               </span>
-            </span>
-            <span className="row" style={{ gap: 4, alignItems: 'center', flex: 'none', fontWeight: 800, fontSize: 13 }}>
-              {lang === 'ar' ? 'تابع' : 'Track'} <Icon name="next" size={15} style={{ transform: lang === 'ar' ? 'scaleX(1)' : 'scaleX(-1)' }} />
-            </span>
-          </Link>
+              <span className="row" style={{ gap: 4, alignItems: 'center', flex: 'none', fontWeight: 800, fontSize: 13 }}>
+                {lang === 'ar' ? 'تابع' : 'Track'} <Icon name="next" size={15} style={{ transform: lang === 'ar' ? 'scaleX(1)' : 'scaleX(-1)' }} />
+              </span>
+            </Link>
+            {waitPlay && (
+              <Link
+                to={`/order/${tenant.slug}/${activeOrder.id}?play=1`}
+                className="row-between"
+                style={{
+                  gap: 10, padding: '9px 14px', textDecoration: 'none',
+                  background: 'color-mix(in srgb, var(--brand) 12%, var(--surface))',
+                  color: 'var(--text)', borderBottom: '1px solid var(--border)',
+                }}
+              >
+                <span className="row" style={{ gap: 8, alignItems: 'center', minWidth: 0 }}>
+                  <Icon name="games" size={16} style={{ color: 'var(--brand)' }} />
+                  <span className="small bold" style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                    {lang === 'ar' ? 'العب وأنت تنتظر طلبك' : 'Play while you wait'}
+                  </span>
+                </span>
+                <span className="row" style={{ gap: 4, alignItems: 'center', flex: 'none', fontWeight: 800, fontSize: 12.5, color: 'var(--brand)' }}>
+                  {lang === 'ar' ? 'ابدأ' : 'Start'} <Icon name="next" size={14} style={{ transform: lang === 'ar' ? 'scaleX(1)' : 'scaleX(-1)' }} />
+                </span>
+              </Link>
+            )}
+          </>
         )
       })()}
 

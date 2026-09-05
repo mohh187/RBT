@@ -298,6 +298,11 @@ export default function GamesCenter({
   // Set when the guest arrived from an invite link (/join → menu?room=&game=).
   // The hub then skips promo and browse and drops straight onto that board.
   joinRoomId = '', joinGameId = '',
+  // Set when the hub was opened FOR one specific game (the post-order «العب
+  // وأنت تنتظر» card): that game opens as if its shelf card was tapped, so the
+  // registration gate, the party-game lobby and the enabled-list check all
+  // still apply. '' (the default) changes nothing.
+  openGameId = '',
 }) {
   const t = TXT[lang] || TXT.ar
   useScrollLock(open) // full-screen games hub: lock the menu behind it
@@ -685,6 +690,16 @@ export default function GamesCenter({
     }
     startGame(id)
   }, [store.registered, startGame, rememberScroll, enabled, t])
+
+  // The wait-card hand-off: the named game opens once per mount, through the
+  // very same path a shelf tap uses — registration is never bypassed, and a
+  // game this venue disabled falls back to the shelf with the honest hint.
+  const directOpenRef = useRef('')
+  useEffect(() => {
+    if (!open || !openGameId || directOpenRef.current === openGameId) return
+    directOpenRef.current = openGameId
+    pickGame(openGameId)
+  }, [open, openGameId, pickGame])
 
   const submitGate = async (e) => {
     e?.preventDefault?.()

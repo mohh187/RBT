@@ -1,0 +1,492 @@
+/* ===========================================================================
+   «أركيد المجلس» — the shared chrome for the four reflex-arcade games:
+   WaiterDash (سباق النادل), CatchBasket (سلة التمر), BubblePop (فقاعات الشاي)
+   and WaitGame (صياد البحر). Owned by those four components only, prefix
+   `arc-`. Deliberately isolated from index.css.
+
+   LOOK: the house «majlis game table» family — deep felt greens over dark
+   walnut with soft gold, cream cards with real depth. The canvas draws each
+   game's world; everything DOM here is the commercial-grade shell around it:
+   stage pills, hearts, quota progress, stage banners, cleared/over cards.
+
+   RULES KEPT: only transform/opacity animate; no visible scrollbars (nothing
+   scrolls — cards shrink and wrap); Latin digits come from the JS side;
+   prefers-reduced-motion collapses every animation to a jump cut.
+   =========================================================================== */
+
+.arc-root {
+  --arc-brand: #0e7490;
+  --arc-gold: #e7c46a;
+  --arc-gold-deep: #b98a2f;
+  --arc-ink: #f4f7fa;
+  --arc-dim: rgba(244, 247, 250, 0.6);
+  --arc-card-bg: linear-gradient(180deg, #fdf9ef 0%, #f4ecdb 100%);
+  --arc-card-ink: #2b2118;
+  --arc-card-dim: #6d5f4e;
+  --arc-ease: cubic-bezier(0.22, 1, 0.36, 1);
+  --arc-spring: cubic-bezier(0.34, 1.45, 0.5, 1);
+
+  position: relative;
+  width: 100%;
+  height: 100%;
+  overflow: hidden;
+  touch-action: none;
+  user-select: none;
+  -webkit-user-select: none;
+  -webkit-tap-highlight-color: transparent;
+  font-family: inherit;
+  color: var(--arc-ink);
+  background: linear-gradient(180deg, #0c1a18 0%, #081210 100%);
+  contain: layout paint;
+}
+.arc-root *,
+.arc-root *::before,
+.arc-root *::after { box-sizing: border-box; }
+
+.arc-canvas {
+  position: absolute;
+  inset: 0;
+  display: block;
+  width: 100%;
+  height: 100%;
+  touch-action: none;
+}
+
+/* ---------------------------------------------------------------------------
+   in-play HUD — one row of pills + the quota progress rail under it.
+   pointer-events: none everywhere (trap 3): the canvas owns every tap.
+   --------------------------------------------------------------------------- */
+.arc-hud {
+  position: absolute;
+  inset-block-start: 0;
+  inset-inline: 0;
+  z-index: 3;
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 6px;
+  padding: clamp(8px, 1.2vmin, 14px) clamp(10px, 1.4vmin, 18px);
+  pointer-events: none;
+}
+
+.arc-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  font-size: clamp(12px, 1.7vmin, 19px);
+  font-weight: 800;
+  line-height: 1;
+  padding: clamp(6px, 0.9vmin, 10px) clamp(10px, 1.4vmin, 16px);
+  border-radius: 999px;
+  color: var(--arc-ink);
+  background: rgba(8, 16, 14, 0.55);
+  border: 1px solid rgba(255, 255, 255, 0.14);
+  backdrop-filter: blur(6px);
+  -webkit-backdrop-filter: blur(6px);
+  white-space: nowrap;
+}
+.arc-pill-stage {
+  color: #241703;
+  background: linear-gradient(160deg, #f4dc9a 0%, var(--arc-gold) 48%, #c99b3f 100%);
+  border-color: rgba(255, 249, 231, 0.65);
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.35), inset 0 1px 0 rgba(255, 255, 255, 0.55);
+  font-weight: 900;
+}
+.arc-pill.is-warn {
+  color: #2a0d0d;
+  background: linear-gradient(135deg, #ff9a8b, #ff5f56);
+  border-color: rgba(255, 255, 255, 0.5);
+  animation: arc-warn 0.9s ease-in-out infinite;
+}
+@keyframes arc-warn {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.55; }
+}
+
+/* combo chip pops every time its value changes (JS re-keys the element) */
+.arc-combo {
+  color: #1b1006;
+  background: linear-gradient(135deg, #ffd166, #ffb020);
+  border-color: rgba(255, 255, 255, 0.5);
+  animation: arc-combo-pop 0.3s var(--arc-spring) both;
+}
+@keyframes arc-combo-pop {
+  from { transform: scale(0.55); opacity: 0; }
+  to { transform: none; opacity: 1; }
+}
+
+/* hearts */
+.arc-lives {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  padding: clamp(5px, 0.8vmin, 9px) clamp(8px, 1.1vmin, 13px);
+  border-radius: 999px;
+  background: rgba(8, 16, 14, 0.55);
+  border: 1px solid rgba(255, 255, 255, 0.14);
+  backdrop-filter: blur(6px);
+  -webkit-backdrop-filter: blur(6px);
+}
+.arc-heart {
+  width: clamp(14px, 2vmin, 22px);
+  height: clamp(14px, 2vmin, 22px);
+  display: grid;
+  place-items: center;
+}
+.arc-heart svg { width: 100%; height: 100%; display: block; }
+.arc-heart path {
+  fill: #ff5f6d;
+  stroke: rgba(255, 255, 255, 0.5);
+  stroke-width: 1.4;
+}
+.arc-heart.off path {
+  fill: rgba(255, 255, 255, 0.14);
+  stroke: rgba(255, 255, 255, 0.22);
+}
+/* a heart that was just lost thumps once before dimming */
+.arc-heart.hit { animation: arc-heart-hit 0.45s var(--arc-ease) both; }
+@keyframes arc-heart-hit {
+  0% { transform: scale(1.55); }
+  100% { transform: scale(1); }
+}
+
+/* quota progress — the fill animates with scaleX only (never width) */
+.arc-prog {
+  flex: 1 1 90px;
+  min-width: 70px;
+  height: clamp(9px, 1.2vmin, 14px);
+  border-radius: 999px;
+  background: rgba(8, 16, 14, 0.55);
+  border: 1px solid rgba(255, 255, 255, 0.16);
+  overflow: hidden;
+  position: relative;
+}
+.arc-prog i {
+  position: absolute;
+  inset: 1px;
+  border-radius: 999px;
+  background: linear-gradient(90deg, color-mix(in srgb, var(--arc-brand) 70%, #fff 30%), var(--arc-brand));
+  transform-origin: 100% 50%; /* RTL: grows from the right */
+  transform: scaleX(var(--p, 0));
+  transition: transform 0.25s var(--arc-ease);
+}
+.arc-prog.done i { background: linear-gradient(90deg, #ffe9ad, var(--arc-gold)); }
+
+/* ---------------------------------------------------------------------------
+   stage banner — the between-stages beat: «المرحلة N» + what is new in it.
+   JS mounts it for ~1.6s at each stage start. Pure transform/opacity.
+   --------------------------------------------------------------------------- */
+.arc-banner {
+  position: absolute;
+  inset-inline: 0;
+  top: 24%;
+  z-index: 4;
+  display: grid;
+  justify-items: center;
+  gap: clamp(4px, 0.8vmin, 10px);
+  pointer-events: none;
+  animation: arc-banner 1.6s var(--arc-ease) both;
+}
+.arc-banner-kicker {
+  font-size: clamp(12px, 1.8vmin, 20px);
+  font-weight: 800;
+  letter-spacing: 0.14em;
+  color: var(--arc-gold);
+  text-shadow: 0 2px 10px rgba(0, 0, 0, 0.6);
+}
+.arc-banner-title {
+  font-size: clamp(30px, 6vmin, 64px);
+  font-weight: 900;
+  line-height: 1.1;
+  color: #fff;
+  text-shadow: 0 3px 0 rgba(0, 0, 0, 0.22), 0 10px 34px rgba(0, 0, 0, 0.6);
+}
+.arc-banner-line {
+  max-width: 82%;
+  text-align: center;
+  font-size: clamp(13px, 2vmin, 22px);
+  font-weight: 700;
+  line-height: 1.6;
+  color: rgba(255, 255, 255, 0.88);
+  background: rgba(8, 16, 14, 0.55);
+  border: 1px solid rgba(231, 196, 106, 0.35);
+  border-radius: 999px;
+  padding: clamp(6px, 1vmin, 11px) clamp(14px, 2vmin, 22px);
+  backdrop-filter: blur(6px);
+  -webkit-backdrop-filter: blur(6px);
+}
+@keyframes arc-banner {
+  0% { opacity: 0; transform: translateY(22px) scale(0.94); }
+  14% { opacity: 1; transform: none; }
+  82% { opacity: 1; transform: none; }
+  100% { opacity: 0; transform: translateY(-16px) scale(0.98); }
+}
+
+/* transient event toast («رياح!», «قرصة قنديل!») — announces every rule that
+   would otherwise act silently (trap 4) */
+.arc-toast {
+  position: absolute;
+  inset-inline: 0;
+  top: 34%;
+  z-index: 4;
+  display: grid;
+  justify-items: center;
+  pointer-events: none;
+  animation: arc-toast 1.1s var(--arc-ease) both;
+}
+.arc-toast span {
+  font-size: clamp(15px, 2.6vmin, 28px);
+  font-weight: 900;
+  color: #fff;
+  text-shadow: 0 3px 14px rgba(0, 0, 0, 0.65);
+  background: rgba(8, 16, 14, 0.5);
+  border: 1px solid rgba(255, 255, 255, 0.2);
+  border-radius: 999px;
+  padding: clamp(5px, 0.9vmin, 10px) clamp(14px, 2vmin, 24px);
+  backdrop-filter: blur(4px);
+  -webkit-backdrop-filter: blur(4px);
+}
+.arc-toast.bad span { border-color: rgba(255, 122, 107, 0.65); color: #ffc9c2; }
+.arc-toast.good span { border-color: rgba(231, 196, 106, 0.65); color: #ffe9ad; }
+@keyframes arc-toast {
+  0% { opacity: 0; transform: translateY(14px) scale(0.9); }
+  18% { opacity: 1; transform: none; }
+  78% { opacity: 1; }
+  100% { opacity: 0; transform: translateY(-22px); }
+}
+
+/* ---------------------------------------------------------------------------
+   veil + cards — ready / stage-cleared / game-over / victory
+   --------------------------------------------------------------------------- */
+.arc-veil {
+  position: absolute;
+  inset: 0;
+  z-index: 6;
+  display: grid;
+  place-items: center;
+  padding: clamp(14px, 2.4vmin, 30px);
+  background: radial-gradient(120% 90% at 50% 40%, rgba(6, 14, 12, 0.58), rgba(4, 10, 9, 0.88));
+  backdrop-filter: blur(3px);
+  -webkit-backdrop-filter: blur(3px);
+  animation: arc-veil-in 0.22s ease both;
+}
+@keyframes arc-veil-in { from { opacity: 0; } to { opacity: 1; } }
+
+.arc-card {
+  width: min(400px, 100%);
+  max-height: 100%;
+  display: grid;
+  gap: clamp(8px, 1.4vmin, 14px);
+  justify-items: center;
+  text-align: center;
+  padding: clamp(20px, 3vmin, 34px) clamp(18px, 2.6vmin, 30px);
+  border-radius: clamp(20px, 2.6vmin, 30px);
+  background: var(--arc-card-bg);
+  border: 1px solid rgba(185, 138, 47, 0.35);
+  box-shadow:
+    0 30px 80px rgba(0, 0, 0, 0.55),
+    inset 0 1px 0 rgba(255, 255, 255, 0.9),
+    inset 0 -14px 30px rgba(185, 138, 47, 0.08);
+  animation: arc-card-in 0.3s var(--arc-spring) both;
+}
+@keyframes arc-card-in {
+  from { opacity: 0; transform: translateY(16px) scale(0.94); }
+  to { opacity: 1; transform: none; }
+}
+
+.arc-kicker {
+  font-size: clamp(11px, 1.5vmin, 16px);
+  font-weight: 900;
+  letter-spacing: 0.16em;
+  color: var(--arc-gold-deep);
+}
+.arc-title {
+  margin: 0;
+  font-size: clamp(21px, 3.4vmin, 34px);
+  font-weight: 900;
+  color: var(--arc-card-ink);
+  letter-spacing: -0.2px;
+  line-height: 1.25;
+}
+.arc-line {
+  margin: 0;
+  font-size: clamp(13px, 1.9vmin, 18px);
+  line-height: 1.85;
+  color: var(--arc-card-dim);
+  max-width: 40ch;
+}
+.arc-sub {
+  margin: 0;
+  font-size: clamp(11.5px, 1.6vmin, 16px);
+  color: #9a8a72;
+}
+.arc-big {
+  font-size: clamp(42px, 7vmin, 76px);
+  font-weight: 900;
+  line-height: 1;
+  direction: ltr;
+  color: var(--arc-brand);
+  text-shadow: 0 2px 0 rgba(0, 0, 0, 0.06);
+}
+
+/* two-column mini stats (best score / stage reached) */
+.arc-statrow {
+  display: flex;
+  gap: clamp(8px, 1.2vmin, 14px);
+  width: 100%;
+  justify-content: center;
+}
+.arc-stat {
+  flex: 1 1 0;
+  max-width: 150px;
+  display: grid;
+  gap: 2px;
+  padding: clamp(8px, 1.2vmin, 13px) 8px;
+  border-radius: 14px;
+  background: rgba(185, 138, 47, 0.1);
+  border: 1px solid rgba(185, 138, 47, 0.25);
+}
+.arc-stat b {
+  font-size: clamp(17px, 2.6vmin, 26px);
+  font-weight: 900;
+  color: var(--arc-card-ink);
+  direction: ltr;
+}
+.arc-stat span {
+  font-size: clamp(10.5px, 1.5vmin, 14px);
+  font-weight: 700;
+  color: var(--arc-card-dim);
+}
+
+/* stage-cleared stars — one per life still held; they pop in one after another */
+.arc-stars {
+  display: flex;
+  gap: clamp(6px, 1vmin, 12px);
+  direction: ltr; /* stars are symmetric — keep pop order visual left→right */
+}
+.arc-star {
+  width: clamp(34px, 5vmin, 54px);
+  height: clamp(34px, 5vmin, 54px);
+}
+.arc-star svg { width: 100%; height: 100%; display: block; }
+.arc-star path {
+  fill: rgba(43, 33, 24, 0.12);
+  stroke: rgba(43, 33, 24, 0.2);
+  stroke-width: 1.2;
+}
+.arc-star.on { animation: arc-star-pop 0.45s var(--arc-spring) both; }
+.arc-star.on:nth-child(2) { animation-delay: 0.14s; }
+.arc-star.on:nth-child(3) { animation-delay: 0.28s; }
+.arc-star.on path {
+  fill: var(--arc-gold);
+  stroke: var(--arc-gold-deep);
+}
+@keyframes arc-star-pop {
+  0% { opacity: 0; transform: scale(0.2) rotate(-18deg); }
+  70% { opacity: 1; transform: scale(1.18) rotate(4deg); }
+  100% { opacity: 1; transform: none; }
+}
+
+.arc-actions {
+  display: flex;
+  gap: clamp(7px, 1vmin, 12px);
+  flex-wrap: wrap;
+  justify-content: center;
+  width: 100%;
+}
+.arc-btn {
+  appearance: none;
+  border: none;
+  cursor: pointer;
+  font: inherit;
+  font-size: clamp(14px, 2vmin, 19px);
+  font-weight: 800;
+  color: #fff;
+  min-height: 44px;
+  padding: clamp(10px, 1.5vmin, 15px) clamp(20px, 3vmin, 32px);
+  border-radius: 999px;
+  background: linear-gradient(135deg, var(--arc-brand), color-mix(in srgb, var(--arc-brand) 55%, #06120e 45%));
+  box-shadow:
+    0 8px 22px color-mix(in srgb, var(--arc-brand) 35%, transparent),
+    inset 0 1px 0 rgba(255, 255, 255, 0.28);
+  transition: transform 0.12s var(--arc-ease), box-shadow 0.12s var(--arc-ease);
+}
+.arc-btn:active { transform: scale(0.95); }
+.arc-btn:focus-visible {
+  outline: 3px solid color-mix(in srgb, var(--arc-brand) 60%, #fff);
+  outline-offset: 2px;
+}
+.arc-btn.gold {
+  color: #241703;
+  background: linear-gradient(160deg, #f6e0a4 0%, var(--arc-gold) 46%, #c99b3f 100%);
+  box-shadow: 0 8px 22px rgba(185, 138, 47, 0.4), inset 0 1px 0 rgba(255, 255, 255, 0.6);
+}
+.arc-btn.ghost {
+  color: #6d5f4e;
+  background: rgba(43, 33, 24, 0.07);
+  box-shadow: none;
+  border: 1px solid rgba(43, 33, 24, 0.14);
+}
+
+/* the small emblem row on the ready card (each game draws its own inline SVG) */
+.arc-emblem {
+  width: clamp(58px, 8vmin, 86px);
+  height: clamp(58px, 8vmin, 86px);
+  display: grid;
+  place-items: center;
+  border-radius: 24px;
+  background:
+    radial-gradient(80% 80% at 30% 22%, rgba(255, 255, 255, 0.5), transparent 60%),
+    linear-gradient(160deg, color-mix(in srgb, var(--arc-brand) 82%, #fff 18%), color-mix(in srgb, var(--arc-brand) 62%, #06120e 38%));
+  border: 1px solid rgba(255, 255, 255, 0.4);
+  box-shadow: 0 10px 26px color-mix(in srgb, var(--arc-brand) 35%, transparent);
+}
+.arc-emblem svg { width: 62%; height: 62%; display: block; }
+
+/* the fishing game keeps its legacy .wg-overlay shell (it also runs standalone
+   on the order-status page) — inside it the arc chrome needs its vars */
+.wg-overlay {
+  --arc-brand: #0e7490;
+  --arc-gold: #e7c46a;
+  --arc-gold-deep: #b98a2f;
+  --arc-ink: #f4f7fa;
+  --arc-card-bg: linear-gradient(180deg, #fdf9ef 0%, #f4ecdb 100%);
+  --arc-card-ink: #2b2118;
+  --arc-card-dim: #6d5f4e;
+  --arc-ease: cubic-bezier(0.22, 1, 0.36, 1);
+  --arc-spring: cubic-bezier(0.34, 1.45, 0.5, 1);
+}
+/* its HUD lives in the legacy top row, after the (hub-hidden) close button */
+.wg-top .arc-pill,
+.wg-top .arc-lives { pointer-events: none; }
+.wg-top { flex-wrap: wrap; row-gap: 6px; }
+/* second rail: quota progress under the pills */
+.wg-quota {
+  position: absolute;
+  z-index: 2;
+  inset-inline: 14px;
+  top: calc(56px + env(safe-area-inset-top, 0px));
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  pointer-events: none;
+}
+.wg-quota .arc-prog { flex: 1; }
+.wg-quota .arc-pill { flex: none; }
+
+/* ---------------------------------------------------------------------------
+   reduced motion: everything becomes a jump cut
+   --------------------------------------------------------------------------- */
+@media (prefers-reduced-motion: reduce) {
+  .arc-banner,
+  .arc-toast { animation-duration: 0.9s; animation-timing-function: step-end; }
+  .arc-veil,
+  .arc-card,
+  .arc-combo,
+  .arc-heart.hit,
+  .arc-star.on { animation: none !important; }
+  .arc-pill.is-warn { animation: none; }
+  .arc-prog i { transition: none; }
+  .arc-btn { transition: none; }
+  .arc-btn:active { transform: none; }
+}

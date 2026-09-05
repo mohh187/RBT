@@ -1,0 +1,918 @@
+/* ===========================================================================
+   «ألعاب البصيرة» v2 — TasteProfile / MindMirror / DecisionStyle.
+   Owned by those three components only, prefixed `ig-`. Never edit index.css.
+
+   LOOK: the shared «majlis reading room» skin — deep felt green over dark
+   walnut with soft gold hairlines; the final identity card is warm cream,
+   like a printed keepsake laid on the felt.
+
+   Hard rules honoured here:
+     • every scroll container hides its scrollbar (scrollbar-width + webkit)
+     • no emoji, no Arabic-Indic digits (numbers formatted in JS, -nu-latn)
+     • logical properties throughout — Arabic-first RTL reads correctly
+     • keyframes/transitions run on transform + opacity ONLY
+     • prefers-reduced-motion collapses all motion to jump cuts
+   The hub owns the shell, close button and live score — these styles only
+   fill the parent stage.
+   =========================================================================== */
+
+.ig-root {
+  --ig-gold: #e7c46a;
+  --ig-gold-deep: #b98a2e;
+  --ig-gold-dim: rgba(231, 196, 106, 0.4);
+  --ig-line: rgba(231, 196, 106, 0.16);
+  --ig-ink: #f2ede2;
+  --ig-dim: rgba(242, 237, 226, 0.62);
+  --ig-faint: rgba(242, 237, 226, 0.42);
+  --ig-surface: rgba(255, 255, 255, 0.05);
+  --ig-surface-2: rgba(255, 255, 255, 0.085);
+  --ig-cream: #f6efdf;
+  --ig-cream-2: #ecdfc4;
+  --ig-walnut: #2c2115;
+  --ig-walnut-dim: rgba(44, 33, 21, 0.62);
+  --ig-ease: cubic-bezier(0.22, 1, 0.36, 1);
+  --ig-spring: cubic-bezier(0.34, 1.4, 0.5, 1);
+
+  position: relative;
+  width: 100%;
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  box-sizing: border-box;
+  color: var(--ig-ink);
+  font-size: 15px;
+  background:
+    radial-gradient(130% 80% at 50% -10%, rgba(231, 196, 106, 0.09) 0%, transparent 55%),
+    radial-gradient(120% 120% at 50% 115%, rgba(0, 0, 0, 0.5) 0%, transparent 60%),
+    linear-gradient(180deg, #0d1b18 0%, #0a1412 55%, #071009 100%);
+  -webkit-user-select: none;
+  user-select: none;
+  -webkit-tap-highlight-color: transparent;
+}
+.ig-root *,
+.ig-root *::before,
+.ig-root *::after { box-sizing: border-box; }
+
+/* fine gold hairline frame — the «table inlay» */
+.ig-root::before {
+  content: '';
+  position: absolute;
+  inset: 7px;
+  border: 1px solid var(--ig-line);
+  border-radius: 14px;
+  pointer-events: none;
+  z-index: 1;
+}
+
+/* ---- shared scroll surface: no visible scrollbar, ever ---- */
+.ig-scroll {
+  position: relative;
+  z-index: 2;
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  overflow-x: hidden;
+  -webkit-overflow-scrolling: touch;
+  overscroll-behavior: contain;
+  scrollbar-width: none;
+  -ms-overflow-style: none;
+}
+.ig-scroll::-webkit-scrollbar { width: 0; height: 0; display: none; }
+
+.ig-pad {
+  min-height: 100%;
+  padding: 14px 16px 20px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 14px;
+}
+.ig-pad.center { justify-content: center; }
+
+/* =========================================================================
+   header strip — chapter chip + progress dots + step counter
+   ========================================================================= */
+.ig-top {
+  position: relative;
+  z-index: 3;
+  flex: 0 0 auto;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 13px 18px 4px;
+  min-height: 40px;
+}
+.ig-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 11px;
+  border-radius: 999px;
+  font-size: 11px;
+  font-weight: 800;
+  letter-spacing: 0.02em;
+  color: var(--ig-gold);
+  background: rgba(231, 196, 106, 0.08);
+  border: 1px solid var(--ig-line);
+  white-space: nowrap;
+}
+.ig-chip > b { font-variant-numeric: tabular-nums; }
+.ig-dots {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  min-width: 0;
+}
+.ig-dots i {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: rgba(242, 237, 226, 0.18);
+  transition: opacity 0.3s var(--ig-ease), transform 0.3s var(--ig-ease);
+}
+.ig-dots i.is-done { background: var(--ig-gold); opacity: 0.85; }
+.ig-dots i.is-now {
+  background: var(--ig-gold);
+  box-shadow: 0 0 0 3px rgba(231, 196, 106, 0.18);
+  animation: igDotNow 1.6s ease-in-out infinite;
+}
+@keyframes igDotNow {
+  0%, 100% { transform: scale(1); }
+  50% { transform: scale(1.35); }
+}
+.ig-step {
+  font-size: 11px;
+  font-weight: 800;
+  color: var(--ig-faint);
+  white-space: nowrap;
+  font-variant-numeric: tabular-nums;
+}
+
+/* =========================================================================
+   live trait gauges — a footer rail of tiny brass dials whose needles tilt
+   with every answer. Needle motion is pure transform.
+   ========================================================================= */
+.ig-gauges {
+  position: relative;
+  z-index: 3;
+  flex: 0 0 auto;
+  display: flex;
+  justify-content: center;
+  gap: 8px;
+  padding: 8px 14px 13px;
+}
+.ig-gauge {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+  min-width: 40px;
+  transition: opacity 0.3s var(--ig-ease);
+}
+.ig-gauge.is-dim { opacity: 0.42; }
+.ig-gdial {
+  position: relative;
+  width: 38px;
+  height: 38px;
+  border-radius: 50%;
+  background:
+    radial-gradient(100% 100% at 50% 30%, rgba(255, 255, 255, 0.1), rgba(255, 255, 255, 0.02) 70%),
+    rgba(0, 0, 0, 0.3);
+  border: 1px solid var(--ig-line);
+  overflow: hidden;
+}
+/* the twelve-o'clock centre tick */
+.ig-gdial::before {
+  content: '';
+  position: absolute;
+  top: 2px;
+  left: 50%;
+  width: 1.5px;
+  height: 5px;
+  margin-left: -0.75px;
+  background: rgba(242, 237, 226, 0.35);
+}
+.ig-gneedle {
+  position: absolute;
+  left: 50%;
+  bottom: 50%;
+  width: 2.5px;
+  height: 14px;
+  margin-left: -1.25px;
+  border-radius: 2px;
+  background: linear-gradient(180deg, var(--ig-gold), var(--ig-gold-deep));
+  transform-origin: 50% 100%;
+  transition: transform 0.6s var(--ig-spring);
+}
+.ig-gpin {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  width: 7px;
+  height: 7px;
+  margin: -3.5px 0 0 -3.5px;
+  border-radius: 50%;
+  background: var(--ig-cream);
+  border: 1.5px solid var(--ig-gold-deep);
+}
+/* the pulse fired when an answer moves this dial — remounted per answer */
+.ig-ghalo {
+  position: absolute;
+  inset: -1px;
+  border-radius: 50%;
+  border: 1.5px solid var(--ig-gold);
+  opacity: 0;
+  animation: igHalo 0.8s var(--ig-ease) both;
+  pointer-events: none;
+}
+@keyframes igHalo {
+  0% { opacity: 0.9; transform: scale(0.7); }
+  100% { opacity: 0; transform: scale(1.35); }
+}
+.ig-glabel {
+  font-size: 9.5px;
+  font-weight: 800;
+  color: var(--ig-faint);
+  letter-spacing: 0.02em;
+  white-space: nowrap;
+}
+.ig-gauge.is-hot .ig-glabel { color: var(--ig-gold); }
+
+/* =========================================================================
+   typography + scene motion
+   ========================================================================= */
+.ig-kicker {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 12px;
+  border-radius: 999px;
+  font-size: 11px;
+  font-weight: 800;
+  letter-spacing: 0.05em;
+  color: var(--ig-gold);
+  background: rgba(231, 196, 106, 0.08);
+  border: 1px solid var(--ig-line);
+}
+.ig-title {
+  margin: 0;
+  font-size: clamp(21px, 5.6vw, 30px);
+  font-weight: 900;
+  letter-spacing: -0.015em;
+  line-height: 1.35;
+  text-align: center;
+}
+.ig-sub {
+  margin: 0;
+  max-width: 36ch;
+  font-size: 14px;
+  line-height: 1.85;
+  color: var(--ig-dim);
+  text-align: center;
+}
+.ig-q {
+  margin: 0;
+  max-width: 32ch;
+  font-size: clamp(17px, 4.9vw, 22px);
+  font-weight: 800;
+  line-height: 1.7;
+  text-align: center;
+}
+.ig-qmeta {
+  margin: 0;
+  font-size: 11px;
+  font-weight: 800;
+  letter-spacing: 0.08em;
+  color: var(--ig-faint);
+  text-align: center;
+}
+
+.ig-in { animation: igIn 0.34s var(--ig-ease) both; }
+@keyframes igIn {
+  from { opacity: 0; transform: translateY(10px); }
+  to { opacity: 1; transform: none; }
+}
+.ig-rise { animation: igRise 0.5s var(--ig-ease) both; }
+@keyframes igRise {
+  from { opacity: 0; transform: translateY(18px) scale(0.985); }
+  to { opacity: 1; transform: none; }
+}
+
+/* =========================================================================
+   buttons
+   ========================================================================= */
+.ig-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  min-height: 47px;
+  padding: 0 26px;
+  border: 0;
+  border-radius: 13px;
+  font: inherit;
+  font-size: 15px;
+  font-weight: 800;
+  color: #fff;
+  cursor: pointer;
+  box-shadow: 0 10px 26px rgba(0, 0, 0, 0.42), inset 0 1px 0 rgba(255, 255, 255, 0.18);
+  transition: transform 0.14s var(--ig-ease);
+  touch-action: manipulation;
+}
+.ig-btn:active { transform: translateY(1px) scale(0.985); }
+.ig-btn.ghost {
+  background: transparent !important;
+  border: 1px solid rgba(231, 196, 106, 0.34);
+  box-shadow: none;
+  color: var(--ig-ink);
+  font-weight: 700;
+}
+.ig-btn.gold {
+  background: linear-gradient(170deg, var(--ig-gold), var(--ig-gold-deep)) !important;
+  color: #241708;
+}
+.ig-btnrow { display: flex; flex-wrap: wrap; gap: 9px; justify-content: center; }
+
+/* =========================================================================
+   intro — chapter ladder (the visible «مراحل»)
+   ========================================================================= */
+.ig-chlist { display: grid; gap: 8px; width: min(430px, 100%); }
+.ig-chrow {
+  display: flex;
+  align-items: center;
+  gap: 11px;
+  padding: 10px 13px;
+  border-radius: 14px;
+  border: 1px solid var(--ig-line);
+  background: var(--ig-surface);
+  text-align: start;
+}
+.ig-chrow.is-now {
+  border-color: rgba(231, 196, 106, 0.5);
+  background: rgba(231, 196, 106, 0.07);
+}
+.ig-chrow.is-done { opacity: 0.78; }
+.ig-chrow.is-todo { opacity: 0.6; }
+.ig-chnum {
+  flex: none;
+  width: 30px;
+  height: 30px;
+  border-radius: 10px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 13px;
+  font-weight: 900;
+  color: var(--ig-gold);
+  background: rgba(231, 196, 106, 0.1);
+  border: 1px solid var(--ig-gold-dim);
+  font-variant-numeric: tabular-nums;
+}
+.ig-chrow.is-done .ig-chnum { color: #241708; background: var(--ig-gold); }
+.ig-chbody { min-width: 0; flex: 1; display: grid; gap: 2px; }
+.ig-chbody > b { font-size: 13.5px; font-weight: 800; color: var(--ig-ink); }
+.ig-chbody > i { font-style: normal; font-size: 11.5px; line-height: 1.6; color: var(--ig-faint); }
+.ig-chstate { flex: none; color: var(--ig-gold); display: flex; align-items: center; }
+.ig-chrow.is-todo .ig-chstate { color: var(--ig-faint); }
+
+/* =========================================================================
+   TasteProfile duo — two real items face off
+   ========================================================================= */
+.ig-duo {
+  position: relative;
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 12px;
+  width: min(470px, 100%);
+  align-items: stretch;
+}
+.ig-duo-card {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 9px 13px;
+  border: 1px solid var(--ig-line);
+  border-radius: 17px;
+  background: linear-gradient(170deg, rgba(255, 255, 255, 0.075), rgba(255, 255, 255, 0.028));
+  color: inherit;
+  font: inherit;
+  cursor: pointer;
+  text-align: center;
+  overflow: hidden;
+  box-shadow: 0 8px 22px rgba(0, 0, 0, 0.3);
+  transition: transform 0.18s var(--ig-ease), opacity 0.18s var(--ig-ease), border-color 0.18s var(--ig-ease);
+  touch-action: manipulation;
+}
+.ig-duo-card:active { transform: scale(0.97); }
+.ig-duo-card.picked {
+  border-color: var(--ig-gold);
+  transform: translateY(-3px);
+  box-shadow: 0 0 0 1px var(--ig-gold) inset, 0 14px 30px rgba(0, 0, 0, 0.45);
+}
+.ig-duo-card.faded { opacity: 0.28; }
+.ig-duo-card:disabled { cursor: default; }
+.ig-duo-media {
+  width: 100%;
+  aspect-ratio: 1 / 1;
+  border-radius: 13px;
+  overflow: hidden;
+  background: rgba(0, 0, 0, 0.28);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--ig-faint);
+}
+.ig-duo-media img { width: 100%; height: 100%; object-fit: cover; display: block; }
+.ig-duo-name {
+  font-size: 13.5px;
+  font-weight: 800;
+  line-height: 1.45;
+  color: var(--ig-ink);
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+.ig-duo-meta { font-size: 11px; color: var(--ig-faint); font-variant-numeric: tabular-nums; }
+/* the «أو» medallion between the two cards */
+.ig-vs-badge {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  z-index: 2;
+  width: 34px;
+  height: 34px;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 12px;
+  font-weight: 900;
+  color: #241708;
+  background: linear-gradient(170deg, var(--ig-gold), var(--ig-gold-deep));
+  border: 2px solid #0d1b18;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.45);
+  pointer-events: none;
+}
+
+/* =========================================================================
+   option list (situations)
+   ========================================================================= */
+.ig-opts { display: grid; gap: 9px; width: min(450px, 100%); }
+.ig-opt {
+  position: relative;
+  min-height: 52px;
+  padding: 12px 16px;
+  border: 1px solid var(--ig-line);
+  border-radius: 14px;
+  background: var(--ig-surface);
+  color: var(--ig-ink);
+  font: inherit;
+  font-size: 14px;
+  font-weight: 600;
+  line-height: 1.7;
+  text-align: start;
+  cursor: pointer;
+  overflow: hidden;
+  transition: transform 0.15s var(--ig-ease), opacity 0.15s var(--ig-ease), border-color 0.15s var(--ig-ease);
+  touch-action: manipulation;
+}
+/* gold notch on the reading edge */
+.ig-opt::before {
+  content: '';
+  position: absolute;
+  inset-inline-start: 0;
+  top: 50%;
+  height: 55%;
+  width: 3px;
+  border-radius: 3px;
+  background: var(--ig-gold);
+  opacity: 0;
+  transform: translateY(-50%) scaleY(0.4);
+  transition: opacity 0.18s var(--ig-ease), transform 0.18s var(--ig-ease);
+}
+.ig-opt:active { transform: scale(0.985); }
+.ig-opt.picked {
+  border-color: var(--ig-gold);
+  background: rgba(231, 196, 106, 0.09);
+  transform: translateY(-2px);
+}
+.ig-opt.picked::before { opacity: 1; transform: translateY(-50%) scaleY(1); }
+.ig-opt.faded { opacity: 0.3; }
+.ig-opt:disabled { cursor: default; }
+
+/* =========================================================================
+   chapter break — the «stage cleared» beat
+   ========================================================================= */
+.ig-break {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 14px;
+  text-align: center;
+  width: min(430px, 100%);
+}
+.ig-seal {
+  position: relative;
+  width: 104px;
+  height: 104px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  animation: igStamp 0.55s var(--ig-spring) both;
+}
+.ig-seal > svg { position: absolute; inset: 0; width: 100%; height: 100%; pointer-events: none; }
+.ig-seal > b {
+  position: relative;
+  font-size: 34px;
+  font-weight: 900;
+  color: var(--ig-gold);
+  font-variant-numeric: tabular-nums;
+  text-shadow: 0 2px 8px rgba(0, 0, 0, 0.5);
+}
+@keyframes igStamp {
+  0% { opacity: 0; transform: scale(1.6) rotate(-9deg); }
+  100% { opacity: 1; transform: none; }
+}
+.ig-tease {
+  display: grid;
+  gap: 6px;
+  justify-items: center;
+  width: 100%;
+  padding: 14px 16px;
+  border-radius: 16px;
+  border: 1px solid var(--ig-line);
+  background: var(--ig-surface);
+}
+.ig-tease > i { font-style: normal; font-size: 11px; font-weight: 800; letter-spacing: 0.06em; color: var(--ig-faint); }
+.ig-tease > b { font-size: 18px; font-weight: 900; color: var(--ig-gold); }
+.ig-tease > span { font-size: 12.5px; line-height: 1.7; color: var(--ig-dim); }
+
+/* =========================================================================
+   reveal — identity card (cream keepsake) + reading sections
+   ========================================================================= */
+.ig-reveal {
+  width: min(560px, 100%);
+  margin-inline: auto;
+  display: grid;
+  gap: 15px;
+}
+.ig-rest { display: grid; gap: 15px; min-width: 0; }
+
+.ig-idcard {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+  padding: 24px 18px 18px;
+  border-radius: 22px;
+  background:
+    radial-gradient(120% 60% at 50% 0%, rgba(255, 255, 255, 0.55), transparent 55%),
+    linear-gradient(168deg, var(--ig-cream) 0%, var(--ig-cream-2) 100%);
+  color: var(--ig-walnut);
+  text-align: center;
+  border: 1px solid rgba(184, 138, 46, 0.55);
+  box-shadow:
+    inset 0 0 0 1px rgba(255, 255, 255, 0.5),
+    inset 0 0 0 5px rgba(184, 138, 46, 0.0),
+    0 18px 44px rgba(0, 0, 0, 0.5);
+  overflow: hidden;
+}
+/* inner gold rule, like a printed certificate border */
+.ig-idcard::before {
+  content: '';
+  position: absolute;
+  inset: 7px;
+  border: 1px solid rgba(184, 138, 46, 0.45);
+  border-radius: 16px;
+  pointer-events: none;
+}
+.ig-emblem { display: block; pointer-events: none; }
+.ig-emblem.is-dim { opacity: 0.4; }
+.ig-idcard .ig-kicker {
+  color: var(--ig-gold-deep);
+  background: rgba(184, 138, 46, 0.08);
+  border-color: rgba(184, 138, 46, 0.35);
+}
+.ig-arch {
+  margin: 0;
+  font-size: clamp(22px, 6vw, 30px);
+  font-weight: 900;
+  letter-spacing: -0.02em;
+  color: var(--ig-walnut);
+  line-height: 1.3;
+}
+.ig-fit {
+  font-size: 11.5px;
+  font-weight: 800;
+  color: var(--ig-walnut-dim);
+  font-variant-numeric: tabular-nums;
+}
+.ig-tags { display: flex; flex-wrap: wrap; gap: 6px; justify-content: center; }
+.ig-tag {
+  font-size: 11px;
+  font-weight: 800;
+  padding: 4px 11px;
+  border-radius: 999px;
+  background: rgba(44, 33, 21, 0.07);
+  border: 1px solid rgba(184, 138, 46, 0.45);
+  color: var(--ig-walnut);
+}
+.ig-hook {
+  margin: 2px 0 0;
+  max-width: 34ch;
+  font-size: 12px;
+  line-height: 1.75;
+  color: var(--ig-walnut-dim);
+}
+.ig-who { font-size: 12.5px; font-weight: 800; color: var(--ig-walnut); }
+.ig-venue { font-size: 11px; font-weight: 700; color: var(--ig-walnut-dim); letter-spacing: 0.04em; }
+.ig-idcard .ig-btn.ghost {
+  border-color: rgba(184, 138, 46, 0.5);
+  color: var(--ig-walnut);
+  min-height: 42px;
+}
+
+/* reading sections on the felt */
+.ig-sec {
+  padding: 14px 15px;
+  border-radius: 16px;
+  border: 1px solid var(--ig-line);
+  background: var(--ig-surface);
+}
+.ig-sec.gold { border-color: rgba(231, 196, 106, 0.4); background: rgba(231, 196, 106, 0.06); }
+.ig-sec-h {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  margin: 0 0 9px;
+  font-size: 12.5px;
+  font-weight: 800;
+  letter-spacing: 0.02em;
+  color: var(--ig-gold);
+}
+.ig-sec-h > span.tail { margin-inline-start: auto; font-weight: 700; color: var(--ig-faint); font-variant-numeric: tabular-nums; }
+.ig-body { margin: 0; font-size: 14px; line-height: 1.9; color: rgba(242, 237, 226, 0.88); }
+.ig-body.strong { font-weight: 800; }
+.ig-list { margin: 0; padding: 0; list-style: none; display: grid; gap: 8px; }
+.ig-list li {
+  position: relative;
+  padding-inline-start: 18px;
+  font-size: 13.5px;
+  line-height: 1.8;
+  color: rgba(242, 237, 226, 0.86);
+}
+.ig-list li::before {
+  content: '';
+  position: absolute;
+  inset-inline-start: 2px;
+  top: 0.66em;
+  width: 7px;
+  height: 7px;
+  border-radius: 2px;
+  background: var(--ig-gold);
+  opacity: 0.7;
+  transform: rotate(45deg);
+}
+.ig-preds { margin: 0; padding: 0; list-style: none; display: grid; gap: 10px; }
+.ig-pred {
+  position: relative;
+  padding-inline-start: 34px;
+  font-size: 13.5px;
+  line-height: 1.85;
+  color: rgba(242, 237, 226, 0.9);
+}
+.ig-pred-n {
+  position: absolute;
+  inset-inline-start: 0;
+  top: 0.1em;
+  width: 24px;
+  height: 24px;
+  border-radius: 8px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 12px;
+  font-weight: 900;
+  color: #241708;
+  background: linear-gradient(170deg, var(--ig-gold), var(--ig-gold-deep));
+  font-variant-numeric: tabular-nums;
+}
+
+/* trait bars — centre-out, entrance is a transform-only grow */
+.ig-bars { display: grid; gap: 11px; }
+.ig-bar-top {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 8px;
+  font-size: 12px;
+  margin-bottom: 5px;
+}
+.ig-bar-nm { font-weight: 800; color: rgba(242, 237, 226, 0.9); }
+.ig-bar-val { font-weight: 700; color: var(--ig-faint); font-variant-numeric: tabular-nums; }
+.ig-bar-track {
+  position: relative;
+  height: 9px;
+  border-radius: 999px;
+  background: rgba(0, 0, 0, 0.32);
+  border: 1px solid rgba(231, 196, 106, 0.1);
+  overflow: hidden;
+}
+.ig-bar-track::after {
+  content: '';
+  position: absolute;
+  inset-inline-start: 50%;
+  top: 0;
+  bottom: 0;
+  width: 1px;
+  background: rgba(231, 196, 106, 0.35);
+}
+.ig-bar-fill {
+  position: absolute;
+  top: 1px;
+  bottom: 1px;
+  border-radius: 999px;
+  animation: igGrow 0.7s var(--ig-ease) both;
+}
+@keyframes igGrow {
+  from { transform: scaleX(0); }
+  to { transform: scaleX(1); }
+}
+.ig-bar-poles {
+  display: flex;
+  justify-content: space-between;
+  gap: 8px;
+  margin-top: 4px;
+  font-size: 10.5px;
+  color: var(--ig-faint);
+}
+.ig-bar.low-conf .ig-bar-fill { opacity: 0.45; }
+.ig-bar.low-conf .ig-bar-nm { color: rgba(242, 237, 226, 0.55); }
+
+/* recommendations */
+.ig-recs { display: grid; gap: 9px; }
+.ig-rec {
+  display: flex;
+  align-items: center;
+  gap: 11px;
+  padding: 9px;
+  border-radius: 14px;
+  border: 1px solid var(--ig-line);
+  background: var(--ig-surface);
+}
+.ig-rec-media {
+  flex: none;
+  width: 56px;
+  height: 56px;
+  border-radius: 12px;
+  overflow: hidden;
+  background: rgba(0, 0, 0, 0.3);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--ig-faint);
+}
+.ig-rec-media img { width: 100%; height: 100%; object-fit: cover; display: block; }
+.ig-rec-body { min-width: 0; display: grid; gap: 3px; }
+.ig-rec-nm { font-size: 14px; font-weight: 800; color: var(--ig-ink); }
+.ig-rec-why { font-size: 12px; line-height: 1.65; color: var(--ig-dim); }
+.ig-rec-price { font-size: 11.5px; font-weight: 700; color: var(--ig-faint); font-variant-numeric: tabular-nums; }
+
+/* «complete chapter 2» call-to-action on an early reveal */
+.ig-cta {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 13px 15px;
+  border-radius: 16px;
+  border: 1px solid rgba(231, 196, 106, 0.45);
+  background: rgba(231, 196, 106, 0.07);
+  text-align: start;
+}
+.ig-cta-ico {
+  flex: none;
+  width: 40px;
+  height: 40px;
+  border-radius: 13px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: #241708;
+  background: linear-gradient(170deg, var(--ig-gold), var(--ig-gold-deep));
+}
+.ig-cta-body { flex: 1; min-width: 0; display: grid; gap: 2px; }
+.ig-cta-body > b { font-size: 13.5px; font-weight: 800; color: var(--ig-ink); }
+.ig-cta-body > span { font-size: 11.5px; line-height: 1.6; color: var(--ig-dim); }
+
+/* everyday-vs-big decision comparison */
+.ig-vs { display: grid; grid-template-columns: 1fr auto 1fr; gap: 9px; align-items: stretch; }
+.ig-vs-col {
+  display: grid;
+  gap: 4px;
+  justify-items: center;
+  align-content: center;
+  padding: 12px 8px;
+  border-radius: 14px;
+  border: 1px solid var(--ig-line);
+  background: var(--ig-surface);
+  text-align: center;
+}
+.ig-vs-col > i { font-style: normal; font-size: 10.5px; font-weight: 800; letter-spacing: 0.05em; color: var(--ig-faint); }
+.ig-vs-col > b { font-size: 14.5px; font-weight: 900; color: var(--ig-gold); line-height: 1.4; }
+.ig-vs-arrow { display: flex; align-items: center; color: var(--ig-faint); }
+
+/* disclaimer + resume + empty */
+.ig-disc {
+  margin: 4px 0 0;
+  max-width: 42ch;
+  font-size: 11px;
+  line-height: 1.75;
+  color: var(--ig-faint);
+  text-align: center;
+}
+.ig-resume {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  font-size: 12px;
+  font-weight: 700;
+  color: var(--ig-dim);
+  padding: 6px 13px;
+  border-radius: 999px;
+  background: var(--ig-surface);
+  border: 1px solid var(--ig-line);
+  font-variant-numeric: tabular-nums;
+}
+.ig-empty {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 12px;
+  padding: 24px;
+  text-align: center;
+}
+.ig-empty-ico {
+  width: 48px;
+  height: 48px;
+  border-radius: 15px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: #fff;
+}
+
+/* =========================================================================
+   fit: big screens (venue TV) — two-column reveal, larger play column
+   ========================================================================= */
+@media (min-width: 1000px) {
+  .ig-root { font-size: 16px; }
+  .ig-pad { padding: 20px 28px 26px; }
+  .ig-q { max-width: 40ch; font-size: 26px; }
+  .ig-opts { width: min(560px, 100%); }
+  .ig-duo { width: min(620px, 100%); }
+  .ig-gauges { gap: 14px; padding-bottom: 16px; }
+  .ig-gdial { width: 46px; height: 46px; }
+  .ig-gneedle { height: 17px; }
+  .ig-glabel { font-size: 10.5px; }
+  .ig-reveal {
+    width: min(1060px, 100%);
+    grid-template-columns: 400px minmax(0, 1fr);
+    align-items: start;
+  }
+  .ig-idcard { position: sticky; top: 6px; }
+  .ig-title { font-size: 34px; }
+  .ig-sub { font-size: 15px; max-width: 44ch; }
+}
+
+/* very short stages (landscape phones): tighten so nothing needs scrolling */
+@media (max-height: 520px) {
+  .ig-pad { padding: 8px 14px 12px; gap: 10px; }
+  .ig-duo-media { aspect-ratio: 4 / 3; }
+  .ig-opt { min-height: 44px; padding: 8px 13px; font-size: 13px; }
+  .ig-title { font-size: 20px; }
+  .ig-gauges { padding: 4px 10px 8px; }
+  .ig-gdial { width: 30px; height: 30px; }
+  .ig-gneedle { height: 11px; }
+  .ig-seal { width: 76px; height: 76px; }
+  .ig-seal > b { font-size: 26px; }
+}
+
+/* =========================================================================
+   reduced motion — jump cuts only
+   ========================================================================= */
+@media (prefers-reduced-motion: reduce) {
+  .ig-in, .ig-rise, .ig-seal, .ig-bar-fill, .ig-ghalo { animation: none; }
+  .ig-dots i.is-now { animation: none; }
+  .ig-gneedle, .ig-dots i, .ig-btn, .ig-opt, .ig-opt::before, .ig-duo-card, .ig-gauge { transition: none; }
+  .ig-btn:active, .ig-opt:active, .ig-duo-card:active { transform: none; }
+}

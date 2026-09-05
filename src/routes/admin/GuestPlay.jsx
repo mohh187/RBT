@@ -15,7 +15,8 @@ import { useI18n } from '../../lib/i18n.jsx'
 import { Spinner } from '../../components/ui.jsx'
 import Icon from '../../components/Icon.jsx'
 import { CAP } from '../../lib/permissions.js'
-import { listCustomers } from '../../lib/db.js'
+import { listCustomers, updateTenant } from '../../lib/db.js'
+import { gamesFor } from '../../lib/games.js'
 import { fmtNum } from '../../lib/format.js'
 import { PLAY_AI_GUARD_AR } from '../../lib/gameMemory.js'
 
@@ -107,6 +108,36 @@ export default function GuestPlay({ onCreateCampaign }) {
   const { tenantId, tenant, isManager, can } = useAuth()
   const allowed = isManager || can(CAP.VIEW_REPORTS) || can(CAP.MANAGE_CAMPAIGNS)
   const aiAllowed = can(CAP.USE_ASSISTANT)
+
+  // ---- «لعبة الانتظار بعد الطلب» — venue setting stored at tenant.waitGame ----
+  // { enabled: boolean, gameId: 'auto' | <game id> }. 'auto' rotates per order
+  // (the guest screen hashes the order id over the enabled list). Saved through
+  // the same updateTenant path every venue setting uses; managers only.
+  const [wg, setWg] = useState({ enabled: false, gameId: 'auto' })
+  const [wgBusy, setWgBusy] = useState(false)
+  const [wgErr, setWgErr] = useState('')
+  const [wgSaved, setWgSaved] = useState(false)
+  // Re-seed when the tenant doc arrives (auth loads it after first render).
+  const tWgEnabled = tenant?.waitGame?.enabled === true
+  const tWgGame = tenant?.waitGame?.gameId || 'auto'
+  useEffect(() => { setWg({ enabled: tWgEnabled, gameId: tWgGame }) }, [tWgEnabled, tWgGame])
+  const enabledGames = useMemo(() => gamesFor(tenant), [tenant])
+
+  const saveWait = async (next) => {
+    setWg(next)
+    setWgBusy(true)
+    setWgErr('')
+    setWgSaved(false)
+    try {
+      await updateTenant(tenantId, { waitGame: { enabled: next.enabled === true, gameId: next.gameId || 'auto' } })
+      setWgSaved(true)
+    } catch (_) {
+      setWgErr(ar ? 'تعذّر الحفظ — تحقق من صلاحياتك واتصالك.' : 'Could not save — check your permission and connection.')
+      setWg({ enabled: tWgEnabled, gameId: tWgGame })
+    } finally {
+      setWgBusy(false)
+    }
+  }
 
   const [tab, setTab] = useState('overview')
   const [periodKey, setPeriodKey] = useState('d30')
@@ -217,6 +248,70 @@ export default function GuestPlay({ onCreateCampaign }) {
           )}
         </div>
       </div>
+
+      {isManager && (
+        <div className="gp-card">
+          <div className="gp-card-t">
+            <Icon name="play" size={15} /> {ar ? 'لعبة الانتظار بعد الطلب' : 'Waiting game after ordering'}
+          </div>
+          <p className="gp-hint">
+            {ar
+              ? 'بعد أن يرسل الضيف طلبه تظهر له في شاشة متابعة الطلب بطاقة «العب وأنت تنتظر» تفتح اللعبة المختارة هنا مباشرة — بنفس تسجيل ركن الألعاب ونقاطه وجوائزه.'
+              : 'After a guest places an order, the tracking screen shows a "Play while you wait" card that opens the game picked here — with the same Games Corner registration, points and rewards.'}
+          </p>
+          <div className="gp-period">
+            <button
+              type="button"
+              className={`chip${wg.enabled ? ' active' : ''}`}
+              aria-pressed={wg.enabled}
+              disabled={wgBusy}
+              onClick={() => saveWait({ ...wg, enabled: !wg.enabled })}
+            >
+              <Icon name={wg.enabled ? 'check' : 'no'} size={14} /> {wg.enabled ? (ar ? 'مفعّلة' : 'On') : (ar ? 'متوقفة' : 'Off')}
+            </button>
+            {wgBusy && <span className="gp-hint">{ar ? 'جارٍ الحفظ…' : 'Saving…'}</span>}
+            {!wgBusy && wgSaved && <span className="gp-hint">{ar ? 'تم الحفظ.' : 'Saved.'}</span>}
+          </div>
+          {wg.enabled && enabledGames.length > 0 && (
+            <div className="gp-scroll-x">
+              <div className="gp-tabs">
+                <button
+                  type="button"
+                  className={`chip${wg.gameId === 'auto' ? ' active' : ''}`}
+                  aria-pressed={wg.gameId === 'auto'}
+                  disabled={wgBusy}
+                  onClick={() => saveWait({ ...wg, gameId: 'auto' })}
+                >
+                  <Icon name="repeat" size={14} /> {ar ? 'تلقائي — تتبدل مع كل طلب' : 'Auto — rotates per order'}
+                </button>
+                {enabledGames.map((g) => (
+                  <button
+                    key={g.id}
+                    type="button"
+                    className={`chip${wg.gameId === g.id ? ' active' : ''}`}
+                    aria-pressed={wg.gameId === g.id}
+                    disabled={wgBusy}
+                    onClick={() => saveWait({ ...wg, gameId: g.id })}
+                  >
+                    {ar ? g.ar : g.en}
+                  </button>
+                ))}
+              </div>
+            </div>
+          )}
+          {wg.enabled && enabledGames.length === 0 && (
+            <p className="gp-hint">
+              {ar ? 'لا توجد ألعاب مفعّلة في هذا المكان — فعّل الألعاب أولاً من إعدادات المنشأة.' : 'No games are enabled at this venue — enable games first in venue settings.'}
+            </p>
+          )}
+          {wgErr && (
+            <div className="gp-warn">
+              <Icon name="warning" size={15} />
+              <span>{wgErr}</span>
+            </div>
+          )}
+        </div>
+      )}
 
       <div className="gp-scroll-x">
         <div className="gp-tabs">
